@@ -1,7 +1,6 @@
 package index
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -195,13 +194,10 @@ func TestScan_ScopeAndStemignoreCombined(t *testing.T) {
 }
 
 func TestScan_ScopeExcludesBeforeExtraction(t *testing.T) {
-	// Create a file that would fail extraction if read.
-	root := t.TempDir()
-	mdPath := filepath.Join(root, "good.md")
-	os.WriteFile(mdPath, []byte("---\ntitle: Good\n---\n"), 0o644)
-
-	otherPath := filepath.Join(root, "skip.md")
-	os.WriteFile(otherPath, []byte("---\ntitle: Skip\n---\n"), 0o644)
+	root := setupScanTree(t, map[string]string{
+		"good.md": "---\ntitle: Good\n---\n",
+		"skip.md": "---\ntitle: Skip\n---\n",
+	})
 
 	// Scope excludes skip.md
 	stem := &rules.StemFile{Scope: rules.Scope{Match: "good.md"}}

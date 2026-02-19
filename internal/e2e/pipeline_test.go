@@ -1,0 +1,382 @@
+// Package e2e contains integration tests that exercise the full
+// extraction pipeline across packages: rules → index → extract.
+package e2e
+
+import (
+	"os"
+	"path/filepath"
+	"sort"
+	"testing"
+
+	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/index"
+	"github.com/pablontiv/rootline/internal/rules"
+)
+
+// setupProject creates a temporary directory tree simulating a real
+// rootline project. It creates a .git marker, files, and returns
+// the root path.
+func setupProject(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+
+	// Create .git marker so WalkUp has a boundary.
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for relPath, content := range files {
+		absPath := filepath.Join(root, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(absPath, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+// buildScopeResolver returns a ScopeResolver that uses WalkUp + Merge
+// to compute the effective stem for each directory.
+func buildScopeResolver() index.ScopeResolver {
+	return func(dir string) *rules.StemFile {
+		entries, err := rules.WalkUp(dir)
+		if err != nil {
+			return nil
+		}
+		return rules.MergeStemFiles(entries)
+	}
+}
+
+// recordPaths extracts sorted paths from records for easy assertion.
+func recordPaths(records []*extract.Record) []string {
+	paths := make([]string, len(records))
+	for i, r := range records {
+		paths[i] = r.Path
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+// TestPipeline_ScanExtractWithStemScope tests the full pipeline:
+// .stem files define scope → scanner filters by scope → extractor
+// produces records with correct frontmatter.
+func TestPipeline_ScanExtractWithStemScope(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		// Root .stem: scope only *.md files
+		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
+
+		// Markdown files at root
+		"readme.md":  "---\ntitle: Root Readme\n---\n# Welcome",
+		"notes.md":   "---\ntitle: Notes\n---\n# Notes",
+		"config.yml": "key: value",
+
+		// Subdirectory with its own .stem narrowing scope
+		"docs/.stem":        "scope:\n  match: \"*.md\"\nschema:\n  status:\n    type: string\n",
+		"docs/guide.md":     "---\ntitle: Guide\nstatus: draft\n---\n# Guide",
+		"docs/api.md":       "---\ntitle: API Reference\nstatus: published\n---\n# API",
+		"docs/changelog.md": "---\ntitle: Changelog\n---\n# Changes",
+	})
+
+	reg := extract.NewRegistry()
+	resolver := buildScopeResolver()
+
+	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+
+	// All .md files should be found (scope is *.md at both levels).
+	paths := recordPaths(records)
+	expected := []string{
+		"docs/api.md",
+		"docs/changelog.md",
+		"docs/guide.md",
+		"notes.md",
+		"readme.md",
+	}
+	if len(paths) != len(expected) {
+		t.Fatalf("got paths %v, want %v", paths, expected)
+	}
+	for i, p := range expected {
+		if paths[i] != p {
+			t.Errorf("path[%d] = %q, want %q", i, paths[i], p)
+		}
+	}
+}
+
+// TestPipeline_ScopeNarrowsInSubdirectory tests that a child .stem
+// can narrow the scope so only specific files are extracted.
+func TestPipeline_ScopeNarrowsInSubdirectory(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		// Root: match all markdown
+		".stem": "version: 1\nscope:\n  match: \"*.md\"\n",
+
+		"readme.md": "---\ntitle: Root\n---\n",
+
+		// tasks/ narrows scope to T*.md only
+		"tasks/.stem":       "scope:\n  match: \"T*.md\"\n",
+		"tasks/T001-foo.md": "---\ntitle: Task 1\n---\n",
+		"tasks/T002-bar.md": "---\ntitle: Task 2\n---\n",
+		"tasks/README.md":   "---\ntitle: Tasks Index\n---\n",
+	})
+
+	reg := extract.NewRegistry()
+	resolver := buildScopeResolver()
+
+	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+
+	paths := recordPaths(records)
+	// Root: readme.md matches *.md
+	// tasks/: only T001-foo.md and T002-bar.md match T*.md
+	// tasks/README.md does NOT match T*.md
+	expected := []string{
+		"readme.md",
+		"tasks/T001-foo.md",
+		"tasks/T002-bar.md",
+	}
+	if len(paths) != len(expected) {
+		t.Fatalf("got paths %v, want %v", paths, expected)
+	}
+	for i, p := range expected {
+		if paths[i] != p {
+			t.Errorf("path[%d] = %q, want %q", i, paths[i], p)
+		}
+	}
+}
+
+// TestPipeline_StemignoreAndScopeCombined tests that .stemignore
+// exclusions and scope filtering work together correctly.
+func TestPipeline_StemignoreAndScopeCombined(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem":       "version: 1\nscope:\n  match: \"*.md\"\n",
+		".stemignore": "draft-*.md\n",
+
+		"published.md":  "---\ntitle: Published\n---\n",
+		"draft-idea.md": "---\ntitle: Draft\n---\n",
+		"notes.txt":     "plain text",
+	})
+
+	reg := extract.NewRegistry()
+	resolver := buildScopeResolver()
+
+	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+
+	// published.md: passes scope (*.md) and not in .stemignore
+	// draft-idea.md: passes scope but excluded by .stemignore
+	// notes.txt: no extractor registered
+	if len(records) != 1 {
+		paths := recordPaths(records)
+		t.Fatalf("got %d records %v, want 1 [published.md]", len(records), paths)
+	}
+	if records[0].Frontmatter["title"] != "Published" {
+		t.Errorf("title = %v, want Published", records[0].Frontmatter["title"])
+	}
+}
+
+// TestPipeline_StemMergeInheritance tests that schema fields from
+// parent .stem files are inherited by child directories via merge.
+func TestPipeline_StemMergeInheritance(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		// Root defines base schema
+		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n  owner:\n    type: string\n",
+
+		// Child adds status field, inherits title + owner
+		"docs/.stem": "schema:\n  status:\n    type: string\n    values:\n      - draft\n      - published\n",
+
+		"docs/guide.md": "---\ntitle: Guide\nstatus: draft\nowner: team-a\n---\n# Guide",
+	})
+
+	// Verify stem merge works correctly for docs/ directory
+	entries, err := rules.WalkUp(filepath.Join(root, "docs"))
+	if err != nil {
+		t.Fatalf("WalkUp error: %v", err)
+	}
+
+	effective := rules.MergeStemFiles(entries)
+
+	// Should have all 3 fields: title (root), owner (root), status (child)
+	if len(effective.Schema) != 3 {
+		t.Fatalf("schema has %d fields, want 3: %v", len(effective.Schema), effective.Schema)
+	}
+	if _, ok := effective.Schema["title"]; !ok {
+		t.Error("missing inherited 'title' field")
+	}
+	if _, ok := effective.Schema["owner"]; !ok {
+		t.Error("missing inherited 'owner' field")
+	}
+	if sf, ok := effective.Schema["status"]; !ok {
+		t.Error("missing child 'status' field")
+	} else if len(sf.Values) != 2 {
+		t.Errorf("status.values = %v, want [draft published]", sf.Values)
+	}
+
+	// Verify scope inherited from root
+	if effective.Scope.Match != "*.md" {
+		t.Errorf("scope.match = %q, want *.md", effective.Scope.Match)
+	}
+
+	// Verify extraction still works with the merged scope
+	reg := extract.NewRegistry()
+	resolver := buildScopeResolver()
+
+	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+
+	if len(records) != 1 {
+		t.Fatalf("got %d records, want 1", len(records))
+	}
+	rec := records[0]
+	if rec.Frontmatter["title"] != "Guide" {
+		t.Errorf("title = %v, want Guide", rec.Frontmatter["title"])
+	}
+	if rec.Frontmatter["status"] != "draft" {
+		t.Errorf("status = %v, want draft", rec.Frontmatter["status"])
+	}
+}
+
+// TestPipeline_NoStemMatchesEverything tests that without any .stem
+// files, the scanner extracts all files with registered extractors.
+func TestPipeline_NoStemMatchesEverything(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		"a.md": "---\ntitle: A\n---\n",
+		"b.md": "---\ntitle: B\n---\n",
+	})
+
+	reg := extract.NewRegistry()
+	resolver := buildScopeResolver()
+
+	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+
+	// No .stem = no scope = match all. Both .md files should be extracted.
+	if len(records) != 2 {
+		t.Fatalf("got %d records, want 2", len(records))
+	}
+}
+
+// TestPipeline_DeepNesting tests a 3-level deep directory with stem
+// inheritance at each level.
+func TestPipeline_DeepNesting(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem":                   "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  project:\n    type: string\n",
+		"epics/.stem":             "schema:\n  epic:\n    type: string\n",
+		"epics/features/.stem":    "schema:\n  feature:\n    type: string\n",
+		"epics/features/task.md":  "---\ntitle: Task\nproject: rootline\nepic: E01\nfeature: F01\n---\n# Task",
+		"epics/features/notes.md": "---\ntitle: Notes\n---\n# Notes",
+	})
+
+	// Check full merge at deepest level
+	entries, err := rules.WalkUp(filepath.Join(root, "epics", "features"))
+	if err != nil {
+		t.Fatalf("WalkUp error: %v", err)
+	}
+
+	effective := rules.MergeStemFiles(entries)
+
+	// Should have project (root) + epic (epics/) + feature (features/)
+	if len(effective.Schema) != 3 {
+		t.Fatalf("schema has %d fields, want 3", len(effective.Schema))
+	}
+
+	// Scan should find both .md files
+	reg := extract.NewRegistry()
+	resolver := buildScopeResolver()
+
+	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+
+	paths := recordPaths(records)
+	expected := []string{
+		"epics/features/notes.md",
+		"epics/features/task.md",
+	}
+	if len(paths) != len(expected) {
+		t.Fatalf("got paths %v, want %v", paths, expected)
+	}
+	for i, p := range expected {
+		if paths[i] != p {
+			t.Errorf("path[%d] = %q, want %q", i, paths[i], p)
+		}
+	}
+
+	// Verify frontmatter extraction is correct
+	for _, rec := range records {
+		if rec.Path == "epics/features/task.md" {
+			if rec.Frontmatter["project"] != "rootline" {
+				t.Errorf("project = %v, want rootline", rec.Frontmatter["project"])
+			}
+			if rec.Frontmatter["epic"] != "E01" {
+				t.Errorf("epic = %v, want E01", rec.Frontmatter["epic"])
+			}
+		}
+	}
+}
+
+// TestPipeline_FrontmatterExtractionIntegrity verifies that extracted
+// records preserve all frontmatter types correctly through the pipeline.
+func TestPipeline_FrontmatterExtractionIntegrity(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem": "version: 1\nscope:\n  match: \"*.md\"\n",
+		"doc.md": "---\ntitle: Test Doc\nstatus: draft\npriority: 1\ntags:\n  - go\n  - testing\n---\n# Body\n\nParagraph.",
+	})
+
+	reg := extract.NewRegistry()
+	resolver := buildScopeResolver()
+
+	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+
+	if len(records) != 1 {
+		t.Fatalf("got %d records, want 1", len(records))
+	}
+
+	rec := records[0]
+
+	// String fields
+	if rec.Frontmatter["title"] != "Test Doc" {
+		t.Errorf("title = %v", rec.Frontmatter["title"])
+	}
+	if rec.Frontmatter["status"] != "draft" {
+		t.Errorf("status = %v", rec.Frontmatter["status"])
+	}
+
+	// Integer field
+	if rec.Frontmatter["priority"] != 1 {
+		t.Errorf("priority = %v (type %T), want 1", rec.Frontmatter["priority"], rec.Frontmatter["priority"])
+	}
+
+	// Array field
+	tags, ok := rec.Frontmatter["tags"].([]any)
+	if !ok {
+		t.Fatalf("tags type = %T, want []any", rec.Frontmatter["tags"])
+	}
+	if len(tags) != 2 || tags[0] != "go" || tags[1] != "testing" {
+		t.Errorf("tags = %v, want [go testing]", tags)
+	}
+
+	// Body
+	if rec.Body != "# Body\n\nParagraph." {
+		t.Errorf("body = %q", rec.Body)
+	}
+
+	// Record type
+	if rec.Type != "markdown" {
+		t.Errorf("type = %q, want markdown", rec.Type)
+	}
+}
