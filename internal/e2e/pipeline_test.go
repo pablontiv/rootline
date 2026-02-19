@@ -1,5 +1,5 @@
 // Package e2e contains integration tests that exercise the full
-// extraction pipeline across packages: rules → index → extract.
+// pipeline across packages: rules → index → extract → validate.
 package e2e
 
 import (
@@ -378,5 +378,133 @@ func TestPipeline_FrontmatterExtractionIntegrity(t *testing.T) {
 	// Record type
 	if rec.Type != "markdown" {
 		t.Errorf("type = %q, want markdown", rec.Type)
+	}
+}
+
+// TestPipeline_ValidateAfterExtraction exercises the full pipeline:
+// scan → extract → resolve effective stem → validate.
+// Simulates a real project with PRD documents.
+func TestPipeline_ValidateAfterExtraction(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		// Root .stem: Fecha required for all docs
+		".stem": `version: 1
+scope:
+  match: "*.md"
+schema:
+  Fecha:
+    type: string
+    required: true
+`,
+		// PRD .stem: adds Estado enum + conditional requires
+		"prd/.stem": `schema:
+  Estado:
+    type: enum
+    values:
+      - Pending
+      - Completado
+    required: true
+  Tipo:
+    type: enum
+    values:
+      - servicio-docker
+      - modulo-sistema
+    required: true
+validate:
+  - rule: requires
+    if: { Estado: Completado }
+    then: { fields: [Fecha] }
+  - rule: non_empty
+    field: Tipo
+`,
+		// Valid PRD document
+		"prd/valid.md": "---\nFecha: \"2026-01-15\"\nEstado: Pending\nTipo: servicio-docker\n---\n# Valid PRD",
+
+		// Invalid PRD: bad Estado enum value
+		"prd/bad-enum.md": "---\nFecha: \"2026-01-15\"\nEstado: Invalid\nTipo: modulo-sistema\n---\n# Bad Enum",
+
+		// Invalid PRD: missing required Fecha
+		"prd/missing-required.md": "---\nEstado: Pending\nTipo: servicio-docker\n---\n# Missing Required",
+
+		// Invalid PRD: Estado=Completado but no Fecha (requires rule fires)
+		"prd/requires-fail.md": "---\nEstado: Completado\nTipo: modulo-sistema\n---\n# Requires Fail",
+	})
+
+	reg := extract.NewRegistry()
+	resolver := buildScopeResolver()
+
+	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+
+	// Resolve effective stem for prd/ directory
+	entries, err := rules.WalkUp(filepath.Join(root, "prd"))
+	if err != nil {
+		t.Fatalf("WalkUp error: %v", err)
+	}
+	effective := rules.MergeStemFiles(entries)
+
+	// Validate each record
+	results := make(map[string][]rules.ValidationError)
+	for _, rec := range records {
+		errs := rules.Validate(rec, effective)
+		results[rec.Path] = errs
+	}
+
+	// valid.md: should have 0 errors
+	if errs := results["prd/valid.md"]; len(errs) != 0 {
+		t.Errorf("valid.md: got %d errors, want 0: %v", len(errs), errs)
+	}
+
+	// bad-enum.md: Estado=Invalid should fail enum check
+	if errs := results["prd/bad-enum.md"]; len(errs) == 0 {
+		t.Error("bad-enum.md: expected enum error for Estado=Invalid")
+	} else {
+		foundEnum := false
+		for _, e := range errs {
+			if e.Rule == "enum" && e.Field == "Estado" {
+				foundEnum = true
+			}
+		}
+		if !foundEnum {
+			t.Errorf("bad-enum.md: expected enum error for Estado, got: %v", errs)
+		}
+	}
+
+	// missing-required.md: Fecha missing
+	if errs := results["prd/missing-required.md"]; len(errs) == 0 {
+		t.Error("missing-required.md: expected required error for Fecha")
+	} else {
+		foundRequired := false
+		for _, e := range errs {
+			if e.Rule == "required" && e.Field == "Fecha" {
+				foundRequired = true
+			}
+		}
+		if !foundRequired {
+			t.Errorf("missing-required.md: expected required error for Fecha, got: %v", errs)
+		}
+	}
+
+	// requires-fail.md: Estado=Completado without Fecha triggers requires rule
+	if errs := results["prd/requires-fail.md"]; len(errs) == 0 {
+		t.Error("requires-fail.md: expected requires error for Fecha")
+	} else {
+		foundRequires := false
+		foundRequired := false
+		for _, e := range errs {
+			if e.Rule == "requires" && e.Field == "Fecha" {
+				foundRequires = true
+			}
+			if e.Rule == "required" && e.Field == "Fecha" {
+				foundRequired = true
+			}
+		}
+		if !foundRequires {
+			t.Errorf("requires-fail.md: expected requires error, got: %v", errs)
+		}
+		if !foundRequired {
+			t.Errorf("requires-fail.md: expected required error for Fecha, got: %v", errs)
+		}
 	}
 }
