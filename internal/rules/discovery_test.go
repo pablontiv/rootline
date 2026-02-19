@@ -135,3 +135,44 @@ func TestWalkUp_NoGitStopsAtFsRoot(t *testing.T) {
 	// We don't know what's above TempDir, so just verify no error.
 	_ = entries
 }
+
+func TestWalkUp_TargetIsFile(t *testing.T) {
+	root := setupTree(t,
+		[]string{"repo/.stem"},
+		"repo",
+	)
+	// Create a file (not a directory) as target.
+	filePath := filepath.Join(root, "repo", "doc.md")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := WalkUp(filePath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1", len(entries))
+	}
+}
+
+func TestParseStemFile_Success(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	content := []byte("version: 1\nscope:\n  match: \"*.md\"\n")
+	if err := os.WriteFile(stemPath, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stem, err := ParseStemFile(stemPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stem.Version != 1 {
+		t.Errorf("version = %d, want 1", stem.Version)
+	}
+	if stem.Scope.Match != "*.md" {
+		t.Errorf("scope.match = %q, want %q", stem.Scope.Match, "*.md")
+	}
+}
