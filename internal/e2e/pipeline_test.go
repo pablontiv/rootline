@@ -580,3 +580,109 @@ schema:
 		t.Errorf("kind = %v", parsed["kind"])
 	}
 }
+
+// TestPipeline_DescribeEffectiveSchema exercises the describe pipeline:
+// WalkUp → Merge → DescribeResult with source tracking and applies.
+func TestPipeline_DescribeEffectiveSchema(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem": `version: 1
+scope:
+  match: "*.md"
+schema:
+  Fecha:
+    type: string
+    required: true
+`,
+		"prd/.stem": `schema:
+  Estado:
+    type: enum
+    values:
+      - Pending
+      - Completado
+    required: true
+validate:
+  - rule: requires
+    if: { Estado: Completado }
+    then: { fields: [Fecha] }
+`,
+	})
+
+	// Walk-up from prd/
+	entries, err := rules.WalkUp(filepath.Join(root, "prd"))
+	if err != nil {
+		t.Fatalf("WalkUp error: %v", err)
+	}
+	effective := rules.MergeStemFiles(entries)
+	result := rules.NewDescribeResult("prd/", entries, effective)
+
+	// Verify contract
+	if result.Version != 1 {
+		t.Errorf("version = %d", result.Version)
+	}
+	if result.Kind != "rootline/describe" {
+		t.Errorf("kind = %q", result.Kind)
+	}
+
+	// Applies: root/.stem then prd/.stem
+	if len(result.Applies) != 2 {
+		t.Fatalf("applies has %d entries, want 2", len(result.Applies))
+	}
+
+	// Schema: Fecha (from root) + Estado (from prd)
+	if len(result.Schema) != 2 {
+		t.Fatalf("schema has %d fields, want 2", len(result.Schema))
+	}
+
+	fecha, ok := result.Schema["Fecha"]
+	if !ok {
+		t.Fatal("missing Fecha in schema")
+	}
+	if !fecha.Required {
+		t.Error("Fecha should be required")
+	}
+
+	estado, ok := result.Schema["Estado"]
+	if !ok {
+		t.Fatal("missing Estado in schema")
+	}
+	if len(estado.Values) != 2 {
+		t.Errorf("Estado.values = %v", estado.Values)
+	}
+
+	// Source tracking
+	if fecha.Source == "" {
+		t.Error("Fecha.source should be set")
+	}
+	if estado.Source == "" {
+		t.Error("Estado.source should be set")
+	}
+	if fecha.Source == estado.Source {
+		t.Error("Fecha and Estado should come from different .stem files")
+	}
+
+	// Validate rules preserved
+	if len(result.Validate) != 1 {
+		t.Fatalf("validate has %d rules, want 1", len(result.Validate))
+	}
+	if result.Validate[0].Rule != "requires" {
+		t.Errorf("validate[0].rule = %q", result.Validate[0].Rule)
+	}
+
+	// Scope inherited from root
+	if result.Scope.Match != "*.md" {
+		t.Errorf("scope.match = %q", result.Scope.Match)
+	}
+
+	// JSON roundtrip
+	data, err := result.ToJSON()
+	if err != nil {
+		t.Fatalf("ToJSON error: %v", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("JSON parse error: %v", err)
+	}
+	if parsed["kind"] != "rootline/describe" {
+		t.Errorf("JSON kind = %v", parsed["kind"])
+	}
+}

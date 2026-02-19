@@ -25,25 +25,25 @@ type StemFile struct {
 
 // Scope defines which files a .stem applies to.
 type Scope struct {
-	Match string `yaml:"match"`
+	Match string `yaml:"match" json:"match,omitempty"`
 }
 
 // SchemaField defines a single field in the schema.
 type SchemaField struct {
-	Type     string   `yaml:"type"`
-	Required bool     `yaml:"required"`
-	Values   []string `yaml:"values"`
-	Default  string   `yaml:"default"`
-	Source   string   `yaml:"-"`
+	Type     string   `yaml:"type" json:"type"`
+	Required bool     `yaml:"required" json:"required"`
+	Values   []string `yaml:"values" json:"values,omitempty"`
+	Default  string   `yaml:"default" json:"default,omitempty"`
+	Source   string   `yaml:"-" json:"source,omitempty"`
 }
 
 // ValidationRule defines a single validation constraint.
 type ValidationRule struct {
-	Field  string         `yaml:"field"`
-	Rule   string         `yaml:"rule"`
-	If     map[string]any `yaml:"if"`
-	Then   map[string]any `yaml:"then"`
-	Source string         `yaml:"-"`
+	Field  string         `yaml:"field" json:"field,omitempty"`
+	Rule   string         `yaml:"rule" json:"rule"`
+	If     map[string]any `yaml:"if" json:"if,omitempty"`
+	Then   map[string]any `yaml:"then" json:"then,omitempty"`
+	Source string         `yaml:"-" json:"source,omitempty"`
 }
 
 // ParseStem parses a .stem file from raw YAML content.

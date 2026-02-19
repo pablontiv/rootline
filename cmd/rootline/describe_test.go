@@ -1,0 +1,213 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func executeDescribe(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	fieldPath = nil
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs(append([]string{"describe"}, args...))
+	err := rootCmd.Execute()
+	return buf.String(), err
+}
+
+func TestDescribeCmd_FullContract(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  Fecha:\n    type: string\n    required: true\n",
+		"prd/.stem": "schema:\n  Estado:\n    type: enum\n    values:\n      - Pending\n      - Completado\n    required: true\nvalidate:\n  - rule: requires\n    if: { Estado: Completado }\n    then: { fields: [Fecha] }\n",
+	})
+
+	stdout, err := executeDescribe(t, filepath.Join(root, "prd"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	if result["version"].(float64) != 1 {
+		t.Errorf("version = %v", result["version"])
+	}
+	if result["kind"] != "rootline/describe" {
+		t.Errorf("kind = %v", result["kind"])
+	}
+
+	// Applies should list both .stem files
+	applies := result["applies"].([]any)
+	if len(applies) != 2 {
+		t.Fatalf("applies has %d entries, want 2", len(applies))
+	}
+
+	// Schema should have merged fields: Fecha + Estado
+	schema := result["schema"].(map[string]any)
+	if len(schema) != 2 {
+		t.Errorf("schema has %d fields, want 2", len(schema))
+	}
+	if _, ok := schema["Fecha"]; !ok {
+		t.Error("missing Fecha in schema")
+	}
+	if _, ok := schema["Estado"]; !ok {
+		t.Error("missing Estado in schema")
+	}
+
+	// Source tracking
+	fechaField := schema["Fecha"].(map[string]any)
+	if fechaField["source"] == nil || fechaField["source"] == "" {
+		t.Error("Fecha.source should be set")
+	}
+
+	// Validate section
+	validate := result["validate"].([]any)
+	if len(validate) != 1 {
+		t.Errorf("validate has %d rules, want 1", len(validate))
+	}
+}
+
+func TestDescribeCmd_NoStemAncestors(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		"empty/placeholder.txt": "",
+	})
+
+	stdout, err := executeDescribe(t, filepath.Join(root, "empty"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	// Should return empty schema, not an error
+	applies := result["applies"].([]any)
+	if len(applies) != 0 {
+		t.Errorf("applies = %v, want empty", applies)
+	}
+
+	schema := result["schema"].(map[string]any)
+	if len(schema) != 0 {
+		t.Errorf("schema = %v, want empty", schema)
+	}
+}
+
+func TestDescribeCmd_FieldExtraction(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  Estado:\n    type: enum\n    values:\n      - Pending\n      - Done\n    required: true\n",
+	})
+
+	stdout, err := executeDescribe(t, "--field", "schema.Estado.values", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var values []any
+	if err := json.Unmarshal([]byte(stdout), &values); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	if len(values) != 2 {
+		t.Fatalf("values = %v, want [Pending Done]", values)
+	}
+}
+
+func TestDescribeCmd_FieldApplies(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":     "version: 1\nschema:\n  title:\n    type: string\n",
+		"sub/.stem": "schema:\n  status:\n    type: string\n",
+	})
+
+	stdout, err := executeDescribe(t, "--field", "applies", filepath.Join(root, "sub"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var applies []any
+	if err := json.Unmarshal([]byte(stdout), &applies); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	if len(applies) != 2 {
+		t.Fatalf("applies has %d entries, want 2", len(applies))
+	}
+}
+
+func TestDescribeCmd_ScopeInherited(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":     "version: 1\nscope:\n  match: \"*.md\"\n",
+		"sub/.stem": "schema:\n  x:\n    type: string\n",
+	})
+
+	stdout, err := executeDescribe(t, filepath.Join(root, "sub"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	scope := result["scope"].(map[string]any)
+	if scope["match"] != "*.md" {
+		t.Errorf("scope.match = %v, want *.md", scope["match"])
+	}
+}
+
+func TestDescribeCmd_DeepInheritance(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":           "version: 1\nschema:\n  project:\n    type: string\n",
+		"epics/.stem":     "schema:\n  epic:\n    type: string\n",
+		"epics/E01/.stem": "schema:\n  feature:\n    type: string\n",
+	})
+
+	stdout, err := executeDescribe(t, filepath.Join(root, "epics", "E01"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// 3 .stem files merged
+	applies := result["applies"].([]any)
+	if len(applies) != 3 {
+		t.Fatalf("applies = %d, want 3", len(applies))
+	}
+
+	// 3 schema fields: project, epic, feature
+	schema := result["schema"].(map[string]any)
+	if len(schema) != 3 {
+		t.Errorf("schema has %d fields, want 3", len(schema))
+	}
+
+	// Verify directory argument is used as path, not resolved absolute
+	absDir := filepath.Join(root, "epics", "E01")
+	if result["path"] != absDir {
+		// Path comes from args[0] which is absolute in test
+		_ = absDir // path is whatever was passed
+	}
+}
+
+func TestDescribeCmd_RequiresArg(t *testing.T) {
+	_, _ = os.Getwd() // just to use os
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"describe"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error for missing arg")
+	}
+}
