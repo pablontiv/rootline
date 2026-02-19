@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -506,5 +507,76 @@ validate:
 		if !foundRequired {
 			t.Errorf("requires-fail.md: expected required error for Fecha, got: %v", errs)
 		}
+	}
+}
+
+// TestPipeline_BatchValidationOutput exercises the full pipeline through
+// to JSON output: scan → extract → validate → BatchValidationResult.
+func TestPipeline_BatchValidationOutput(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem": `version: 1
+scope:
+  match: "*.md"
+schema:
+  title:
+    type: string
+    required: true
+  status:
+    type: enum
+    values: [draft, published]
+`,
+		"valid.md":   "---\ntitle: Good Doc\nstatus: draft\n---\n# OK",
+		"invalid.md": "---\nstatus: unknown\n---\n# Bad",
+	})
+
+	reg := extract.NewRegistry()
+	resolver := buildScopeResolver()
+
+	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+
+	entries, err := rules.WalkUp(root)
+	if err != nil {
+		t.Fatalf("WalkUp error: %v", err)
+	}
+	effective := rules.MergeStemFiles(entries)
+
+	// Build ValidationResults and batch
+	var validationResults []*rules.ValidationResult
+	for _, rec := range records {
+		errs := rules.Validate(rec, effective)
+		validationResults = append(validationResults, rules.NewValidationResult(rec.Path, errs))
+	}
+
+	batch := rules.NewBatchValidationResult(validationResults)
+
+	// Verify batch structure
+	if batch.Summary.Total != 2 {
+		t.Fatalf("total = %d, want 2", batch.Summary.Total)
+	}
+	if batch.Summary.Valid != 1 {
+		t.Errorf("valid = %d, want 1", batch.Summary.Valid)
+	}
+	if batch.Summary.Invalid != 1 {
+		t.Errorf("invalid = %d, want 1", batch.Summary.Invalid)
+	}
+
+	// Verify JSON roundtrip
+	data, err := batch.ToJSON()
+	if err != nil {
+		t.Fatalf("ToJSON error: %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("JSON unmarshal error: %v", err)
+	}
+	if parsed["version"].(float64) != 1 {
+		t.Errorf("version = %v", parsed["version"])
+	}
+	if parsed["kind"] != "rootline/validate-batch" {
+		t.Errorf("kind = %v", parsed["kind"])
 	}
 }
