@@ -1,0 +1,118 @@
+# Story Guide — Crear Contrato Semántico
+
+## Workflow
+
+### Paso 1: Parsear Argumentos
+
+De `$ARGUMENTS`, extraer:
+- **feature-path**: ruta al Feature padre (ej: `E01/F13`)
+- **story-name**: slug kebab-case (ej: `layer3-validation`)
+- **capacidad**: descripción de la capacidad entregada
+
+### Paso 2: Verificar Feature Padre
+
+```bash
+# Resolver path real (los directorios incluyen slug después del ID)
+ls -d docs/epics/E01-*/F13-*/README.md 2>/dev/null
+```
+
+Si no existe → informar a Pones. Sugerir crear con `/roadmap epic` primero.
+
+Si existe → leer el README del Feature para entender contexto y scope.
+
+### Paso 3: Auto-numbering
+
+```bash
+# Detectar próximo SXXX en el Feature
+ls -d docs/epics/E01-*/F13-*/S[0-9][0-9][0-9]-* 2>/dev/null | sort -V | tail -1
+```
+
+Incrementar. Si no hay stories, empezar con S001.
+
+### Paso 4: Generar Story
+
+Crear directorio y README con estructura antes/después:
+
+```bash
+mkdir -p docs/epics/E01-*/F13-*/SXXX-story-name/
+```
+
+### Paso 5: Actualizar Feature README
+
+Agregar fila en la tabla "Stories" del Feature README padre.
+
+---
+
+## Template: Story README
+
+```markdown
+# SXXX: [Nombre descriptivo de la capacidad]
+
+**Feature**: [FXX Feature Name](../README.md)
+**Estado**: Specified
+**Cliente**: Platform Owner
+**Capacidad**: [una línea describiendo qué capacidad nueva existe]
+
+## Antes / Despues
+
+**Antes**: [Descripción del estado actual. Qué NO se puede hacer hoy. Qué riesgo existe.]
+
+**Despues**: [Descripción del estado objetivo. Qué capacidad nueva tiene el sistema. Qué riesgo se elimina.]
+
+## Criterios de Aceptacion (semanticos)
+
+- [ ] [Capacidad observable 1 — Pones verifica]
+- [ ] [Capacidad observable 2 — Pones verifica]
+
+## Tasks
+
+| Task | Descripcion | Estado |
+|------|-------------|--------|
+| (se llenan con `/roadmap task`) | | |
+
+## Fuente de verdad
+
+- [path a código/config relevante]
+- [path a documentación relevante]
+```
+
+---
+
+## Notas
+
+- Los criterios de aceptación de una Story son **semánticos** (de capacidad), no operativos
+- Las Tasks se crean después con `/roadmap task` y se agregan a la tabla automáticamente
+- Una Story NO está pensada para ejecutarse en una sola sesión de AI — es un agregador de Tasks
+- El "Antes/Después" es la pieza más importante: define el valor entregado
+
+---
+
+## Guía para Antes/Después por Dominio
+
+El Antes/Después debe ser concreto, no genérico. Ejemplos por dominio:
+
+### IaC / Infrastructure
+```markdown
+**Antes**: No existe backup automatizado. Riesgo de pérdida de datos ante fallo de disco.
+**Despues**: Kopia ejecuta backups cada 6h con retención 30d. Restore verificado con test.
+```
+
+### Software Development
+```markdown
+**Antes**: No existe parser de frontmatter. 7 consumidores usan regex independientes con 4 patrones distintos.
+**Despues**: MarkdownExtractor produce Records JSON con frontmatter parseado. Un solo punto de parsing.
+```
+
+### CI/CD / Distribution
+```markdown
+**Antes**: Builds son manuales. No hay artefactos publicados ni versionamiento.
+**Despues**: GitHub Actions produce binarios multi-plataforma en cada tag. Disponible via Homebrew.
+```
+
+### Governance / Framework
+```markdown
+**Antes**: Reglas de validación están dispersas en 6 skills con regex frágiles.
+**Despues**: .stem files definen schemas. `rootline validate` reemplaza todas las validaciones.
+```
+
+**Anti-patrón**: "Antes: no existe. Después: existe." — Demasiado genérico, no comunica valor.

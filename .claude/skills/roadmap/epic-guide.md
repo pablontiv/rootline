@@ -1,0 +1,143 @@
+# Epic Guide — Descomponer Intención Estratégica
+
+## Workflow
+
+### Paso 1: Parsear Argumentos
+
+De `$ARGUMENTS`, extraer:
+- **epic-name**: slug kebab-case (ej: `disaster-recovery`)
+- **description**: intención estratégica en una línea
+
+### Paso 2: Auto-numbering
+
+```bash
+# Detectar próximo número de Epic
+ls -d docs/epics/E[0-9][0-9]-* 2>/dev/null | sort -V | tail -1
+```
+
+Incrementar el número. Si no hay epics, empezar con E01.
+
+### Paso 3: Discovery
+
+Antes de crear, verificar:
+1. Leer READMEs de epics existentes → ¿hay overlap con la intención propuesta?
+2. Buscar PRDs relacionados → `grep -rl "keyword" docs/prd/`
+3. Verificar roadmaps existentes → `docs/roadmap-*.md`
+
+Si hay overlap significativo → informar a Pones antes de crear.
+
+### Paso 4: Descomposición
+
+Descomponer la intención en Features. Cada Feature debe ser:
+- Un **milestone técnico real** (no subdivisión artificial)
+- Cerrable de forma independiente
+- Coherente con el objetivo del Epic
+
+**Principio anti-inflación**: Preferir 3-5 Features con substancia que 10 Features granulares. Si una Feature tiene una sola Story, probablemente no debería ser Feature.
+
+Para cada Feature, identificar 1-3 Stories iniciales (placeholders).
+
+### Paso 5: Generar en Plan File
+
+Presentar la descomposición completa ANTES de crear archivos:
+
+```
+Epic: EXX-name
+├── Intención: [una línea]
+├── Métrica de éxito: [medible]
+├── Features:
+│   ├── FXX-feature-1: [milestone]
+│   │   └── Stories: S001-name, S002-name
+│   └── FXX-feature-2: [milestone]
+│       └── Stories: S001-name
+└── Decision Log: (vacío, se llena iterativamente)
+```
+
+### Paso 6: Crear Estructura (post-aprobación)
+
+Crear directorios y archivos:
+
+```
+docs/epics/EXX-name/
+├── README.md                    ← Epic README
+├── FXX-feature-1/
+│   └── README.md                ← Feature README
+└── FXX-feature-2/
+    └── README.md                ← Feature README
+```
+
+Las Stories se crean como placeholders en las tablas de Features, no como directorios (se materializan con `/roadmap story`).
+
+---
+
+## Template: Epic README
+
+```markdown
+# EXX: [Nombre del Epic]
+
+**Estado**: Activa
+**Metrica de exito**: [métrica medible]
+**Timeline**: YYYY-QX — en curso
+
+## Intencion
+
+[Párrafo describiendo el objetivo sistémico. Qué problema resuelve a nivel estratégico.]
+
+## Features
+
+| ID | Nombre | Estado | Descripcion |
+|----|--------|--------|-------------|
+| FXX | [Feature Name](FXX-name/) | 0% | [una línea] |
+
+## Orden de Ejecucion
+
+| Feature | Depende de | Razon |
+|---------|-----------|-------|
+| FXX | — | Foundation (sin dependencias) |
+| FXX | FXX | [razón de la dependencia] |
+
+## Decision Log
+
+| Fecha | Decision | Razon |
+|-------|----------|-------|
+
+## Gaps Activos
+
+- [Gaps identificados durante la descomposición]
+```
+
+## Template: Feature README
+
+```markdown
+# FXX: [Nombre del Feature]
+
+**Epic**: [EXX](../README.md)
+**Objetivo**: [Qué capacidad nueva tiene el sistema cuando esto está completo]
+**Beneficio**: [Qué problema resuelve o qué habilita para el sistema/usuario]
+**Milestone**: [Condición medible de "done" — estado observable, no entregable]
+
+## Scope
+
+**In**: [qué cubre este feature]
+**Out**: [qué NO cubre]
+
+## Stories
+
+| ID | Nombre | Capacidad |
+|----|--------|-----------|
+
+## Dependencias
+
+- [Features que deben completarse antes de este]
+
+## Fuente de verdad
+
+- [paths relevantes]
+```
+
+**Nota sobre Objetivo vs Milestone**:
+- **Objetivo** = capacidad funcional ("El sistema puede validar documentos contra schemas")
+- **Beneficio** = valor entregado ("Elimina 7 parsers independientes con regex frágiles")
+- **Milestone** = condición de "done" ("`rootline validate docs/` retorna JSON con errores")
+
+No confundir deliverable con objetivo: "Task guide incluye tipos" es un deliverable, no un objetivo.
