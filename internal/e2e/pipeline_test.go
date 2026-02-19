@@ -11,6 +11,7 @@ import (
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
+	"github.com/pablontiv/rootline/internal/query"
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
@@ -684,5 +685,79 @@ validate:
 	}
 	if parsed["kind"] != "rootline/describe" {
 		t.Errorf("JSON kind = %v", parsed["kind"])
+	}
+}
+
+// TestPipeline_QueryAfterScanExtract exercises the full pipeline:
+// scan → extract → query with operators.
+func TestPipeline_QueryAfterScanExtract(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem": "version: 1\nscope:\n  match: \"*.md\"\n",
+		"tasks/T001.md": "---\ntitle: Deploy Redis\nestado: Pending\ntipo: servicio-docker\n---\n# Deploy",
+		"tasks/T002.md": "---\ntitle: Auth Module\nestado: Completado\ntipo: modulo-sistema\n---\n# Auth",
+		"tasks/T003.md": "---\ntitle: LXC Setup\nestado: Pending\ntipo: lxc\n---\n# LXC\n\nMigration needed.",
+	})
+
+	reg := extract.NewRegistry()
+	resolver := buildScopeResolver()
+
+	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+
+	// Query: estado eq Pending
+	result, err := query.Execute(records, &query.Query{
+		Where: &query.Condition{Op: query.OpEq, Field: "estado", Value: "Pending"},
+	})
+	if err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	qr := result.(*query.QueryResult)
+	if qr.Meta.Count != 2 {
+		t.Errorf("eq Pending: count = %d, want 2", qr.Meta.Count)
+	}
+
+	// Query: tipo in [lxc, vm]
+	result2, _ := query.Execute(records, &query.Query{
+		Where: &query.Condition{Op: query.OpIn, Field: "tipo", Values: []string{"lxc", "vm"}},
+	})
+	qr2 := result2.(*query.QueryResult)
+	if qr2.Meta.Count != 1 {
+		t.Errorf("in [lxc,vm]: count = %d, want 1", qr2.Meta.Count)
+	}
+
+	// Query: body contains "Migration"
+	result3, _ := query.Execute(records, &query.Query{
+		Where: &query.Condition{Op: query.OpContains, Field: "body", Value: "Migration"},
+	})
+	qr3 := result3.(*query.QueryResult)
+	if qr3.Meta.Count != 1 {
+		t.Errorf("body contains Migration: count = %d, want 1", qr3.Meta.Count)
+	}
+
+	// Count query
+	result4, _ := query.Execute(records, &query.Query{
+		Where: &query.Condition{Op: query.OpEq, Field: "estado", Value: "Completado"},
+		Count: true,
+	})
+	cr := result4.(*query.CountResult)
+	if cr.Count != 1 {
+		t.Errorf("count Completado: %d, want 1", cr.Count)
+	}
+
+	// And query: tipo eq servicio-docker AND estado eq Pending
+	result5, _ := query.Execute(records, &query.Query{
+		Where: &query.Condition{
+			Op: query.OpAnd,
+			Children: []query.Condition{
+				{Op: query.OpEq, Field: "tipo", Value: "servicio-docker"},
+				{Op: query.OpEq, Field: "estado", Value: "Pending"},
+			},
+		},
+	})
+	qr5 := result5.(*query.QueryResult)
+	if qr5.Meta.Count != 1 {
+		t.Errorf("and(tipo=servicio-docker, estado=Pending): count = %d, want 1", qr5.Meta.Count)
 	}
 }
