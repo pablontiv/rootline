@@ -62,7 +62,11 @@ type CountResult struct {
 }
 
 // Execute filters records against a query and returns the result.
+// Field shortcuts are resolved before evaluation.
 func Execute(records []*extract.Record, q *Query) (any, error) {
+	// Resolve shortcuts in condition tree
+	resolveConditionShortcuts(q.Where)
+
 	var filtered []*extract.Record
 
 	for _, rec := range records {
