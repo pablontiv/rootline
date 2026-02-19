@@ -3,17 +3,19 @@ name: roadmap
 description: |
   Framework de planificación AI-native: crear epics, stories o tasks.
   Acepta texto libre para descomposición autónoma de proyectos completos,
-  o subcomandos explícitos (epic, story, task, pending, view).
+  o subcomandos explícitos (epic, story, task, pending, view, loop).
   Tasks son unidades auto-contenidas con especificaciones técnicas
   y criterios de aceptación binarios.
   Usar cuando Pones pida "crear epic", "crear story", "crear task",
   "descomponer en features", "crear roadmap de X", "estructura de X",
   "planificar implementación de X", "qué sigue", "ver roadmap",
   "ver progreso", "qué falta", "Tasks pendientes",
+  "loop de tasks", "ejecutar pendientes", "implementar tasks",
+  "roadmap loop", "ejecutar roadmap",
   o texto libre describiendo trabajo a descomponer.
-  Argumento: <texto libre> | epic|story|task|pending|view [path] [name] [description]
-argument-hint: "<texto libre> | [epic|story|task|pending|view] [args]"
-allowed-tools: Write, Read, Grep, Glob, Bash
+  Argumento: <texto libre> | epic|story|task|pending|view|loop [path] [name] [description]
+argument-hint: "<texto libre> | [epic|story|task|pending|view|loop] [args]"
+allowed-tools: Write, Read, Grep, Glob, Bash, TaskCreate, TaskList, TaskUpdate, TaskGet, Skill, AskUserQuestion
 disable-model-invocation: true
 ---
 
@@ -341,7 +343,91 @@ docs/epics/
 │   ├── F03: Rules & Docs Cleanup [0/6]
 │   │   ├── S001: Rules & CLAUDE.md [0/4]
 │   │   └── S002: Dead Code Removal [0/2]
-│   └── ○ F04: PRD Data Migration [0/0]
+│   └── ○ F04: Task Data Migration [0/0]
+```
+
+---
+
+### `/roadmap loop [--filter PATTERN] [--max N]`
+
+Ejecutar Tasks pendientes en loop con confirmación entre cada uno.
+
+**Opciones**:
+- `--filter PATTERN`: Filtrar por path (ej: `E02/F04`, `E01`)
+- `--max N`: Limitar a N tasks
+
+**Procedimiento**:
+
+#### Fase 1: Discovery
+
+1. Ejecutar el script Python de `/roadmap pending` para obtener tasks pendientes
+2. Si `--filter PATTERN` proporcionado, filtrar resultados por Epic/Feature path match
+3. Si `--max N`, tomar solo los primeros N tasks
+4. Mostrar tabla de tasks encontradas a Pones
+
+#### Fase 2: TodoList Setup
+
+Para cada task encontrada, crear entrada con `TaskCreate`:
+- **subject**: `TXXX: título`
+- **description**: `Path: <filepath> | Tipo: <tipo>`
+- **activeForm**: `Implementando TXXX`
+
+Mostrar TodoList con `TaskList`.
+
+#### Fase 3: Loop de Ejecución
+
+Para cada task en orden:
+
+1. **Marcar inicio**: `TaskUpdate` → status: `in_progress`
+
+2. **Leer Task**: `Read` del archivo .md completo para entender qué pide
+
+3. **Implementar**:
+   - Si el Task tiene `tipo:` en frontmatter que corresponde a un skill
+     conocido del proyecto, invocarlo via `Skill` tool (ej: tipo `servicio-docker` → `/service TXXX`)
+   - Si no tiene skill asociado, implementar directamente siguiendo
+     las instrucciones del Task
+
+4. **Commit+Push** (centralizado, NO delegado a skills hijos):
+   - Identificar archivos modificados/creados por la implementación
+   - `git add` archivos relevantes (específicos, no `git add .`)
+   - `git commit` con mensaje descriptivo referenciando el Task
+   - `git push`
+
+5. **Verificar ACs**:
+   - Leer sección "Criterios de Aceptación" del Task .md
+   - Ejecutar CADA verificación documentada (comandos, checks, observables)
+   - Reportar resultado por AC: ✅ PASS / ❌ FAIL
+   - Si algún AC falla → reportar y preguntar si continuar
+
+6. **Marcar completado**: `TaskUpdate` → status: `completed`
+
+7. **Resumen de iteración**:
+   ```
+   📊 ITERACIÓN N/TOTAL
+   ├─ Task: TXXX - título
+   ├─ Resultado: ✅/❌
+   ├─ ACs: N/M passed
+   ├─ Commit: hash
+   └─ Siguiente: TXXX+1 - título
+   ```
+
+8. **Confirmar**: `AskUserQuestion` con opciones:
+   - Sí, continuar (Recommended)
+   - Saltar siguiente y continuar
+   - Parar aquí
+
+#### Fase 4: Resumen Final
+
+Al terminar todas las tasks o al parar:
+
+```
+📊 RESUMEN LOOP
+├─ Tasks completadas: N/TOTAL
+├─ Tasks saltadas: M
+├─ ACs: total passed / total
+├─ Commits: lista de hashes
+└─ Tasks restantes: lista (si las hay)
 ```
 
 ---
