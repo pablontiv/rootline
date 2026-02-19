@@ -10,12 +10,33 @@ import (
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/rules"
 )
+
+// ScanOption configures optional Scan behavior.
+type ScanOption func(*scanConfig)
+
+type scanConfig struct {
+	scopeResolver ScopeResolver
+}
+
+// WithScopeResolver adds scope filtering to Scan. The resolver is called
+// once per directory to obtain the effective StemFile. Files that don't
+// match scope.match are skipped before extraction.
+func WithScopeResolver(fn func(dir string) *rules.StemFile) ScanOption {
+	return func(c *scanConfig) { c.scopeResolver = fn }
+}
 
 // Scan walks rootPath recursively, extracting records from files
 // matched by the registry. It respects .stemignore files and always
-// excludes .git/ directories.
-func Scan(rootPath string, registry *extract.Registry) ([]*extract.Record, error) {
+// excludes .git/ directories. Pass WithScopeResolver to filter files
+// by their directory's effective scope.match before extraction.
+func Scan(rootPath string, registry *extract.Registry, opts ...ScanOption) ([]*extract.Record, error) {
+	var cfg scanConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	absRoot, err := filepath.Abs(rootPath)
 	if err != nil {
 		return nil, err
@@ -25,6 +46,12 @@ func Scan(rootPath string, registry *extract.Registry) ([]*extract.Record, error
 
 	// ignoreStack tracks .stemignore patterns per directory depth.
 	var ignoreStack []ignoreEntry
+
+	// scopeCache avoids repeated resolver calls for the same directory.
+	var scopeCache map[string]*rules.StemFile
+	if cfg.scopeResolver != nil {
+		scopeCache = make(map[string]*rules.StemFile)
+	}
 
 	err = filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -58,6 +85,19 @@ func Scan(rootPath string, registry *extract.Registry) ([]*extract.Record, error
 		// Check if file is ignored.
 		if isIgnored(path, ignoreStack) {
 			return nil
+		}
+
+		// Apply scope filtering if resolver is configured.
+		if cfg.scopeResolver != nil {
+			dir := filepath.Dir(path)
+			stem, cached := scopeCache[dir]
+			if !cached {
+				stem = cfg.scopeResolver(dir)
+				scopeCache[dir] = stem
+			}
+			if !MatchesScope(path, stem) {
+				return nil
+			}
 		}
 
 		// Check registry for extractor.
