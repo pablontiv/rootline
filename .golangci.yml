@@ -1,0 +1,16 @@
+run:
+  timeout: 3m
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - gocritic
+
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 5
