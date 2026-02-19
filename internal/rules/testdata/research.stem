@@ -1,0 +1,8 @@
+version: 1
+
+schema:
+  Contexto:
+    type: string
+    required: true
+  Esfuerzo:
+    type: string

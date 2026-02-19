@@ -1,0 +1,10 @@
+version: 1
+
+schema:
+  Estado:
+    type: enum
+    values: [Activa, Completada, Diferida]
+    required: true
+  Cliente:
+    type: string
+    default: "Platform Owner"

@@ -1,0 +1,20 @@
+version: 1
+
+schema:
+  Estado:
+    type: enum
+    values: [Pending, In Progress, Completado]
+    required: true
+  Tipo:
+    type: enum
+    values:
+      - servicio-docker
+      - modulo-sistema
+      - operacion-sistema
+    required: true
+  In:
+    type: string
+    required: true
+  Out:
+    type: string
+    required: true

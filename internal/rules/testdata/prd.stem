@@ -1,0 +1,32 @@
+version: 1
+
+schema:
+  Estado:
+    type: enum
+    values:
+      - "Especificado"
+      - "Completado"
+      - "Obsoleto"
+    required: true
+  Tipo:
+    type: enum
+    values:
+      - servicio-docker
+      - modulo-sistema
+      - modulo-infraestructura
+      - operacion-sistema
+      - operacion-documentacion
+      - servicio-k8s
+    required: true
+  Prioridad:
+    type: enum
+    values: [Alta, Media, Baja]
+  Prerequisitos:
+    type: string
+  Dependencias:
+    type: string
+
+validate:
+  - rule: requires
+    if: { Estado: "Completado" }
+    then: { fields: [Fecha] }
