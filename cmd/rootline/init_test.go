@@ -28,8 +28,8 @@ func TestInitDryRun(t *testing.T) {
 func TestInitWritesFile(t *testing.T) {
 	dir := t.TempDir()
 	// Create markdown files (no .stem)
-	os.WriteFile(filepath.Join(dir, "a.md"), []byte("---\nestado: draft\n---\n# A\n"), 0644)
-	os.WriteFile(filepath.Join(dir, "b.md"), []byte("---\nestado: done\n---\n# B\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\nestado: draft\n---\n# A\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\nestado: done\n---\n# B\n"), 0644)
 
 	out, err := runCmd(t, "init", dir)
 	if err != nil {
@@ -86,11 +86,11 @@ func TestInitNoFiles(t *testing.T) {
 func TestInitMixedContentWarning(t *testing.T) {
 	dir := t.TempDir()
 	// Create 3 files with frontmatter and 2 without (40% without > 20% threshold)
-	os.WriteFile(filepath.Join(dir, "a.md"), []byte("---\nestado: draft\n---\n# A\n"), 0644)
-	os.WriteFile(filepath.Join(dir, "b.md"), []byte("---\nestado: done\n---\n# B\n"), 0644)
-	os.WriteFile(filepath.Join(dir, "c.md"), []byte("---\nestado: review\n---\n# C\n"), 0644)
-	os.WriteFile(filepath.Join(dir, "readme.md"), []byte("# No frontmatter\n"), 0644)
-	os.WriteFile(filepath.Join(dir, "notes.md"), []byte("# Also no frontmatter\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\nestado: draft\n---\n# A\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\nestado: done\n---\n# B\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "c.md"), []byte("---\nestado: review\n---\n# C\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "readme.md"), []byte("# No frontmatter\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "notes.md"), []byte("# Also no frontmatter\n"), 0644)
 
 	out, err := runCmd(t, "init", dir, "--dry-run")
 	if err != nil {
@@ -111,8 +111,8 @@ func TestInitMixedContentWarning(t *testing.T) {
 func TestInitCleanContentNoWarning(t *testing.T) {
 	dir := t.TempDir()
 	// All files have frontmatter
-	os.WriteFile(filepath.Join(dir, "a.md"), []byte("---\nestado: draft\n---\n# A\n"), 0644)
-	os.WriteFile(filepath.Join(dir, "b.md"), []byte("---\nestado: done\n---\n# B\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\nestado: draft\n---\n# A\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\nestado: done\n---\n# B\n"), 0644)
 
 	out, err := runCmd(t, "init", dir, "--dry-run")
 	if err != nil {
@@ -127,10 +127,10 @@ func TestInitMixedBelowThresholdNoWarning(t *testing.T) {
 	dir := t.TempDir()
 	// 1 of 10 files without frontmatter = 10% < 20% threshold
 	for i := 0; i < 9; i++ {
-		os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%d.md", i)),
+		mustWriteFile(t, filepath.Join(dir, fmt.Sprintf("f%d.md", i)),
 			[]byte(fmt.Sprintf("---\nestado: s%d\n---\n# F%d\n", i, i)), 0644)
 	}
-	os.WriteFile(filepath.Join(dir, "readme.md"), []byte("# No frontmatter\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "readme.md"), []byte("# No frontmatter\n"), 0644)
 
 	out, err := runCmd(t, "init", dir, "--dry-run")
 	if err != nil {

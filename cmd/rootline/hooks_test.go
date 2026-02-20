@@ -18,14 +18,14 @@ func TestHooksInstallAndStatus(t *testing.T) {
 	existing, hadHook := os.ReadFile(hookPath)
 	defer func() {
 		if hadHook == nil {
-			os.WriteFile(hookPath, existing, 0755)
+			_ = os.WriteFile(hookPath, existing, 0755)
 		} else {
-			os.Remove(hookPath)
+			_ = os.Remove(hookPath)
 		}
 	}()
 
 	// Remove any existing hook
-	os.Remove(hookPath)
+	_ = os.Remove(hookPath)
 
 	// Test install
 	out, err := runCmd(t, "hooks", "install")
@@ -46,7 +46,7 @@ func TestHooksInstallAndStatus(t *testing.T) {
 	}
 
 	// Verify marker
-	content, _ := os.ReadFile(hookPath)
+	content := mustReadFile(t, hookPath)
 	if !strings.Contains(string(content), hookMarker) {
 		t.Error("hook should contain rootline-managed marker")
 	}
@@ -79,15 +79,17 @@ func TestHooksInstallExistingNonRootline(t *testing.T) {
 	existing, hadHook := os.ReadFile(hookPath)
 	defer func() {
 		if hadHook == nil {
-			os.WriteFile(hookPath, existing, 0755)
+			_ = os.WriteFile(hookPath, existing, 0755)
 		} else {
-			os.Remove(hookPath)
+			_ = os.Remove(hookPath)
 		}
 	}()
 
 	// Write a non-rootline hook
-	os.MkdirAll(filepath.Dir(hookPath), 0755)
-	os.WriteFile(hookPath, []byte("#!/bin/sh\necho custom\n"), 0755)
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	mustWriteFile(t, hookPath, []byte("#!/bin/sh\necho custom\n"), 0755)
 
 	_, err = runCmd(t, "hooks", "install")
 	if err == nil {
@@ -104,7 +106,7 @@ func TestHooksInstallExistingNonRootline(t *testing.T) {
 	}
 
 	// Clean up
-	os.Remove(hookPath)
+	_ = os.Remove(hookPath)
 }
 
 func TestHooksUninstallNonRootline(t *testing.T) {
@@ -116,15 +118,17 @@ func TestHooksUninstallNonRootline(t *testing.T) {
 	existing, hadHook := os.ReadFile(hookPath)
 	defer func() {
 		if hadHook == nil {
-			os.WriteFile(hookPath, existing, 0755)
+			_ = os.WriteFile(hookPath, existing, 0755)
 		} else {
-			os.Remove(hookPath)
+			_ = os.Remove(hookPath)
 		}
 	}()
 
 	// Write non-rootline hook
-	os.MkdirAll(filepath.Dir(hookPath), 0755)
-	os.WriteFile(hookPath, []byte("#!/bin/sh\necho custom\n"), 0755)
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	mustWriteFile(t, hookPath, []byte("#!/bin/sh\necho custom\n"), 0755)
 
 	_, err = runCmd(t, "hooks", "uninstall")
 	if err == nil {
@@ -132,5 +136,5 @@ func TestHooksUninstallNonRootline(t *testing.T) {
 	}
 
 	// Clean up
-	os.Remove(hookPath)
+	_ = os.Remove(hookPath)
 }

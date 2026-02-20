@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,8 +22,8 @@ schema:
     type: enum
     values: [a, b]
 `
-	os.WriteFile(filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
-	os.WriteFile(filepath.Join(dir, "test.md"), []byte("---\nestado: draft\n---\n# Test\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	mustWriteFile(t, filepath.Join(dir, "test.md"), []byte("---\nestado: draft\n---\n# Test\n"), 0644)
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -40,13 +39,13 @@ schema:
 
 func TestDoctorInvalidYAML(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, ".stem"), []byte("{{invalid yaml"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("{{invalid yaml"), 0644)
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(buf)
 	rootCmd.SetArgs([]string{"doctor", dir})
-	rootCmd.Execute() // may return error
+	_ = rootCmd.Execute() // may return error
 	out := buf.String()
 	if !strings.Contains(out, "yaml-valid") {
 		t.Errorf("expected yaml-valid check failure, got: %s", out)
@@ -59,12 +58,12 @@ func TestDoctorOrphanScope(t *testing.T) {
 scope:
   match: "*.xyz"
 `
-	os.WriteFile(filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
 	rootCmd.SetArgs([]string{"doctor", dir})
-	rootCmd.Execute()
+	_ = rootCmd.Execute()
 	out := buf.String()
 	if !strings.Contains(out, "scope-match") {
 		t.Errorf("expected scope-match warning, got: %s", out)
@@ -78,7 +77,7 @@ schema:
   estado:
     type: string
 `
-	os.WriteFile(filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -105,7 +104,7 @@ func TestDoctorNoStems(t *testing.T) {
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
 	rootCmd.SetArgs([]string{"doctor", dir})
-	rootCmd.Execute()
+	_ = rootCmd.Execute()
 	out := buf.String()
 	if !strings.Contains(out, "no .stem") {
 		t.Errorf("expected no .stem warning, got: %s", out)

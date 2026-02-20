@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,7 +26,7 @@ schema:
     required: true
     severity: error
 `
-	os.WriteFile(filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
 	return dir
 }
 
@@ -35,7 +34,7 @@ func TestValidateWarnOnlyNoExitCode(t *testing.T) {
 	dir := setupStrictTestDir(t)
 	// Missing estado (warn) but has tipo (error) → should be valid (only warnings)
 	target := filepath.Join(dir, "warn-only.md")
-	os.WriteFile(target, []byte("---\ntipo: test\n---\n# Test\n"), 0644)
+	mustWriteFile(t, target, []byte("---\ntipo: test\n---\n# Test\n"), 0644)
 
 	out, err := runCmd(t, "validate", target)
 	if err != nil {
@@ -43,7 +42,9 @@ func TestValidateWarnOnlyNoExitCode(t *testing.T) {
 	}
 	// Should show valid=true
 	var result map[string]any
-	json.Unmarshal([]byte(out), &result)
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
 	if result["valid"] != true {
 		t.Errorf("expected valid=true with only warnings, got: %v", result["valid"])
 	}
@@ -52,7 +53,7 @@ func TestValidateWarnOnlyNoExitCode(t *testing.T) {
 func TestValidateStrictWarnsExitCode(t *testing.T) {
 	dir := setupStrictTestDir(t)
 	target := filepath.Join(dir, "warn-strict.md")
-	os.WriteFile(target, []byte("---\ntipo: test\n---\n# Test\n"), 0644)
+	mustWriteFile(t, target, []byte("---\ntipo: test\n---\n# Test\n"), 0644)
 
 	_, err := runCmd(t, "validate", "--strict", target)
 	if err == nil {
@@ -64,7 +65,7 @@ func TestValidateErrorAlwaysExitCode(t *testing.T) {
 	dir := setupStrictTestDir(t)
 	// Missing tipo (error severity)
 	target := filepath.Join(dir, "error.md")
-	os.WriteFile(target, []byte("---\nestado: Pending\n---\n# Test\n"), 0644)
+	mustWriteFile(t, target, []byte("---\nestado: Pending\n---\n# Test\n"), 0644)
 
 	_, err := runCmd(t, "validate", target)
 	if err == nil {
@@ -76,7 +77,7 @@ func TestValidateJSONIncludesSeverity(t *testing.T) {
 	dir := setupStrictTestDir(t)
 	// Missing both → has errors and warnings
 	target := filepath.Join(dir, "both.md")
-	os.WriteFile(target, []byte("---\n---\n# Test\n"), 0644)
+	mustWriteFile(t, target, []byte("---\n---\n# Test\n"), 0644)
 
 	out, err := runCmd(t, "validate", target)
 	_ = err // may have error exit code
@@ -90,8 +91,8 @@ func TestValidateBatchWarningsCount(t *testing.T) {
 	dir := setupStrictTestDir(t)
 	f1 := filepath.Join(dir, "a.md")
 	f2 := filepath.Join(dir, "b.md")
-	os.WriteFile(f1, []byte("---\ntipo: test\n---\n# A\n"), 0644)
-	os.WriteFile(f2, []byte("---\ntipo: prod\n---\n# B\n"), 0644)
+	mustWriteFile(t, f1, []byte("---\ntipo: test\n---\n# A\n"), 0644)
+	mustWriteFile(t, f2, []byte("---\ntipo: prod\n---\n# B\n"), 0644)
 
 	out, _ := runCmd(t, "validate", f1, f2)
 	if !strings.Contains(out, `"warnings_count"`) {

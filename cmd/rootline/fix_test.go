@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,7 +11,7 @@ func TestFixMissingRequired(t *testing.T) {
 	dir := setupTestDir(t) // .stem has estado:required+enum
 	// Create file missing required estado
 	target := filepath.Join(dir, "missing.md")
-	os.WriteFile(target, []byte("---\ntipo: test\n---\n# Missing\n"), 0644)
+	mustWriteFile(t, target, []byte("---\ntipo: test\n---\n# Missing\n"), 0644)
 
 	out, err := runCmd(t, "fix", target)
 	if err != nil {
@@ -23,7 +22,7 @@ func TestFixMissingRequired(t *testing.T) {
 	}
 
 	// Verify file was updated
-	content, _ := os.ReadFile(target)
+	content := mustReadFile(t, target)
 	if !strings.Contains(string(content), "estado:") {
 		t.Errorf("expected estado field added to file, got: %s", string(content))
 	}
@@ -32,7 +31,7 @@ func TestFixMissingRequired(t *testing.T) {
 func TestFixInvalidEnum(t *testing.T) {
 	dir := setupTestDir(t) // .stem has estado: enum [Completado, Pending]
 	target := filepath.Join(dir, "bad-enum.md")
-	os.WriteFile(target, []byte("---\nestado: Compltado\n---\n# Bad\n"), 0644)
+	mustWriteFile(t, target, []byte("---\nestado: Compltado\n---\n# Bad\n"), 0644)
 
 	out, err := runCmd(t, "fix", target)
 	if err != nil {
@@ -42,7 +41,7 @@ func TestFixInvalidEnum(t *testing.T) {
 		t.Errorf("expected 'corrected' in output, got: %s", out)
 	}
 
-	content, _ := os.ReadFile(target)
+	content := mustReadFile(t, target)
 	if !strings.Contains(string(content), "Completado") {
 		t.Errorf("expected 'Completado' after fix, got: %s", string(content))
 	}
@@ -52,7 +51,7 @@ func TestFixDryRun(t *testing.T) {
 	dir := setupTestDir(t)
 	target := filepath.Join(dir, "dryrun.md")
 	original := "---\ntipo: test\n---\n# Dry\n"
-	os.WriteFile(target, []byte(original), 0644)
+	mustWriteFile(t, target, []byte(original), 0644)
 
 	out, err := runCmd(t, "fix", "--dry-run", target)
 	if err != nil {
@@ -63,7 +62,7 @@ func TestFixDryRun(t *testing.T) {
 	}
 
 	// Verify file was NOT modified
-	content, _ := os.ReadFile(target)
+	content := mustReadFile(t, target)
 	if string(content) != original {
 		t.Error("dry-run should not modify the file")
 	}
@@ -85,11 +84,14 @@ func TestFixNoErrors(t *testing.T) {
 func TestFixPreservesBody(t *testing.T) {
 	dir := setupTestDir(t)
 	target := filepath.Join(dir, "body.md")
-	os.WriteFile(target, []byte("---\ntipo: test\n---\n# Important Content\n\nBody text here.\n"), 0644)
+	mustWriteFile(t, target, []byte("---\ntipo: test\n---\n# Important Content\n\nBody text here.\n"), 0644)
 
-	runCmd(t, "fix", target)
+	_, err := runCmd(t, "fix", target)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	content, _ := os.ReadFile(target)
+	content := mustReadFile(t, target)
 	if !strings.Contains(string(content), "Important Content") {
 		t.Error("expected body preserved after fix")
 	}
@@ -129,11 +131,9 @@ func TestFixAllJSON(t *testing.T) {
 	dir := setupTestDir(t) // .stem has estado:required+enum
 
 	// Create file with missing required field
-	os.WriteFile(filepath.Join(dir, "broken.md"), []byte("---\ntipo: test\n---\n# Broken\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "broken.md"), []byte("---\ntipo: test\n---\n# Broken\n"), 0644)
 
-	oldDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldDir)
+	mustChdir(t, dir)
 
 	out, err := runCmd(t, "fix", "--all", "--output", "json")
 	if err != nil {
@@ -158,7 +158,7 @@ func TestFixAllJSON(t *testing.T) {
 	}
 
 	// Verify file was actually updated
-	content, _ := os.ReadFile(filepath.Join(dir, "broken.md"))
+	content := mustReadFile(t, filepath.Join(dir, "broken.md"))
 	if !strings.Contains(string(content), "estado:") {
 		t.Errorf("expected estado field added to file, got: %s", string(content))
 	}
@@ -167,11 +167,9 @@ func TestFixAllJSON(t *testing.T) {
 func TestFixAllTable(t *testing.T) {
 	dir := setupTestDir(t)
 
-	os.WriteFile(filepath.Join(dir, "broken.md"), []byte("---\ntipo: test\n---\n# Broken\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "broken.md"), []byte("---\ntipo: test\n---\n# Broken\n"), 0644)
 
-	oldDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldDir)
+	mustChdir(t, dir)
 
 	out, err := runCmd(t, "fix", "--all", "--output", "table")
 	if err != nil {
@@ -193,11 +191,9 @@ func TestFixAllDryRunJSON(t *testing.T) {
 
 	original := "---\ntipo: test\n---\n# DryAll\n"
 	target := filepath.Join(dir, "dryall.md")
-	os.WriteFile(target, []byte(original), 0644)
+	mustWriteFile(t, target, []byte(original), 0644)
 
-	oldDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldDir)
+	mustChdir(t, dir)
 
 	out, err := runCmd(t, "fix", "--all", "--dry-run", "--output", "json")
 	if err != nil {
@@ -222,7 +218,7 @@ func TestFixAllDryRunJSON(t *testing.T) {
 	}
 
 	// Verify file was NOT modified
-	content, _ := os.ReadFile(target)
+	content := mustReadFile(t, target)
 	if string(content) != original {
 		t.Error("dry-run should not modify the file")
 	}
@@ -231,11 +227,9 @@ func TestFixAllDryRunJSON(t *testing.T) {
 func TestFixAllNoStem(t *testing.T) {
 	dir := t.TempDir()
 	// No .stem file, just a markdown file
-	os.WriteFile(filepath.Join(dir, "file.md"), []byte("---\ntipo: test\n---\n# Test\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "file.md"), []byte("---\ntipo: test\n---\n# Test\n"), 0644)
 
-	oldDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldDir)
+	mustChdir(t, dir)
 
 	out, err := runCmd(t, "fix", "--all", "--output", "json")
 	if err != nil {
@@ -254,9 +248,7 @@ func TestFixAllNoStem(t *testing.T) {
 func TestFixAllNoErrors(t *testing.T) {
 	dir := setupTestDir(t) // has valid doc1.md
 
-	oldDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldDir)
+	mustChdir(t, dir)
 
 	out, err := runCmd(t, "fix", "--all", "--output", "json")
 	if err != nil {
@@ -312,11 +304,9 @@ func TestFixAllWithEnumCorrection(t *testing.T) {
 	dir := setupTestDir(t)
 
 	// Create file with bad enum value
-	os.WriteFile(filepath.Join(dir, "bad-enum.md"), []byte("---\nestado: Compltado\ntipo: test\n---\n# Bad\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "bad-enum.md"), []byte("---\nestado: Compltado\ntipo: test\n---\n# Bad\n"), 0644)
 
-	oldDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(oldDir)
+	mustChdir(t, dir)
 
 	out, err := runCmd(t, "fix", "--all", "--output", "json")
 	if err != nil {

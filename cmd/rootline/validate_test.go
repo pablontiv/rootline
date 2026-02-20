@@ -105,9 +105,7 @@ func TestValidateCmd_AllMode(t *testing.T) {
 	})
 
 	// Change to project dir for --all mode
-	oldDir, _ := os.Getwd()
-	defer os.Chdir(oldDir)
-	os.Chdir(root)
+	mustChdir(t, root)
 
 	stdout, err := executeValidate(t, "--all")
 	if err != ErrValidationFailed {

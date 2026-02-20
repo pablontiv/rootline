@@ -19,10 +19,7 @@ func TestNewCreatesFile(t *testing.T) {
 		t.Errorf("expected 'Created' message, got: %s", out)
 	}
 
-	content, err := os.ReadFile(target)
-	if err != nil {
-		t.Fatalf("expected file to exist: %v", err)
-	}
+	content := mustReadFile(t, target)
 	s := string(content)
 	if !strings.Contains(s, "---") {
 		t.Error("expected frontmatter delimiters")
@@ -36,9 +33,12 @@ func TestNewRequiredFields(t *testing.T) {
 	dir := setupTestDir(t)
 	target := filepath.Join(dir, "test-doc.md")
 
-	runCmd(t, "new", target)
+	_, err := runCmd(t, "new", target)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	content, _ := os.ReadFile(target)
+	content := mustReadFile(t, target)
 	s := string(content)
 	// estado is required+enum, should appear with first value
 	if !strings.Contains(s, "estado: Completado") && !strings.Contains(s, "estado: Pending") {
@@ -50,9 +50,12 @@ func TestNewEnumComments(t *testing.T) {
 	dir := setupTestDir(t)
 	target := filepath.Join(dir, "test-doc.md")
 
-	runCmd(t, "new", target)
+	_, err := runCmd(t, "new", target)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	content, _ := os.ReadFile(target)
+	content := mustReadFile(t, target)
 	s := string(content)
 	if !strings.Contains(s, "# [") {
 		t.Errorf("expected enum value comment, got: %s", s)
@@ -120,9 +123,12 @@ func TestNewTitleFromFilename(t *testing.T) {
 	dir := setupTestDir(t)
 	target := filepath.Join(dir, "my-test-doc.md")
 
-	runCmd(t, "new", target)
+	_, err := runCmd(t, "new", target)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	content, _ := os.ReadFile(target)
+	content := mustReadFile(t, target)
 	s := string(content)
 	if !strings.Contains(s, "# My Test Doc") {
 		t.Errorf("expected title from filename, got: %s", s)
