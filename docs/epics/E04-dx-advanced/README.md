@@ -17,6 +17,7 @@ Evolucionar Rootline de MVP funcional (E03: core engine + 5 comandos) a herramie
 | F03 | [Validation Evolution](F03-validation-evolution/) | Progressive strictness (severity levels), git hooks |
 | F04 | [Derivation Engine](F04-derivation-engine/) | Expression language (expr-lang), derive pipeline, explain command |
 | F05 | [Dependency Graph](F05-dependency-graph/) | Wiki-link extraction, link schema/validation, graph command |
+| F06 | [E05 Hardening](F06-e05-hardening/) | fix --all, describe hints, init mixed-content warnings |
 
 ## Orden de Ejecucion
 
@@ -27,6 +28,7 @@ Evolucionar Rootline de MVP funcional (E03: core engine + 5 comandos) a herramie
 | F03 | — | Validation evolution, parallelizable con F01 y F02 |
 | F04 | F01-F03 (core estable) | Derivation requiere pipeline maduro |
 | F05 | F04 | Estado derivado por propagacion usa expression language |
+| F06 | F02 | Hardening de fix/describe/init requiere comandos base |
 
 ## Decision Log
 
