@@ -1,8 +1,11 @@
+---
+estado: Specified
+tipo: historia
+cliente: Platform Owner
+---
 # S001: Expression Evaluator
 
 **Feature**: [F04 Derivation Engine](../README.md)
-**Estado**: Specified
-**Cliente**: Platform Owner
 **Capacidad**: Rootline compila y evalua expresiones declarativas contra records usando expr-lang/expr con funciones builtin para transformacion de texto y agregacion
 
 ## Antes / Despues

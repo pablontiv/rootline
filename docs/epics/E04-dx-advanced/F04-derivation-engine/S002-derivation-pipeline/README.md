@@ -1,8 +1,11 @@
+---
+estado: Specified
+tipo: historia
+cliente: Platform Owner
+---
 # S002: Derivation Pipeline
 
 **Feature**: [F04 Derivation Engine](../README.md)
-**Estado**: Specified
-**Cliente**: Platform Owner
 **Capacidad**: Campos derivados definidos en .stem se evaluan en el pipeline y aparecen en query results, y el comando explain traza el origen de cada campo
 
 ## Antes / Despues

@@ -1,8 +1,11 @@
+---
+estado: Specified
+tipo: historia
+cliente: Platform Owner
+---
 # S003: Graph Command
 
 **Feature**: [F05 Dependency Graph](../README.md)
-**Estado**: Specified
-**Cliente**: Platform Owner
 **Capacidad**: Rootline construye un grafo dirigido de dependencias entre documentos, detecta ciclos, y genera diagramas en formato DOT o mermaid
 
 ## Antes / Despues

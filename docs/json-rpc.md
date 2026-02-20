@@ -1,3 +1,6 @@
+---
+estado: Planned
+---
 # JSON-RPC Protocol (Planned)
 
 Rootline will use **JSON-RPC 2.0** as its interaction protocol via the MCP server.

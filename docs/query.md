@@ -1,3 +1,6 @@
+---
+estado: Completado
+---
 # Query Engine
 
 Rootline exposes data through a **declarative query model**.

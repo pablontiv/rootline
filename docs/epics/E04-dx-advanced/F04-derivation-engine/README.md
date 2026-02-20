@@ -1,3 +1,7 @@
+---
+estado: Pending
+tipo: feature
+---
 # F04: Derivation Engine
 
 **Epic**: [E04](../README.md)

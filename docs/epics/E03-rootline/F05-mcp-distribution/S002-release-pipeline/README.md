@@ -1,8 +1,11 @@
+---
+estado: Specified
+tipo: historia
+cliente: Platform Owner
+---
 # S002: Release Pipeline
 
 **Feature**: [F05 MCP Server and Distribution](../README.md)
-**Estado**: Specified
-**Cliente**: Platform Owner
 **Capacidad**: Tags en el repositorio producen binarios multi-plataforma y formula Homebrew automaticamente
 
 ## Antes / Despues

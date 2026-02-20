@@ -1,3 +1,7 @@
+---
+estado: Pending
+tipo: feature
+---
 # F05: Dependency Graph
 
 **Epic**: [E04](../README.md)

@@ -1,8 +1,11 @@
+---
+estado: Specified
+tipo: historia
+cliente: Platform Owner
+---
 # S002: Link Schema and Validation
 
 **Feature**: [F05 Dependency Graph](../README.md)
-**Estado**: Specified
-**Cliente**: Platform Owner
 **Capacidad**: .stem define que tipos de links estan permitidos y hacia que targets, y la validacion detecta links invalidos
 
 ## Antes / Despues

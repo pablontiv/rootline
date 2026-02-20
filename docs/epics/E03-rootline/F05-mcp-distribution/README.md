@@ -1,3 +1,7 @@
+---
+estado: Pending
+tipo: feature
+---
 # F05: MCP Server and Distribution
 
 **Epic**: [E03](../README.md)

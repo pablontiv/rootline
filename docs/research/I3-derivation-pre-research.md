@@ -1,8 +1,9 @@
+---
+estado: Pre-research
+fecha: "2026-02-18"
+metodo: web-research
+---
 # I3 Pre-Research: Derivation Functions
-
-**Date**: 2026-02-18
-**Status**: Pre-research (investigation deferred)
-**Method**: Web research on expression languages + analysis of rootline's derivation needs
 
 ---
 

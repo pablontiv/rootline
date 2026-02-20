@@ -1,7 +1,10 @@
+---
+estado: Pre-research
+fecha: "2026-02-17"
+metodo: web-research
+---
 # I2 — Plugin Architecture: Pre-Research Notes
 
-**Fecha**: 2026-02-17
-**Estado**: Notes (pre-investigation)
 **Contexto**: Capturado durante I7. Artículo de referencia + análisis de opciones.
 
 ---

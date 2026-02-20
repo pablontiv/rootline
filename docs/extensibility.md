@@ -1,3 +1,6 @@
+---
+estado: Completado
+---
 # Extensibility
 
 Rootline is built around **extractors**.

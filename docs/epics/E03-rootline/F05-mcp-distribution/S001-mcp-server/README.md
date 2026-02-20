@@ -1,8 +1,11 @@
+---
+estado: Specified
+tipo: historia
+cliente: Platform Owner
+---
 # S001: MCP Server
 
 **Feature**: [F05 MCP Server and Distribution](../README.md)
-**Estado**: Specified
-**Cliente**: Platform Owner
 **Capacidad**: `rootline serve` expone todos los comandos via JSON-RPC 2.0 (MCP protocol) para consumo por AI assistants
 
 ## Antes / Despues

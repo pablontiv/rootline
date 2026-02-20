@@ -1,3 +1,6 @@
+---
+estado: Completado
+---
 # Identidad visual básica · Rootline
 
 ## Símbolo

@@ -1,7 +1,9 @@
+---
+estado: Done
+fecha: "2026-02-18"
+---
 # I9: Áreas de Oportunidad — Exploración Creativa
 
-**Date**: 2026-02-18
-**Status**: Done
 **Podado**: 2026-02-20 — se eliminaron secciones ya implementadas (init, doctor, fix, new, hooks, completions, table, severity)
 
 ---

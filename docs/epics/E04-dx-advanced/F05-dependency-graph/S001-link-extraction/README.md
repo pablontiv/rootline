@@ -1,8 +1,11 @@
+---
+estado: Specified
+tipo: historia
+cliente: Platform Owner
+---
 # S001: Link Extraction
 
 **Feature**: [F05 Dependency Graph](../README.md)
-**Estado**: Specified
-**Cliente**: Platform Owner
 **Capacidad**: MarkdownExtractor detecta y extrae wiki-links tipados del body de documentos Markdown, poblando el campo Links del Record
 
 ## Antes / Despues
