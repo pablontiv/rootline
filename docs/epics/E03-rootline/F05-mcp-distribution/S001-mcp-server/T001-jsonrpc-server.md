@@ -66,5 +66,4 @@ tests:
 
 ## Fuente de verdad
 
-- `src/rootline/docs/intent/v0-rootline.md` seccion 3 (Commands: serve)
 - `src/rootline/README.md` seccion "JSON-RPC protocol"

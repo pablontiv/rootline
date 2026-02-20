@@ -65,5 +65,4 @@ tests:
 
 ## Fuente de verdad
 
-- `src/rootline/docs/intent/v0-rootline.md` seccion 3 (Commands table — MCP exposes same)
 - `src/rootline/README.md` seccion "AI-native" y "JSON-RPC protocol"

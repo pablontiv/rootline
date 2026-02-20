@@ -1,7 +1,7 @@
 # Rootline
 
-> **Status**: Design phase — not yet released.
-> This README describes the intended design.
+> **Status**: Core engine functional — validation, query, describe, and CLI complete.
+> Features marked with **(planned)** are designed but not yet implemented.
 
 Rootline is a **file-based database and constraint engine** for structured documentation.
 
@@ -72,10 +72,10 @@ A `.stem` file is written in YAML and may declare:
 
 - **Schemas** for document metadata
 - **Validation rules** for consistency
-- **Derived fields** computed from existing data
-- **Derived state** inferred from structure and relationships
+- **Derived fields** computed from existing data **(planned)**
+- **Derived state** inferred from structure and relationships **(planned)**
 - **Scope rules** that define which files it applies to
-- **Link semantics and constraints**
+- **Link semantics and constraints** **(planned)**
 
 All definitions are inherited unless explicitly overridden.
 
@@ -129,12 +129,12 @@ validate:
     then:
       fields: [owner]
 
-derive:
+derive:  # (planned — pipeline slot reserved, not yet functional)
   slug:
     from: title
     using: slugify
 
-state:
+state:  # (planned — pipeline slot reserved, not yet functional)
   visibility:
     derive:
       when:
@@ -143,11 +143,9 @@ state:
 
 ```
 
-> Derivation functions (`slugify`, `when/then`, etc.) are planned for a future release.
-> The pipeline slot and data structures are reserved. See I3 in the [intent document](docs/intent/v0-rootline.md).
+> Derivation functions (`slugify`, `when/then`, etc.) are planned. The pipeline slot and data structures are reserved.
 
-> Link constraints (`links.allowed`) are deferred.
-> See D9 in the [intent document](docs/intent/v0-rootline.md).
+> Link constraints (`links.allowed`) are planned.
 
 ---
 
@@ -164,10 +162,9 @@ Rootline adds a machine-readable layer on top.
 
 ---
 
-## Links as relationships
+## Links as relationships **(planned)**
 
-> Link extraction and relationship modeling are deferred.
-> See D9 in the [intent document](docs/intent/v0-rootline.md).
+> Link extraction and relationship modeling are planned.
 
 Rootline will treat links as **data**, not navigation.
 
@@ -234,19 +231,8 @@ rootline describe docs/api/
       "source": "docs/.stem"
     }
   ],
-  "derive": {
-    "slug": {
-      "from": "title",
-      "using": "slugify",
-      "source": "docs/.stem"
-    }
-  },
-  "state": {
-    "visibility": {
-      "derive": { "when": { "status": "published" }, "then": "public" },
-      "source": "docs/.stem"
-    }
-  },
+  "derive": {},
+  "state": {},
   "links": {}
 }
 ```
@@ -279,8 +265,7 @@ Queries return **records**, not rendered documents.
   "version": 1,
   "kind": "rootline/query",
   "meta": {
-    "count": 1,
-    "next_cursor": null
+    "count": 1
   },
   "rows": [
     {
@@ -289,9 +274,7 @@ Queries return **records**, not rendered documents.
       "frontmatter": {
         "title": "Endpoints",
         "status": "published"
-      },
-      "derived": { "slug": "endpoints" },
-      "state": { "visibility": "public" }
+      }
     }
   ]
 }
@@ -316,15 +299,13 @@ Queries return **records**, not rendered documents.
 {
   "version": 1,
   "from": "docs/",
-  "select": ["path", "frontmatter.title", "state.visibility"],
   "where": {
     "and": [
       {"eq": ["frontmatter.status", "published"]},
       {"exists": "frontmatter.owner"}
     ]
   },
-  "limit": 50,
-  "cursor": null
+  "limit": 50
 }
 ```
 
@@ -347,15 +328,15 @@ Query functions: `limit`, `count`.
 - Queries are **purely declarative**
 - No embedded code or scripts
 - Stable semantics for automation and AI
-- Operator set derived from real consumer analysis ([I1 research](docs/research/I1-query-operators.md))
+- Operator set derived from real consumer analysis
 
 ---
 
-## JSON-RPC protocol
+## JSON-RPC protocol **(planned)**
 
-Rootline uses **JSON-RPC 2.0** as its interaction protocol.
+Rootline will use **JSON-RPC 2.0** as its interaction protocol via the MCP server.
 
-All core capabilities are exposed as methods:
+All core capabilities will be exposed as methods:
 
 - `query`
 - `describe`
@@ -391,7 +372,7 @@ The query contract above maps directly to JSON-RPC `params`:
   "result": {
     "version": 1,
     "kind": "rootline/query",
-    "meta": { "count": 1, "next_cursor": null },
+    "meta": { "count": 1 },
     "rows": []
   }
 }
@@ -399,24 +380,21 @@ The query contract above maps directly to JSON-RPC `params`:
 
 ---
 
-## Explainability
+## Explainability **(planned)**
 
-Rootline can explain **why** a document has a given state,
+Rootline will explain **why** a document has a given state,
 validation error, or derived value.
 
 ```bash
 rootline explain docs/api/endpoints.md
 ```
 
-Explain output traces:
+Explain output will trace:
 - which `.stem` files applied
 - which rules fired
 - which conditions matched
 
-Explainability is a first-class design goal.
-
-> Explain tracing depth is under investigation.
-> See I4 in the [intent document](docs/intent/v0-rootline.md).
+Explainability is a first-class design goal. Currently, `describe` shows the full schema cascade with `source` tracking per field, and `validate` errors include source `.stem` paths.
 
 ---
 
@@ -446,13 +424,26 @@ rules by directory, inheritance, validation, derivation, querying.
 Rootline ships as a **single static Go binary** with no dependencies.
 
 ```bash
-rootline query
-rootline validate
+# Core
+rootline validate [file|--all|--staged]
+rootline query --where 'field op value'
 rootline describe <path>
-rootline explain <file>
-rootline tree
-rootline stats
-rootline serve
+rootline tree [path]
+rootline stats [path]
+
+# Document lifecycle
+rootline init [path]          # Infer .stem from existing documents
+rootline new <file>           # Scaffold document from effective schema
+rootline fix <file|--all>     # Repair files (add missing fields, fix values)
+
+# Tooling
+rootline doctor               # Check .stem configuration health
+rootline hooks install|uninstall|status
+rootline completion bash|zsh|fish|powershell
+
+# Planned
+rootline explain <file>       # Trace derivation chain (stub)
+rootline serve                # MCP server (stub)
 ```
 
 All commands support `--field` for dot-path extraction:
@@ -482,11 +473,11 @@ Breaking changes to output schemas require a version bump.
 
 ---
 
-## AI-native
+## AI-native **(planned)**
 
-Rootline embeds a **Model Context Protocol (MCP)** server.
+Rootline will embed a **Model Context Protocol (MCP)** server.
 
-AI assistants can query Rootline using the same contracts as the CLI,
+AI assistants will query Rootline using the same contracts as the CLI,
 making documentation a structured, explainable knowledge source.
 
 ---

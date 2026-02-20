@@ -26,4 +26,3 @@
 
 ## Fuente de verdad
 
-- `src/rootline/docs/intent/v0-rootline.md` seccion 7 (Stack: CI/CD, Distribution)

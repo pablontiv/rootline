@@ -57,5 +57,3 @@ artefactos:
 
 ## Fuente de verdad
 
-- `src/rootline/docs/intent/v0-rootline.md` seccion 7 (Stack: Distribution)
-- `src/rootline/docs/research/docrules-research-2026.md` seccion 6 (Amplificadores: Homebrew tap)

@@ -26,5 +26,3 @@
 
 ## Fuente de verdad
 
-- `src/rootline/docs/intent/v0-rootline.md` seccion 3 (Commands: serve)
-- `src/rootline/docs/intent/v0-rootline.md` seccion 7 (Stack: MCP server)
