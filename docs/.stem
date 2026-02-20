@@ -1,0 +1,9 @@
+version: 1
+
+scope:
+  match: "*.md"
+
+schema:
+  estado:
+    type: string
+    required: true

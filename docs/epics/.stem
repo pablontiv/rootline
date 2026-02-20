@@ -1,0 +1,32 @@
+version: 1
+
+schema:
+  estado:
+    type: enum
+    values:
+      - Pending
+      - In Progress
+      - Specified
+      - Completado
+      - Diferida
+    required: true
+  tipo:
+    type: enum
+    values:
+      - software-module
+      - ci-cd
+      - feature
+      - historia
+    severity: warn
+  cliente:
+    type: string
+  ejecutable_en:
+    type: string
+
+validate:
+  - rule: requires
+    if: { tipo: "software-module" }
+    then: { fields: [ejecutable_en] }
+  - rule: requires
+    if: { tipo: "ci-cd" }
+    then: { fields: [ejecutable_en] }

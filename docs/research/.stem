@@ -1,0 +1,16 @@
+version: 1
+
+schema:
+  estado:
+    type: enum
+    values:
+      - Pre-research
+      - In Progress
+      - Done
+      - Deferred
+    required: true
+  fecha:
+    type: string
+    required: true
+  metodo:
+    type: string
