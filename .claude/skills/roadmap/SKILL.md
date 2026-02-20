@@ -31,9 +31,14 @@ Este skill es **plan-mode aware**. Cuando `defaultMode: "plan"` está activo:
 4. Llamar `ExitPlanMode` para aprobación
 
 ### Fase 2: Ejecución (post-aprobación)
-1. Crear archivos/directorios según el plan aprobado
-2. Actualizar tabla en el README padre (cascading link)
-3. Confirmar creación exitosa
+
+**IMPORTANTE**: Esta fase SOLO crea archivos .md de planificación. NO implementar el trabajo descrito en los tasks — eso lo hace `/roadmap loop`.
+
+1. Crear archivos .md según el plan aprobado (READMEs de Epic/Feature/Story, archivos de Task)
+2. Después de cada Write, ejecutar `rootline validate <path>` para verificar contra el schema .stem
+3. Si la validación falla, ejecutar `rootline fix <path>` como fallback
+4. Actualizar tabla en el README padre (cascading link)
+5. Confirmar creación exitosa
 
 ---
 
@@ -155,10 +160,16 @@ El plan se presenta como **propuesta fundamentada**, no como pregunta abierta.
 
 ### Paso 6: Crear Estructura (post-aprobación)
 
+**IMPORTANTE**: Solo crear archivos .md de planificación. NO implementar el trabajo descrito en los tasks.
+
 Una vez aprobada, crear TODOS los archivos usando los templates de:
 - [epic-guide.md](epic-guide.md) para READMEs de Epic y Feature
 - [story-guide.md](story-guide.md) para READMEs de Story
 - [task-guide.md](task-guide.md) para archivos de Task
+
+Después de crear cada archivo, validar contra el schema:
+1. `rootline validate <path>` — verificar que el archivo cumple el .stem
+2. Si falla, `rootline fix <path>` — corregir automáticamente lo que se pueda
 
 ---
 
@@ -232,7 +243,7 @@ Ejecutar Tasks pendientes en loop con confirmación entre cada uno.
 
 #### Fase 1: Discovery
 
-1. Ejecutar el script Python de `/roadmap pending` para obtener tasks pendientes
+1. Ejecutar `rootline query docs/epics/ --where "estado in Pending,Especificado" --output table` para obtener tasks pendientes
 2. Si `--filter PATTERN` proporcionado, filtrar resultados por Epic/Feature path match
 3. Si `--max N`, tomar solo los primeros N tasks
 4. Mostrar tabla de tasks encontradas a Pones
