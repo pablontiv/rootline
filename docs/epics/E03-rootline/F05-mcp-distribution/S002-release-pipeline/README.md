@@ -26,6 +26,8 @@ cliente: Platform Owner
 |------|-------------|
 | [T001](T001-goreleaser-config.md) | Configurar goreleaser y GitHub Actions release workflow |
 | [T002](T002-homebrew-tap.md) | Crear Homebrew tap y formula |
+| [T003](T003-conventional-commits-hook.md) | Git hook commit-msg para validar conventional commits |
+| [T004](T004-svu-version-automation.md) | Instalar svu y documentar flujo de release en CLAUDE.md |
 
 ## Fuente de verdad
 
