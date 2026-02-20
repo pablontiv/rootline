@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
@@ -37,5 +39,35 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 	relPath := args[0]
 
 	result := rules.NewDescribeResult(relPath, entries, effective)
+	if outputFormat == "table" {
+		return renderDescribeTable(cmd, result)
+	}
 	return outputJSON(cmd, result, false)
+}
+
+func renderDescribeTable(cmd *cobra.Command, r *rules.DescribeResult) error {
+	headers := []string{"Field", "Type", "Required", "Values", "Source"}
+	var rows [][]string
+
+	keys := make([]string, 0, len(r.Schema))
+	for k := range r.Schema {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		f := r.Schema[k]
+		req := "no"
+		if f.Required {
+			req = "yes"
+		}
+		vals := ""
+		if len(f.Values) > 0 {
+			vals = strings.Join(f.Values, ", ")
+		}
+		rows = append(rows, []string{k, f.Type, req, vals, f.Source})
+	}
+
+	renderTable(cmd.OutOrStdout(), headers, rows)
+	return nil
 }

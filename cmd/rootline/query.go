@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -80,6 +81,9 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("executing query: %w", err)
 	}
 
+	if outputFormat == "table" {
+		return renderQueryTable(cmd, result)
+	}
 	return outputJSON(cmd, result, false)
 }
 
@@ -134,4 +138,41 @@ func parseWhereExpr(expr string) (query.Condition, error) {
 	default:
 		return query.Condition{}, fmt.Errorf("unknown operator %q (expected eq|ne|contains|in|exists)", op)
 	}
+}
+
+func renderQueryTable(cmd *cobra.Command, result any) error {
+	qr, ok := result.(*query.QueryResult)
+	if !ok {
+		return outputJSON(cmd, result, false)
+	}
+
+	// Collect all frontmatter keys across rows
+	keySet := map[string]bool{}
+	for _, row := range qr.Rows {
+		for k := range row.Frontmatter {
+			keySet[k] = true
+		}
+	}
+	var keys []string
+	for k := range keySet {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	headers := append([]string{"Path"}, keys...)
+	var rows [][]string
+	for _, row := range qr.Rows {
+		r := []string{row.Path}
+		for _, k := range keys {
+			if v, ok := row.Frontmatter[k]; ok {
+				r = append(r, fmt.Sprintf("%v", v))
+			} else {
+				r = append(r, "")
+			}
+		}
+		rows = append(rows, r)
+	}
+
+	renderTable(cmd.OutOrStdout(), headers, rows)
+	return nil
 }

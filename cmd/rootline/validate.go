@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
@@ -88,9 +89,15 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 
 	// Single file → single result; multiple → batch
 	if len(results) == 1 {
+		if outputFormat == "table" {
+			return renderValidateTable(cmd, rules.NewBatchValidationResult(results))
+		}
 		return outputJSON(cmd, results[0], !results[0].Valid)
 	}
 	batch := rules.NewBatchValidationResult(results)
+	if outputFormat == "table" {
+		return renderValidateTable(cmd, batch)
+	}
 	return outputJSON(cmd, batch, batch.Summary.Invalid > 0)
 }
 
@@ -128,7 +135,37 @@ func runValidateAll(cmd *cobra.Command) error {
 	}
 
 	batch := rules.NewBatchValidationResult(results)
+	if outputFormat == "table" {
+		return renderValidateTable(cmd, batch)
+	}
 	return outputJSON(cmd, batch, batch.Summary.Invalid > 0)
+}
+
+func renderValidateTable(cmd *cobra.Command, batch *rules.BatchValidationResult) error {
+	headers := []string{"File", "Valid", "Errors"}
+	var rows [][]string
+	for _, r := range batch.Results {
+		valid := "yes"
+		if !r.Valid {
+			valid = "no"
+		}
+		errMsgs := make([]string, len(r.Errors))
+		for i, e := range r.Errors {
+			errMsgs[i] = e.Message
+		}
+		errStr := ""
+		if len(errMsgs) > 0 {
+			errStr = strings.Join(errMsgs, "; ")
+		}
+		rows = append(rows, []string{r.Path, valid, errStr})
+	}
+	renderTable(cmd.OutOrStdout(), headers, rows)
+	if batch.Summary.Invalid > 0 {
+		cmd.SilenceUsage = true
+		cmd.SilenceErrors = true
+		return ErrValidationFailed
+	}
+	return nil
 }
 
 // outputJSON marshals v to JSON, applies --field extraction if set,
