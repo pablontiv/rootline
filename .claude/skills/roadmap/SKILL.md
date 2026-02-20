@@ -216,53 +216,7 @@ Presenta el output tal cual, sin modificaciones.
 
 Mostrar árbol jerárquico del estado actual (read-only).
 
-**Procedimiento**:
-1. Escanear `docs/epics/` recursivamente con Glob
-2. **Tasks**: Leer YAML frontmatter de cada `T*.md` para extraer `estado:`
-3. **Stories**: Contar tasks completados/total → `[n/m]`
-4. **Features**: Sumar tasks completados/total de todas sus Stories → `[n/m]`
-5. **Epics**: Sumar tasks completados/total de todas sus Features → `[n/m]`
-6. Renderizar árbol ASCII con `[n/m]`
-
-**Reglas de renderizado**:
-- `✅` para nodos con `n/n` donde n > 0 (todas las tasks completadas)
-- `○` para nodos con `[0/0]` (sin tasks, pendiente de descomponer)
-- Tasks → siguen mostrando `[Pending]` / `[Completado]` como hojas del árbol
-- Siempre expandir todas las tasks, incluso en Stories completadas
-
-**Formato de salida**:
-```
-docs/epics/
-├── E01: Infrastructure Foundation [0/4]
-│   ├── ○ F01: Host Bootstrap [0/0]
-│   ├── ○ F02: Proxmox Provisioning [0/0]
-│   ├── ○ F03: Bootstrap Orchestrator [0/0]
-│   ├── F13: CST Testing [0/2]
-│   │   └── S001: CST Layer 3 Validation [0/2]
-│   │       ├── T001: add-k8s-workload-phase [Pending]
-│   │       └── T002: validate-cst-layer3-pass [Pending]
-│   └── F14: DR Runbooks [0/2]
-│       └── S001: DR-001 Production Execution [0/2]
-│
-├── E02: AI-Native Development Framework [8/14]
-│   ├── ✅ F01: Task Template Extension [3/3]
-│   │   └── ✅ S001: IaC Task Types [3/3]
-│   │       ├── T001: extend-task-guide [Completado]
-│   │       ├── T002: update-framework-reference [Completado]
-│   │       └── T003: update-roadmap-skill [Completado]
-│   ├── F02: Skill/Hook Migration [5/8]
-│   │   ├── ✅ S001: Implementation Skills [5/5]
-│   │   │   ├── T001: migrate-service-skill [Completado]
-│   │   │   ├── T002: migrate-module-skill [Completado]
-│   │   │   ├── T003: migrate-operation-skill [Completado]
-│   │   │   ├── T004: migrate-instance-skill [Completado]
-│   │   │   └── T005: migrate-script-skills [Completado]
-│   │   └── S002: Query Skills & Hooks [0/3]
-│   ├── F03: Rules & Docs Cleanup [0/6]
-│   │   ├── S001: Rules & CLAUDE.md [0/4]
-│   │   └── S002: Dead Code Removal [0/2]
-│   └── ○ F04: Task Data Migration [0/0]
-```
+**Procedimiento**: Ejecutar `rootline tree docs/epics/ --output table`
 
 ---
 
