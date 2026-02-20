@@ -49,6 +49,7 @@ func resetFlags() {
 	initDryRun = false
 	initForce = false
 	newForce = false
+	fixDryRun = false
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
 	if f := queryCmd.Flags().Lookup("where"); f != nil {
