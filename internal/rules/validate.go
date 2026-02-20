@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -63,7 +64,10 @@ func Validate(record *extract.Record, effective *StemFile) []ValidationError {
 		}
 	}
 
-	// Phase 2: Explicit validation rules from validate section.
+	// Phase 2: Link validation against LinkSchema.
+	errs = append(errs, validateLinks(record.Links, effective.Links, effective.Path)...)
+
+	// Phase 3: Explicit validation rules from validate section.
 	for _, rule := range effective.Validate {
 		if rule.Severity == "off" {
 			continue
@@ -212,6 +216,53 @@ func extractThenFields(then map[string]any) []string {
 func enumContains(values []string, val any) bool {
 	s := fmt.Sprintf("%v", val)
 	for _, v := range values {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// validateLinks checks record links against the effective LinkSchema.
+// If the schema has no link constraints, all links are allowed (permissive).
+func validateLinks(links []extract.Link, schema LinkSchema, source string) []ValidationError {
+	if schema.IsEmpty() {
+		return nil
+	}
+
+	var errs []ValidationError
+	for _, link := range links {
+		// Check allowed types.
+		if len(schema.Allowed) > 0 && !stringSliceContains(schema.Allowed, link.Type) {
+			errs = append(errs, ValidationError{
+				Rule:     "link_type",
+				Field:    "links",
+				Message:  fmt.Sprintf("link type %q not allowed (allowed: [%s])", link.Type, strings.Join(schema.Allowed, ", ")),
+				Source:   source,
+				Severity: "error",
+			})
+		}
+
+		// Check target pattern.
+		if rule, ok := schema.Rules[link.Type]; ok && rule.Target != "" {
+			matched, err := filepath.Match(rule.Target, link.Target)
+			if err != nil || !matched {
+				errs = append(errs, ValidationError{
+					Rule:     "link_target",
+					Field:    "links",
+					Message:  fmt.Sprintf("link target %q does not match pattern %q", link.Target, rule.Target),
+					Source:   source,
+					Severity: "error",
+				})
+			}
+		}
+	}
+	return errs
+}
+
+// stringSliceContains checks if a string is in a slice.
+func stringSliceContains(slice []string, s string) bool {
+	for _, v := range slice {
 		if v == s {
 			return true
 		}

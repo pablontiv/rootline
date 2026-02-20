@@ -353,3 +353,86 @@ func TestValidate_SourceTracking(t *testing.T) {
 		t.Error("expected error from tasks/.stem")
 	}
 }
+
+func TestValidateLinks_AllowedType(t *testing.T) {
+	stem := &StemFile{
+		Links: LinkSchema{Allowed: []string{"blocks", "parent"}},
+		Path:  "test/.stem",
+	}
+	record := &extract.Record{
+		Path: "test.md", Type: "markdown",
+		Frontmatter: map[string]any{},
+		Links:       []extract.Link{{Target: "T003", Type: "blocks", Line: 1}},
+	}
+	errs := Validate(record, stem)
+	if len(errs) != 0 {
+		t.Errorf("got %d errors, want 0: %v", len(errs), errs)
+	}
+}
+
+func TestValidateLinks_DisallowedType(t *testing.T) {
+	stem := &StemFile{
+		Links: LinkSchema{Allowed: []string{"blocks", "parent"}},
+		Path:  "test/.stem",
+	}
+	record := &extract.Record{
+		Path: "test.md", Type: "markdown",
+		Frontmatter: map[string]any{},
+		Links:       []extract.Link{{Target: "X", Type: "unknown", Line: 1}},
+	}
+	errs := Validate(record, stem)
+	if len(errs) != 1 || errs[0].Rule != "link_type" {
+		t.Errorf("got %v, want 1 link_type error", errs)
+	}
+}
+
+func TestValidateLinks_TargetMatchesGlob(t *testing.T) {
+	stem := &StemFile{
+		Links: LinkSchema{
+			Allowed: []string{"blocks"},
+			Rules:   map[string]LinkRule{"blocks": {Target: "*.md"}},
+		},
+		Path: "test/.stem",
+	}
+	record := &extract.Record{
+		Path: "test.md", Type: "markdown",
+		Frontmatter: map[string]any{},
+		Links:       []extract.Link{{Target: "T003.md", Type: "blocks", Line: 1}},
+	}
+	errs := Validate(record, stem)
+	if len(errs) != 0 {
+		t.Errorf("got %d errors, want 0: %v", len(errs), errs)
+	}
+}
+
+func TestValidateLinks_TargetMismatchGlob(t *testing.T) {
+	stem := &StemFile{
+		Links: LinkSchema{
+			Allowed: []string{"blocks"},
+			Rules:   map[string]LinkRule{"blocks": {Target: "*.md"}},
+		},
+		Path: "test/.stem",
+	}
+	record := &extract.Record{
+		Path: "test.md", Type: "markdown",
+		Frontmatter: map[string]any{},
+		Links:       []extract.Link{{Target: "T003.txt", Type: "blocks", Line: 1}},
+	}
+	errs := Validate(record, stem)
+	if len(errs) != 1 || errs[0].Rule != "link_target" {
+		t.Errorf("got %v, want 1 link_target error", errs)
+	}
+}
+
+func TestValidateLinks_NoSchema_Permissive(t *testing.T) {
+	stem := &StemFile{Path: "test/.stem"}
+	record := &extract.Record{
+		Path: "test.md", Type: "markdown",
+		Frontmatter: map[string]any{},
+		Links:       []extract.Link{{Target: "anything", Type: "whatever", Line: 1}},
+	}
+	errs := Validate(record, stem)
+	if len(errs) != 0 {
+		t.Errorf("got %d errors, want 0 (no schema = permissive): %v", len(errs), errs)
+	}
+}
