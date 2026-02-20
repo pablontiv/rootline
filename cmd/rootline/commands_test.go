@@ -101,7 +101,7 @@ func TestQueryJSON(t *testing.T) {
 
 func TestQueryWithWhere(t *testing.T) {
 	dir := setupTestDir(t)
-	out, err := runCmd(t, "query", "--from", dir, "--where", "estado eq Pending")
+	out, err := runCmd(t, "query", "--from", dir, "--where", "estado == 'Pending'")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -156,19 +156,21 @@ func TestQueryTable(t *testing.T) {
 
 func TestQueryWhereIn(t *testing.T) {
 	dir := setupTestDir(t)
-	out, err := runCmd(t, "query", "--from", dir, "--where", "tipo in test")
+	out, err := runCmd(t, "query", "--from", dir, "--where", "tipo in ['test', 'prod']")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out, "doc1.md") {
 		t.Errorf("expected doc1.md with 'in' operator, got: %s", out)
 	}
+	if !strings.Contains(out, "doc2.md") {
+		t.Errorf("expected doc2.md with 'in' operator, got: %s", out)
+	}
 }
 
-func TestQueryWhereInCommaSeparated(t *testing.T) {
+func TestQueryWhereInArray(t *testing.T) {
 	dir := setupTestDir(t)
-	// With StringArrayVar, comma in value is preserved (not split into separate flags)
-	out, err := runCmd(t, "query", "--from", dir, "--where", "estado in Pending,Completado")
+	out, err := runCmd(t, "query", "--from", dir, "--where", "estado in ['Pending', 'Completado']")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -182,8 +184,8 @@ func TestQueryWhereInCommaSeparated(t *testing.T) {
 
 func TestQueryWhereInWithMultipleWhere(t *testing.T) {
 	dir := setupTestDir(t)
-	// Combine in operator with another --where (AND logic)
-	out, err := runCmd(t, "query", "--from", dir, "--where", "estado in Pending,Completado", "--where", "tipo eq test")
+	// Multiple --where flags combined with && (AND logic)
+	out, err := runCmd(t, "query", "--from", dir, "--where", "estado in ['Pending', 'Completado']", "--where", "tipo == 'test'")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -197,7 +199,7 @@ func TestQueryWhereInWithMultipleWhere(t *testing.T) {
 
 func TestQueryWhereContains(t *testing.T) {
 	dir := setupTestDir(t)
-	out, err := runCmd(t, "query", "--from", dir, "--where", "tipo contains tes")
+	out, err := runCmd(t, "query", "--from", dir, "--where", "tipo contains 'tes'")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -208,7 +210,7 @@ func TestQueryWhereContains(t *testing.T) {
 
 func TestQueryWhereNe(t *testing.T) {
 	dir := setupTestDir(t)
-	out, err := runCmd(t, "query", "--from", dir, "--where", "estado ne Pending")
+	out, err := runCmd(t, "query", "--from", dir, "--where", "estado != 'Pending'")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -217,41 +219,47 @@ func TestQueryWhereNe(t *testing.T) {
 	}
 }
 
-func TestQueryWhereExists(t *testing.T) {
+func TestQueryWhereFieldNotNil(t *testing.T) {
 	dir := setupTestDir(t)
-	out, err := runCmd(t, "query", "--from", dir, "--where", "tipo exists")
+	out, err := runCmd(t, "query", "--from", dir, "--where", "tipo != nil")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out, "doc1.md") {
-		t.Errorf("expected results with exists, got: %s", out)
+		t.Errorf("expected results with field != nil, got: %s", out)
 	}
 }
 
-func TestQueryWhereInvalid(t *testing.T) {
+func TestQueryWhereInvalidExpr(t *testing.T) {
 	dir := setupTestDir(t)
-	_, err := runCmd(t, "query", "--from", dir, "--where", "bad")
+	_, err := runCmd(t, "query", "--from", dir, "--where", "== bad syntax")
 	if err == nil {
 		t.Fatal("expected error for invalid where expression")
 	}
 }
 
-func TestQueryWhereUnknownOp(t *testing.T) {
-	dir := setupTestDir(t)
-	_, err := runCmd(t, "query", "--from", dir, "--where", "estado nope val")
-	if err == nil {
-		t.Fatal("expected error for unknown operator")
-	}
-}
-
 func TestQueryMultipleWhere(t *testing.T) {
 	dir := setupTestDir(t)
-	out, err := runCmd(t, "query", "--from", dir, "--where", "estado eq Pending", "--where", "tipo eq test")
+	out, err := runCmd(t, "query", "--from", dir, "--where", "estado == 'Pending'", "--where", "tipo == 'test'")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out, "doc1.md") {
 		t.Errorf("expected doc1.md with multiple where, got: %s", out)
+	}
+}
+
+func TestQueryWhereAndInSingleExpr(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--where", "estado == 'Pending' && tipo == 'test'")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "doc1.md") {
+		t.Errorf("expected doc1.md with && in single expr, got: %s", out)
+	}
+	if strings.Contains(out, "doc2.md") {
+		t.Errorf("expected doc2.md filtered out")
 	}
 }
 
@@ -476,26 +484,3 @@ func TestExplainStub(t *testing.T) {
 	}
 }
 
-// --- parseWhereExpr edge cases ---
-
-func TestParseWhereExprMissingValue(t *testing.T) {
-	tests := []struct {
-		expr    string
-		wantErr bool
-	}{
-		{"estado eq", true},
-		{"estado ne", true},
-		{"estado contains", true},
-		{"estado in", true},
-		{"estado exists", false},
-	}
-	for _, tt := range tests {
-		_, err := parseWhereExpr(tt.expr)
-		if tt.wantErr && err == nil {
-			t.Errorf("parseWhereExpr(%q): expected error", tt.expr)
-		}
-		if !tt.wantErr && err != nil {
-			t.Errorf("parseWhereExpr(%q): unexpected error: %v", tt.expr, err)
-		}
-	}
-}

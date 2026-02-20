@@ -12,6 +12,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// whereExamples shows the new expr-based syntax in the help text.
+const whereExamples = `Examples:
+  rootline query --where "estado == 'Pending'"
+  rootline query --where "estado in ['Pending', 'Especificado']"
+  rootline query --where "tipo == 'lxc' && estado == 'Pending'"
+  rootline query --where "body contains 'migration'"
+  rootline query --where "tags != nil"`
+
 var (
 	queryWhere []string
 	queryCount bool
@@ -22,13 +30,13 @@ var (
 var queryCmd = &cobra.Command{
 	Use:   "query [path]",
 	Short: "Search and filter records",
-	Long:  "Query documents matching filter expressions.\nMultiple --where flags are combined with AND.",
+	Long:  "Query documents matching filter expressions.\nMultiple --where flags are combined with AND.\n\n" + whereExamples,
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  runQuery,
 }
 
 func init() {
-	queryCmd.Flags().StringArrayVar(&queryWhere, "where", nil, "filter expression (repeatable, e.g. 'estado eq Pending')")
+	queryCmd.Flags().StringArrayVar(&queryWhere, "where", nil, "filter expression (e.g. \"estado == 'Pending'\")")
 	queryCmd.Flags().BoolVar(&queryCount, "count", false, "return count instead of records")
 	queryCmd.Flags().IntVar(&queryLimit, "limit", 0, "limit number of results (0 = unlimited)")
 	queryCmd.Flags().StringVar(&queryFrom, "from", ".", "root path to scan")
@@ -54,7 +62,6 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
-	// Parse --where flags into conditions
 	q := &query.Query{
 		Count: queryCount,
 		Limit: queryLimit,
@@ -68,23 +75,11 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if len(wheres) > 0 {
-		conditions, err := parseWhereFlags(wheres)
-		if err != nil {
-			return err
-		}
-		if len(conditions) == 1 {
-			q.Where = &conditions[0]
-		} else {
-			q.Where = &query.Condition{
-				Op:       query.OpAnd,
-				Children: conditions,
-			}
-		}
-	}
+	// Join multiple --where with && for expr evaluation
+	whereExpr := strings.Join(wheres, " && ")
 
-	// Execute query
-	result, err := query.Execute(records, q)
+	// Execute query with expr-based filtering
+	result, err := query.ExecuteExpr(records, whereExpr, q)
 	if err != nil {
 		return fmt.Errorf("executing query: %w", err)
 	}
@@ -93,59 +88,6 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return renderQueryTable(cmd, result)
 	}
 	return outputJSON(cmd, result, false)
-}
-
-// parseWhereFlags parses --where flag strings into Conditions.
-// Format: "field op value" where op is eq|ne|contains|exists|in.
-// For "in", value is comma-separated.
-func parseWhereFlags(wheres []string) ([]query.Condition, error) {
-	var conditions []query.Condition
-	for _, w := range wheres {
-		cond, err := parseWhereExpr(w)
-		if err != nil {
-			return nil, fmt.Errorf("invalid --where %q: %w", w, err)
-		}
-		conditions = append(conditions, cond)
-	}
-	return conditions, nil
-}
-
-func parseWhereExpr(expr string) (query.Condition, error) {
-	parts := strings.SplitN(expr, " ", 3)
-	if len(parts) < 2 {
-		return query.Condition{}, fmt.Errorf("expected 'field op [value]', got %q", expr)
-	}
-
-	field := parts[0]
-	op := parts[1]
-
-	switch op {
-	case "eq":
-		if len(parts) < 3 {
-			return query.Condition{}, fmt.Errorf("eq requires a value")
-		}
-		return query.Condition{Op: query.OpEq, Field: field, Value: parts[2]}, nil
-	case "ne":
-		if len(parts) < 3 {
-			return query.Condition{}, fmt.Errorf("ne requires a value")
-		}
-		return query.Condition{Op: query.OpNe, Field: field, Value: parts[2]}, nil
-	case "contains":
-		if len(parts) < 3 {
-			return query.Condition{}, fmt.Errorf("contains requires a value")
-		}
-		return query.Condition{Op: query.OpContains, Field: field, Value: parts[2]}, nil
-	case "in":
-		if len(parts) < 3 {
-			return query.Condition{}, fmt.Errorf("in requires comma-separated values")
-		}
-		values := strings.Split(parts[2], ",")
-		return query.Condition{Op: query.OpIn, Field: field, Values: values}, nil
-	case "exists":
-		return query.Condition{Op: query.OpExists, Field: field}, nil
-	default:
-		return query.Condition{}, fmt.Errorf("unknown operator %q (expected eq|ne|contains|in|exists)", op)
-	}
 }
 
 func renderQueryTable(cmd *cobra.Command, result any) error {

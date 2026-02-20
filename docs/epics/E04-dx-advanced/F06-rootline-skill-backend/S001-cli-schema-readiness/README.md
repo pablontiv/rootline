@@ -26,6 +26,7 @@ cliente: Platform Owner
 |------|-------------|
 | [T001](T001-fix-query-in-operator.md) | Cambiar StringSliceVar a StringArrayVar en query.go |
 | [T002](T002-expand-stem-tipo-enum.md) | Agregar 10 valores faltantes al enum tipo en .stem |
+| [T003](T003-migrate-where-to-expr.md) | Migrar --where de parsing manual a expr-lang/expr |
 
 ## Fuente de verdad
 
