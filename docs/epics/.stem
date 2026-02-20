@@ -13,8 +13,22 @@ schema:
   tipo:
     type: enum
     values:
+      # IaC
+      - servicio-docker
+      - modulo-sistema
+      - operacion-sistema
+      - lxc
+      - vm
+      - modulo-infraestructura
+      - host-script
+      - instance-script
+      # Software
       - software-module
+      - software-test
       - ci-cd
+      # General
+      - documentation
+      # Framework
       - feature
       - historia
     severity: warn
