@@ -20,11 +20,13 @@ tipo: feature
 |----|--------|-----------|
 | S001 | [CLI & Schema Readiness](S001-cli-schema-readiness/) | Query `in` funciona y .stem cubre todos los tipos de task |
 | S002 | [Skill Rootline Integration](S002-skill-rootline-integration/) | Skill usa rootline query/tree/validate en vez de logica hardcodeada |
+| S003 | [Auto-numbering Integration](S003-autonumbering-integration/) | Skill usa rootline describe para IDs y rootline new para scaffolding |
 
 ## Dependencias
 
 - Ninguna Feature previa requerida
 - S001 debe completarse antes de S002
+- F07/S001 debe completarse antes de S003
 
 ## Fuente de verdad
 
