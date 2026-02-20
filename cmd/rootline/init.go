@@ -66,6 +66,16 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Analyze
 	schema := infer.Analyze(records)
 
+	// Warn about mixed content
+	if schema.TotalFiles > 0 && schema.FilesWithout > 0 {
+		ratio := float64(schema.FilesWithout) / float64(schema.TotalFiles)
+		if ratio > 0.2 {
+			fmt.Fprintf(cmd.ErrOrStderr(),
+				"Warning: %d of %d files have no frontmatter. Consider running init on a more specific subdirectory.\n",
+				schema.FilesWithout, schema.TotalFiles)
+		}
+	}
+
 	// Generate YAML
 	yaml := generateStemYAML(schema)
 

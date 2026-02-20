@@ -21,15 +21,19 @@ type FieldStats struct {
 
 // InferredSchema is the result of analyzing a set of records.
 type InferredSchema struct {
-	Fields map[string]*FieldStats      `json:"fields"`
-	Schema map[string]rules.SchemaField `json:"schema"`
+	Fields              map[string]*FieldStats      `json:"fields"`
+	Schema              map[string]rules.SchemaField `json:"schema"`
+	TotalFiles          int                          `json:"total_files"`
+	FilesWithFrontmatter int                         `json:"files_with_frontmatter"`
+	FilesWithout        int                          `json:"files_without"`
 }
 
 // Analyze processes records and infers a schema from frontmatter patterns.
 func Analyze(records []*extract.Record) *InferredSchema {
 	result := &InferredSchema{
-		Fields: make(map[string]*FieldStats),
-		Schema: make(map[string]rules.SchemaField),
+		Fields:     make(map[string]*FieldStats),
+		Schema:     make(map[string]rules.SchemaField),
+		TotalFiles: len(records),
 	}
 
 	if len(records) == 0 {
@@ -37,6 +41,15 @@ func Analyze(records []*extract.Record) *InferredSchema {
 	}
 
 	total := len(records)
+
+	// Count files with and without frontmatter
+	for _, rec := range records {
+		if len(rec.Frontmatter) > 0 {
+			result.FilesWithFrontmatter++
+		} else {
+			result.FilesWithout++
+		}
+	}
 
 	// Collect field statistics
 	valueSets := make(map[string]map[string]int) // field -> value -> count

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,5 +80,63 @@ func TestInitNoFiles(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no markdown files") {
 		t.Errorf("expected 'no markdown files' error, got: %v", err)
+	}
+}
+
+func TestInitMixedContentWarning(t *testing.T) {
+	dir := t.TempDir()
+	// Create 3 files with frontmatter and 2 without (40% without > 20% threshold)
+	os.WriteFile(filepath.Join(dir, "a.md"), []byte("---\nestado: draft\n---\n# A\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "b.md"), []byte("---\nestado: done\n---\n# B\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "c.md"), []byte("---\nestado: review\n---\n# C\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "readme.md"), []byte("# No frontmatter\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "notes.md"), []byte("# Also no frontmatter\n"), 0644)
+
+	out, err := runCmd(t, "init", dir, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "Warning") {
+		t.Errorf("expected Warning for mixed content, got: %s", out)
+	}
+	if !strings.Contains(out, "2 of 5") {
+		t.Errorf("expected '2 of 5' in warning, got: %s", out)
+	}
+	// Schema should still be generated
+	if !strings.Contains(out, "version: 1") {
+		t.Errorf("expected schema generated despite warning, got: %s", out)
+	}
+}
+
+func TestInitCleanContentNoWarning(t *testing.T) {
+	dir := t.TempDir()
+	// All files have frontmatter
+	os.WriteFile(filepath.Join(dir, "a.md"), []byte("---\nestado: draft\n---\n# A\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "b.md"), []byte("---\nestado: done\n---\n# B\n"), 0644)
+
+	out, err := runCmd(t, "init", dir, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(out, "Warning") {
+		t.Errorf("expected no warning when all files have frontmatter, got: %s", out)
+	}
+}
+
+func TestInitMixedBelowThresholdNoWarning(t *testing.T) {
+	dir := t.TempDir()
+	// 1 of 10 files without frontmatter = 10% < 20% threshold
+	for i := 0; i < 9; i++ {
+		os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%d.md", i)),
+			[]byte(fmt.Sprintf("---\nestado: s%d\n---\n# F%d\n", i, i)), 0644)
+	}
+	os.WriteFile(filepath.Join(dir, "readme.md"), []byte("# No frontmatter\n"), 0644)
+
+	out, err := runCmd(t, "init", dir, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(out, "Warning") {
+		t.Errorf("expected no warning at 10%% ratio, got: %s", out)
 	}
 }
