@@ -18,7 +18,10 @@ import (
 // The caller should set exit code 1.
 var ErrValidationFailed = errors.New("validation failed")
 
-var validateAll bool
+var (
+	validateAll    bool
+	validateStrict bool
+)
 
 var validateCmd = &cobra.Command{
 	Use:   "validate [file...]",
@@ -29,6 +32,7 @@ var validateCmd = &cobra.Command{
 
 func init() {
 	validateCmd.Flags().BoolVar(&validateAll, "all", false, "validate all files in scope from current directory")
+	validateCmd.Flags().BoolVar(&validateStrict, "strict", false, "treat warnings as errors (exit code 1)")
 	rootCmd.AddCommand(validateCmd)
 }
 
@@ -89,16 +93,17 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 
 	// Single file → single result; multiple → batch
 	if len(results) == 1 {
+		hasErr := validateHasFailure(rules.NewBatchValidationResult(results))
 		if outputFormat == "table" {
 			return renderValidateTable(cmd, rules.NewBatchValidationResult(results))
 		}
-		return outputJSON(cmd, results[0], !results[0].Valid)
+		return outputJSON(cmd, results[0], hasErr)
 	}
 	batch := rules.NewBatchValidationResult(results)
 	if outputFormat == "table" {
 		return renderValidateTable(cmd, batch)
 	}
-	return outputJSON(cmd, batch, batch.Summary.Invalid > 0)
+	return outputJSON(cmd, batch, validateHasFailure(batch))
 }
 
 func runValidateAll(cmd *cobra.Command) error {
@@ -138,7 +143,19 @@ func runValidateAll(cmd *cobra.Command) error {
 	if outputFormat == "table" {
 		return renderValidateTable(cmd, batch)
 	}
-	return outputJSON(cmd, batch, batch.Summary.Invalid > 0)
+	return outputJSON(cmd, batch, validateHasFailure(batch))
+}
+
+// validateHasFailure returns true if the batch has errors,
+// or if --strict and has warnings.
+func validateHasFailure(batch *rules.BatchValidationResult) bool {
+	if batch.Summary.Invalid > 0 {
+		return true
+	}
+	if validateStrict && batch.Summary.WarningsCount > 0 {
+		return true
+	}
+	return false
 }
 
 func renderValidateTable(cmd *cobra.Command, batch *rules.BatchValidationResult) error {

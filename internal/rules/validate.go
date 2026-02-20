@@ -10,10 +10,11 @@ import (
 // ValidationError represents a single validation failure with full
 // traceability to the .stem file that defined the rule.
 type ValidationError struct {
-	Rule    string `json:"rule"`
-	Field   string `json:"field"`
-	Message string `json:"message"`
-	Source  string `json:"source"`
+	Rule     string `json:"rule"`
+	Field    string `json:"field"`
+	Message  string `json:"message"`
+	Source   string `json:"source"`
+	Severity string `json:"severity"`
 }
 
 // Validate checks a Record's frontmatter against the effective StemFile.
@@ -31,13 +32,19 @@ func Validate(record *extract.Record, effective *StemFile) []ValidationError {
 	for name, field := range effective.Schema {
 		val, exists := record.Frontmatter[name]
 
+		// Skip if severity is "off"
+		if field.Severity == "off" {
+			continue
+		}
+
 		// required: true → field must exist
 		if field.Required && !exists {
 			errs = append(errs, ValidationError{
-				Rule:    "required",
-				Field:   name,
-				Message: fmt.Sprintf("required field %q is missing", name),
-				Source:  field.Source,
+				Rule:     "required",
+				Field:    name,
+				Message:  fmt.Sprintf("required field %q is missing", name),
+				Source:   field.Source,
+				Severity: field.Severity,
 			})
 			continue
 		}
@@ -46,10 +53,11 @@ func Validate(record *extract.Record, effective *StemFile) []ValidationError {
 		if exists && len(field.Values) > 0 {
 			if !enumContains(field.Values, val) {
 				errs = append(errs, ValidationError{
-					Rule:    "enum",
-					Field:   name,
-					Message: fmt.Sprintf("value %v is not in allowed values: [%s]", val, strings.Join(field.Values, ", ")),
-					Source:  field.Source,
+					Rule:     "enum",
+					Field:    name,
+					Message:  fmt.Sprintf("value %v is not in allowed values: [%s]", val, strings.Join(field.Values, ", ")),
+					Source:   field.Source,
+					Severity: field.Severity,
 				})
 			}
 		}
@@ -57,16 +65,24 @@ func Validate(record *extract.Record, effective *StemFile) []ValidationError {
 
 	// Phase 2: Explicit validation rules from validate section.
 	for _, rule := range effective.Validate {
+		if rule.Severity == "off" {
+			continue
+		}
+		var ruleErrs []ValidationError
 		switch rule.Rule {
 		case "non_empty":
-			errs = append(errs, checkNonEmpty(record, rule)...)
+			ruleErrs = checkNonEmpty(record, rule)
 		case "exists":
-			errs = append(errs, checkExists(record, rule)...)
+			ruleErrs = checkExists(record, rule)
 		case "requires":
-			errs = append(errs, checkRequires(record, rule)...)
+			ruleErrs = checkRequires(record, rule)
 		case "enum":
-			errs = append(errs, checkEnum(record, rule, effective)...)
+			ruleErrs = checkEnum(record, rule, effective)
 		}
+		for i := range ruleErrs {
+			ruleErrs[i].Severity = rule.Severity
+		}
+		errs = append(errs, ruleErrs...)
 	}
 
 	return errs
