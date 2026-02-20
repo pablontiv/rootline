@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Diferida
 tipo: feature
 ---
 # F04: Derivation Engine

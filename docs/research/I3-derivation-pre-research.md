@@ -1,171 +1,136 @@
 ---
-estado: Pre-research
-fecha: "2026-02-18"
-metodo: web-research
+estado: Deferred
+fecha: "2026-02-20"
+metodo: agent-team-research
 ---
-# I3 Pre-Research: Derivation Functions
-
----
-
-## 1. Why Deferred
-
-Reality check: the primary motivator for I3 (tracking drift, E02/F01) is solvable with
-**hierarchical validation** without derivation. Derivation adds convenience
-(auto-computed `progress`, `slug`) but isn't blocking.
-
-Deferring lets us choose the expression language with evidence from real usage patterns
-instead of designing in abstract.
-
-**Architecture is ready**: pipeline slot reserved (`Extraction > ... > [Derivation] > Query`),
-Record type accommodates derived fields (`map[string]any`), .stem `derive:` key parseable
-but no-op, query contract has `derived.*` namespace, describe contract has `"derive": {}` placeholder.
+# I3 Research: Derivation Engine — Decision Record
 
 ---
 
-## 2. Derivation Levels Identified
+## 1. Decision
 
-| Level | Example | Evaluator needs |
-|-------|---------|-----------------|
-| 1. Field transform | `slug = slugify(title)` | Access to one record's fields |
-| 2. Cross-record aggregation | `feature.status = f(children)` | Access to child records as collection |
-| 3. Link traversal | `blocked = any(links.blocks, .status != "done")` | Navigate link graph |
-| 4. Transitive/recursive | `health = all(descendants, .has_owner)` | Recursive traversal |
+**Diferido**. F04 (Derivation Engine) queda en estado Diferida hasta que haya evidencia de demanda real de campos derivados por parte de usuarios.
 
-Initial derivation should cover levels 1-2. Levels 3-4 depend on link features (D9).
+**Razón**: Rootline ya tiene validation + query completos. `derive:` se parsea en .stem pero es 100% no-op. Zero archivos .stem en el repo usan `derive:`. La research original (Feb 2026) recomendaba diferir hasta tener "evidence from real usage patterns" — esa evidencia aún no existe.
+
+**Motor recomendado cuando se retome**: `expr-lang/expr` (v1.17+). Zero deps, non-Turing complete, 70ns/op, probado en Google/Uber/Argo.
 
 ---
 
-## 3. Expression Languages Evaluated
+## 2. Contexto de la Investigación
 
-### Expr (`expr-lang/expr`)
-
-- **Type**: Non-Turing complete expression evaluator
-- **Go package**: `github.com/expr-lang/expr`
-- **Syntax**: Go/JS-like (`lower(replace(title, " ", "-"))`)
-- **Safety**: Memory-safe, side-effect-free, always terminates
-- **Types**: Compile-time type checking
-- **Built-ins**: `all`, `none`, `any`, `filter`, `map`, `len`, `lower`, `upper`, `trim`
-- **Performance**: Bytecode VM with optimizing compiler
-- **Size**: ~3MB, zero transitive deps
-- **Users**: Google Cloud, Uber, Argo Workflows, ByteDance
-- **Levels**: 1-2 (collections supported via `filter`/`map` if engine passes children as array)
-- **Source**: https://expr-lang.org/
-
-### CEL (`google/cel-go`)
-
-- **Type**: Non-Turing complete expression language
-- **Go package**: `cel.dev/expr`
-- **Syntax**: C-like (`request.auth.claims.sub`)
-- **Safety**: Non-Turing complete, always terminates
-- **Users**: Kubernetes CRD validation, Envoy, Tekton
-- **Size**: Heavy (protobuf dependency)
-- **Levels**: 1-2 (cross-field validation strength, less natural for transforms)
-- **Source**: https://cel.dev/
-
-### Starlark (`google/starlark-go`)
-
-- **Type**: Python dialect, Turing-complete (bounded)
-- **Go package**: `go.starlark.net/starlark`
-- **Syntax**: Python (`[c for c in children if c.status == "done"]`)
-- **Safety**: No I/O, no unsafe imports, sandboxed. `Thread.SetMaxExecutionSteps()` for termination
-- **Users**: Bazel, Buck2, Tilt, Drone CI
-- **Levels**: 1-4 (full language, can express anything with custom builtins)
-- **Source**: https://github.com/google/starlark-go
-
-### Rego (OPA)
-
-- **Type**: Datalog-inspired policy language, non-Turing complete
-- **Go package**: `github.com/open-policy-agent/opa/v1/rego`
-- **Syntax**: Declarative/Datalog (`status := "done" { count(undone) == 0 }`)
-- **Safety**: Non-Turing complete, always terminates
-- **Built-ins**: 150+ (count, sum, min, max, regex, glob, graph, etc.)
-- **Users**: Kubernetes, Terraform Sentinel, Envoy, Conftest
-- **Size**: Heavy (~15MB OPA dependency)
-- **Levels**: 1-4 (Datalog = natural recursion over graphs)
-- **Source**: https://www.openpolicyagent.org/
-
-### Also Reviewed (less relevant)
-
-- **CUE** (`cuelang.org/go/cue`): Lattice-based unification. Philosophically aligned (schema=derivation) but excessive complexity for rootline's scope.
-- **Nickel** (`nickel-lang`): Contracts + merge with idempotency. Interesting concept (idempotent derivation: `slugify(slugify(x)) == slugify(x)`) but Rust-based, no Go embedding.
-- **Contentlayer**: `computedFields` pattern with `resolve: (doc) => value` signature. Clean but project abandoned (2024). Pattern adoptable.
-- **Dataview** (Obsidian): Expression engine with `Result` type error handling. Cross-page computed fields NOT supported (known limitation). Error handling pattern adoptable.
-- **MarkdownDB**: `computedFields: [(fileInfo, ast) => {...}]`. No schema declaration. Counter-example.
+Investigación conducida por team de 4 agentes (Feb 2026):
+- **needs-analyst**: Analizó qué necesita rootline del codebase actual
+- **expr-evaluator**: Deep-dive en expr-lang/expr API, safety, adoption
+- **alternatives-evaluator**: Comparó CEL, Starlark, Rego, go-native
+- **critic**: Cuestionó si se necesita un engine en absoluto
 
 ---
 
-## 4. Two Architectures Identified
+## 3. Hallazgos Clave
 
-### Architecture A: Single Powerful Language
+### Estado actual del codebase
+- `StemFile.Derive` es `map[string]any` en `internal/rules/rules.go:21`
+- Se parsea via YAML unmarshal pero no se evalúa en ningún lugar
+- Pipeline slot reservado: Extraction → Validation → **[DERIVATION]** → Query
+- `cmd/rootline/explain.go` es stub
+- `tree.go` ya hace derivación hardcodeada (cuenta estados, calcula completados/total)
 
-```
-Starlark / Rego handles everything:
-  field transforms + aggregation + graph traversal
-```
+### Derivation Levels
 
-- One language, one file (`.derive.star` or `.derive.rego`)
-- User writes all derivation logic
-- Engine passes context (record, children, links)
-- Inheritance: walk-up like `.stem`, child can override parent
+| Level | Ejemplo | Necesario v1? |
+|-------|---------|---------------|
+| 1. Field transform | `slug = slugify(title)` | Posible, pero nadie lo ha pedido |
+| 2. Cross-record aggregation | `progress = count(done) / total` | Parcial — requiere contexto de hijos que el pipeline no provee aún |
+| 3. Link traversal | `blocked = any(links.blocks, .status != "done")` | No — F05 (links) no implementado |
+| 4. Recursive | `health = all(descendants, .has_owner)` | No — requiere graph traversal |
 
-**Starlark variant**: imperative (Python-like). Familiar syntax, high adoption potential.
-**Rego variant**: declarative (Datalog). Coherent with `.stem` declarative nature. Natural graph recursion.
+### Dependencia F04 ↔ F05
 
-### Architecture B: Engine + Expression
-
-```
-Rootline engine (Go) controls traversal.
-Expression language (Expr) evaluates leaf computations.
-```
-
-- Engine handles: which records to visit, in what order, what context to pass
-- Expressions handle: individual value computations
-- `.stem` declares derivation declaratively, expressions inline in YAML
-
-**Pro**: rootline controls the walk (coherent with per-directory inheritance as differentiator).
-**Con**: two concepts (engine keywords + expression syntax).
+F05 (Dependency Graph) declaraba dependencia en F04 para "estado derivado por propagación". Análisis demuestra que F05 core (link extraction, validation, graph, cycle detection) NO necesita F04. La propagación de estado es Level 3 derivation y requiere ambos features. Dependencia corregida.
 
 ---
 
-## 5. Where Files Would Live
+## 4. Evaluación de Engines
 
-Expressions inline in `.stem` (Architecture B):
+| Engine | Size | Deps | YAML inline | Safety | Performance | Verdict |
+|--------|------|------|-------------|--------|-------------|---------|
+| **Expr** | 3 MB | 0 | Excelente | Non-Turing, sandboxed | 70 ns/op | **Recomendado** |
+| CEL | 15+ MB | Protobuf (heavy) | Awkward | Non-Turing | 91 ns/op | Solo si K8s integration |
+| Starlark | 8-10 MB | 0 | Multi-block only | Bounded (SetMaxSteps) | Interpreter | Solo Architecture A |
+| Rego | 20+ MB | 15 transitivas | Multi-block only | Non-Turing | Heavy | No (oversized) |
+| Go-native | 0 MB | 0 | Pure YAML | Full control | N/A | Alternativa keyword |
+
+### Expr-lang/expr (Recomendado)
+- v1.17.7 (Dec 2025), actively maintained
+- Builtins: `lower`, `upper`, `trim`, `replace`, `len`, `any`, `all`, `filter`, `map`, `split`, `contains`, `startsWith`, `endsWith`
+- Custom functions via `expr.Function()` (para slugify, etc.)
+- Compile-time type checking, bytecode VM
+- Security advisory GHSA-93mq-9ffx-83m2 (parser memory, fixed v1.17.0)
+- Adoption: Google Cloud, Uber, Argo Workflows, ByteDance, GoDaddy
+
+### Alternativa: Keywords Declarativos (go-native)
+
+Si se necesita MVP minimal sin engine externo:
 ```yaml
 derive:
   slug:
-    expr: "lower(replace(title, ' ', '-'))"
+    fn: slugify
+    from: title
+  status_lower:
+    fn: lower
+    from: estado
 ```
-
-Separate file alongside `.stem` (Architecture A):
-```
-docs/epics/E01-infra/
-  .stem              # schema + validation
-  .derive.star       # derivation logic (Starlark)
-```
-
-Inheritance applies to both: walk-up discovery, child overrides parent.
+Zero deps, scope limitado by design, mejor UX en YAML. Limitado a Level 1.
 
 ---
 
-## 6. Key Insight
+## 5. Argumentos del Critic
 
-The expression language choice benefits from real usage patterns.
-Once rootline ships with validation + query, we'll know:
-- How complex real derivation needs are (level 1 only? or 2-4?)
-- Whether inline expressions suffice or separate files are needed
-- What the actual adoption barrier is (syntax familiarity matters)
-
-This evidence will make I3 a much better investigation.
+1. **`tree.go` ya hace derivación** — cuenta estados, calcula ratios. Es derivación en Go.
+2. **CLAUDE.md dice** "convenience, not blocking" sobre derivación.
+3. **Inline expressions en YAML** = UX cuestionable (escaping, no IDE support, multiline ugly).
+4. **Scope creep**: shipear Expr invita presión por Levels 3-4 antes de validar 1-2.
+5. **Keyword system cubre 80%** de los casos sin engine externo.
 
 ---
 
-## 7. References
+## 6. Arquitecturas
+
+### Architecture A: Single Language (Starlark/Rego)
+- Archivo separado `.derive.star` o `.derive.rego`
+- Turing-complete, puede expresar todo
+- Risk: complejidad excesiva para L1-2
+
+### Architecture B: Engine + Expression (Expr inline)
+- Expressions inline en .stem YAML: `expr: "lower(replace(title, ' ', '-'))"`
+- Rootline controla traversal, Expr evalúa hojas
+- Pro: coherente con inheritance model de rootline
+- Con: dos conceptos (engine + expression syntax)
+
+### Architecture C: Keywords declarativos (go-native)
+- YAML puro: `{ fn: slugify, from: title }`
+- Zero deps, scope forzado a L1-2
+- Pro: simple, no UX issues
+- Con: cada función nueva = código Go
+
+**Decisión diferida** — cuando se retome, empezar con Architecture B (Expr) o C (keywords) según complejidad de los casos de uso reales.
+
+---
+
+## 7. Criterios para Reactivar
+
+Reactivar F04 cuando:
+1. Usuarios pidan campos derivados en .stem (demanda real)
+2. Se identifiquen > 3 expresiones concretas que no se pueden resolver con query/tree existentes
+3. F05 (links) esté implementado (habilita Level 3 use cases)
+
+---
+
+## 8. References
 
 - Expr: https://expr-lang.org/, https://github.com/expr-lang/expr
-- CEL: https://cel.dev/, https://codelabs.developers.google.com/codelabs/cel-go
+- CEL: https://cel.dev/
 - Starlark: https://github.com/google/starlark-go
-- OPA/Rego: https://www.openpolicyagent.org/docs, https://www.openpolicyagent.org/docs/policy-language
-- CUE: https://cuelang.org/docs/introduction/
-- Nickel: https://nickel-lang.org/user-manual/contracts/, https://github.com/tweag/nickel/blob/master/RATIONALE.md
-- Dataview: https://deepwiki.com/blacksmithgu/obsidian-dataview
-- WunderGraph Expr analysis: https://wundergraph.com/blog/expr-lang-go-centric-expression-language
+- OPA/Rego: https://www.openpolicyagent.org/
+- Expr security: https://github.com/expr-lang/expr/security/advisories/GHSA-93mq-9ffx-83m2

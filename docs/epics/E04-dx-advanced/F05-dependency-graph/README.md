@@ -24,8 +24,8 @@ tipo: feature
 
 ## Dependencias
 
-- F04 (Expression language para estado derivado por propagacion)
 - Links field ya parsea en StemFile (internal/rules/rules.go)
+- Estado derivado por propagacion (Level 3 derivation) requiere F04, diferido
 
 ## Fuente de verdad
 
