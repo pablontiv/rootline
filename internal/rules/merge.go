@@ -67,9 +67,24 @@ func mergeSchemaFields(parent, child map[string]SchemaField, source string) map[
 	}
 	for k, v := range child {
 		v.Source = source
+		if parentField, exists := out[k]; exists {
+			v = mergeFieldSeverity(parentField, v)
+		}
 		out[k] = v
 	}
 	return out
+}
+
+// mergeFieldSeverity applies the tighten-only rule for severity:
+// child can tighten (warn -> error) but not loosen (error -> warn).
+func mergeFieldSeverity(parent, child SchemaField) SchemaField {
+	parentSev := severityOrder[parent.Severity]
+	childSev := severityOrder[child.Severity]
+	if childSev < parentSev {
+		// Child is trying to loosen — keep parent's stricter severity
+		child.Severity = parent.Severity
+	}
+	return child
 }
 
 // mergeAnyMap performs a type-driven merge of two map[string]any values.

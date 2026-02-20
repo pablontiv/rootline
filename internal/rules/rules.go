@@ -34,16 +34,26 @@ type SchemaField struct {
 	Required bool     `yaml:"required" json:"required"`
 	Values   []string `yaml:"values" json:"values,omitempty"`
 	Default  string   `yaml:"default" json:"default,omitempty"`
+	Severity string   `yaml:"severity" json:"severity,omitempty"`
 	Source   string   `yaml:"-" json:"source,omitempty"`
 }
 
 // ValidationRule defines a single validation constraint.
 type ValidationRule struct {
-	Field  string         `yaml:"field" json:"field,omitempty"`
-	Rule   string         `yaml:"rule" json:"rule"`
-	If     map[string]any `yaml:"if" json:"if,omitempty"`
-	Then   map[string]any `yaml:"then" json:"then,omitempty"`
-	Source string         `yaml:"-" json:"source,omitempty"`
+	Field    string         `yaml:"field" json:"field,omitempty"`
+	Rule     string         `yaml:"rule" json:"rule"`
+	If       map[string]any `yaml:"if" json:"if,omitempty"`
+	Then     map[string]any `yaml:"then" json:"then,omitempty"`
+	Severity string         `yaml:"severity" json:"severity,omitempty"`
+	Source   string         `yaml:"-" json:"source,omitempty"`
+}
+
+// severityOrder defines the ordering for severity levels.
+// Higher value = stricter.
+var severityOrder = map[string]int{
+	"off":   0,
+	"warn":  1,
+	"error": 2,
 }
 
 // ParseStem parses a .stem file from raw YAML content.
@@ -55,15 +65,21 @@ func ParseStem(path string, content []byte) (*StemFile, error) {
 	}
 	stem.Path = path
 
-	// Tag source on schema fields
+	// Tag source and default severity on schema fields
 	for name, field := range stem.Schema {
 		field.Source = path
+		if field.Severity == "" {
+			field.Severity = "error"
+		}
 		stem.Schema[name] = field
 	}
 
-	// Tag source on validation rules
+	// Tag source and default severity on validation rules
 	for i := range stem.Validate {
 		stem.Validate[i].Source = path
+		if stem.Validate[i].Severity == "" {
+			stem.Validate[i].Severity = "error"
+		}
 	}
 
 	return &stem, nil
