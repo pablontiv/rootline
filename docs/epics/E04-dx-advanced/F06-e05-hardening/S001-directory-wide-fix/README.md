@@ -1,7 +1,7 @@
 # S001: Directory-wide Fix
 
 **Feature**: [F06 E05 Hardening](../README.md)
-**Estado**: Specified
+**Estado**: Completado
 **Cliente**: Platform Owner
 **Capacidad**: fix opera sobre directorios completos con batch output, igual que validate --all
 
@@ -13,10 +13,10 @@
 
 ## Criterios de Aceptacion (semanticos)
 
-- [ ] `rootline fix --all` repara todos los archivos con errores en un directorio
-- [ ] Output JSON tiene estructura batch con summary (total/fixed/skipped)
-- [ ] Output table muestra columnas File, Fixed, Changes
-- [ ] `rootline fix --all --dry-run` muestra cambios sin modificar archivos
+- [x] `rootline fix --all` repara todos los archivos con errores en un directorio
+- [x] Output JSON tiene estructura batch con summary (total/fixed/skipped)
+- [x] Output table muestra columnas File, Fixed, Changes
+- [x] `rootline fix --all --dry-run` muestra cambios sin modificar archivos
 
 ## Tasks
 

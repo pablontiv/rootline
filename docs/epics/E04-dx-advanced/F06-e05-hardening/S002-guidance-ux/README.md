@@ -1,7 +1,7 @@
 # S002: Guidance UX
 
 **Feature**: [F06 E05 Hardening](../README.md)
-**Estado**: Specified
+**Estado**: Completado
 **Cliente**: Platform Owner
 **Capacidad**: describe e init guian al usuario con mensajes claros cuando encuentran escenarios vacios o mixtos
 
@@ -13,8 +13,8 @@
 
 ## Criterios de Aceptacion (semanticos)
 
-- [ ] `rootline describe` sin .stem muestra sugerencia de correr `init`
-- [ ] `rootline init` con >20% archivos sin frontmatter emite warning
+- [x] `rootline describe` sin .stem muestra sugerencia de correr `init`
+- [x] `rootline init` con >20% archivos sin frontmatter emite warning
 
 ## Tasks
 
