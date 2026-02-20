@@ -9,6 +9,8 @@ import (
 
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var (
@@ -99,11 +101,12 @@ func generateMarkdown(absPath string, effective *rules.StemFile) string {
 			value = field.Values[0]
 		}
 
-		if len(field.Values) > 0 {
+		switch {
+		case len(field.Values) > 0:
 			b.WriteString(fmt.Sprintf("%s: %s # [%s]\n", name, value, strings.Join(field.Values, ", ")))
-		} else if value != "" {
+		case value != "":
 			b.WriteString(fmt.Sprintf("%s: %s\n", name, value))
-		} else if field.Required {
+		case field.Required:
 			b.WriteString(fmt.Sprintf("%s: \n", name))
 		}
 	}
@@ -115,7 +118,7 @@ func generateMarkdown(absPath string, effective *rules.StemFile) string {
 	title := strings.TrimSuffix(base, filepath.Ext(base))
 	title = strings.ReplaceAll(title, "-", " ")
 	title = strings.ReplaceAll(title, "_", " ")
-	b.WriteString(fmt.Sprintf("# %s\n", strings.Title(title)))
+	b.WriteString(fmt.Sprintf("# %s\n", cases.Title(language.Und).String(title)))
 
 	return b.String()
 }

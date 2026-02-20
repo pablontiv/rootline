@@ -93,13 +93,14 @@ func Analyze(records []*extract.Record) *InferredSchema {
 		stats.UniqueValues = uniq
 
 		// Check for list
-		if listFields[name] {
+		switch {
+		case listFields[name]:
 			stats.HasList = true
 			stats.InferredType = "list"
-		} else if len(uniq) <= 20 && float64(stats.Count)/float64(total) > 0.5 {
+		case len(uniq) <= 20 && float64(stats.Count)/float64(total) > 0.5:
 			// Enum: few unique values and present in >50% of records
 			stats.InferredType = "enum"
-		} else {
+		default:
 			stats.InferredType = "string"
 		}
 
