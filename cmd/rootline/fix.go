@@ -12,6 +12,30 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// FixResult represents the fix outcome for a single file.
+type FixResult struct {
+	Path            string   `json:"path"`
+	Fixed           bool     `json:"fixed"`
+	FieldsAdded     int      `json:"fields_added"`
+	ValuesCorrected int      `json:"values_corrected"`
+	Changes         []string `json:"changes"`
+}
+
+// BatchFixResult is the versioned JSON output for multi-file fix.
+type BatchFixResult struct {
+	Version int           `json:"version"`
+	Kind    string        `json:"kind"`
+	Results []*FixResult  `json:"results"`
+	Summary FixSummary    `json:"summary"`
+}
+
+// FixSummary holds aggregate counts for batch fix.
+type FixSummary struct {
+	Total   int `json:"total"`
+	Fixed   int `json:"fixed"`
+	Skipped int `json:"skipped"`
+}
+
 var (
 	fixDryRun bool
 	fixAll    bool
@@ -140,8 +164,7 @@ func runFixAll(cmd *cobra.Command) error {
 		return fmt.Errorf("scanning: %w", err)
 	}
 
-	totalAdded := 0
-	totalCorrected := 0
+	var results []*FixResult
 
 	for _, rec := range records {
 		absPath := filepath.Join(root, rec.Path)
@@ -154,45 +177,85 @@ func runFixAll(cmd *cobra.Command) error {
 
 		errs := rules.Validate(rec, effective)
 		if len(errs) == 0 {
+			results = append(results, &FixResult{
+				Path:    rec.Path,
+				Fixed:   false,
+				Changes: []string{},
+			})
 			continue
 		}
 
 		added, corrected := applyFixes(rec, effective, errs)
 
-		if fixDryRun {
-			for _, a := range added {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s: would add %s\n", rec.Path, a)
-			}
-			for _, c := range corrected {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s: would correct %s\n", rec.Path, c)
-			}
-			totalAdded += len(added)
-			totalCorrected += len(corrected)
-			continue
-		}
-
-		content, readErr := os.ReadFile(absPath)
-		if readErr != nil {
-			return fmt.Errorf("reading %s: %w", rec.Path, readErr)
-		}
-
-		newContent := rewriteFrontmatter(string(content), rec.Frontmatter)
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
-			return fmt.Errorf("writing %s: %w", rec.Path, err)
-		}
-
-		totalAdded += len(added)
-		totalCorrected += len(corrected)
-
+		var changes []string
 		for _, a := range added {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: added %s\n", rec.Path, a)
+			changes = append(changes, "add "+a)
 		}
 		for _, c := range corrected {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: corrected %s\n", rec.Path, c)
+			changes = append(changes, "correct "+c)
 		}
+
+		if !fixDryRun {
+			content, readErr := os.ReadFile(absPath)
+			if readErr != nil {
+				return fmt.Errorf("reading %s: %w", rec.Path, readErr)
+			}
+
+			newContent := rewriteFrontmatter(string(content), rec.Frontmatter)
+			if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+				return fmt.Errorf("writing %s: %w", rec.Path, err)
+			}
+		}
+
+		results = append(results, &FixResult{
+			Path:            rec.Path,
+			Fixed:           !fixDryRun,
+			FieldsAdded:     len(added),
+			ValuesCorrected: len(corrected),
+			Changes:         changes,
+		})
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "\nFixed: %d fields added, %d values corrected\n", totalAdded, totalCorrected)
+	batch := newBatchFixResult(results)
+
+	if outputFormat == "table" {
+		return renderFixTable(cmd, batch)
+	}
+	return outputJSON(cmd, batch, false)
+}
+
+func newBatchFixResult(results []*FixResult) *BatchFixResult {
+	summary := FixSummary{Total: len(results)}
+	for _, r := range results {
+		if r.Fixed || r.FieldsAdded > 0 || r.ValuesCorrected > 0 {
+			summary.Fixed++
+		} else {
+			summary.Skipped++
+		}
+	}
+	return &BatchFixResult{
+		Version: 1,
+		Kind:    "rootline/fix-batch",
+		Results: results,
+		Summary: summary,
+	}
+}
+
+func renderFixTable(cmd *cobra.Command, batch *BatchFixResult) error {
+	headers := []string{"File", "Fixed", "Changes"}
+	var rows [][]string
+	for _, r := range batch.Results {
+		fixed := "no"
+		if r.Fixed {
+			fixed = "yes"
+		}
+		changesStr := ""
+		if len(r.Changes) > 0 {
+			changesStr = strings.Join(r.Changes, "; ")
+		}
+		rows = append(rows, []string{r.Path, fixed, changesStr})
+	}
+	renderTable(cmd.OutOrStdout(), headers, rows)
 	return nil
 }
 

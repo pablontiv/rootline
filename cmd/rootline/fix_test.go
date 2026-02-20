@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,7 +125,7 @@ func TestClosestMatch(t *testing.T) {
 	}
 }
 
-func TestFixAll(t *testing.T) {
+func TestFixAllJSON(t *testing.T) {
 	dir := setupTestDir(t) // .stem has estado:required+enum
 
 	// Create file with missing required field
@@ -134,22 +135,60 @@ func TestFixAll(t *testing.T) {
 	os.Chdir(dir)
 	defer os.Chdir(oldDir)
 
-	out, err := runCmd(t, "fix", "--all")
+	out, err := runCmd(t, "fix", "--all", "--output", "json")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "added") {
-		t.Errorf("expected 'added' in output, got: %s", out)
+
+	var batch BatchFixResult
+	if err := json.Unmarshal([]byte(out), &batch); err != nil {
+		t.Fatalf("invalid JSON output: %v\nraw: %s", err, out)
+	}
+	if batch.Version != 1 {
+		t.Errorf("expected version 1, got %d", batch.Version)
+	}
+	if batch.Kind != "rootline/fix-batch" {
+		t.Errorf("expected kind rootline/fix-batch, got %s", batch.Kind)
+	}
+	if batch.Summary.Fixed == 0 {
+		t.Error("expected at least 1 fixed file")
+	}
+	if batch.Summary.Total == 0 {
+		t.Error("expected total > 0")
 	}
 
-	// Verify file was updated
+	// Verify file was actually updated
 	content, _ := os.ReadFile(filepath.Join(dir, "broken.md"))
 	if !strings.Contains(string(content), "estado:") {
 		t.Errorf("expected estado field added to file, got: %s", string(content))
 	}
 }
 
-func TestFixAllDryRun(t *testing.T) {
+func TestFixAllTable(t *testing.T) {
+	dir := setupTestDir(t)
+
+	os.WriteFile(filepath.Join(dir, "broken.md"), []byte("---\ntipo: test\n---\n# Broken\n"), 0644)
+
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(oldDir)
+
+	out, err := runCmd(t, "fix", "--all", "--output", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "File") {
+		t.Errorf("expected table header 'File', got: %s", out)
+	}
+	if !strings.Contains(out, "Fixed") {
+		t.Errorf("expected table header 'Fixed', got: %s", out)
+	}
+	if !strings.Contains(out, "Changes") {
+		t.Errorf("expected table header 'Changes', got: %s", out)
+	}
+}
+
+func TestFixAllDryRunJSON(t *testing.T) {
 	dir := setupTestDir(t)
 
 	original := "---\ntipo: test\n---\n# DryAll\n"
@@ -160,12 +199,26 @@ func TestFixAllDryRun(t *testing.T) {
 	os.Chdir(dir)
 	defer os.Chdir(oldDir)
 
-	out, err := runCmd(t, "fix", "--all", "--dry-run")
+	out, err := runCmd(t, "fix", "--all", "--dry-run", "--output", "json")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "would add") {
-		t.Errorf("expected 'would add' in dry-run output, got: %s", out)
+
+	var batch BatchFixResult
+	if err := json.Unmarshal([]byte(out), &batch); err != nil {
+		t.Fatalf("invalid JSON output: %v", err)
+	}
+
+	// In dry-run, Fixed should be false but changes should be reported
+	for _, r := range batch.Results {
+		if r.FieldsAdded > 0 || r.ValuesCorrected > 0 {
+			if r.Fixed {
+				t.Errorf("dry-run should not mark files as fixed, got fixed=true for %s", r.Path)
+			}
+			if len(r.Changes) == 0 {
+				t.Errorf("expected changes reported for %s in dry-run", r.Path)
+			}
+		}
 	}
 
 	// Verify file was NOT modified
@@ -184,12 +237,41 @@ func TestFixAllNoStem(t *testing.T) {
 	os.Chdir(dir)
 	defer os.Chdir(oldDir)
 
-	out, err := runCmd(t, "fix", "--all")
+	out, err := runCmd(t, "fix", "--all", "--output", "json")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "0 fields added, 0 values corrected") {
-		t.Errorf("expected 0 fixes without .stem, got: %s", out)
+
+	var batch BatchFixResult
+	if err := json.Unmarshal([]byte(out), &batch); err != nil {
+		t.Fatalf("invalid JSON output: %v", err)
+	}
+	if batch.Summary.Fixed != 0 {
+		t.Errorf("expected 0 fixes without .stem, got: %d", batch.Summary.Fixed)
+	}
+}
+
+func TestFixAllNoErrors(t *testing.T) {
+	dir := setupTestDir(t) // has valid doc1.md
+
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(oldDir)
+
+	out, err := runCmd(t, "fix", "--all", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var batch BatchFixResult
+	if err := json.Unmarshal([]byte(out), &batch); err != nil {
+		t.Fatalf("invalid JSON output: %v", err)
+	}
+	if batch.Summary.Fixed != 0 {
+		t.Errorf("expected 0 fixed for valid files, got: %d", batch.Summary.Fixed)
+	}
+	if batch.Summary.Total != batch.Summary.Skipped {
+		t.Errorf("expected all files skipped, got total=%d skipped=%d", batch.Summary.Total, batch.Summary.Skipped)
 	}
 }
 
@@ -197,5 +279,78 @@ func TestFixNoArgsNoFlag(t *testing.T) {
 	_, err := runCmd(t, "fix")
 	if err == nil {
 		t.Error("expected error when no args and no --all flag")
+	}
+}
+
+func TestRewriteFrontmatterNoPrior(t *testing.T) {
+	// File with no frontmatter — should prepend it
+	original := "# Just a heading\nSome body.\n"
+	fm := map[string]any{"estado": "Pending"}
+	result := rewriteFrontmatter(original, fm)
+	if !strings.HasPrefix(result, "---\n") {
+		t.Error("expected frontmatter prepended")
+	}
+	if !strings.Contains(result, "estado: Pending") {
+		t.Error("expected estado field in new frontmatter")
+	}
+	if !strings.Contains(result, "Just a heading") {
+		t.Error("expected original body preserved")
+	}
+}
+
+func TestRewriteFrontmatterMalformed(t *testing.T) {
+	// Frontmatter starts but never closes — should return original
+	original := "---\nestado: test\n# No closing\n"
+	fm := map[string]any{"estado": "Pending"}
+	result := rewriteFrontmatter(original, fm)
+	if result != original {
+		t.Errorf("expected original returned for malformed frontmatter, got: %s", result)
+	}
+}
+
+func TestFixAllWithEnumCorrection(t *testing.T) {
+	dir := setupTestDir(t)
+
+	// Create file with bad enum value
+	os.WriteFile(filepath.Join(dir, "bad-enum.md"), []byte("---\nestado: Compltado\ntipo: test\n---\n# Bad\n"), 0644)
+
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(oldDir)
+
+	out, err := runCmd(t, "fix", "--all", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var batch BatchFixResult
+	if err := json.Unmarshal([]byte(out), &batch); err != nil {
+		t.Fatalf("invalid JSON output: %v", err)
+	}
+
+	// Find the result for bad-enum.md
+	var found bool
+	for _, r := range batch.Results {
+		if strings.Contains(r.Path, "bad-enum") {
+			found = true
+			if r.ValuesCorrected == 0 {
+				t.Error("expected enum correction for bad-enum.md")
+			}
+			if !r.Fixed {
+				t.Error("expected fixed=true for bad-enum.md")
+			}
+			hasCorrection := false
+			for _, c := range r.Changes {
+				if strings.Contains(c, "correct") {
+					hasCorrection = true
+				}
+			}
+			if !hasCorrection {
+				t.Errorf("expected 'correct' in changes, got: %v", r.Changes)
+			}
+		}
+	}
+	if !found {
+		t.Error("bad-enum.md not found in results")
 	}
 }
