@@ -16,7 +16,6 @@ description: |
   Argumento: <texto libre> | epic|story|task|pending|view|loop [path] [name] [description]
 argument-hint: "<texto libre> | [epic|story|task|pending|view|loop] [args]"
 allowed-tools: Write, Read, Grep, Glob, Bash, TaskCreate, TaskList, TaskUpdate, TaskGet, Skill, AskUserQuestion
-disable-model-invocation: true
 ---
 
 # /roadmap — Framework de Planificación AI-Native
@@ -207,88 +206,7 @@ Cada Task tiene un campo `Tipo` que determina su naturaleza (servicio-docker, mo
 
 Mostrar solo Tasks pendientes en formato tabla, agrupados por Epic/Feature.
 
-**Procedimiento**: Ejecuta este script Python:
-
-```python
-import os, re, glob, subprocess
-
-BASE = "/opt/homeserver/automation"
-
-def parse_frontmatter(content):
-    """Extract YAML frontmatter fields from Task file."""
-    fm = {}
-    if content.startswith('---'):
-        end = content.find('---', 3)
-        if end > 0:
-            for line in content[3:end].strip().splitlines():
-                if ':' in line:
-                    key, val = line.split(':', 1)
-                    fm[key.strip()] = val.strip()
-    return fm
-
-def extract_story(filepath):
-    """Derive Story context from filesystem path."""
-    parts = filepath.split('/')
-    for p in parts:
-        if re.match(r'S\d{3}-', p):
-            return p
-    return "?"
-
-def extract_epic_feature(filepath):
-    """Derive Epic/Feature from filesystem path."""
-    parts = filepath.split('/')
-    epic = feature = ""
-    for p in parts:
-        if re.match(r'E\d{2}-', p): epic = p.split('-', 1)[0]
-        if re.match(r'F\d{2}-', p): feature = p.split('-', 1)[0]
-    return f"{epic}/{feature}" if epic else "?"
-
-tasks = []
-for f in glob.glob(f"{BASE}/docs/epics/**/T[0-9][0-9][0-9]-*.md", recursive=True):
-    with open(f) as h: content = h.read(3000)
-    fm = parse_frontmatter(content)
-    estado = fm.get('estado', '')
-    # Match Pending (including "Pending (blocked by ...)" variants) and Especificado
-    if not re.match(r'(Pending|Especificado)', estado):
-        continue
-    tipo = fm.get('tipo', '-')
-    # Extract Task ID and title from heading
-    title_match = re.search(r'^# T\d{3}:\s*(.+)$', content, re.M)
-    title = title_match.group(1)[:40] if title_match else "Sin titulo"
-    # Extract TXXX from filename
-    task_id = re.search(r'(T\d{3})', os.path.basename(f)).group(1)
-    story = extract_story(f)
-    location = extract_epic_feature(f)
-    tasks.append((location, story, task_id, title, tipo, estado, f))
-
-# Detect new (untracked) Task files via git status
-new_files = set()
-try:
-    r = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, cwd=BASE)
-    for l in r.stdout.splitlines():
-        if '??' in l and '/T' in l and l.strip().endswith('.md'):
-            m = re.search(r'(T\d{3})', l)
-            if m: new_files.add(m.group(1))
-except Exception: pass
-
-# Group by Epic/Feature
-from collections import defaultdict
-grouped = defaultdict(list)
-for loc, story, tid, title, tipo, estado, fpath in tasks:
-    grouped[loc].append((story, tid, title, tipo, estado, tid in new_files))
-
-print(f"Tasks Pendientes ({len(tasks)})\n")
-for loc in sorted(grouped.keys()):
-    items = sorted(grouped[loc])
-    print(f"### {loc}\n")
-    print("| Story | Task | Titulo                                   | Tipo              | Estado    |")
-    print("|-------|------|------------------------------------------|-------------------|-----------|")
-    for story, tid, title, tipo, estado, is_new in items:
-        story_short = re.sub(r'S(\d{3})-.*', r'S\1', story)
-        marker = " *new*" if is_new else ""
-        print(f"| {story_short:<5} | {tid}  | {title:<40} | {tipo:<17} | {estado:<9}{marker} |")
-    print()
-```
+**Procedimiento**: Ejecutar `rootline query docs/epics/ --where "estado in Pending,Especificado" --output table`
 
 Presenta el output tal cual, sin modificaciones.
 
