@@ -7,26 +7,43 @@ import (
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
 )
 
-var fixDryRun bool
+var (
+	fixDryRun bool
+	fixAll    bool
+)
 
 var fixCmd = &cobra.Command{
-	Use:   "fix <file> [files...]",
+	Use:   "fix [file...]",
 	Short: "Auto-repair validation errors",
 	Long:  "Fix validation errors by adding missing required fields\nand correcting invalid enum values.",
-	Args:  cobra.MinimumNArgs(1),
-	RunE:  runFix,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if fixAll {
+			return nil
+		}
+		if len(args) == 0 {
+			return fmt.Errorf("specify file(s) to fix or use --all")
+		}
+		return nil
+	},
+	RunE: runFix,
 }
 
 func init() {
 	fixCmd.Flags().BoolVar(&fixDryRun, "dry-run", false, "show proposed changes without modifying files")
+	fixCmd.Flags().BoolVar(&fixAll, "all", false, "fix all files in scope from current directory")
 	rootCmd.AddCommand(fixCmd)
 }
 
 func runFix(cmd *cobra.Command, args []string) error {
+	if fixAll {
+		return runFixAll(cmd)
+	}
+
 	reg := extract.NewRegistry()
 	totalAdded := 0
 	totalCorrected := 0
@@ -96,6 +113,82 @@ func runFix(cmd *cobra.Command, args []string) error {
 		}
 		for _, c := range corrected {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s: corrected %s\n", file, c)
+		}
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "\nFixed: %d fields added, %d values corrected\n", totalAdded, totalCorrected)
+	return nil
+}
+
+func runFixAll(cmd *cobra.Command) error {
+	root, err := filepath.Abs(".")
+	if err != nil {
+		return err
+	}
+
+	reg := extract.NewRegistry()
+	resolver := func(dir string) *rules.StemFile {
+		entries, err := rules.WalkUp(dir)
+		if err != nil {
+			return nil
+		}
+		return rules.MergeStemFiles(entries)
+	}
+
+	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	if err != nil {
+		return fmt.Errorf("scanning: %w", err)
+	}
+
+	totalAdded := 0
+	totalCorrected := 0
+
+	for _, rec := range records {
+		absPath := filepath.Join(root, rec.Path)
+		dir := filepath.Dir(absPath)
+		entries, walkErr := rules.WalkUp(dir)
+		if walkErr != nil {
+			continue
+		}
+		effective := rules.MergeStemFiles(entries)
+
+		errs := rules.Validate(rec, effective)
+		if len(errs) == 0 {
+			continue
+		}
+
+		added, corrected := applyFixes(rec, effective, errs)
+
+		if fixDryRun {
+			for _, a := range added {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s: would add %s\n", rec.Path, a)
+			}
+			for _, c := range corrected {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s: would correct %s\n", rec.Path, c)
+			}
+			totalAdded += len(added)
+			totalCorrected += len(corrected)
+			continue
+		}
+
+		content, readErr := os.ReadFile(absPath)
+		if readErr != nil {
+			return fmt.Errorf("reading %s: %w", rec.Path, readErr)
+		}
+
+		newContent := rewriteFrontmatter(string(content), rec.Frontmatter)
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+			return fmt.Errorf("writing %s: %w", rec.Path, err)
+		}
+
+		totalAdded += len(added)
+		totalCorrected += len(corrected)
+
+		for _, a := range added {
+			fmt.Fprintf(cmd.OutOrStdout(), "%s: added %s\n", rec.Path, a)
+		}
+		for _, c := range corrected {
+			fmt.Fprintf(cmd.OutOrStdout(), "%s: corrected %s\n", rec.Path, c)
 		}
 	}
 

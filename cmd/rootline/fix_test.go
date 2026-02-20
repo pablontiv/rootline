@@ -123,3 +123,79 @@ func TestClosestMatch(t *testing.T) {
 		t.Errorf("closestMatch('Compltado') = %q, want 'Completado'", got)
 	}
 }
+
+func TestFixAll(t *testing.T) {
+	dir := setupTestDir(t) // .stem has estado:required+enum
+
+	// Create file with missing required field
+	os.WriteFile(filepath.Join(dir, "broken.md"), []byte("---\ntipo: test\n---\n# Broken\n"), 0644)
+
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(oldDir)
+
+	out, err := runCmd(t, "fix", "--all")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "added") {
+		t.Errorf("expected 'added' in output, got: %s", out)
+	}
+
+	// Verify file was updated
+	content, _ := os.ReadFile(filepath.Join(dir, "broken.md"))
+	if !strings.Contains(string(content), "estado:") {
+		t.Errorf("expected estado field added to file, got: %s", string(content))
+	}
+}
+
+func TestFixAllDryRun(t *testing.T) {
+	dir := setupTestDir(t)
+
+	original := "---\ntipo: test\n---\n# DryAll\n"
+	target := filepath.Join(dir, "dryall.md")
+	os.WriteFile(target, []byte(original), 0644)
+
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(oldDir)
+
+	out, err := runCmd(t, "fix", "--all", "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "would add") {
+		t.Errorf("expected 'would add' in dry-run output, got: %s", out)
+	}
+
+	// Verify file was NOT modified
+	content, _ := os.ReadFile(target)
+	if string(content) != original {
+		t.Error("dry-run should not modify the file")
+	}
+}
+
+func TestFixAllNoStem(t *testing.T) {
+	dir := t.TempDir()
+	// No .stem file, just a markdown file
+	os.WriteFile(filepath.Join(dir, "file.md"), []byte("---\ntipo: test\n---\n# Test\n"), 0644)
+
+	oldDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(oldDir)
+
+	out, err := runCmd(t, "fix", "--all")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "0 fields added, 0 values corrected") {
+		t.Errorf("expected 0 fixes without .stem, got: %s", out)
+	}
+}
+
+func TestFixNoArgsNoFlag(t *testing.T) {
+	_, err := runCmd(t, "fix")
+	if err == nil {
+		t.Error("expected error when no args and no --all flag")
+	}
+}

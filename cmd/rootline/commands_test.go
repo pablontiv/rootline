@@ -53,6 +53,7 @@ func resetFlags() {
 	newForce = false
 	newDryRun = false
 	fixDryRun = false
+	fixAll = false
 	hooksForce = false
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
