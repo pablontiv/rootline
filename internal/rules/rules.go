@@ -20,7 +20,64 @@ type StemFile struct {
 	Validate []ValidationRule       `yaml:"validate"`
 	Derive   map[string]any         `yaml:"derive"`
 	State    map[string]any         `yaml:"state"`
-	Links    map[string]any         `yaml:"links"`
+	Links    LinkSchema             `yaml:"links"`
+}
+
+// LinkSchema defines link constraints in a .stem file.
+// YAML format:
+//
+//	links:
+//	  allowed: [blocks, parent, reference]
+//	  blocks:
+//	    target: "../tasks/*.md"
+//	    field: blocked_by
+type LinkSchema struct {
+	Allowed []string            `json:"allowed,omitempty"`
+	Rules   map[string]LinkRule `json:"rules,omitempty"`
+}
+
+// LinkRule defines a constraint for a specific link type.
+type LinkRule struct {
+	Target string `yaml:"target" json:"target,omitempty"`
+	Field  string `yaml:"field" json:"field,omitempty"`
+}
+
+// UnmarshalYAML implements custom unmarshaling for LinkSchema.
+// "allowed" is parsed as a string slice; all other keys are link rules.
+func (ls *LinkSchema) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.MappingNode {
+		return fmt.Errorf("links: expected mapping, got %v", value.Kind)
+	}
+
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		key := value.Content[i].Value
+		val := value.Content[i+1]
+
+		if key == "allowed" {
+			var allowed []string
+			if err := val.Decode(&allowed); err != nil {
+				return fmt.Errorf("links.allowed: %w", err)
+			}
+			ls.Allowed = allowed
+			continue
+		}
+
+		var rule LinkRule
+		if err := val.Decode(&rule); err != nil {
+			return fmt.Errorf("links.%s: %w", key, err)
+		}
+		if ls.Rules == nil {
+			ls.Rules = make(map[string]LinkRule)
+		}
+		ls.Rules[key] = rule
+	}
+
+	return nil
+}
+
+// IsEmpty reports whether the LinkSchema has no constraints.
+func (ls LinkSchema) IsEmpty() bool {
+	return len(ls.Allowed) == 0 && len(ls.Rules) == 0
 }
 
 // Scope defines which files a .stem applies to.

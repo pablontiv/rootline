@@ -93,8 +93,8 @@ links:
 	if stem.State == nil || len(stem.State) != 1 {
 		t.Errorf("state = %v, want 1 entry", stem.State)
 	}
-	if stem.Links == nil || len(stem.Links) != 1 {
-		t.Errorf("links = %v, want 1 entry", stem.Links)
+	if len(stem.Links.Allowed) != 2 {
+		t.Errorf("links.allowed = %v, want [decision, reference]", stem.Links.Allowed)
 	}
 }
 

@@ -34,10 +34,12 @@ func MergeStemFiles(entries []StemEntry) *StemFile {
 			result.Validate = s.Validate
 		}
 
-		// Derive, State, Links: generic type-driven merge.
+		// Derive, State: generic type-driven merge.
 		result.Derive = mergeAnyMap(result.Derive, s.Derive)
 		result.State = mergeAnyMap(result.State, s.State)
-		result.Links = mergeAnyMap(result.Links, s.Links)
+
+		// Links: typed merge (Allowed replaces, Rules map-merges).
+		result.Links = mergeLinkSchema(result.Links, s.Links)
 
 		// Track which .stem files contributed.
 		result.Path = path
@@ -153,4 +155,35 @@ func mergeAnyMapGeneric(parent, child map[string]any) map[string]any {
 func toStringMap(v any) (map[string]any, bool) {
 	m, ok := v.(map[string]any)
 	return m, ok
+}
+
+// mergeLinkSchema merges two LinkSchema values.
+// Allowed (array) → child replaces. Rules (map) → key-level merge.
+func mergeLinkSchema(parent, child LinkSchema) LinkSchema {
+	if child.IsEmpty() {
+		return parent
+	}
+	if parent.IsEmpty() {
+		return child
+	}
+
+	result := LinkSchema{}
+
+	// Allowed: child replaces (array semantics).
+	if child.Allowed != nil {
+		result.Allowed = child.Allowed
+	} else {
+		result.Allowed = parent.Allowed
+	}
+
+	// Rules: map merge at key level.
+	result.Rules = make(map[string]LinkRule, len(parent.Rules)+len(child.Rules))
+	for k, v := range parent.Rules {
+		result.Rules[k] = v
+	}
+	for k, v := range child.Rules {
+		result.Rules[k] = v
+	}
+
+	return result
 }

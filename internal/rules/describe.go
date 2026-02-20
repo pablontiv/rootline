@@ -15,7 +15,7 @@ type DescribeResult struct {
 	Validate []ValidationRule       `json:"validate"`
 	Derive   map[string]any         `json:"derive"`
 	State    map[string]any         `json:"state"`
-	Links    map[string]any         `json:"links"`
+	Links    LinkSchema             `json:"links"`
 	Hints    []string               `json:"hints,omitempty"`
 }
 
@@ -47,11 +47,6 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 		state = map[string]any{}
 	}
 
-	links := effective.Links
-	if links == nil {
-		links = map[string]any{}
-	}
-
 	return &DescribeResult{
 		Version:  1,
 		Kind:     "rootline/describe",
@@ -62,7 +57,7 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 		Validate: validate,
 		Derive:   derive,
 		State:    state,
-		Links:    links,
+		Links:    effective.Links,
 	}
 }
 
