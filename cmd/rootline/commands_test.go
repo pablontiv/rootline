@@ -46,6 +46,8 @@ func resetFlags() {
 	outputFormat = "json"
 	fieldPath = nil
 	statsFrom = "."
+	initDryRun = false
+	initForce = false
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
 	if f := queryCmd.Flags().Lookup("where"); f != nil {
