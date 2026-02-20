@@ -23,6 +23,13 @@ func init() {
 	rootCmd.AddCommand(treeCmd)
 }
 
+// TreeResult is the versioned JSON output for tree.
+type TreeResult struct {
+	Version int       `json:"version"`
+	Kind    string    `json:"kind"`
+	Root    *treeNode `json:"root"`
+}
+
 // treeNode represents a directory or file in the tree.
 type treeNode struct {
 	Name      string      `json:"name"`
@@ -54,7 +61,8 @@ func runTree(cmd *cobra.Command, args []string) error {
 	root := buildTree(records, filepath.Base(absRoot))
 
 	if outputFormat == "json" {
-		return outputJSON(cmd, root, false)
+		result := &TreeResult{Version: 1, Kind: "rootline/tree", Root: root}
+		return outputJSON(cmd, result, false)
 	}
 
 	// ASCII output

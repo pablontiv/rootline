@@ -265,15 +265,18 @@ func TestTreeJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	var result treeNode
+	var result TreeResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if result.Total != 2 {
-		t.Errorf("expected 2 total, got %d", result.Total)
+	if result.Version != 1 {
+		t.Errorf("expected version 1, got %d", result.Version)
 	}
-	if result.Completed != 1 {
-		t.Errorf("expected 1 completed, got %d", result.Completed)
+	if result.Root.Total != 2 {
+		t.Errorf("expected 2 total, got %d", result.Root.Total)
+	}
+	if result.Root.Completed != 1 {
+		t.Errorf("expected 1 completed, got %d", result.Root.Completed)
 	}
 }
 
