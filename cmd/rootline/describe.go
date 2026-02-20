@@ -39,6 +39,12 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 	relPath := args[0]
 
 	result := rules.NewDescribeResult(relPath, entries, effective)
+
+	// Add hint when no schema is found
+	if effective == nil || len(effective.Schema) == 0 {
+		result.Hints = append(result.Hints, "No .stem schema found. Run 'rootline init <path>' to infer schema from existing files.")
+	}
+
 	if outputFormat == "table" {
 		return renderDescribeTable(cmd, result)
 	}
@@ -69,5 +75,13 @@ func renderDescribeTable(cmd *cobra.Command, r *rules.DescribeResult) error {
 	}
 
 	renderTable(cmd.OutOrStdout(), headers, rows)
+
+	if len(r.Hints) > 0 {
+		fmt.Fprintln(cmd.OutOrStdout())
+		for _, h := range r.Hints {
+			fmt.Fprintf(cmd.OutOrStdout(), "Hint: %s\n", h)
+		}
+	}
+
 	return nil
 }

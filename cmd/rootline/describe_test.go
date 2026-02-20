@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func executeDescribe(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	fieldPath = nil
+	resetFlags()
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(new(bytes.Buffer))
@@ -97,6 +98,17 @@ func TestDescribeCmd_NoStemAncestors(t *testing.T) {
 	schema := result["schema"].(map[string]any)
 	if len(schema) != 0 {
 		t.Errorf("schema = %v, want empty", schema)
+	}
+
+	// Should include hint to run init
+	hints, ok := result["hints"].([]any)
+	if !ok || len(hints) == 0 {
+		t.Error("expected hints when no .stem found")
+	} else {
+		hint := hints[0].(string)
+		if !strings.Contains(hint, "rootline init") {
+			t.Errorf("hint should mention 'rootline init', got: %s", hint)
+		}
 	}
 }
 
@@ -209,5 +221,47 @@ func TestDescribeCmd_RequiresArg(t *testing.T) {
 	err := rootCmd.Execute()
 	if err == nil {
 		t.Error("expected error for missing arg")
+	}
+}
+
+func TestDescribeCmd_NoStemTableHint(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		"empty/placeholder.txt": "",
+	})
+
+	stdout, err := executeDescribe(t, "--output", "table", filepath.Join(root, "empty"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(stdout, "Hint:") {
+		t.Errorf("expected Hint in table output, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "rootline init") {
+		t.Errorf("expected 'rootline init' in hint, got: %s", stdout)
+	}
+}
+
+func TestDescribeCmd_WithStemNoHints(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values:\n      - Pending\n      - Done\n    required: true\n",
+	})
+
+	stdout, err := executeDescribe(t, root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// hints should be absent (omitempty) or null when schema exists
+	if hints, ok := result["hints"]; ok && hints != nil {
+		hintsList := hints.([]any)
+		if len(hintsList) > 0 {
+			t.Errorf("expected no hints with .stem present, got: %v", hints)
+		}
 	}
 }

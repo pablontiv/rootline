@@ -16,6 +16,7 @@ type DescribeResult struct {
 	Derive   map[string]any         `json:"derive"`
 	State    map[string]any         `json:"state"`
 	Links    map[string]any         `json:"links"`
+	Hints    []string               `json:"hints,omitempty"`
 }
 
 // NewDescribeResult builds a DescribeResult from walk-up entries and
