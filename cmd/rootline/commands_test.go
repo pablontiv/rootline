@@ -44,6 +44,7 @@ func resetFlags() {
 	queryWhere = nil
 	validateAll = false
 	validateStrict = false
+	validateStaged = false
 	outputFormat = "json"
 	fieldPath = nil
 	statsFrom = "."

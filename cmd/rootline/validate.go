@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -21,6 +22,7 @@ var ErrValidationFailed = errors.New("validation failed")
 var (
 	validateAll    bool
 	validateStrict bool
+	validateStaged bool
 )
 
 var validateCmd = &cobra.Command{
@@ -33,10 +35,14 @@ var validateCmd = &cobra.Command{
 func init() {
 	validateCmd.Flags().BoolVar(&validateAll, "all", false, "validate all files in scope from current directory")
 	validateCmd.Flags().BoolVar(&validateStrict, "strict", false, "treat warnings as errors (exit code 1)")
+	validateCmd.Flags().BoolVar(&validateStaged, "staged", false, "validate only files in git staging area")
 	rootCmd.AddCommand(validateCmd)
 }
 
 func runValidate(cmd *cobra.Command, args []string) error {
+	if validateStaged {
+		return runValidateStaged(cmd)
+	}
 	if validateAll {
 		return runValidateAll(cmd)
 	}
@@ -144,6 +150,39 @@ func runValidateAll(cmd *cobra.Command) error {
 		return renderValidateTable(cmd, batch)
 	}
 	return outputJSON(cmd, batch, validateHasFailure(batch))
+}
+
+func runValidateStaged(cmd *cobra.Command) error {
+	files, err := getStagedFiles()
+	if err != nil {
+		return err
+	}
+
+	if len(files) == 0 {
+		// No staged markdown files — nothing to validate
+		return nil
+	}
+
+	return runValidateFiles(cmd, files)
+}
+
+// getStagedFiles returns markdown files in the git staging area.
+func getStagedFiles() ([]string, error) {
+	out, err := exec.Command("git", "diff", "--cached", "--name-only", "--diff-filter=ACM").Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff --cached: %w", err)
+	}
+
+	var mdFiles []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		if strings.HasSuffix(line, ".md") {
+			mdFiles = append(mdFiles, line)
+		}
+	}
+	return mdFiles, nil
 }
 
 // validateHasFailure returns true if the batch has errors,
