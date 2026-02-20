@@ -95,6 +95,27 @@ func TestNewNoStem(t *testing.T) {
 	}
 }
 
+func TestNewDryRun(t *testing.T) {
+	dir := setupTestDir(t)
+	target := filepath.Join(dir, "preview.md")
+
+	out, err := runCmd(t, "new", target, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Should print content to stdout
+	if !strings.Contains(out, "---") {
+		t.Error("expected frontmatter in dry-run output")
+	}
+	if !strings.Contains(out, "estado:") {
+		t.Error("expected estado field in dry-run output")
+	}
+	// File should NOT exist on disk
+	if _, err := os.Stat(target); err == nil {
+		t.Error("dry-run should not create file on disk")
+	}
+}
+
 func TestNewTitleFromFilename(t *testing.T) {
 	dir := setupTestDir(t)
 	target := filepath.Join(dir, "my-test-doc.md")

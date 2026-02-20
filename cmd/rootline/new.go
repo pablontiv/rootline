@@ -11,7 +11,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var newForce bool
+var (
+	newForce  bool
+	newDryRun bool
+)
 
 var newCmd = &cobra.Command{
 	Use:   "new <filepath>",
@@ -23,6 +26,7 @@ var newCmd = &cobra.Command{
 
 func init() {
 	newCmd.Flags().BoolVar(&newForce, "force", false, "overwrite existing file")
+	newCmd.Flags().BoolVar(&newDryRun, "dry-run", false, "show generated content without writing file")
 	rootCmd.AddCommand(newCmd)
 }
 
@@ -54,6 +58,11 @@ func runNew(cmd *cobra.Command, args []string) error {
 
 	// Generate markdown content
 	content := generateMarkdown(absTarget, effective)
+
+	if newDryRun {
+		fmt.Fprint(cmd.OutOrStdout(), content)
+		return nil
+	}
 
 	// Ensure parent directory exists
 	if err := os.MkdirAll(dir, 0755); err != nil {

@@ -51,6 +51,7 @@ func resetFlags() {
 	initDryRun = false
 	initForce = false
 	newForce = false
+	newDryRun = false
 	fixDryRun = false
 	hooksForce = false
 
