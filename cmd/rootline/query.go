@@ -28,7 +28,7 @@ var queryCmd = &cobra.Command{
 }
 
 func init() {
-	queryCmd.Flags().StringSliceVar(&queryWhere, "where", nil, "filter expression (repeatable, e.g. 'estado eq Pending')")
+	queryCmd.Flags().StringArrayVar(&queryWhere, "where", nil, "filter expression (repeatable, e.g. 'estado eq Pending')")
 	queryCmd.Flags().BoolVar(&queryCount, "count", false, "return count instead of records")
 	queryCmd.Flags().IntVar(&queryLimit, "limit", 0, "limit number of results (0 = unlimited)")
 	queryCmd.Flags().StringVar(&queryFrom, "from", ".", "root path to scan")
@@ -60,8 +60,16 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		Limit: queryLimit,
 	}
 
-	if len(queryWhere) > 0 {
-		conditions, err := parseWhereFlags(queryWhere)
+	// Filter empty strings — StringArrayVar may produce [""] on cobra re-execution
+	var wheres []string
+	for _, w := range queryWhere {
+		if w != "" {
+			wheres = append(wheres, w)
+		}
+	}
+
+	if len(wheres) > 0 {
+		conditions, err := parseWhereFlags(wheres)
 		if err != nil {
 			return err
 		}

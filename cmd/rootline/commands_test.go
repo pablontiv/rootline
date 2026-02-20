@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,11 +26,11 @@ schema:
     type: string
     required: false
 `
-	os.WriteFile(filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
 
 	// Two markdown files
-	os.WriteFile(filepath.Join(dir, "doc1.md"), []byte("---\nestado: Pending\ntipo: test\n---\n# Doc 1\n"), 0644)
-	os.WriteFile(filepath.Join(dir, "doc2.md"), []byte("---\nestado: Completado\ntipo: prod\n---\n# Doc 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "doc1.md"), []byte("---\nestado: Pending\ntipo: test\n---\n# Doc 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "doc2.md"), []byte("---\nestado: Completado\ntipo: prod\n---\n# Doc 2\n"), 0644)
 
 	return dir
 }
@@ -58,15 +57,15 @@ func resetFlags() {
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
 	if f := queryCmd.Flags().Lookup("where"); f != nil {
-		f.Value.Set("")
+		_ = f.Value.Set("")
 		f.Changed = false
 	}
 	if f := rootCmd.PersistentFlags().Lookup("field"); f != nil {
-		f.Value.Set("")
+		_ = f.Value.Set("")
 		f.Changed = false
 	}
 	if f := rootCmd.PersistentFlags().Lookup("output"); f != nil {
-		f.Value.Set("json")
+		_ = f.Value.Set("json")
 		f.Changed = false
 	}
 }
@@ -132,7 +131,9 @@ func TestQueryLimit(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	var result map[string]any
-	json.Unmarshal([]byte(out), &result)
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
 	rows := result["rows"].([]any)
 	if len(rows) != 1 {
 		t.Errorf("expected 1 row with --limit 1, got %d", len(rows))
@@ -155,13 +156,42 @@ func TestQueryTable(t *testing.T) {
 
 func TestQueryWhereIn(t *testing.T) {
 	dir := setupTestDir(t)
-	// Use two separate --where flags to avoid StringSliceVar splitting on comma
 	out, err := runCmd(t, "query", "--from", dir, "--where", "tipo in test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(out, "doc1.md") {
 		t.Errorf("expected doc1.md with 'in' operator, got: %s", out)
+	}
+}
+
+func TestQueryWhereInCommaSeparated(t *testing.T) {
+	dir := setupTestDir(t)
+	// With StringArrayVar, comma in value is preserved (not split into separate flags)
+	out, err := runCmd(t, "query", "--from", dir, "--where", "estado in Pending,Completado")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "doc1.md") {
+		t.Errorf("expected doc1.md (Pending) in results, got: %s", out)
+	}
+	if !strings.Contains(out, "doc2.md") {
+		t.Errorf("expected doc2.md (Completado) in results, got: %s", out)
+	}
+}
+
+func TestQueryWhereInWithMultipleWhere(t *testing.T) {
+	dir := setupTestDir(t)
+	// Combine in operator with another --where (AND logic)
+	out, err := runCmd(t, "query", "--from", dir, "--where", "estado in Pending,Completado", "--where", "tipo eq test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "doc1.md") {
+		t.Errorf("expected doc1.md (Pending + tipo=test), got: %s", out)
+	}
+	if strings.Contains(out, "doc2.md") {
+		t.Errorf("expected doc2.md filtered out (tipo=prod, not test)")
 	}
 }
 
@@ -352,7 +382,7 @@ func TestValidateFileNotFound(t *testing.T) {
 func TestValidateInvalidFile(t *testing.T) {
 	dir := setupTestDir(t)
 	// Write a file that violates the schema (missing required estado)
-	os.WriteFile(filepath.Join(dir, "bad.md"), []byte("---\ntipo: test\n---\n# Bad\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "bad.md"), []byte("---\ntipo: test\n---\n# Bad\n"), 0644)
 	out, _ := runCmd(t, "validate", filepath.Join(dir, "bad.md"))
 	if !strings.Contains(out, "false") && !strings.Contains(out, "error") {
 		t.Errorf("expected validation failure for missing required field, got: %s", out)
