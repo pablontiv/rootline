@@ -218,6 +218,11 @@ func resolveField(rec *extract.Record, field string) (any, bool) {
 		return rec.Body, true
 	case "type":
 		return rec.Type, true
+	case "links":
+		if len(rec.Links) == 0 {
+			return nil, false
+		}
+		return rec.Links, true
 	}
 
 	// Try frontmatter directly

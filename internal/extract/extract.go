@@ -23,10 +23,11 @@ type Extractor interface {
 // Record is the universal output of all extractors and the universal input
 // to validation, derivation, and query.
 type Record struct {
-	Path        string         `json:"path"`
-	Type        string         `json:"type"`
-	Frontmatter map[string]any `json:"frontmatter"`
-	Body        string         `json:"body"`
+	Path        string            `json:"path"`
+	Type        string            `json:"type"`
+	Frontmatter map[string]any   `json:"frontmatter"`
+	Body        string            `json:"body"`
+	Links       []Link            `json:"links,omitempty"`
 	Errors      []ExtractionError `json:"errors,omitempty"`
 }
 
@@ -55,6 +56,7 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 	// No frontmatter — entire content is body.
 	if !strings.HasPrefix(text, "---\n") && !strings.HasPrefix(text, "---\r\n") {
 		record.Body = text
+		record.Links = ParseLinks(record.Body)
 		return record, nil
 	}
 
@@ -85,6 +87,9 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 	if bodyStart < len(text) {
 		record.Body = strings.TrimLeft(text[bodyStart:], "\r\n")
 	}
+
+	// Extract wiki-links from body.
+	record.Links = ParseLinks(record.Body)
 
 	return record, nil
 }
