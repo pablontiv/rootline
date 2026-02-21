@@ -31,11 +31,16 @@ El comando retorna directamente el próximo identificador (ej: `"S003"`). Requie
 
 ### Paso 4: Generar Story
 
-Crear directorio y README con estructura antes/después:
+**4.1**: Crear directorio y generar README con frontmatter correcto:
 
 ```bash
-mkdir -p docs/epics/E01-*/F13-*/SXXX-story-name/
+mkdir -p <feature-dir>/SXXX-story-name/
+rootline new <feature-dir>/SXXX-story-name/README.md
 ```
+
+Esto genera el frontmatter según el `.stem` heredado. El agente edita el contenido (antes/después, ACs) pero NO modifica el schema del frontmatter.
+
+**4.2**: Editar el contenido del README con estructura antes/después.
 
 ### Paso 5: Actualizar Feature README
 

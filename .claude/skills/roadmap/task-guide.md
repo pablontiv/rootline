@@ -61,7 +61,15 @@ El comando retorna directamente el próximo identificador (ej: `"T004"`). Requie
 
 ### Paso 4: Generar Task File
 
-Crear el archivo `.md` con toda la información necesaria para que un agente AI lo ejecute sin contexto adicional.
+**4.1**: Crear el archivo con frontmatter correcto usando `rootline new`:
+
+```bash
+rootline new <story-dir>/TXXX-task-name.md
+```
+
+Esto genera el frontmatter según el `.stem` del directorio, con valores de enum correctos y comentados. El agente edita el contenido del task (contexto, alcance, ACs) pero NO modifica el schema del frontmatter — solo selecciona el valor correcto de cada enum.
+
+**4.2**: Editar el contenido con toda la información necesaria para que un agente AI lo ejecute sin contexto adicional.
 
 **CRÍTICO**: El Task debe ser auto-contenido. Un agente que lea SOLO este archivo debe poder ejecutar el trabajo completo.
 
