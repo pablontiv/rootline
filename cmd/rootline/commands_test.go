@@ -54,6 +54,8 @@ func resetFlags() {
 	fixDryRun = false
 	fixAll = false
 	hooksForce = false
+	graphFormat = "dot"
+	graphCheck = false
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
 	if f := queryCmd.Flags().Lookup("where"); f != nil {
