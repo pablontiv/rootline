@@ -1,6 +1,10 @@
 version: 1
 
 schema:
+  id:
+    type: sequence
+    prefix: E
+    digits: 2
   estado:
     type: enum
     values:
