@@ -30,6 +30,8 @@ cliente: Platform Owner
 | [T002](T002-merge-edge-cases.md) | merge_test.go: null removal, herencia 4 niveles, override required |
 | [T003](T003-expr-eval-edge-cases.md) | expr_eval_test.go: type mismatch, boolean literals, campo ausente |
 | [T004](T004-extract-edge-cases.md) | extract_test.go: Unicode, YAML block scalar, sin newline final |
+| [T005](T005-fix-ne-operator-zsh-escaping.md) | Fix != operator zsh escaping en help text y docs |
+| [T006](T006-fix-resolve-target-basename-fallback.md) | Fix resolveTarget: fallback por basename para wiki-links cross-directory |
 
 ## Fuente de verdad
 
