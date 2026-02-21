@@ -249,10 +249,13 @@ Ejecutar Tasks pendientes en loop con confirmación entre cada uno.
 
 #### Fase 1: Discovery
 
-1. Ejecutar `rootline query docs/epics/ --where "estado in ['Pending', 'Especificado']" --output table` para obtener tasks pendientes
-2. Si `--filter PATTERN` proporcionado, filtrar resultados por Epic/Feature path match
-3. Si `--max N`, tomar solo los primeros N tasks
-4. Mostrar tabla de tasks encontradas a Pones
+1. Ejecutar `rootline graph --check docs/epics/` para validar dependencias antes de empezar
+   - Si hay ciclos → reportar y **parar** (dependencias circulares impiden ejecución)
+   - Si hay broken links → reportar como warning (pueden ser tasks aún no creados)
+2. Ejecutar `rootline query docs/epics/ --where "estado in ['Pending', 'Especificado']" --output table` para obtener tasks pendientes
+3. Si `--filter PATTERN` proporcionado, filtrar resultados por Epic/Feature path match
+4. Si `--max N`, tomar solo los primeros N tasks
+5. Mostrar tabla de tasks encontradas a Pones
 
 #### Fase 2: TodoList Setup
 
@@ -267,11 +270,17 @@ Mostrar TodoList con `TaskList`.
 
 Para cada task en orden:
 
-1. **Marcar inicio**: `TaskUpdate` → status: `in_progress`
+1. **Verificar dependencias**: Leer el archivo .md del task y buscar `[[blocks:TXXX-name]]` en el body.
+   Para cada dependencia encontrada:
+   - Buscar el task referenciado y verificar que su frontmatter tiene `estado: Completado`
+   - Si alguna dependencia no está Completada → **skip** con mensaje: `⏭️ Bloqueado por: TXXX (estado: Pending)`
+   - Tasks bloqueados se reintentarán al final de la cola
 
-2. **Leer Task**: `Read` del archivo .md completo para entender qué pide
+2. **Marcar inicio**: `TaskUpdate` → status: `in_progress`
 
-3. **Implementar**:
+3. **Leer Task**: `Read` del archivo .md completo para entender qué pide
+
+4. **Implementar**:
    - Si el Task tiene `tipo:` en frontmatter que corresponde a un skill
      conocido del proyecto, invocarlo via `Skill` tool (ej: tipo `servicio-docker` → `/service TXXX`)
    - Si no tiene skill asociado, implementar directamente siguiendo
@@ -287,7 +296,7 @@ Para cada task en orden:
    - Leer sección "Criterios de Aceptación" del Task .md
    - Ejecutar CADA verificación documentada (comandos, checks, observables)
    - Reportar resultado por AC: ✅ PASS / ❌ FAIL
-   - Si algún AC falla → reportar y preguntar si continuar
+   - Si algún AC falla → reportar y **parar** (bug encontrado)
 
 6. **Marcar completado**: `TaskUpdate` → status: `completed`
 
@@ -305,6 +314,8 @@ Para cada task en orden:
    - Sí, continuar (Recommended)
    - Saltar siguiente y continuar
    - Parar aquí
+
+9. **Reintentar bloqueados**: Al terminar la cola, si quedan tasks que fueron skipped por dependencias bloqueadas y ahora sus dependencias están Completadas → reintentar. Si ningún task progresó en la pasada → parar (deadlock de dependencias).
 
 #### Fase 4: Resumen Final
 
