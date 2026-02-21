@@ -83,6 +83,8 @@ Leer [framework-reference.md](framework-reference.md) y aplicar estos criterios 
    → 2-3 objetivos independientes → 2-3 Epics
    → Señal de separación: si dos Features NO comparten dependencias
      ni contribuyen al mismo objetivo → son Epics distintos
+   → Señal de splitting: nombre del Epic requiere palabras genéricas
+     ("Advanced", "Misc", "Improvements") → dividir por objetivo
 
 2. ¿Cuántos MILESTONES independientes tiene cada Epic?
    → Target: 3-5 Features por Epic
@@ -356,5 +358,4 @@ Después de crear un artefacto, actualizar la tabla en el README padre:
 ## Referencia
 
 - Ver [framework-reference.md](framework-reference.md) para el documento completo del marco de trabajo
-- Ver `.claude/rules/planning-framework.md` para principios siempre activos
 - Templates canónicos: `docs/epics/E01-infrastructure-foundation/`

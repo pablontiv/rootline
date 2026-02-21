@@ -60,9 +60,18 @@ Ningún nivel reemplaza a otro.
 **Rol:** Dirección estratégica
 **Pregunta que responde:** *¿Qué objetivo sistémico estamos persiguiendo?*
 
+* Tiene **un solo objetivo sistémico** — no múltiples objetivos agrupados
+* Tiene métrica de éxito medible
+* Agrupa features que **contribuyen al mismo "done"**
+* Se describe con un nombre **específico**, no genérico
 * Vive semanas o meses
-* Tiene métrica de éxito
-* Agrupa features coherentes
+
+**Test de cohesión**: Si dos features del epic no comparten dependencias
+ni contribuyen a la misma métrica de éxito → son epics distintos.
+
+**Test de nombre**: Si el nombre requiere palabras como "Advanced",
+"Misc", "Improvements", "DX" → el epic no tiene intención clara
+y probablemente agrupa trabajo no relacionado.
 
 **NO contiene:** tareas, pasos, comandos
 

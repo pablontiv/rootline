@@ -1,5 +1,40 @@
 # Epic Guide — Descomponer Intención Estratégica
 
+## Cuándo Crear un Epic
+
+Un Epic es válido cuando cumple TODAS estas condiciones:
+
+1. **Objetivo único**: Persigue un solo objetivo sistémico. Si necesitás
+   explicar dos capacidades independientes, son dos epics.
+
+2. **Nombre específico**: Se puede describir en 2-4 palabras concretas
+   (ej: "Derivation Engine", "Release Pipeline"). Si requiere un nombre
+   genérico ("Advanced Capabilities", "DX Improvements") → no tiene
+   intención clara.
+
+3. **Features conectadas**: Todas sus features contribuyen a la misma
+   métrica de éxito. Si completar F01 no acerca el epic a "done" en
+   el mismo sentido que F02 → no son del mismo epic.
+
+4. **Criterios de éxito escribibles**: Podés escribir 2-3 criterios
+   de aceptación a nivel epic que engloben todas las features.
+   Si no podés → el scope es incoherente.
+
+## Señales de Splitting
+
+Un epic debe partirse cuando:
+
+- El nombre es vago o usa catch-all words (Advanced, Misc, Enhancements)
+- Features pertenecen a dominios técnicos distintos sin dependencias cruzadas
+- No existe un "done" unificado — cada feature tiene su propio "done" independiente
+- Stakeholder no puede explicar qué cambia cuando el epic está "completo"
+
+## Tamaño
+
+- **Target**: 3-5 Features con substancia
+- **Máximo**: 7 Features — más allá de esto, dividir
+- **Mínimo**: 2 Features — si tiene 1, probablemente es un Feature dentro de otro Epic
+
 ## Workflow
 
 ### Paso 1: Parsear Argumentos
