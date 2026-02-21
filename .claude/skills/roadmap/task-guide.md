@@ -53,11 +53,11 @@ Si existe → leer el README de la Story para:
 ### Paso 3: Auto-numbering
 
 ```bash
-# Detectar próximo TXXX en la Story
-ls docs/epics/E01-*/F13-*/S001-*/T[0-9][0-9][0-9]-*.md 2>/dev/null | sort -V | tail -1
+# Detectar próximo TXXX en la Story (requiere .stem con id: {type: sequence, prefix: T, digits: 3})
+rootline describe <story-dir> --field schema.id.next
 ```
 
-Incrementar. Si no hay tasks, empezar con T001.
+El comando retorna directamente el próximo identificador (ej: `"T004"`). Requiere que el directorio padre tenga un `.stem` con `id: {type: sequence}` configurado.
 
 ### Paso 4: Generar Task File
 

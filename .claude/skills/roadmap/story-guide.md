@@ -12,8 +12,8 @@ De `$ARGUMENTS`, extraer:
 ### Paso 2: Verificar Feature Padre
 
 ```bash
-# Resolver path real (los directorios incluyen slug después del ID)
-ls -d docs/epics/E01-*/F13-*/README.md 2>/dev/null
+# Verificar que el Feature padre existe
+rootline describe <feature-dir>
 ```
 
 Si no existe → informar a Pones. Sugerir crear con `/roadmap epic` primero.
@@ -23,11 +23,11 @@ Si existe → leer el README del Feature para entender contexto y scope.
 ### Paso 3: Auto-numbering
 
 ```bash
-# Detectar próximo SXXX en el Feature
-ls -d docs/epics/E01-*/F13-*/S[0-9][0-9][0-9]-* 2>/dev/null | sort -V | tail -1
+# Detectar próximo SXXX en el Feature (requiere .stem con id: {type: sequence, prefix: S, digits: 3})
+rootline describe <feature-dir> --field schema.id.next
 ```
 
-Incrementar. Si no hay stories, empezar con S001.
+El comando retorna directamente el próximo identificador (ej: `"S003"`). Requiere que el directorio padre tenga un `.stem` con `id: {type: sequence}` configurado.
 
 ### Paso 4: Generar Story
 

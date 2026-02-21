@@ -46,11 +46,11 @@ De `$ARGUMENTS`, extraer:
 ### Paso 2: Auto-numbering
 
 ```bash
-# Detectar próximo número de Epic
-ls -d docs/epics/E[0-9][0-9]-* 2>/dev/null | sort -V | tail -1
+# Detectar próximo número de Epic (requiere .stem con id: {type: sequence, prefix: E, digits: 2})
+rootline describe docs/epics/ --field schema.id.next
 ```
 
-Incrementar el número. Si no hay epics, empezar con E01.
+El comando retorna directamente el próximo identificador (ej: `"E05"`). Requiere que `docs/epics/.stem` tenga `id: {type: sequence}` configurado.
 
 ### Paso 3: Discovery
 

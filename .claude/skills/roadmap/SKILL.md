@@ -219,7 +219,7 @@ Cada Task tiene un campo `Tipo` que determina su naturaleza (servicio-docker, mo
 
 Mostrar solo Tasks pendientes en formato tabla, agrupados por Epic/Feature.
 
-**Procedimiento**: Ejecutar `rootline query docs/epics/ --where "estado in Pending,Especificado" --output table`
+**Procedimiento**: Ejecutar `rootline query docs/epics/ --where "estado in ['Pending', 'Especificado']" --output table`
 
 Presenta el output tal cual, sin modificaciones.
 
@@ -245,7 +245,7 @@ Ejecutar Tasks pendientes en loop con confirmación entre cada uno.
 
 #### Fase 1: Discovery
 
-1. Ejecutar `rootline query docs/epics/ --where "estado in Pending,Especificado" --output table` para obtener tasks pendientes
+1. Ejecutar `rootline query docs/epics/ --where "estado in ['Pending', 'Especificado']" --output table` para obtener tasks pendientes
 2. Si `--filter PATTERN` proporcionado, filtrar resultados por Epic/Feature path match
 3. Si `--max N`, tomar solo los primeros N tasks
 4. Mostrar tabla de tasks encontradas a Pones
@@ -321,27 +321,31 @@ Al terminar todas las tasks o al parar:
 
 ### Auto-numbering
 
-Para cada nivel, detectar el próximo número disponible:
+Para cada nivel, usar `rootline describe` con el campo `schema.id.next`:
 
 ```bash
+# Requiere .stem con id: {type: sequence, prefix: X, digits: N} en cada nivel
+
 # Epics: próximo EXX
-ls -d docs/epics/E[0-9][0-9]-* 2>/dev/null | sort -V | tail -1
+rootline describe docs/epics/ --field schema.id.next
 
 # Features: próximo FXX dentro del Epic
-ls -d docs/epics/EXX-name/F[0-9][0-9]-* 2>/dev/null | sort -V | tail -1
+rootline describe docs/epics/EXX-name/ --field schema.id.next
 
 # Stories: próximo SXXX dentro del Feature
-ls -d docs/epics/.../SXXX-* 2>/dev/null | sort -V | tail -1
+rootline describe docs/epics/.../FXX-name/ --field schema.id.next
 
 # Tasks: próximo TXXX dentro de la Story
-ls docs/epics/.../T[0-9][0-9][0-9]-*.md 2>/dev/null | sort -V | tail -1
+rootline describe docs/epics/.../SXXX-name/ --field schema.id.next
 ```
+
+El comando retorna el próximo identificador directamente (ej: `"T004"`).
 
 ### Verificación de Padre
 
 SIEMPRE verificar que el directorio padre existe antes de crear:
-- `/roadmap story E01/F13 ...` → verificar `docs/epics/E01-*/F13-*/README.md` existe
-- `/roadmap task E01/F13/S001 ...` → verificar `docs/epics/E01-*/F13-*/S001-*/README.md` existe
+- `/roadmap story E01/F13 ...` → verificar con `rootline describe docs/epics/E01-*/F13-*/`
+- `/roadmap task E01/F13/S001 ...` → verificar con `rootline describe docs/epics/E01-*/F13-*/S001-*/`
 
 Si no existe → informar a Pones y sugerir crearlo primero.
 
