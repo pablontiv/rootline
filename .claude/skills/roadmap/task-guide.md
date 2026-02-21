@@ -97,6 +97,10 @@ ejecutable_en: 1 sesion
 
 **Story**: [SXXX Story Name](README.md)
 
+[[blocks:TXXX-prerequisite-task]]
+
+> **Wiki-links de dependencia**: Si este Task depende de otro, agregar `[[blocks:TXXX-name]]` aquí (debajo del link a la Story). `rootline graph` lee estos links automáticamente para detectar ciclos y resolver orden de ejecución. Omitir si no hay dependencias.
+
 ## Contexto
 
 [Párrafo breve explicando el contexto necesario. Extraído de la Story padre pero auto-contenido. El agente no necesita leer otro archivo para entender qué hacer.]
@@ -222,7 +226,9 @@ artefactos:
 
 ## Dependencias
 
-- [Task/componente que debe existir antes de ejecutar este Task]
+> Contexto humano complementario. Las dependencias machine-readable se declaran arriba con `[[blocks:TXXX-name]]`.
+
+- [Task/componente que debe existir antes de ejecutar este Task — contexto adicional]
 - [Servicio, módulo o config que este Task requiere]
 
 ## Alcance
