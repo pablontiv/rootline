@@ -135,6 +135,7 @@ rootline query --where 'field op value'
 rootline describe <path>
 rootline tree [path]
 rootline stats [path]
+rootline graph [path]             # Dependency graph (DOT, Mermaid, --check)
 
 # Document lifecycle
 rootline init [path]          # Infer .stem from existing documents
