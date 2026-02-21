@@ -1,6 +1,12 @@
 package rules
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"regexp"
+	"strconv"
+)
 
 // DescribeResult is the versioned JSON output for the describe command.
 // It shows the effective schema for a directory after merging all
@@ -47,6 +53,14 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 		state = map[string]any{}
 	}
 
+	// Compute Next for sequence fields
+	for name, field := range schema {
+		if field.Type == "sequence" {
+			field.Next = computeNextSequence(path, field)
+			schema[name] = field
+		}
+	}
+
 	return &DescribeResult{
 		Version:  1,
 		Kind:     "rootline/describe",
@@ -59,6 +73,40 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 		State:    state,
 		Links:    effective.Links,
 	}
+}
+
+// computeNextSequence scans dirPath for files/dirs matching the prefix pattern,
+// finds the highest numeric suffix, and returns prefix + next number zero-padded
+// to the specified digits.
+func computeNextSequence(dirPath string, field SchemaField) string {
+	if field.Prefix == "" || field.Digits <= 0 {
+		return ""
+	}
+
+	pattern := regexp.MustCompile(`^` + regexp.QuoteMeta(field.Prefix) + `(\d+)`)
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		// Directory doesn't exist or unreadable — start at 1
+		return fmt.Sprintf("%s%0*d", field.Prefix, field.Digits, 1)
+	}
+
+	maxNum := 0
+	for _, e := range entries {
+		matches := pattern.FindStringSubmatch(e.Name())
+		if matches == nil {
+			continue
+		}
+		num, err := strconv.Atoi(matches[1])
+		if err != nil {
+			continue
+		}
+		if num > maxNum {
+			maxNum = num
+		}
+	}
+
+	return fmt.Sprintf("%s%0*d", field.Prefix, field.Digits, maxNum+1)
 }
 
 // ToJSON serializes the describe result to stable JSON.
