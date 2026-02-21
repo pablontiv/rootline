@@ -118,6 +118,75 @@ func TestBrokenLinks_AllValid(t *testing.T) {
 	}
 }
 
+func TestResolveTarget_BasenameFallback(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("subdir/T001-task.md", nil),
+		makeRecord("other/source.md", []extract.Link{
+			{Target: "T001-task", Type: "blocks", Line: 3},
+		}),
+	}
+
+	g := Build(records)
+	broken := g.BrokenLinks()
+	if len(broken) != 0 {
+		t.Errorf("got %d broken links, want 0: %v", len(broken), broken)
+	}
+	edges := g.Edges["other/source.md"]
+	if len(edges) != 1 || edges[0].Target != "subdir/T001-task.md" {
+		t.Errorf("edge target = %q, want %q", edges[0].Target, "subdir/T001-task.md")
+	}
+}
+
+func TestResolveTarget_BasenameFallback_WithExtension(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("subdir/T001-task.md", nil),
+		makeRecord("other/source.md", []extract.Link{
+			{Target: "T001-task.md", Type: "blocks", Line: 3},
+		}),
+	}
+
+	g := Build(records)
+	broken := g.BrokenLinks()
+	if len(broken) != 0 {
+		t.Errorf("got %d broken links, want 0: %v", len(broken), broken)
+	}
+	edges := g.Edges["other/source.md"]
+	if len(edges) != 1 || edges[0].Target != "subdir/T001-task.md" {
+		t.Errorf("edge target = %q, want %q", edges[0].Target, "subdir/T001-task.md")
+	}
+}
+
+func TestResolveTarget_BasenameFallback_Ambiguous(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("dir1/T001-task.md", nil),
+		makeRecord("dir2/T001-task.md", nil),
+		makeRecord("source.md", []extract.Link{
+			{Target: "T001-task", Type: "blocks", Line: 1},
+		}),
+	}
+
+	g := Build(records)
+	broken := g.BrokenLinks()
+	if len(broken) != 1 {
+		t.Errorf("got %d broken links, want 1 (ambiguous): %v", len(broken), broken)
+	}
+}
+
+func TestResolveTarget_BasenameFallback_NoMatch(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("a.md", nil),
+		makeRecord("source.md", []extract.Link{
+			{Target: "nonexistent-task", Type: "blocks", Line: 1},
+		}),
+	}
+
+	g := Build(records)
+	broken := g.BrokenLinks()
+	if len(broken) != 1 {
+		t.Errorf("got %d broken links, want 1: %v", len(broken), broken)
+	}
+}
+
 func TestBuild_NoLinks(t *testing.T) {
 	records := []*extract.Record{
 		makeRecord("a.md", nil),

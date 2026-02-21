@@ -35,6 +35,7 @@ type BrokenLink struct {
 
 // Build constructs a Graph from a slice of records.
 // Link targets are resolved relative to the source record's directory.
+// Unresolved targets get a basename fallback lookup across all nodes.
 func Build(records []*extract.Record) *Graph {
 	g := &Graph{
 		Nodes: make(map[string]*extract.Record, len(records)),
@@ -57,7 +58,38 @@ func Build(records []*extract.Record) *Graph {
 		}
 	}
 
+	// Second pass: resolve unmatched targets by basename fallback.
+	g.resolveByBasename()
+
 	return g
+}
+
+// resolveByBasename rewrites edge targets that don't match any node
+// by searching for a unique basename match (with and without .md).
+func (g *Graph) resolveByBasename() {
+	// Build basename index: basename → list of full paths.
+	idx := make(map[string][]string, len(g.Nodes))
+	for path := range g.Nodes {
+		base := filepath.Base(path)
+		idx[base] = append(idx[base], path)
+		// Also index without .md extension.
+		noExt := strings.TrimSuffix(base, ".md")
+		if noExt != base {
+			idx[noExt] = append(idx[noExt], path)
+		}
+	}
+
+	for src, edges := range g.Edges {
+		for i, edge := range edges {
+			if _, exists := g.Nodes[edge.Target]; exists {
+				continue // already resolved
+			}
+			// Try basename lookup.
+			if matches, ok := idx[edge.Target]; ok && len(matches) == 1 {
+				g.Edges[src][i].Target = matches[0]
+			}
+		}
+	}
 }
 
 // DetectCycles finds all cycles in the graph using DFS.
