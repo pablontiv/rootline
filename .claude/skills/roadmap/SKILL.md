@@ -227,9 +227,13 @@ Presenta el output tal cual, sin modificaciones.
 
 ### `/roadmap` o `/roadmap view`
 
-Mostrar árbol jerárquico del estado actual (read-only).
+Mostrar árbol jerárquico y resumen estadístico del estado actual (read-only).
 
-**Procedimiento**: Ejecutar `rootline tree docs/epics/ --output table`
+**Procedimiento**:
+1. Ejecutar `rootline tree docs/epics/ --output table`
+2. Ejecutar `rootline stats docs/epics/ --output table`
+
+Presenta ambos outputs al usuario sin modificaciones.
 
 ---
 
@@ -358,6 +362,18 @@ Después de crear un artefacto, actualizar la tabla en el README padre:
 **Nota**: Las tablas NO incluyen columna Estado. El estado se lee del YAML frontmatter de cada Task y se deriva para Stories/Features en `/roadmap view`.
 
 ---
+
+## Comandos Rootline de Referencia
+
+| Comando | Cuándo usarlo en el skill |
+|---------|--------------------------|
+| `rootline validate <path>` | Después de crear/editar archivos .md — verificar contra .stem |
+| `rootline fix <path>` | Cuando validate falla — corregir automáticamente |
+| `rootline describe <dir> --field schema.id.next` | Auto-numbering: obtener próximo ID en cualquier nivel |
+| `rootline new <path>` | Scaffolding: crear archivo con frontmatter correcto según .stem |
+| `rootline query <path> --where "expr"` | Discovery: buscar records por frontmatter (estado, tipo, etc.) |
+| `rootline tree <path> --output table` | Vista jerárquica: `/roadmap view` |
+| `rootline stats <path> --output table` | Resumen estadístico: conteos por estado y tipo |
 
 ## Referencia
 
