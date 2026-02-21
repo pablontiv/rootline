@@ -41,6 +41,11 @@ schema:
   ejecutable_en:
     type: string
 
+links:
+  allowed: [blocks, reference]
+  blocks:
+    target: "T*"
+
 validate:
   - rule: requires
     if: { tipo: "software-module" }
