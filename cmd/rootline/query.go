@@ -18,7 +18,7 @@ const whereExamples = `Examples:
   rootline query --where "estado in ['Pending', 'Especificado']"
   rootline query --where "tipo == 'lxc' && estado == 'Pending'"
   rootline query --where "body contains 'migration'"
-  rootline query --where "tags != nil"`
+  rootline query --where 'tags != nil'`
 
 var (
 	queryWhere []string

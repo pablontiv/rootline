@@ -17,7 +17,7 @@ El evaluador de expresiones en `internal/query/expr_eval.go` soporta `==`, `!=`,
 1. `TestExprEval_TypeMismatch_NumericFieldStringCompare` — record con `version: 1` (int), expresion `version == 'texto'` → retorna false (no panic)
 2. `TestExprEval_BooleanLiteral_True` — record con `active: true` (bool YAML), expresion `active == true` → retorna true
 3. `TestExprEval_BooleanLiteral_False` — `active == false` cuando `active: true` → retorna false
-4. `TestExprEval_FieldAbsent_NilCheck` — record sin campo `estado`, expresion `estado != nil` → retorna false (no error)
+4. `TestExprEval_FieldAbsent_NilCheck` — record sin campo `estado`, expresion `estado != nil` → retorna false (no error). **Nota zsh**: al invocar desde zsh, usar comillas simples para expresiones con `!=` (ej: `--where 'estado != nil'`), ya que `HIST_EXPAND` de zsh interpreta `!` en comillas dobles como expansión de historial
 5. `TestExprEval_FieldAbsent_EqCheck` — record sin `estado`, expresion `estado == 'Pending'` → retorna false (no panic)
 
 **Out**: Cambios a expr_eval.go, nuevos operadores
