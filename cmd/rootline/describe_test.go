@@ -242,6 +242,42 @@ func TestDescribeCmd_NoStemTableHint(t *testing.T) {
 	}
 }
 
+func TestDescribeCmd_SequenceFieldNext(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":                "version: 1\nschema:\n  id:\n    type: sequence\n    prefix: T\n    digits: 3\n",
+		"tasks/T001-first.md":  "---\nestado: Done\n---\n# First\n",
+		"tasks/T002-second.md": "---\nestado: Pending\n---\n# Second\n",
+	})
+
+	// Test JSON field extraction
+	stdout, err := executeDescribe(t, "--field", "schema.id.next", filepath.Join(root, "tasks"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	trimmed := strings.TrimSpace(stdout)
+	if trimmed != `"T003"` {
+		t.Errorf("schema.id.next = %s, want %q", trimmed, "T003")
+	}
+}
+
+func TestDescribeCmd_SequenceFieldNextEmpty(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem": "version: 1\nschema:\n  id:\n    type: sequence\n    prefix: S\n    digits: 3\n",
+	})
+
+	// Root has no files matching S prefix → S001
+	stdout, err := executeDescribe(t, "--field", "schema.id.next", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	trimmed := strings.TrimSpace(stdout)
+	if trimmed != `"S001"` {
+		t.Errorf("schema.id.next = %s, want %q", trimmed, "S001")
+	}
+}
+
 func TestDescribeCmd_WithStemNoHints(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
 		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values:\n      - Pending\n      - Done\n    required: true\n",

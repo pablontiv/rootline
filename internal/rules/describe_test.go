@@ -2,6 +2,7 @@ package rules
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"testing"
 )
 
@@ -92,6 +93,61 @@ func TestDescribeResult_ToJSON(t *testing.T) {
 	titleField := schema["title"].(map[string]any)
 	if titleField["source"] != "root/.stem" {
 		t.Errorf("schema.title.source = %v", titleField["source"])
+	}
+}
+
+func TestDescribeResult_SequenceNext(t *testing.T) {
+	dir := t.TempDir()
+	// Create files matching the sequence pattern
+	writeTestFile(t, filepath.Join(dir, "T001-first.md"))
+	writeTestFile(t, filepath.Join(dir, "T002-second.md"))
+
+	entries := []StemEntry{{Path: filepath.Join(dir, ".stem"), Stem: &StemFile{}}}
+	effective := &StemFile{
+		Schema: map[string]SchemaField{
+			"id": {Type: "sequence", Prefix: "T", Digits: 3},
+		},
+	}
+
+	result := NewDescribeResult(dir, entries, effective)
+
+	idField, ok := result.Schema["id"]
+	if !ok {
+		t.Fatal("schema field 'id' not found")
+	}
+	if idField.Next != "T003" {
+		t.Errorf("Next = %q, want %q", idField.Next, "T003")
+	}
+
+	// Verify it appears in JSON
+	data, err := result.ToJSON()
+	if err != nil {
+		t.Fatalf("ToJSON: %v", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("JSON parse: %v", err)
+	}
+	schema := parsed["schema"].(map[string]any)
+	idJSON := schema["id"].(map[string]any)
+	if idJSON["next"] != "T003" {
+		t.Errorf("JSON schema.id.next = %v, want T003", idJSON["next"])
+	}
+}
+
+func TestDescribeResult_NonSequenceFieldUnchanged(t *testing.T) {
+	entries := []StemEntry{{Path: "test/.stem", Stem: &StemFile{}}}
+	effective := &StemFile{
+		Schema: map[string]SchemaField{
+			"title": {Type: "string", Required: true},
+		},
+	}
+
+	result := NewDescribeResult("test/", entries, effective)
+
+	titleField := result.Schema["title"]
+	if titleField.Next != "" {
+		t.Errorf("non-sequence field has Next = %q, want empty", titleField.Next)
 	}
 }
 
