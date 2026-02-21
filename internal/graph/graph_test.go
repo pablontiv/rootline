@@ -187,6 +187,88 @@ func TestResolveTarget_BasenameFallback_NoMatch(t *testing.T) {
 	}
 }
 
+func TestDetectCycles_FourNodeCycle(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("a.md", []extract.Link{{Target: "b.md", Type: "reference", Line: 1}}),
+		makeRecord("b.md", []extract.Link{{Target: "c.md", Type: "reference", Line: 1}}),
+		makeRecord("c.md", []extract.Link{{Target: "d.md", Type: "reference", Line: 1}}),
+		makeRecord("d.md", []extract.Link{{Target: "a.md", Type: "reference", Line: 1}}),
+	}
+
+	g := Build(records)
+	cycles := g.DetectCycles()
+	if len(cycles) != 1 {
+		t.Fatalf("got %d cycles, want 1: %v", len(cycles), cycles)
+	}
+	cycle := cycles[0]
+	// Cycle must close and contain 4 unique nodes.
+	if cycle[0] != cycle[len(cycle)-1] {
+		t.Errorf("cycle should close: %v", cycle)
+	}
+	nodes := map[string]bool{}
+	for _, n := range cycle[:len(cycle)-1] {
+		nodes[n] = true
+	}
+	if len(nodes) != 4 {
+		t.Errorf("expected 4 unique nodes in cycle, got %d: %v", len(nodes), cycle)
+	}
+}
+
+func TestDetectCycles_MultipleDisjoint(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("a.md", []extract.Link{{Target: "b.md", Type: "reference", Line: 1}}),
+		makeRecord("b.md", []extract.Link{{Target: "a.md", Type: "reference", Line: 1}}),
+		makeRecord("c.md", []extract.Link{{Target: "d.md", Type: "reference", Line: 1}}),
+		makeRecord("d.md", []extract.Link{{Target: "c.md", Type: "reference", Line: 1}}),
+	}
+
+	g := Build(records)
+	cycles := g.DetectCycles()
+	if len(cycles) != 2 {
+		t.Fatalf("got %d cycles, want 2: %v", len(cycles), cycles)
+	}
+}
+
+func TestBrokenLinks_MultipleFromSameSource(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("a.md", []extract.Link{
+			{Target: "x.md", Type: "reference", Line: 1},
+			{Target: "y.md", Type: "reference", Line: 2},
+			{Target: "z.md", Type: "reference", Line: 3},
+		}),
+		makeRecord("z.md", nil), // z exists, x and y don't
+	}
+
+	g := Build(records)
+	broken := g.BrokenLinks()
+	if len(broken) != 2 {
+		t.Fatalf("got %d broken links, want 2: %v", len(broken), broken)
+	}
+	for _, b := range broken {
+		if b.Source != "a.md" {
+			t.Errorf("broken link source = %q, want a.md", b.Source)
+		}
+	}
+}
+
+func TestBuild_EmptyGraph(t *testing.T) {
+	g := Build([]*extract.Record{})
+	if len(g.Nodes) != 0 {
+		t.Errorf("nodes = %d, want 0", len(g.Nodes))
+	}
+	if len(g.Edges) != 0 {
+		t.Errorf("edges = %d, want 0", len(g.Edges))
+	}
+	cycles := g.DetectCycles()
+	if len(cycles) != 0 {
+		t.Errorf("cycles = %d, want 0", len(cycles))
+	}
+	broken := g.BrokenLinks()
+	if len(broken) != 0 {
+		t.Errorf("broken links = %d, want 0", len(broken))
+	}
+}
+
 func TestBuild_NoLinks(t *testing.T) {
 	records := []*extract.Record{
 		makeRecord("a.md", nil),
