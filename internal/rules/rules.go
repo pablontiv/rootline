@@ -93,6 +93,9 @@ type SchemaField struct {
 	Default  string   `yaml:"default" json:"default,omitempty"`
 	Severity string   `yaml:"severity" json:"severity,omitempty"`
 	Source   string   `yaml:"-" json:"source,omitempty"`
+	Prefix   string   `yaml:"prefix" json:"prefix,omitempty"`
+	Digits   int      `yaml:"digits" json:"digits,omitempty"`
+	Next     string   `yaml:"-" json:"next,omitempty"`
 }
 
 // ValidationRule defines a single validation constraint.

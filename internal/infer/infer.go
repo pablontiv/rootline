@@ -21,11 +21,11 @@ type FieldStats struct {
 
 // InferredSchema is the result of analyzing a set of records.
 type InferredSchema struct {
-	Fields              map[string]*FieldStats      `json:"fields"`
-	Schema              map[string]rules.SchemaField `json:"schema"`
-	TotalFiles          int                          `json:"total_files"`
-	FilesWithFrontmatter int                         `json:"files_with_frontmatter"`
-	FilesWithout        int                          `json:"files_without"`
+	Fields               map[string]*FieldStats       `json:"fields"`
+	Schema               map[string]rules.SchemaField `json:"schema"`
+	TotalFiles           int                          `json:"total_files"`
+	FilesWithFrontmatter int                          `json:"files_with_frontmatter"`
+	FilesWithout         int                          `json:"files_without"`
 }
 
 // Analyze processes records and infers a schema from frontmatter patterns.

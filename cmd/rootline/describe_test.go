@@ -22,7 +22,7 @@ func executeDescribe(t *testing.T, args ...string) (string, error) {
 
 func TestDescribeCmd_FullContract(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  Fecha:\n    type: string\n    required: true\n",
+		".stem":     "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  Fecha:\n    type: string\n    required: true\n",
 		"prd/.stem": "schema:\n  Estado:\n    type: enum\n    values:\n      - Pending\n      - Completado\n    required: true\nvalidate:\n  - rule: requires\n    if: { Estado: Completado }\n    then: { fields: [Fecha] }\n",
 	})
 

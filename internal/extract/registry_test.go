@@ -86,6 +86,6 @@ type fakeExtractor struct {
 	exts []string
 }
 
-func (f *fakeExtractor) Name() string                                   { return f.name }
-func (f *fakeExtractor) Extensions() []string                           { return f.exts }
+func (f *fakeExtractor) Name() string                            { return f.name }
+func (f *fakeExtractor) Extensions() []string                    { return f.exts }
 func (f *fakeExtractor) Extract(string, []byte) (*Record, error) { return nil, nil }

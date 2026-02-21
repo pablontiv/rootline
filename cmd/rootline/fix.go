@@ -23,10 +23,10 @@ type FixResult struct {
 
 // BatchFixResult is the versioned JSON output for multi-file fix.
 type BatchFixResult struct {
-	Version int           `json:"version"`
-	Kind    string        `json:"kind"`
-	Results []*FixResult  `json:"results"`
-	Summary FixSummary    `json:"summary"`
+	Version int          `json:"version"`
+	Kind    string       `json:"kind"`
+	Results []*FixResult `json:"results"`
+	Summary FixSummary   `json:"summary"`
 }
 
 // FixSummary holds aggregate counts for batch fix.

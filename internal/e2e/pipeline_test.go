@@ -332,7 +332,7 @@ func TestPipeline_DeepNesting(t *testing.T) {
 // records preserve all frontmatter types correctly through the pipeline.
 func TestPipeline_FrontmatterExtractionIntegrity(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\n",
+		".stem":  "version: 1\nscope:\n  match: \"*.md\"\n",
 		"doc.md": "---\ntitle: Test Doc\nstatus: draft\npriority: 1\ntags:\n  - go\n  - testing\n---\n# Body\n\nParagraph.",
 	})
 
@@ -692,7 +692,7 @@ validate:
 // scan → extract → query with operators.
 func TestPipeline_QueryAfterScanExtract(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\n",
+		".stem":         "version: 1\nscope:\n  match: \"*.md\"\n",
 		"tasks/T001.md": "---\ntitle: Deploy Redis\nestado: Pending\ntipo: servicio-docker\n---\n# Deploy",
 		"tasks/T002.md": "---\ntitle: Auth Module\nestado: Completado\ntipo: modulo-sistema\n---\n# Auth",
 		"tasks/T003.md": "---\ntitle: LXC Setup\nestado: Pending\ntipo: lxc\n---\n# LXC\n\nMigration needed.",

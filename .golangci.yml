@@ -1,13 +1,15 @@
+version: "2"
+
 run:
   timeout: 3m
 
 linters:
+  default: none
   enable:
     - govet
     - errcheck
     - staticcheck
     - unused
-    - gosimple
     - ineffassign
     - gocritic
 

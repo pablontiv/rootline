@@ -44,9 +44,9 @@ func TestScan_FindsMarkdownRecursively(t *testing.T) {
 
 func TestScan_ExcludesStemignore(t *testing.T) {
 	root := setupScanTree(t, map[string]string{
-		"doc.md":       "---\ntitle: Keep\n---\n",
-		"draft.md":     "---\ntitle: Draft\n---\n",
-		".stemignore":  "draft.md\n",
+		"doc.md":      "---\ntitle: Keep\n---\n",
+		"draft.md":    "---\ntitle: Draft\n---\n",
+		".stemignore": "draft.md\n",
 	})
 
 	reg := extract.NewRegistry()
@@ -65,10 +65,10 @@ func TestScan_ExcludesStemignore(t *testing.T) {
 
 func TestScan_StemignoreGlobPattern(t *testing.T) {
 	root := setupScanTree(t, map[string]string{
-		"doc.md":       "---\ntitle: Keep\n---\n",
-		"notes.log":    "not markdown",
-		"data.txt":     "not markdown",
-		".stemignore":  "*.log\n*.txt\n",
+		"doc.md":      "---\ntitle: Keep\n---\n",
+		"notes.log":   "not markdown",
+		"data.txt":    "not markdown",
+		".stemignore": "*.log\n*.txt\n",
 	})
 
 	reg := extract.NewRegistry()
@@ -86,10 +86,10 @@ func TestScan_StemignoreGlobPattern(t *testing.T) {
 
 func TestScan_StemignoreInSubdirectory(t *testing.T) {
 	root := setupScanTree(t, map[string]string{
-		"root.md":          "---\ntitle: Root\n---\n",
-		"sub/keep.md":      "---\ntitle: Keep\n---\n",
-		"sub/ignored.md":   "---\ntitle: Ignored\n---\n",
-		"sub/.stemignore":  "ignored.md\n",
+		"root.md":         "---\ntitle: Root\n---\n",
+		"sub/keep.md":     "---\ntitle: Keep\n---\n",
+		"sub/ignored.md":  "---\ntitle: Ignored\n---\n",
+		"sub/.stemignore": "ignored.md\n",
 	})
 
 	reg := extract.NewRegistry()
@@ -116,9 +116,9 @@ func TestScan_StemignoreInSubdirectory(t *testing.T) {
 
 func TestScan_StemignoreComments(t *testing.T) {
 	root := setupScanTree(t, map[string]string{
-		"doc.md":       "---\ntitle: Doc\n---\n",
-		"draft.md":     "---\ntitle: Draft\n---\n",
-		".stemignore":  "# This is a comment\n\ndraft.md\n",
+		"doc.md":      "---\ntitle: Doc\n---\n",
+		"draft.md":    "---\ntitle: Draft\n---\n",
+		".stemignore": "# This is a comment\n\ndraft.md\n",
 	})
 
 	reg := extract.NewRegistry()

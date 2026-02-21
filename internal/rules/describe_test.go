@@ -13,7 +13,7 @@ func TestNewDescribeResult_FullSchema(t *testing.T) {
 	effective := &StemFile{
 		Scope: Scope{Match: "*.md"},
 		Schema: map[string]SchemaField{
-			"title": {Type: "string", Required: true, Source: "docs/.stem"},
+			"title":  {Type: "string", Required: true, Source: "docs/.stem"},
 			"estado": {Type: "enum", Values: []string{"Pending", "Done"}, Source: "docs/prd/.stem"},
 		},
 		Validate: []ValidationRule{

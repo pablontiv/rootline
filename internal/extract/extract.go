@@ -25,7 +25,7 @@ type Extractor interface {
 type Record struct {
 	Path        string            `json:"path"`
 	Type        string            `json:"type"`
-	Frontmatter map[string]any   `json:"frontmatter"`
+	Frontmatter map[string]any    `json:"frontmatter"`
 	Body        string            `json:"body"`
 	Links       []Link            `json:"links,omitempty"`
 	Errors      []ExtractionError `json:"errors,omitempty"`
@@ -40,7 +40,7 @@ type ExtractionError struct {
 // MarkdownExtractor extracts YAML frontmatter from Markdown files.
 type MarkdownExtractor struct{}
 
-func (m *MarkdownExtractor) Name() string        { return "markdown" }
+func (m *MarkdownExtractor) Name() string         { return "markdown" }
 func (m *MarkdownExtractor) Extensions() []string { return []string{".md", ".markdown"} }
 
 func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error) {

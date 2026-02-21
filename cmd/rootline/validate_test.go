@@ -47,7 +47,7 @@ func executeValidate(t *testing.T, args ...string) (string, error) {
 
 func TestValidateCmd_SingleFileValid(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
+		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
 		"doc.md": "---\ntitle: Hello\n---\n# Hello",
 	})
 
@@ -74,7 +74,7 @@ func TestValidateCmd_SingleFileValid(t *testing.T) {
 
 func TestValidateCmd_SingleFileInvalid(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
+		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
 		"doc.md": "---\nstatus: draft\n---\n# No title",
 	})
 
@@ -134,7 +134,7 @@ func TestValidateCmd_AllMode(t *testing.T) {
 
 func TestValidateCmd_FieldExtraction(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
+		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
 		"doc.md": "---\nstatus: draft\n---\n# No title",
 	})
 
@@ -155,7 +155,7 @@ func TestValidateCmd_FieldExtraction(t *testing.T) {
 
 func TestValidateCmd_FieldExtractionValid(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
+		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
 		"doc.md": "---\ntitle: Hello\n---\n",
 	})
 
@@ -178,9 +178,9 @@ func TestValidateCmd_NoArgs(t *testing.T) {
 
 func TestValidateCmd_MultipleFiles(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
-		"a.md":   "---\ntitle: A\n---\n",
-		"b.md":   "---\ntitle: B\n---\n",
+		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
+		"a.md":  "---\ntitle: A\n---\n",
+		"b.md":  "---\ntitle: B\n---\n",
 	})
 
 	stdout, err := executeValidate(t,
@@ -222,7 +222,7 @@ func TestValidateCmd_NoExtractor(t *testing.T) {
 
 func TestValidateCmd_FieldExtractionNested(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
+		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
 		"doc.md": "---\ntitle: Hello\n---\n",
 	})
 
@@ -237,7 +237,7 @@ func TestValidateCmd_FieldExtractionNested(t *testing.T) {
 
 func TestValidateCmd_FieldExtractionNotFound(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
+		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
 		"doc.md": "---\ntitle: Hello\n---\n",
 	})
 
@@ -273,7 +273,7 @@ func TestSplitDotPath(t *testing.T) {
 
 func TestValidateCmd_EnumError(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values:\n      - Pending\n      - Completado\n    required: true\n",
+		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values:\n      - Pending\n      - Completado\n    required: true\n",
 		"doc.md": "---\nestado: Invalid\n---\n",
 	})
 

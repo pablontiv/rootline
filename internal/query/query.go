@@ -28,8 +28,8 @@ const (
 type Condition struct {
 	Op       Operator
 	Field    string
-	Value    string   // for eq, ne, contains
-	Values   []string // for in
+	Value    string      // for eq, ne, contains
+	Values   []string    // for in
 	Children []Condition // for and
 }
 
@@ -42,9 +42,9 @@ type Query struct {
 
 // QueryResult is the versioned JSON output for a standard query.
 type QueryResult struct {
-	Version int              `json:"version"`
-	Kind    string           `json:"kind"`
-	Meta    QueryMeta        `json:"meta"`
+	Version int               `json:"version"`
+	Kind    string            `json:"kind"`
+	Meta    QueryMeta         `json:"meta"`
 	Rows    []*extract.Record `json:"rows"`
 }
 
