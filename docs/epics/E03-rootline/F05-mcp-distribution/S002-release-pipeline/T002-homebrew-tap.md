@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Bloqueada
 tipo: ci-cd
 ejecutable_en: 1 sesion
 ---

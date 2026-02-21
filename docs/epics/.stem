@@ -13,6 +13,7 @@ schema:
       - Specified
       - Completado
       - Diferida
+      - Bloqueada
     required: true
   tipo:
     type: enum
