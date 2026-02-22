@@ -29,6 +29,7 @@ type Record struct {
 	Frontmatter map[string]any    `json:"frontmatter"`
 	Body        string            `json:"body"`
 	Links       []Link            `json:"links,omitempty"`
+	Derived     map[string]any    `json:"derived,omitempty"`
 	Errors      []ExtractionError `json:"errors,omitempty"`
 }
 
