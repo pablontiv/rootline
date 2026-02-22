@@ -262,6 +262,53 @@ func TestDetectInferFromChildren(t *testing.T) {
 	}
 }
 
+func TestExtractEnumValue_Quoted(t *testing.T) {
+	val := extractEnumValue(`value "Obsoleto" not in allowed values: [Pending, Completado]`, nil)
+	if val != "Obsoleto" {
+		t.Errorf("got %q, want Obsoleto", val)
+	}
+}
+
+func TestExtractEnumValue_Unquoted(t *testing.T) {
+	val := extractEnumValue(`value Compltado is not in allowed values: [Pending, Completado]`, nil)
+	if val != "Compltado" {
+		t.Errorf("got %q, want Compltado", val)
+	}
+}
+
+func TestExtractEnumValue_NoMatch(t *testing.T) {
+	val := extractEnumValue(`some other error message`, nil)
+	if val != "" {
+		t.Errorf("got %q, want empty", val)
+	}
+}
+
+func TestMapValue(t *testing.T) {
+	tests := []struct {
+		input, want string
+	}{
+		{"Completada", "Completado"},
+		{"activa", "In Progress"},
+		{"pendiente", "Pending"},
+		{"Unknown", "Unknown"},
+	}
+	for _, tt := range tests {
+		got := mapValue(tt.input)
+		if got != tt.want {
+			t.Errorf("mapValue(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestAnalyze_NilStem(t *testing.T) {
+	report := Analyze([]*extract.Record{}, nil, map[string][]rules.ValidationError{
+		"a.md": {{Rule: "required", Field: "estado"}},
+	})
+	if len(report.Proposals) != 0 {
+		t.Errorf("got %d proposals with nil stem, want 0", len(report.Proposals))
+	}
+}
+
 func TestAnalyze_NoErrors(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{

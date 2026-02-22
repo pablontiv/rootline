@@ -37,10 +37,40 @@ jobs:
 
       - run: go test ./... -race -coverprofile=coverage.out
 
+      - name: Check coverage threshold
+        env:
+          COVERAGE_THRESHOLD: 85
+        run: |
+          COVERAGE=$(go tool cover -func coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "Coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < $COVERAGE_THRESHOLD" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below threshold ${COVERAGE_THRESHOLD}%"
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage
           path: coverage.out
+
+  tidy:
+    name: Go Mod Tidy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: stable
+
+      - run: go mod tidy
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --exit-code go.mod go.sum; then
+            echo "::error::go.mod or go.sum is not tidy. Run 'go mod tidy' and commit the changes."
+            exit 1
+          fi
 
   lint:
     name: Lint
@@ -54,7 +84,7 @@ jobs:
 
       - uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6
         with:
-          version: latest
+          version: v2.1.6
 
   vuln:
     name: Vulnerability Check
