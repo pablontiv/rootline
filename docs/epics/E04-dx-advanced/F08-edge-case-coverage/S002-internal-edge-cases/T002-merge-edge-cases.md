@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completado
 tipo: software-test
 ejecutable_en: 1 sesion
 ---

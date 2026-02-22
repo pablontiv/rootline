@@ -185,6 +185,93 @@ func TestMergeStemFiles_ThreeLevels(t *testing.T) {
 	}
 }
 
+func TestMergeStemFiles_FourLevelChain(t *testing.T) {
+	// Root → Epic → Feature → Story: each adds a field, result has all 4.
+	entries := []StemEntry{
+		stemEntry("root/.stem", &StemFile{
+			Version: 1,
+			Schema: map[string]SchemaField{
+				"estado": {Type: "enum", Values: []string{"Pending", "Completado"}},
+			},
+		}),
+		stemEntry("epic/.stem", &StemFile{
+			Schema: map[string]SchemaField{
+				"tipo": {Type: "string"},
+			},
+		}),
+		stemEntry("feature/.stem", &StemFile{
+			Schema: map[string]SchemaField{
+				"cliente": {Type: "string", Default: "Platform Owner"},
+			},
+		}),
+		stemEntry("story/.stem", &StemFile{
+			Schema: map[string]SchemaField{
+				"ejecutable_en": {Type: "string"},
+			},
+		}),
+	}
+
+	result := MergeStemFiles(entries)
+	if len(result.Schema) != 4 {
+		t.Fatalf("schema len = %d, want 4", len(result.Schema))
+	}
+	for _, field := range []string{"estado", "tipo", "cliente", "ejecutable_en"} {
+		if _, ok := result.Schema[field]; !ok {
+			t.Errorf("missing field %q in merged schema", field)
+		}
+	}
+}
+
+func TestMergeStemFiles_ChildOverridesRequired(t *testing.T) {
+	entries := []StemEntry{
+		stemEntry("parent/.stem", &StemFile{
+			Version: 1,
+			Schema: map[string]SchemaField{
+				"campo": {Type: "string", Required: true},
+			},
+		}),
+		stemEntry("child/.stem", &StemFile{
+			Schema: map[string]SchemaField{
+				"campo": {Type: "string", Required: false},
+			},
+		}),
+	}
+
+	result := MergeStemFiles(entries)
+	if result.Schema["campo"].Required {
+		t.Error("campo.required = true, want false (child override)")
+	}
+}
+
+func TestMerge_NullRemovesSchemaField(t *testing.T) {
+	// parent defines campo, child nullifies it via merge.
+	// Since Schema is map[string]SchemaField, null removal works via Derive/State maps.
+	// For Schema, child simply omits the field — it inherits from parent.
+	// This test verifies the Derive null-removal path with a Schema-style scenario.
+	entries := []StemEntry{
+		stemEntry("parent/.stem", &StemFile{
+			Version: 1,
+			Derive: map[string]any{
+				"computed_field": "expr1",
+				"removable":      "expr2",
+			},
+		}),
+		stemEntry("child/.stem", &StemFile{
+			Derive: map[string]any{
+				"removable": nil,
+			},
+		}),
+	}
+
+	result := MergeStemFiles(entries)
+	if _, ok := result.Derive["computed_field"]; !ok {
+		t.Error("computed_field should exist")
+	}
+	if _, ok := result.Derive["removable"]; ok {
+		t.Error("removable should be removed by null")
+	}
+}
+
 func TestMergeStemFiles_DeepMapMerge(t *testing.T) {
 	// Nested maps merge recursively.
 	entries := []StemEntry{
