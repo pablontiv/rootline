@@ -476,12 +476,135 @@ func TestServeStub(t *testing.T) {
 	}
 }
 
-// --- Explain test ---
+// --- Explain tests ---
 
-func TestExplainStub(t *testing.T) {
+func TestExplainJSON(t *testing.T) {
 	dir := setupTestDir(t)
-	_, err := runCmd(t, "explain", filepath.Join(dir, "doc1.md"))
+	out, err := runCmd(t, "explain", filepath.Join(dir, "doc1.md"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	if result["version"] != float64(1) {
+		t.Errorf("version = %v, want 1", result["version"])
+	}
+	if result["kind"] != "rootline/explain" {
+		t.Errorf("kind = %v, want rootline/explain", result["kind"])
+	}
+	fields, ok := result["fields"].([]any)
+	if !ok {
+		t.Fatalf("fields is not array: %T", result["fields"])
+	}
+	// Should have at least the frontmatter fields.
+	if len(fields) < 2 {
+		t.Errorf("expected at least 2 fields, got %d", len(fields))
+	}
+	// Check that estado field has origin "frontmatter".
+	found := false
+	for _, f := range fields {
+		fm := f.(map[string]any)
+		if fm["name"] == "estado" {
+			found = true
+			if fm["origin"] != "frontmatter" {
+				t.Errorf("estado origin = %v, want frontmatter", fm["origin"])
+			}
+		}
+	}
+	if !found {
+		t.Error("estado field not found in explain output")
+	}
+}
+
+func TestExplainTable(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "explain", filepath.Join(dir, "doc1.md"), "-o", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "frontmatter") {
+		t.Errorf("expected 'frontmatter' in table output, got: %s", out)
+	}
+	if !strings.Contains(out, "estado") {
+		t.Errorf("expected 'estado' in table output, got: %s", out)
+	}
+}
+
+func TestExplainWithValidationErrors(t *testing.T) {
+	dir := setupTestDir(t)
+	// Create a file missing required field.
+	mustWriteFile(t, filepath.Join(dir, "bad.md"), []byte("---\ntipo: test\n---\n# Bad\n"), 0644)
+	out, err := runCmd(t, "explain", filepath.Join(dir, "bad.md"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	errs, ok := result["errors"].([]any)
+	if !ok || len(errs) == 0 {
+		t.Error("expected validation errors for missing required field")
+	}
+}
+
+func TestExplainWithDerived(t *testing.T) {
+	dir := setupTestDir(t)
+	// Add derive to .stem.
+	stemContent := `version: 1
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completado]
+  tipo:
+    type: string
+    required: false
+derive:
+  slug: "slugify(estado)"
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	out, err := runCmd(t, "explain", filepath.Join(dir, "doc1.md"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	fields := result["fields"].([]any)
+	found := false
+	for _, f := range fields {
+		fm := f.(map[string]any)
+		if fm["name"] == "slug" {
+			found = true
+			if fm["origin"] != "derived" {
+				t.Errorf("slug origin = %v, want derived", fm["origin"])
+			}
+			if fm["expression"] != `slugify(estado)` {
+				t.Errorf("slug expression = %v, want slugify(estado)", fm["expression"])
+			}
+			if fm["value"] != "pending" {
+				t.Errorf("slug value = %v, want pending", fm["value"])
+			}
+		}
+	}
+	if !found {
+		t.Errorf("slug derived field not found in explain output.\nfields: %v", fields)
+	}
+}
+
+func TestExplainFieldExtraction(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "explain", filepath.Join(dir, "doc1.md"), "--field", "kind")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "rootline/explain") {
+		t.Errorf("expected rootline/explain in field output, got: %s", out)
 	}
 }
