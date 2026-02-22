@@ -12,6 +12,14 @@ linters:
     - unused
     - ineffassign
     - gocritic
+    - gosec
+
+  settings:
+    gosec:
+      excludes:
+        - G304  # file inclusion via variable — expected for CLI that reads user files
+        - G301  # directory permissions 0755 — acceptable for non-secret dirs
+        - G306  # file permissions 0644 — acceptable for non-secret files
 
 issues:
   max-issues-per-linter: 50
