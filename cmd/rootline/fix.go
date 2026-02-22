@@ -106,7 +106,7 @@ func runFix(cmd *cobra.Command, args []string) error {
 		// Validate
 		errs := rules.Validate(record, effective)
 		if len(errs) == 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: no errors to fix\n", file)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: no errors to fix\n", file)
 			continue
 		}
 
@@ -115,10 +115,10 @@ func runFix(cmd *cobra.Command, args []string) error {
 
 		if fixDryRun {
 			for _, a := range added {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s: would add %s\n", file, a)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: would add %s\n", file, a)
 			}
 			for _, c := range corrected {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s: would correct %s\n", file, c)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: would correct %s\n", file, c)
 			}
 			totalAdded += len(added)
 			totalCorrected += len(corrected)
@@ -135,14 +135,14 @@ func runFix(cmd *cobra.Command, args []string) error {
 		totalCorrected += len(corrected)
 
 		for _, a := range added {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: added %s\n", file, a)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: added %s\n", file, a)
 		}
 		for _, c := range corrected {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s: corrected %s\n", file, c)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: corrected %s\n", file, c)
 		}
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "\nFixed: %d fields added, %d values corrected\n", totalAdded, totalCorrected)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nFixed: %d fields added, %d values corrected\n", totalAdded, totalCorrected)
 	return nil
 }
 

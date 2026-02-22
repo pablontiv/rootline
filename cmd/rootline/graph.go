@@ -76,19 +76,19 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	if graphCheck {
 		hasProblems := len(cycles) > 0 || len(broken) > 0
 		if len(cycles) > 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "Cycles found: %d\n", len(cycles))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Cycles found: %d\n", len(cycles))
 			for i, c := range cycles {
-				fmt.Fprintf(cmd.OutOrStdout(), "  %d: %s\n", i+1, strings.Join(c, " → "))
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %d: %s\n", i+1, strings.Join(c, " → "))
 			}
 		}
 		if len(broken) > 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "Broken links: %d\n", len(broken))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Broken links: %d\n", len(broken))
 			for _, b := range broken {
-				fmt.Fprintf(cmd.OutOrStdout(), "  %s:%d → %s (%s)\n", b.Source, b.Line, b.Target, b.Type)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s:%d → %s (%s)\n", b.Source, b.Line, b.Target, b.Type)
 			}
 		}
 		if !hasProblems {
-			fmt.Fprintln(cmd.OutOrStdout(), "No cycles or broken links found.")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No cycles or broken links found.")
 		}
 		if hasProblems {
 			cmd.SilenceUsage = true
@@ -130,7 +130,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("marshaling JSON: %w", err)
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), string(data))
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 		return nil
 	}
 
@@ -149,17 +149,17 @@ func runGraph(cmd *cobra.Command, args []string) error {
 
 func renderDOT(cmd *cobra.Command, g *graph.Graph) {
 	w := cmd.OutOrStdout()
-	fmt.Fprintln(w, "digraph {")
-	fmt.Fprintln(w, "  rankdir=LR;")
+	_, _ = fmt.Fprintln(w, "digraph {")
+	_, _ = fmt.Fprintln(w, "  rankdir=LR;")
 	for path := range g.Nodes {
-		fmt.Fprintf(w, "  %q;\n", path)
+		_, _ = fmt.Fprintf(w, "  %q;\n", path)
 	}
 	for _, edges := range g.Edges {
 		for _, e := range edges {
-			fmt.Fprintf(w, "  %q -> %q [label=%q];\n", e.Source, e.Target, e.Type)
+			_, _ = fmt.Fprintf(w, "  %q -> %q [label=%q];\n", e.Source, e.Target, e.Type)
 		}
 	}
-	fmt.Fprintln(w, "}")
+	_, _ = fmt.Fprintln(w, "}")
 }
 
 // filterLinksBySchema removes links from records whose type has no rule in the schema.
@@ -181,7 +181,7 @@ func filterLinksBySchema(records []*extract.Record, schema rules.LinkSchema) {
 
 func renderMermaid(cmd *cobra.Command, g *graph.Graph) {
 	w := cmd.OutOrStdout()
-	fmt.Fprintln(w, "graph TD;")
+	_, _ = fmt.Fprintln(w, "graph TD;")
 
 	// Sanitize node IDs for mermaid (replace special chars).
 	id := func(path string) string {
@@ -190,11 +190,11 @@ func renderMermaid(cmd *cobra.Command, g *graph.Graph) {
 	}
 
 	for path := range g.Nodes {
-		fmt.Fprintf(w, "  %s[%q];\n", id(path), path)
+		_, _ = fmt.Fprintf(w, "  %s[%q];\n", id(path), path)
 	}
 	for _, edges := range g.Edges {
 		for _, e := range edges {
-			fmt.Fprintf(w, "  %s --> |%s| %s;\n", id(e.Source), e.Type, id(e.Target))
+			_, _ = fmt.Fprintf(w, "  %s --> |%s| %s;\n", id(e.Source), e.Type, id(e.Target))
 		}
 	}
 }

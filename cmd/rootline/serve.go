@@ -11,7 +11,7 @@ var serveCmd = &cobra.Command{
 	Short: "Start MCP server (stdio or SSE)",
 	Long:  "Launch the Rootline MCP server exposing the core engine\nvia JSON-RPC 2.0. Supports stdio (default) and SSE transports.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintln(cmd.ErrOrStderr(), "not implemented yet")
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "not implemented yet")
 		return nil
 	},
 }

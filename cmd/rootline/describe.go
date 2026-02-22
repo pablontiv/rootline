@@ -77,9 +77,9 @@ func renderDescribeTable(cmd *cobra.Command, r *rules.DescribeResult) error {
 	renderTable(cmd.OutOrStdout(), headers, rows)
 
 	if len(r.Hints) > 0 {
-		fmt.Fprintln(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 		for _, h := range r.Hints {
-			fmt.Fprintf(cmd.OutOrStdout(), "Hint: %s\n", h)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Hint: %s\n", h)
 		}
 	}
 

@@ -70,7 +70,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if schema.TotalFiles > 0 && schema.FilesWithout > 0 {
 		ratio := float64(schema.FilesWithout) / float64(schema.TotalFiles)
 		if ratio > 0.2 {
-			fmt.Fprintf(cmd.ErrOrStderr(),
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 				"Warning: %d of %d files have no frontmatter. Consider running init on a more specific subdirectory.\n",
 				schema.FilesWithout, schema.TotalFiles)
 		}
@@ -80,7 +80,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	yaml := generateStemYAML(schema)
 
 	if initDryRun {
-		fmt.Fprint(cmd.OutOrStdout(), yaml)
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), yaml)
 		return nil
 	}
 
@@ -88,7 +88,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("writing .stem: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Created %s (%d fields inferred from %d files)\n",
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created %s (%d fields inferred from %d files)\n",
 		stemPath, len(schema.Schema), len(records))
 	return nil
 }
@@ -105,13 +105,13 @@ func generateStemYAML(schema *infer.InferredSchema) string {
 
 	for _, name := range keys {
 		field := schema.Schema[name]
-		b.WriteString(fmt.Sprintf("  %s:\n", name))
-		b.WriteString(fmt.Sprintf("    type: %s\n", field.Type))
+		fmt.Fprintf(&b, "  %s:\n", name)
+		fmt.Fprintf(&b, "    type: %s\n", field.Type)
 		if field.Required {
 			b.WriteString("    required: true\n")
 		}
 		if len(field.Values) > 0 {
-			b.WriteString(fmt.Sprintf("    values: [%s]\n", strings.Join(field.Values, ", ")))
+			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(field.Values, ", "))
 		}
 	}
 

@@ -154,12 +154,7 @@ func (g *Graph) BrokenLinks() []BrokenLink {
 	for _, edges := range g.Edges {
 		for _, edge := range edges {
 			if _, exists := g.Nodes[edge.Target]; !exists {
-				broken = append(broken, BrokenLink{
-					Source: edge.Source,
-					Target: edge.Target,
-					Type:   edge.Type,
-					Line:   edge.Line,
-				})
+				broken = append(broken, BrokenLink(edge))
 			}
 		}
 	}

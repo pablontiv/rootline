@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/spf13/cobra"
@@ -58,6 +59,9 @@ func runTree(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
+	// Run derivation (best-effort, errors silently skipped).
+	derive.DeriveAllSimple(records, absRoot)
+
 	root := buildTree(records, filepath.Base(absRoot))
 
 	if outputFormat == "json" {
@@ -68,7 +72,7 @@ func runTree(cmd *cobra.Command, args []string) error {
 	// ASCII output
 	lines := renderASCII(root, "")
 	for _, line := range lines {
-		fmt.Fprintln(cmd.OutOrStdout(), line)
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
 	}
 	return nil
 }

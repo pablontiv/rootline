@@ -268,7 +268,7 @@ func outputJSON(cmd *cobra.Command, v any, hasErrors bool) error {
 		data = extracted
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), string(data))
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
 
 	if hasErrors {
 		cmd.SilenceUsage = true

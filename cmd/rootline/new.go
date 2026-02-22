@@ -62,7 +62,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 	content := generateMarkdown(absTarget, effective)
 
 	if newDryRun {
-		fmt.Fprint(cmd.OutOrStdout(), content)
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), content)
 		return nil
 	}
 
@@ -75,7 +75,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("writing file: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Created %s\n", target)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created %s\n", target)
 	return nil
 }
 
@@ -103,11 +103,11 @@ func generateMarkdown(absPath string, effective *rules.StemFile) string {
 
 		switch {
 		case len(field.Values) > 0:
-			b.WriteString(fmt.Sprintf("%s: %s # [%s]\n", name, value, strings.Join(field.Values, ", ")))
+			fmt.Fprintf(&b, "%s: %s # [%s]\n", name, value, strings.Join(field.Values, ", "))
 		case value != "":
-			b.WriteString(fmt.Sprintf("%s: %s\n", name, value))
+			fmt.Fprintf(&b, "%s: %s\n", name, value)
 		case field.Required:
-			b.WriteString(fmt.Sprintf("%s: \n", name))
+			fmt.Fprintf(&b, "%s: \n", name)
 		}
 	}
 
@@ -118,7 +118,7 @@ func generateMarkdown(absPath string, effective *rules.StemFile) string {
 	title := strings.TrimSuffix(base, filepath.Ext(base))
 	title = strings.ReplaceAll(title, "-", " ")
 	title = strings.ReplaceAll(title, "_", " ")
-	b.WriteString(fmt.Sprintf("# %s\n", cases.Title(language.Und).String(title)))
+	fmt.Fprintf(&b, "# %s\n", cases.Title(language.Und).String(title))
 
 	return b.String()
 }

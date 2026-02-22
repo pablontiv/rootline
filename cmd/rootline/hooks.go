@@ -98,7 +98,7 @@ func runHooksInstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("writing hook: %w", err)
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "Installed pre-commit hook")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Installed pre-commit hook")
 	return nil
 }
 
@@ -109,7 +109,7 @@ func runHooksUninstall(cmd *cobra.Command, args []string) error {
 	}
 
 	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
-		fmt.Fprintln(cmd.OutOrStdout(), "No pre-commit hook installed")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No pre-commit hook installed")
 		return nil
 	}
 
@@ -121,7 +121,7 @@ func runHooksUninstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("removing hook: %w", err)
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "Removed pre-commit hook")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Removed pre-commit hook")
 	return nil
 }
 
@@ -132,14 +132,14 @@ func runHooksStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	if _, err := os.Stat(hookPath); os.IsNotExist(err) {
-		fmt.Fprintln(cmd.OutOrStdout(), "not installed")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "not installed")
 		return nil
 	}
 
 	if isRootlineHook(hookPath) {
-		fmt.Fprintln(cmd.OutOrStdout(), "installed")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "installed")
 	} else {
-		fmt.Fprintln(cmd.OutOrStdout(), "not installed (non-rootline hook exists)")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "not installed (non-rootline hook exists)")
 	}
 	return nil
 }

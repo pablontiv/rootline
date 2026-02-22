@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/spf13/cobra"
@@ -51,6 +52,9 @@ func runStats(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
+	// Run derivation (best-effort, errors silently skipped).
+	derive.DeriveAllSimple(records, absRoot)
+
 	byEstado := make(map[string]int)
 	byTipo := make(map[string]int)
 
@@ -79,16 +83,16 @@ func runStats(cmd *cobra.Command, args []string) error {
 }
 
 func renderStatsTable(cmd *cobra.Command, r *StatsResult) error {
-	fmt.Fprintf(cmd.OutOrStdout(), "Total: %d records\n\n", r.Total)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Total: %d records\n\n", r.Total)
 
-	fmt.Fprintln(cmd.OutOrStdout(), "By Estado:")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "By Estado:")
 	for _, k := range sortedKeys(r.ByEstado) {
-		fmt.Fprintf(cmd.OutOrStdout(), "  %-20s %d\n", k, r.ByEstado[k])
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %-20s %d\n", k, r.ByEstado[k])
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "\nBy Tipo:")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "\nBy Tipo:")
 	for _, k := range sortedKeys(r.ByTipo) {
-		fmt.Fprintf(cmd.OutOrStdout(), "  %-20s %d\n", k, r.ByTipo[k])
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %-20s %d\n", k, r.ByTipo[k])
 	}
 	return nil
 }

@@ -276,7 +276,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		if c.Message != "" {
 			line += fmt.Sprintf(": %s", c.Message)
 		}
-		fmt.Fprintln(w, line)
+		_, _ = fmt.Fprintln(w, line)
 	}
 
 	var parts []string
@@ -289,7 +289,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	if summary.Failed > 0 {
 		parts = append(parts, fmt.Sprintf("%d failed", summary.Failed))
 	}
-	fmt.Fprintf(w, "\n%d checks: %s\n", summary.Total, strings.Join(parts, ", "))
+	_, _ = fmt.Fprintf(w, "\n%d checks: %s\n", summary.Total, strings.Join(parts, ", "))
 
 	if summary.Failed > 0 {
 		cmd.SilenceUsage = true
