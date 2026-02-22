@@ -29,4 +29,4 @@ cliente: Platform Owner
 
 - `cmd/rootline/graph.go` — implementacion a testear
 - `cmd/rootline/commands_test.go` — patron runCmd/setupTestDir a reusar
-- `internal/extract/links.go` — formato [[target]] para crear fixtures con links
+- `internal/extract/links.go` — formato `[[target]]` para crear fixtures con links

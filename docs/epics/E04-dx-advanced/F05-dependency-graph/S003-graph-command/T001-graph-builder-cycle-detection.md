@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completado
 tipo: software-module
 ejecutable_en: 1 sesion
 ---
@@ -64,7 +64,7 @@ tests:
 ## Criterios de Aceptacion
 
 - `Build(records)` con 3 records y links entre ellos construye grafo correcto
-- `DetectCycles()` con A→B→C→A retorna [[A,B,C,A]]
+- `DetectCycles()` con A→B→C→A retorna `[[A,B,C,A]]`
 - `DetectCycles()` sin ciclos retorna []
 - `BrokenLinks()` con link a "nonexistent.md" retorna BrokenLink
 - `BrokenLinks()` con todos links validos retorna []

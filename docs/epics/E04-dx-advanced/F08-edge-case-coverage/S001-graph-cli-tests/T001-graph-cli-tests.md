@@ -44,7 +44,7 @@ fixtures:
 
 - `cmd/rootline/graph.go` existe e implementa runGraph, renderDOT, renderMermaid
 - `cmd/rootline/commands_test.go` existe con resetFlags(), runCmd(), setupTestDir()
-- `internal/extract/links.go` extrae [[target]] del body del markdown
+- `internal/extract/links.go` extrae `[[target]]` del body del markdown
 - `cmd/rootline/root.go` define ErrValidationFailed
 
 ## Criterios de Aceptacion
