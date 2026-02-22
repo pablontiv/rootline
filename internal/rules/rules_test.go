@@ -202,3 +202,56 @@ func TestParseStemFile_NotFound(t *testing.T) {
 		t.Fatal("expected error for nonexistent file, got nil")
 	}
 }
+
+func TestParseStem_Structural(t *testing.T) {
+	content := []byte(`
+version: 1
+structural:
+  subdirs:
+    require_index: README.md
+    min_children: 2
+    max_children: 10
+    severity: warn
+`)
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	if err := os.WriteFile(stemPath, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stem, err := ParseStemFile(stemPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if stem.Structural.Subdirs.RequireIndex != "README.md" {
+		t.Errorf("require_index = %q, want README.md", stem.Structural.Subdirs.RequireIndex)
+	}
+	if stem.Structural.Subdirs.MinChildren != 2 {
+		t.Errorf("min_children = %d, want 2", stem.Structural.Subdirs.MinChildren)
+	}
+	if stem.Structural.Subdirs.MaxChildren != 10 {
+		t.Errorf("max_children = %d, want 10", stem.Structural.Subdirs.MaxChildren)
+	}
+	if stem.Structural.Subdirs.Severity != "warn" {
+		t.Errorf("severity = %q, want warn", stem.Structural.Subdirs.Severity)
+	}
+}
+
+func TestParseStem_NoStructural(t *testing.T) {
+	content := []byte("version: 1\n")
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	if err := os.WriteFile(stemPath, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stem, err := ParseStemFile(stemPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !stem.Structural.IsEmpty() {
+		t.Error("structural should be empty when not defined")
+	}
+}

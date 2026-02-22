@@ -13,14 +13,33 @@ import (
 
 // StemFile represents a parsed .stem YAML file.
 type StemFile struct {
-	Path     string                 `yaml:"-"`
-	Version  int                    `yaml:"version"`
-	Scope    Scope                  `yaml:"scope"`
-	Schema   map[string]SchemaField `yaml:"schema"`
-	Validate []ValidationRule       `yaml:"validate"`
-	Derive   map[string]any         `yaml:"derive"`
-	State    map[string]any         `yaml:"state"`
-	Links    LinkSchema             `yaml:"links"`
+	Path       string                 `yaml:"-"`
+	Version    int                    `yaml:"version"`
+	Scope      Scope                  `yaml:"scope"`
+	Schema     map[string]SchemaField `yaml:"schema"`
+	Validate   []ValidationRule       `yaml:"validate"`
+	Derive     map[string]any         `yaml:"derive"`
+	State      map[string]any         `yaml:"state"`
+	Links      LinkSchema             `yaml:"links"`
+	Structural StructuralRules        `yaml:"structural"`
+}
+
+// StructuralRules defines directory-level validation constraints.
+type StructuralRules struct {
+	Subdirs SubdirRules `yaml:"subdirs" json:"subdirs,omitempty"`
+}
+
+// SubdirRules defines constraints on subdirectories.
+type SubdirRules struct {
+	RequireIndex string `yaml:"require_index" json:"require_index,omitempty"`
+	MinChildren  int    `yaml:"min_children" json:"min_children,omitempty"`
+	MaxChildren  int    `yaml:"max_children" json:"max_children,omitempty"`
+	Severity     string `yaml:"severity" json:"severity,omitempty"`
+}
+
+// IsEmpty reports whether the StructuralRules have no constraints.
+func (sr StructuralRules) IsEmpty() bool {
+	return sr.Subdirs.RequireIndex == "" && sr.Subdirs.MinChildren == 0 && sr.Subdirs.MaxChildren == 0
 }
 
 // LinkSchema defines link constraints in a .stem file.

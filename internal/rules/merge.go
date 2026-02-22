@@ -41,6 +41,11 @@ func MergeStemFiles(entries []StemEntry) *StemFile {
 		// Links: typed merge (Allowed replaces, Rules map-merges).
 		result.Links = mergeLinkSchema(result.Links, s.Links)
 
+		// Structural: child replaces if non-empty.
+		if !s.Structural.IsEmpty() {
+			result.Structural = s.Structural
+		}
+
 		// Track which .stem files contributed.
 		result.Path = path
 	}

@@ -338,6 +338,52 @@ func TestMergeStemFiles_ScalarReplace(t *testing.T) {
 	}
 }
 
+func TestMergeStemFiles_StructuralPreserved(t *testing.T) {
+	entries := []StemEntry{
+		stemEntry("parent/.stem", &StemFile{
+			Version: 1,
+			Structural: StructuralRules{
+				Subdirs: SubdirRules{RequireIndex: "README.md", MinChildren: 2, Severity: "warn"},
+			},
+		}),
+		stemEntry("child/.stem", &StemFile{
+			Schema: map[string]SchemaField{"tipo": {Type: "string"}},
+		}),
+	}
+
+	result := MergeStemFiles(entries)
+	if result.Structural.Subdirs.RequireIndex != "README.md" {
+		t.Errorf("require_index = %q, want README.md", result.Structural.Subdirs.RequireIndex)
+	}
+	if result.Structural.Subdirs.MinChildren != 2 {
+		t.Errorf("min_children = %d, want 2", result.Structural.Subdirs.MinChildren)
+	}
+}
+
+func TestMergeStemFiles_StructuralOverridden(t *testing.T) {
+	entries := []StemEntry{
+		stemEntry("parent/.stem", &StemFile{
+			Version: 1,
+			Structural: StructuralRules{
+				Subdirs: SubdirRules{RequireIndex: "README.md", MinChildren: 2},
+			},
+		}),
+		stemEntry("child/.stem", &StemFile{
+			Structural: StructuralRules{
+				Subdirs: SubdirRules{RequireIndex: "index.md", MinChildren: 1},
+			},
+		}),
+	}
+
+	result := MergeStemFiles(entries)
+	if result.Structural.Subdirs.RequireIndex != "index.md" {
+		t.Errorf("require_index = %q, want index.md (child override)", result.Structural.Subdirs.RequireIndex)
+	}
+	if result.Structural.Subdirs.MinChildren != 1 {
+		t.Errorf("min_children = %d, want 1 (child override)", result.Structural.Subdirs.MinChildren)
+	}
+}
+
 func TestMergeStemFiles_ChildValidateNilDoesNotReplaceParent(t *testing.T) {
 	// If child has no validate section (nil), parent's validate survives.
 	entries := []StemEntry{
