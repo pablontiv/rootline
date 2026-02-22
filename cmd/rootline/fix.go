@@ -8,6 +8,7 @@ import (
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
+	"github.com/pablontiv/rootline/internal/proposal"
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
 )
@@ -164,7 +165,9 @@ func runFixAll(cmd *cobra.Command) error {
 		return fmt.Errorf("scanning: %w", err)
 	}
 
-	var results []*FixResult
+	// First pass: collect all records, their effective stems, and errors.
+	allErrs := make(map[string][]rules.ValidationError)
+	effectiveStems := make(map[string]*rules.StemFile)
 
 	for _, rec := range records {
 		absPath := filepath.Join(root, rec.Path)
@@ -174,9 +177,37 @@ func runFixAll(cmd *cobra.Command) error {
 			continue
 		}
 		effective := rules.MergeStemFiles(entries)
+		effectiveStems[rec.Path] = effective
 
 		errs := rules.Validate(rec, effective)
-		if len(errs) == 0 {
+		if len(errs) > 0 {
+			allErrs[rec.Path] = errs
+		}
+	}
+
+	// In dry-run mode, use proposal engine for richer output.
+	if fixDryRun {
+		// Use the first effective stem (they should all be equivalent for the root).
+		var effective *rules.StemFile
+		for _, s := range effectiveStems {
+			effective = s
+			break
+		}
+
+		report := proposal.Analyze(records, effective, allErrs)
+
+		if outputFormat == "table" {
+			return renderProposalTable(cmd, report)
+		}
+		return outputJSON(cmd, report, false)
+	}
+
+	// Apply mode: apply fixes directly.
+	var results []*FixResult
+
+	for _, rec := range records {
+		errs, hasErrs := allErrs[rec.Path]
+		if !hasErrs {
 			results = append(results, &FixResult{
 				Path:    rec.Path,
 				Fixed:   false,
@@ -185,6 +216,7 @@ func runFixAll(cmd *cobra.Command) error {
 			continue
 		}
 
+		effective := effectiveStems[rec.Path]
 		added, corrected := applyFixes(rec, effective, errs)
 
 		var changes []string
@@ -195,21 +227,20 @@ func runFixAll(cmd *cobra.Command) error {
 			changes = append(changes, "correct "+c)
 		}
 
-		if !fixDryRun {
-			content, readErr := os.ReadFile(absPath)
-			if readErr != nil {
-				return fmt.Errorf("reading %s: %w", rec.Path, readErr)
-			}
+		absPath := filepath.Join(root, rec.Path)
+		content, readErr := os.ReadFile(absPath)
+		if readErr != nil {
+			return fmt.Errorf("reading %s: %w", rec.Path, readErr)
+		}
 
-			newContent := rewriteFrontmatter(string(content), rec.Frontmatter)
-			if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
-				return fmt.Errorf("writing %s: %w", rec.Path, err)
-			}
+		newContent := rewriteFrontmatter(string(content), rec.Frontmatter)
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+			return fmt.Errorf("writing %s: %w", rec.Path, err)
 		}
 
 		results = append(results, &FixResult{
 			Path:            rec.Path,
-			Fixed:           !fixDryRun,
+			Fixed:           true,
 			FieldsAdded:     len(added),
 			ValuesCorrected: len(corrected),
 			Changes:         changes,
@@ -222,6 +253,21 @@ func runFixAll(cmd *cobra.Command) error {
 		return renderFixTable(cmd, batch)
 	}
 	return outputJSON(cmd, batch, false)
+}
+
+func renderProposalTable(cmd *cobra.Command, report *proposal.Report) error {
+	headers := []string{"Type", "Field", "Description", "Files"}
+	var rows [][]string
+	for _, p := range report.Proposals {
+		files := strings.Join(p.Paths, ", ")
+		rows = append(rows, []string{string(p.Type), p.Field, p.Description, files})
+	}
+	if len(rows) == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No proposals generated (0 fixable errors)")
+		return nil
+	}
+	renderTable(cmd.OutOrStdout(), headers, rows)
+	return nil
 }
 
 func newBatchFixResult(results []*FixResult) *BatchFixResult {
