@@ -289,7 +289,9 @@ Para cada task en orden:
 4. **Commit+Push** (centralizado, NO delegado a skills hijos):
    - Identificar archivos modificados/creados por la implementación
    - `git add` archivos relevantes (específicos, no `git add .`)
-   - `git commit` con mensaje descriptivo referenciando el Task
+   - `git commit` con mensaje en formato **conventional commits**: `type(scope): description`
+     - Elegir `type` según el contenido del task: `feat` (nueva funcionalidad), `fix` (corrección), `test` (tests), `docs` (documentación), `refactor` (reestructuración), `ci` (CI/CD), `chore` (mantenimiento), `perf` (rendimiento), `style` (formato)
+     - El hook `.githooks/commit-msg` rechazará mensajes que no sigan el formato
    - `git push`
 
 5. **Verificar ACs**:
