@@ -166,6 +166,96 @@ func TestMatchRecord_NilCheck(t *testing.T) {
 	}
 }
 
+func TestMatchRecord_TypeMismatch_NumericFieldStringCompare(t *testing.T) {
+	rec := &extract.Record{
+		Path: "test.md", Type: "markdown",
+		Frontmatter: map[string]any{"version": 1},
+	}
+	prog, err := CompileWhere("version == 'texto'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	match, err := MatchRecord(prog, rec)
+	if err != nil {
+		t.Fatalf("expected no error on type mismatch, got: %v", err)
+	}
+	if match {
+		t.Error("expected no match for int vs string comparison")
+	}
+}
+
+func TestMatchRecord_BooleanLiteral_True(t *testing.T) {
+	rec := &extract.Record{
+		Path: "test.md", Type: "markdown",
+		Frontmatter: map[string]any{"active": true},
+	}
+	prog, err := CompileWhere("active == true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	match, err := MatchRecord(prog, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !match {
+		t.Error("expected match for active == true")
+	}
+}
+
+func TestMatchRecord_BooleanLiteral_False(t *testing.T) {
+	rec := &extract.Record{
+		Path: "test.md", Type: "markdown",
+		Frontmatter: map[string]any{"active": true},
+	}
+	prog, err := CompileWhere("active == false")
+	if err != nil {
+		t.Fatal(err)
+	}
+	match, err := MatchRecord(prog, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if match {
+		t.Error("expected no match for active == false when active is true")
+	}
+}
+
+func TestMatchRecord_FieldAbsent_NilCheck(t *testing.T) {
+	rec := &extract.Record{
+		Path: "test.md", Type: "markdown",
+		Frontmatter: map[string]any{"tipo": "test"},
+	}
+	prog, err := CompileWhere("estado != nil")
+	if err != nil {
+		t.Fatal(err)
+	}
+	match, err := MatchRecord(prog, rec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if match {
+		t.Error("expected no match for absent field != nil")
+	}
+}
+
+func TestMatchRecord_FieldAbsent_EqCheck(t *testing.T) {
+	rec := &extract.Record{
+		Path: "test.md", Type: "markdown",
+		Frontmatter: map[string]any{"tipo": "test"},
+	}
+	prog, err := CompileWhere("estado == 'Pending'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	match, err := MatchRecord(prog, rec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if match {
+		t.Error("expected no match for absent field == 'Pending'")
+	}
+}
+
 func TestCompileWhere_InvalidExpr(t *testing.T) {
 	_, err := CompileWhere("== invalid syntax")
 	if err == nil {

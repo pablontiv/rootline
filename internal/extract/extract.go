@@ -109,14 +109,18 @@ func findClosingDelimiter(text string) int {
 	search := text[4:]
 	for i := 0; i < len(search); {
 		nl := strings.Index(search[i:], "\n")
+		var line string
+		var lineStart int
 		if nl < 0 {
-			break
+			// Last line without trailing newline.
+			lineStart = i
+			line = strings.TrimRight(search[i:], "\r")
+			i = len(search)
+		} else {
+			lineStart = i
+			line = strings.TrimRight(search[i:i+nl], "\r")
+			i += nl + 1
 		}
-		lineStart := i
-		i += nl + 1
-
-		line := search[lineStart : lineStart+nl]
-		line = strings.TrimRight(line, "\r")
 		if line == "---" {
 			return lineStart + 4 // offset from full text
 		}

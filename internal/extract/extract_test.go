@@ -191,3 +191,58 @@ func TestFallbackParser(t *testing.T) {
 		t.Error("badline should not be in result")
 	}
 }
+
+func TestExtract_UnicodeValues(t *testing.T) {
+	content := []byte("---\ntitulo: \"Instalación de K8s \U0001F680\"\nautor: \"田中\"\n---\n# Content\n")
+	rec, err := ext.Extract("test.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.Frontmatter["titulo"] != "Instalación de K8s \U0001F680" {
+		t.Errorf("titulo = %v, want unicode string with emoji", rec.Frontmatter["titulo"])
+	}
+	if rec.Frontmatter["autor"] != "田中" {
+		t.Errorf("autor = %v, want 田中", rec.Frontmatter["autor"])
+	}
+}
+
+func TestExtract_YAMLBlockScalar_Literal(t *testing.T) {
+	content := []byte("---\ndesc: |\n  line one\n  line two\n---\n# Content\n")
+	rec, err := ext.Extract("test.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	desc, ok := rec.Frontmatter["desc"].(string)
+	if !ok {
+		t.Fatalf("desc is not a string: %T", rec.Frontmatter["desc"])
+	}
+	if desc != "line one\nline two\n" {
+		t.Errorf("desc = %q, want literal block with newlines", desc)
+	}
+}
+
+func TestExtract_YAMLBlockScalar_Folded(t *testing.T) {
+	content := []byte("---\ndesc: >\n  line one\n  line two\n---\n# Content\n")
+	rec, err := ext.Extract("test.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	desc, ok := rec.Frontmatter["desc"].(string)
+	if !ok {
+		t.Fatalf("desc is not a string: %T", rec.Frontmatter["desc"])
+	}
+	if len(desc) == 0 {
+		t.Error("desc should not be empty for folded scalar")
+	}
+}
+
+func TestExtract_NoTrailingNewline(t *testing.T) {
+	content := []byte("---\ntitle: hello\n---")
+	rec, err := ext.Extract("test.md", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.Frontmatter["title"] != "hello" {
+		t.Errorf("title = %v, want hello", rec.Frontmatter["title"])
+	}
+}
