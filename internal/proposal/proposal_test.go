@@ -160,6 +160,108 @@ func TestDetectMigrateValue(t *testing.T) {
 	}
 }
 
+func TestDetectExtractBody_Completada(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completado", "In Progress"}, Required: true},
+		},
+	}
+	records := []*extract.Record{
+		{Path: "a.md", Body: "# Title\n\n**Estado**: Completada\n**Tipo**: lxc"},
+	}
+	errs := map[string][]rules.ValidationError{
+		"a.md": {{Rule: "required", Field: "estado", Message: `required field "estado" is missing`}},
+	}
+
+	proposals := detectExtractBody(records, stem, errs)
+	if len(proposals) != 1 {
+		t.Fatalf("got %d proposals, want 1", len(proposals))
+	}
+	if proposals[0].Type != ExtractBody {
+		t.Errorf("type = %q, want extract_body", proposals[0].Type)
+	}
+	if proposals[0].To != "Completado" {
+		t.Errorf("to = %q, want Completado (mapped from Completada)", proposals[0].To)
+	}
+}
+
+func TestDetectExtractBody_Activa(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completado", "In Progress"}, Required: true},
+		},
+	}
+	records := []*extract.Record{
+		{Path: "a.md", Body: "**Estado**: Activa"},
+	}
+	errs := map[string][]rules.ValidationError{
+		"a.md": {{Rule: "required", Field: "estado", Message: `required field "estado" is missing`}},
+	}
+
+	proposals := detectExtractBody(records, stem, errs)
+	if len(proposals) != 1 {
+		t.Fatalf("got %d proposals, want 1", len(proposals))
+	}
+	if proposals[0].To != "In Progress" {
+		t.Errorf("to = %q, want 'In Progress' (mapped from Activa)", proposals[0].To)
+	}
+}
+
+func TestInferEstado_AllCompletado(t *testing.T) {
+	got := InferEstado([]string{"Completado", "Completado"})
+	if got != "Completado" {
+		t.Errorf("got %q, want Completado", got)
+	}
+}
+
+func TestInferEstado_Mixed(t *testing.T) {
+	got := InferEstado([]string{"Pending", "Completado"})
+	if got != "In Progress" {
+		t.Errorf("got %q, want 'In Progress'", got)
+	}
+}
+
+func TestInferEstado_AllPending(t *testing.T) {
+	got := InferEstado([]string{"Pending", "Pending"})
+	if got != "Pending" {
+		t.Errorf("got %q, want Pending", got)
+	}
+}
+
+func TestInferEstado_Empty(t *testing.T) {
+	got := InferEstado([]string{})
+	if got != "Pending" {
+		t.Errorf("got %q, want Pending (default for empty)", got)
+	}
+}
+
+func TestDetectInferFromChildren(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completado", "In Progress"}, Required: true},
+		},
+	}
+	records := []*extract.Record{
+		{Path: "dir/README.md", Body: "# Dir", Frontmatter: map[string]any{}},
+		{Path: "dir/a.md", Frontmatter: map[string]any{"estado": "Completado"}},
+		{Path: "dir/b.md", Frontmatter: map[string]any{"estado": "Pending"}},
+	}
+	errs := map[string][]rules.ValidationError{
+		"dir/README.md": {{Rule: "required", Field: "estado", Message: `required field "estado" is missing`}},
+	}
+
+	proposals := detectInferFromChildren(records, stem, errs)
+	if len(proposals) != 1 {
+		t.Fatalf("got %d proposals, want 1", len(proposals))
+	}
+	if proposals[0].Type != InferFromChildren {
+		t.Errorf("type = %q, want infer_from_children", proposals[0].Type)
+	}
+	if proposals[0].Value != "In Progress" {
+		t.Errorf("value = %q, want 'In Progress' (mixed children)", proposals[0].Value)
+	}
+}
+
 func TestAnalyze_NoErrors(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{

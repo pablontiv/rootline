@@ -17,10 +17,12 @@ import (
 type Type string
 
 const (
-	ExtendEnum   Type = "extend_enum"
-	MigrateValue Type = "migrate_value"
-	CorrectValue Type = "correct_value"
-	AddField     Type = "add_field"
+	ExtendEnum        Type = "extend_enum"
+	MigrateValue      Type = "migrate_value"
+	CorrectValue      Type = "correct_value"
+	ExtractBody       Type = "extract_body"
+	InferFromChildren Type = "infer_from_children"
+	AddField          Type = "add_field"
 )
 
 // Proposal represents a suggested fix for one or more validation errors.
@@ -45,11 +47,13 @@ type Report struct {
 
 // Summary holds aggregate counts for a report.
 type Summary struct {
-	Total        int `json:"total"`
-	ExtendEnum   int `json:"extend_enum"`
-	MigrateValue int `json:"migrate_value"`
-	CorrectValue int `json:"correct_value"`
-	AddField     int `json:"add_field"`
+	Total             int `json:"total"`
+	ExtendEnum        int `json:"extend_enum"`
+	MigrateValue      int `json:"migrate_value"`
+	CorrectValue      int `json:"correct_value"`
+	ExtractBody       int `json:"extract_body"`
+	InferFromChildren int `json:"infer_from_children"`
+	AddField          int `json:"add_field"`
 }
 
 // Analyze runs all detectors against validation errors and returns a Report.
@@ -60,6 +64,8 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 		proposals = append(proposals, detectExtendEnum(effective, errs)...)
 		proposals = append(proposals, detectMigrateValue(effective, errs)...)
 		proposals = append(proposals, detectCorrectValue(effective, errs)...)
+		proposals = append(proposals, detectExtractBody(records, effective, errs)...)
+		proposals = append(proposals, detectInferFromChildren(records, effective, errs)...)
 		proposals = append(proposals, detectAddField(effective, errs)...)
 	}
 
@@ -72,6 +78,10 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 			summary.MigrateValue++
 		case CorrectValue:
 			summary.CorrectValue++
+		case ExtractBody:
+			summary.ExtractBody++
+		case InferFromChildren:
+			summary.InferFromChildren++
 		case AddField:
 			summary.AddField++
 		}
@@ -207,6 +217,142 @@ func detectCorrectValue(effective *rules.StemFile, errs map[string][]rules.Valid
 					To:          closest,
 				})
 			}
+		}
+	}
+	return proposals
+}
+
+// detectExtractBody finds records with required field errors that have the value
+// in the body text as a bold-colon pattern (e.g., **Estado**: Completada).
+func detectExtractBody(records []*extract.Record, effective *rules.StemFile, errs map[string][]rules.ValidationError) []Proposal {
+	var proposals []Proposal
+
+	// Build a map of records by path for body access.
+	recordMap := make(map[string]*extract.Record)
+	for _, rec := range records {
+		recordMap[rec.Path] = rec
+	}
+
+	for path, pathErrs := range errs {
+		rec, ok := recordMap[path]
+		if !ok || rec.Body == "" {
+			continue
+		}
+
+		bodyFields := extract.ScanBodyFields(rec.Body)
+		if len(bodyFields) == 0 {
+			continue
+		}
+
+		for _, e := range pathErrs {
+			if e.Rule != "required" {
+				continue
+			}
+			bodyVal, found := bodyFields[e.Field]
+			if !found {
+				continue
+			}
+
+			// Map body value to canonical enum value.
+			mapped := mapValue(bodyVal)
+
+			// Validate mapped value against enum if applicable.
+			sf, ok := effective.Schema[e.Field]
+			if ok && len(sf.Values) > 0 {
+				valid := false
+				for _, v := range sf.Values {
+					if v == mapped {
+						valid = true
+						break
+					}
+				}
+				if !valid {
+					// Try closest match.
+					mapped = closestMatch(mapped, sf.Values)
+				}
+			}
+
+			proposals = append(proposals, Proposal{
+				Type:        ExtractBody,
+				Field:       e.Field,
+				Description: fmt.Sprintf("extract %q from body to frontmatter as %q", bodyVal, mapped),
+				Paths:       []string{path},
+				From:        bodyVal,
+				To:          mapped,
+			})
+		}
+	}
+	return proposals
+}
+
+// detectInferFromChildren finds README files with missing required fields
+// that can be inferred from child document estados.
+func detectInferFromChildren(records []*extract.Record, effective *rules.StemFile, errs map[string][]rules.ValidationError) []Proposal {
+	var proposals []Proposal
+
+	// Build a map of records by path.
+	recordMap := make(map[string]*extract.Record)
+	for _, rec := range records {
+		recordMap[rec.Path] = rec
+	}
+
+	for path, pathErrs := range errs {
+		// Only README files are candidates for child inference.
+		if !strings.HasSuffix(path, "README.md") {
+			continue
+		}
+
+		// Check if body already has the field — if so, extract_body will handle it.
+		rec, ok := recordMap[path]
+		if ok && rec.Body != "" {
+			bodyFields := extract.ScanBodyFields(rec.Body)
+			hasBodyHint := false
+			for _, e := range pathErrs {
+				if e.Rule == "required" {
+					if _, found := bodyFields[e.Field]; found {
+						hasBodyHint = true
+						break
+					}
+				}
+			}
+			if hasBodyHint {
+				continue // extract_body will handle this
+			}
+		}
+
+		// Find child records (same directory prefix, excluding the README itself).
+		dir := strings.TrimSuffix(path, "README.md")
+		var childEstados []string
+		for _, child := range records {
+			if child.Path == path {
+				continue
+			}
+			if !strings.HasPrefix(child.Path, dir) {
+				continue
+			}
+			if estado, ok := child.Frontmatter["estado"]; ok {
+				if s, ok := estado.(string); ok {
+					childEstados = append(childEstados, s)
+				}
+			}
+		}
+
+		if len(childEstados) == 0 {
+			continue
+		}
+
+		for _, e := range pathErrs {
+			if e.Rule != "required" || e.Field != "estado" {
+				continue
+			}
+			inferred := InferEstado(childEstados)
+			proposals = append(proposals, Proposal{
+				Type:        InferFromChildren,
+				Field:       e.Field,
+				Description: fmt.Sprintf("infer %q from %d child documents", inferred, len(childEstados)),
+				Paths:       []string{path},
+				Value:       inferred,
+			})
 		}
 	}
 	return proposals
