@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/query"
@@ -61,6 +62,9 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
+
+	// Run derivation (best-effort, errors silently skipped).
+	derive.DeriveAllSimple(records, absRoot)
 
 	q := &query.Query{
 		Count: queryCount,
