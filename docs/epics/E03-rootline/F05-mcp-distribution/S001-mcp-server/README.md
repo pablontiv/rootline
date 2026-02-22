@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Bloqueada
 tipo: historia
 cliente: Platform Owner
 ---

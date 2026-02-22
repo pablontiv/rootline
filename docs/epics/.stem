@@ -42,6 +42,12 @@ schema:
   ejecutable_en:
     type: string
 
+structural:
+  subdirs:
+    require_index: README.md
+    min_children: 2
+    severity: warn
+
 links:
   allowed: [blocks, reference]
   blocks:
