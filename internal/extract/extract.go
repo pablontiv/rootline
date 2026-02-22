@@ -6,6 +6,7 @@ package extract
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -126,6 +127,19 @@ func findClosingDelimiter(text string) int {
 		}
 	}
 	return -1
+}
+
+var boldColonRe = regexp.MustCompile(`\*\*([^*]+)\*\*:\s*(.+)`)
+
+// ScanBodyFields detects bold-colon metadata patterns in markdown body text.
+// It returns a map of lowercase keys to their original-case values.
+func ScanBodyFields(body string) map[string]string {
+	result := make(map[string]string)
+	for _, match := range boldColonRe.FindAllStringSubmatch(body, -1) {
+		key := strings.ToLower(match[1])
+		result[key] = strings.TrimSpace(match[2])
+	}
+	return result
 }
 
 // fallbackParseFrontmatter does a best-effort line-by-line parse of

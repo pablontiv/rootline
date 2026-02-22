@@ -246,3 +246,37 @@ func TestExtract_NoTrailingNewline(t *testing.T) {
 		t.Errorf("title = %v, want hello", rec.Frontmatter["title"])
 	}
 }
+
+func TestScanBodyFields_Basic(t *testing.T) {
+	body := "**Estado**: Completada\n**Tipo**: lxc"
+	got := ScanBodyFields(body)
+	if got["estado"] != "Completada" {
+		t.Errorf("estado = %q, want Completada", got["estado"])
+	}
+	if got["tipo"] != "lxc" {
+		t.Errorf("tipo = %q, want lxc", got["tipo"])
+	}
+}
+
+func TestScanBodyFields_KeyWithSpaces(t *testing.T) {
+	body := "**Key With Spaces**: some value"
+	got := ScanBodyFields(body)
+	if got["key with spaces"] != "some value" {
+		t.Errorf("key = %q, want 'some value'", got["key with spaces"])
+	}
+}
+
+func TestScanBodyFields_Empty(t *testing.T) {
+	got := ScanBodyFields("no bold patterns here")
+	if len(got) != 0 {
+		t.Errorf("got %d fields, want 0", len(got))
+	}
+}
+
+func TestScanBodyFields_ValueWithParens(t *testing.T) {
+	body := "**Estado**: Completada (PRD-era, sin Tasks)"
+	got := ScanBodyFields(body)
+	if got["estado"] != "Completada (PRD-era, sin Tasks)" {
+		t.Errorf("estado = %q, want 'Completada (PRD-era, sin Tasks)'", got["estado"])
+	}
+}
