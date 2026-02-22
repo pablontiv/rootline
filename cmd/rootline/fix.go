@@ -11,6 +11,7 @@ import (
 	"github.com/pablontiv/rootline/internal/proposal"
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 // FixResult represents the fix outcome for a single file.
@@ -202,57 +203,282 @@ func runFixAll(cmd *cobra.Command) error {
 		return outputJSON(cmd, report, false)
 	}
 
-	// Apply mode: apply fixes directly.
-	var results []*FixResult
-
-	for _, rec := range records {
-		errs, hasErrs := allErrs[rec.Path]
-		if !hasErrs {
-			results = append(results, &FixResult{
-				Path:    rec.Path,
-				Fixed:   false,
-				Changes: []string{},
-			})
-			continue
-		}
-
-		effective := effectiveStems[rec.Path]
-		added, corrected := applyFixes(rec, effective, errs)
-
-		var changes []string
-		for _, a := range added {
-			changes = append(changes, "add "+a)
-		}
-		for _, c := range corrected {
-			changes = append(changes, "correct "+c)
-		}
-
-		absPath := filepath.Join(root, rec.Path)
-		content, readErr := os.ReadFile(absPath)
-		if readErr != nil {
-			return fmt.Errorf("reading %s: %w", rec.Path, readErr)
-		}
-
-		newContent := rewriteFrontmatter(string(content), rec.Frontmatter)
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
-			return fmt.Errorf("writing %s: %w", rec.Path, err)
-		}
-
-		results = append(results, &FixResult{
-			Path:            rec.Path,
-			Fixed:           true,
-			FieldsAdded:     len(added),
-			ValuesCorrected: len(corrected),
-			Changes:         changes,
-		})
+	// Apply mode: use proposal engine internally, output BatchFixResult for compatibility.
+	var effective *rules.StemFile
+	for _, s := range effectiveStems {
+		effective = s
+		break
 	}
 
+	report := proposal.Analyze(records, effective, allErrs)
+
+	// Apply proposals if any.
+	if len(report.Proposals) > 0 {
+		if err := applyProposals(report, root, records); err != nil {
+			return err
+		}
+	}
+
+	// Convert proposals to BatchFixResult for output compatibility.
+	results := proposalsToFixResults(report, records)
 	batch := newBatchFixResult(results)
 
 	if outputFormat == "table" {
 		return renderFixTable(cmd, batch)
 	}
 	return outputJSON(cmd, batch, false)
+}
+
+func proposalsToFixResults(report *proposal.Report, records []*extract.Record) []*FixResult {
+	// Group proposals by path.
+	pathProposals := make(map[string][]proposal.Proposal)
+	for _, p := range report.Proposals {
+		for _, path := range p.Paths {
+			pathProposals[path] = append(pathProposals[path], p)
+		}
+	}
+
+	var results []*FixResult
+	for _, rec := range records {
+		proposals, hasProposals := pathProposals[rec.Path]
+		if !hasProposals {
+			results = append(results, &FixResult{
+				Path: rec.Path, Fixed: false, Changes: []string{},
+			})
+			continue
+		}
+
+		var changes []string
+		fieldsAdded := 0
+		valuesCorrected := 0
+		for _, p := range proposals {
+			switch p.Type {
+			case proposal.AddField, proposal.ExtractBody, proposal.InferFromChildren:
+				fieldsAdded++
+				changes = append(changes, fmt.Sprintf("add %s=%q", p.Field, p.Value))
+			case proposal.CorrectValue, proposal.MigrateValue:
+				valuesCorrected++
+				changes = append(changes, fmt.Sprintf("correct %s: %q -> %q", p.Field, p.From, p.To))
+			case proposal.ExtendEnum:
+				changes = append(changes, fmt.Sprintf("extend enum %s += %q", p.Field, p.Value))
+			}
+		}
+
+		results = append(results, &FixResult{
+			Path:            rec.Path,
+			Fixed:           true,
+			FieldsAdded:     fieldsAdded,
+			ValuesCorrected: valuesCorrected,
+			Changes:         changes,
+		})
+	}
+	return results
+}
+
+func applyProposals(report *proposal.Report, root string, records []*extract.Record) error {
+	// Build record map for quick lookup.
+	recordMap := make(map[string]*extract.Record)
+	for _, rec := range records {
+		recordMap[rec.Path] = rec
+	}
+
+	// Apply extend_enum proposals first (they modify .stem).
+	for _, p := range report.Proposals {
+		if p.Type != proposal.ExtendEnum {
+			continue
+		}
+		if err := applyExtendEnum(p, root); err != nil {
+			return fmt.Errorf("extend_enum %s: %w", p.Field, err)
+		}
+	}
+
+	// Apply data-level proposals (modify frontmatter/body of individual files).
+	for _, p := range report.Proposals {
+		switch p.Type {
+		case proposal.ExtendEnum:
+			continue // already applied above
+		case proposal.MigrateValue:
+			if err := applyMigrateValue(p, root, recordMap); err != nil {
+				return fmt.Errorf("migrate_value %s: %w", p.Paths[0], err)
+			}
+		case proposal.CorrectValue:
+			if err := applyCorrectValue(p, root, recordMap); err != nil {
+				return fmt.Errorf("correct_value %s: %w", p.Paths[0], err)
+			}
+		case proposal.ExtractBody, proposal.InferFromChildren, proposal.AddField:
+			if err := applySetField(p, root, recordMap); err != nil {
+				return fmt.Errorf("%s %s: %w", p.Type, p.Paths[0], err)
+			}
+		}
+	}
+	return nil
+}
+
+func applyExtendEnum(p proposal.Proposal, root string) error {
+	// Find the .stem file that contains this field.
+	stemPath := filepath.Join(root, ".stem")
+	// Walk up from root to find the nearest .stem with this field.
+	entries, err := rules.WalkUp(root)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.Stem != nil {
+			if sf, ok := e.Stem.Schema[p.Field]; ok && sf.Type == "enum" {
+				stemPath = e.Path
+				break
+			}
+		}
+	}
+
+	content, err := os.ReadFile(stemPath)
+	if err != nil {
+		return err
+	}
+
+	// Parse YAML, add value to the enum's values list, rewrite.
+	var doc yaml.Node
+	if err := yaml.Unmarshal(content, &doc); err != nil {
+		return fmt.Errorf("parsing %s: %w", stemPath, err)
+	}
+
+	if len(doc.Content) == 0 {
+		return fmt.Errorf("empty .stem document")
+	}
+
+	root_node := doc.Content[0]
+	if err := addEnumValueToNode(root_node, p.Field, p.Value); err != nil {
+		return err
+	}
+
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(stemPath, out, 0644)
+}
+
+func addEnumValueToNode(node *yaml.Node, field, value string) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected mapping node")
+	}
+
+	// Find "schema" key.
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == "schema" {
+			schemaNode := node.Content[i+1]
+			if schemaNode.Kind != yaml.MappingNode {
+				continue
+			}
+			// Find the field within schema.
+			for j := 0; j+1 < len(schemaNode.Content); j += 2 {
+				if schemaNode.Content[j].Value == field {
+					fieldNode := schemaNode.Content[j+1]
+					if fieldNode.Kind != yaml.MappingNode {
+						continue
+					}
+					// Find "values" within the field.
+					for k := 0; k+1 < len(fieldNode.Content); k += 2 {
+						if fieldNode.Content[k].Value == "values" {
+							valuesNode := fieldNode.Content[k+1]
+							if valuesNode.Kind != yaml.SequenceNode {
+								continue
+							}
+							// Add the new value.
+							valuesNode.Content = append(valuesNode.Content, &yaml.Node{
+								Kind:  yaml.ScalarNode,
+								Tag:   "!!str",
+								Value: value,
+							})
+							return nil
+						}
+					}
+				}
+			}
+		}
+	}
+	return fmt.Errorf("field %q not found in schema", field)
+}
+
+func applyMigrateValue(p proposal.Proposal, root string, recordMap map[string]*extract.Record) error {
+	for _, path := range p.Paths {
+		rec, ok := recordMap[path]
+		if !ok {
+			continue
+		}
+		rec.Frontmatter[p.Field] = p.To
+
+		absPath := filepath.Join(root, path)
+		content, err := os.ReadFile(absPath)
+		if err != nil {
+			return err
+		}
+
+		newContent := rewriteFrontmatter(string(content), rec.Frontmatter)
+
+		// Insert wiki-links before first heading if any.
+		if len(p.WikiLinks) > 0 {
+			newContent = insertWikiLinksBeforeHeading(newContent, p.WikiLinks)
+		}
+
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func applyCorrectValue(p proposal.Proposal, root string, recordMap map[string]*extract.Record) error {
+	for _, path := range p.Paths {
+		rec, ok := recordMap[path]
+		if !ok {
+			continue
+		}
+		rec.Frontmatter[p.Field] = p.To
+		if err := rewriteRecordFile(root, path, rec.Frontmatter); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func applySetField(p proposal.Proposal, root string, recordMap map[string]*extract.Record) error {
+	value := p.Value
+	if value == "" {
+		value = p.To
+	}
+	for _, path := range p.Paths {
+		rec, ok := recordMap[path]
+		if !ok {
+			continue
+		}
+		rec.Frontmatter[p.Field] = value
+		if err := rewriteRecordFile(root, path, rec.Frontmatter); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rewriteRecordFile(root, path string, fm map[string]any) error {
+	absPath := filepath.Join(root, path)
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return err
+	}
+	newContent := rewriteFrontmatter(string(content), fm)
+	return os.WriteFile(absPath, []byte(newContent), 0644)
+}
+
+func insertWikiLinksBeforeHeading(content string, links []string) string {
+	linkBlock := strings.Join(links, "\n") + "\n\n"
+	// Find the first ## heading.
+	idx := strings.Index(content, "\n## ")
+	if idx >= 0 {
+		return content[:idx+1] + linkBlock + content[idx+1:]
+	}
+	// If no ## heading, append at end.
+	return content + "\n" + linkBlock
 }
 
 func renderProposalTable(cmd *cobra.Command, report *proposal.Report) error {

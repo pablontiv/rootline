@@ -388,17 +388,28 @@ func detectAddField(effective *rules.StemFile, errs map[string][]rules.Validatio
 }
 
 // extractEnumValue extracts the invalid value from a validation error message.
-// The message format is: value "X" not in allowed values: [a, b, c]
+// Supports both quoted (value "X" ...) and unquoted (value X ...) formats.
 func extractEnumValue(msg string, _ []string) string {
+	// Try quoted format first: value "X" not in allowed values
 	start := strings.Index(msg, `"`)
-	if start < 0 {
+	if start >= 0 {
+		end := strings.Index(msg[start+1:], `"`)
+		if end >= 0 {
+			return msg[start+1 : start+1+end]
+		}
+	}
+
+	// Try unquoted format: value X is not in allowed values
+	const prefix = "value "
+	if !strings.HasPrefix(msg, prefix) {
 		return ""
 	}
-	end := strings.Index(msg[start+1:], `"`)
+	rest := msg[len(prefix):]
+	end := strings.Index(rest, " is not in allowed")
 	if end < 0 {
 		return ""
 	}
-	return msg[start+1 : start+1+end]
+	return rest[:end]
 }
 
 // closestMatch finds the closest string by Levenshtein distance.
