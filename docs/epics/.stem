@@ -45,7 +45,7 @@ schema:
 links:
   allowed: [blocks, reference]
   blocks:
-    target: "T*"
+    target: "^T\\d{3}-"
 
 validate:
   - rule: requires

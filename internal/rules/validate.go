@@ -2,7 +2,7 @@ package rules
 
 import (
 	"fmt"
-	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -243,10 +243,18 @@ func validateLinks(links []extract.Link, schema LinkSchema, source string) []Val
 			})
 		}
 
-		// Check target pattern.
+		// Check target pattern (regexp).
 		if rule, ok := schema.Rules[link.Type]; ok && rule.Target != "" {
-			matched, err := filepath.Match(rule.Target, link.Target)
-			if err != nil || !matched {
+			matched, err := regexp.MatchString(rule.Target, link.Target)
+			if err != nil {
+				errs = append(errs, ValidationError{
+					Rule:     "link_target",
+					Field:    "links",
+					Message:  fmt.Sprintf("invalid target regexp %q: %v", rule.Target, err),
+					Source:   source,
+					Severity: "error",
+				})
+			} else if !matched {
 				errs = append(errs, ValidationError{
 					Rule:     "link_target",
 					Field:    "links",

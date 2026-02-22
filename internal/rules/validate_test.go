@@ -386,18 +386,18 @@ func TestValidateLinks_DisallowedType(t *testing.T) {
 	}
 }
 
-func TestValidateLinks_TargetMatchesGlob(t *testing.T) {
+func TestValidateLinks_TargetMatchesRegexp(t *testing.T) {
 	stem := &StemFile{
 		Links: LinkSchema{
 			Allowed: []string{"blocks"},
-			Rules:   map[string]LinkRule{"blocks": {Target: "*.md"}},
+			Rules:   map[string]LinkRule{"blocks": {Target: `^T\d{3}-`}},
 		},
 		Path: "test/.stem",
 	}
 	record := &extract.Record{
 		Path: "test.md", Type: "markdown",
 		Frontmatter: map[string]any{},
-		Links:       []extract.Link{{Target: "T003.md", Type: "blocks", Line: 1}},
+		Links:       []extract.Link{{Target: "T001-task-name", Type: "blocks", Line: 1}},
 	}
 	errs := Validate(record, stem)
 	if len(errs) != 0 {
@@ -405,22 +405,43 @@ func TestValidateLinks_TargetMatchesGlob(t *testing.T) {
 	}
 }
 
-func TestValidateLinks_TargetMismatchGlob(t *testing.T) {
+func TestValidateLinks_TargetMismatchRegexp(t *testing.T) {
 	stem := &StemFile{
 		Links: LinkSchema{
 			Allowed: []string{"blocks"},
-			Rules:   map[string]LinkRule{"blocks": {Target: "*.md"}},
+			Rules:   map[string]LinkRule{"blocks": {Target: `^T\d{3}-`}},
+		},
+		Path: "test/.stem",
+	}
+	for _, target := range []string{"target", "A,B,C,A", "T99-short"} {
+		record := &extract.Record{
+			Path: "test.md", Type: "markdown",
+			Frontmatter: map[string]any{},
+			Links:       []extract.Link{{Target: target, Type: "blocks", Line: 1}},
+		}
+		errs := Validate(record, stem)
+		if len(errs) != 1 || errs[0].Rule != "link_target" {
+			t.Errorf("target %q: got %v, want 1 link_target error", target, errs)
+		}
+	}
+}
+
+func TestValidateLinks_InvalidRegexp(t *testing.T) {
+	stem := &StemFile{
+		Links: LinkSchema{
+			Allowed: []string{"blocks"},
+			Rules:   map[string]LinkRule{"blocks": {Target: "[invalid"}},
 		},
 		Path: "test/.stem",
 	}
 	record := &extract.Record{
 		Path: "test.md", Type: "markdown",
 		Frontmatter: map[string]any{},
-		Links:       []extract.Link{{Target: "T003.txt", Type: "blocks", Line: 1}},
+		Links:       []extract.Link{{Target: "anything", Type: "blocks", Line: 1}},
 	}
 	errs := Validate(record, stem)
 	if len(errs) != 1 || errs[0].Rule != "link_target" {
-		t.Errorf("got %v, want 1 link_target error", errs)
+		t.Errorf("got %v, want 1 link_target error for invalid regexp", errs)
 	}
 }
 
