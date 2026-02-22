@@ -133,6 +133,8 @@ func runValidateAll(cmd *cobra.Command) error {
 	}
 
 	var results []*rules.ValidationResult
+	visitedDirs := make(map[string]bool)
+
 	for _, rec := range records {
 		absPath := filepath.Join(root, rec.Path)
 		dir := filepath.Dir(absPath)
@@ -143,6 +145,31 @@ func runValidateAll(cmd *cobra.Command) error {
 		effective := rules.MergeStemFiles(entries)
 		errs := rules.Validate(rec, effective)
 		results = append(results, rules.NewValidationResult(rec.Path, errs))
+
+		// Track directories for structural validation.
+		if !visitedDirs[dir] {
+			visitedDirs[dir] = true
+		}
+	}
+
+	// Structural directory validation.
+	for dir := range visitedDirs {
+		entries, walkErr := rules.WalkUp(dir)
+		if walkErr != nil {
+			continue
+		}
+		effective := rules.MergeStemFiles(entries)
+		if effective.Structural.IsEmpty() {
+			continue
+		}
+
+		structErrs := rules.ValidateDirectory(dir, effective)
+		relDir, _ := filepath.Rel(root, dir)
+		if relDir == "" || relDir == "." {
+			relDir = ""
+		}
+		dirPath := relDir + "/"
+		results = append(results, rules.NewValidationResult(dirPath, structErrs))
 	}
 
 	batch := rules.NewBatchValidationResult(results)
