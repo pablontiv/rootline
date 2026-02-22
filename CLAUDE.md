@@ -71,6 +71,34 @@ Use `rootline` CLI as the primary tool for querying project data — not manual 
 
 Only fall back to `Read` when you need raw markdown body content that rootline doesn't expose.
 
+## Commit Convention
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/). The `.githooks/commit-msg` hook enforces this format.
+
+| Type | Semver Impact | When to use |
+|------|--------------|-------------|
+| `feat` | minor | New functionality |
+| `fix` | patch | Bug fix |
+| `docs` | none | Documentation only |
+| `test` | none | Adding or updating tests |
+| `refactor` | none | Code restructuring, no behavior change |
+| `ci` | none | CI/CD pipeline changes |
+| `chore` | none | Maintenance, dependencies |
+| `perf` | patch | Performance improvement |
+| `style` | none | Formatting, whitespace |
+
+Format: `type(scope): description` — scope is optional. Add `!` before `:` for breaking changes (bumps major).
+
+## Release Flow
+
+```bash
+svu current              # Show current version (from latest git tag)
+svu next                 # Preview next version based on commits since last tag
+git tag "$(svu next)" && git push --tags  # Tag and trigger goreleaser
+```
+
+Requires `svu` installed: `go install github.com/caarlos0/svu/v2@latest`
+
 ## Module Path
 
 ```
