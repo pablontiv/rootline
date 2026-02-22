@@ -9,6 +9,7 @@ import (
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/graph"
 	"github.com/pablontiv/rootline/internal/index"
+	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
 )
 
@@ -56,6 +57,15 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	records, err := index.Scan(absRoot, reg)
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
+	}
+
+	// Load .stem schema and filter links to only include structurally relevant ones.
+	entries, err := rules.WalkUp(absRoot)
+	if err == nil {
+		stem := rules.MergeStemFiles(entries)
+		if stem != nil {
+			filterLinksBySchema(records, stem.Links)
+		}
 	}
 
 	g := graph.Build(records)
@@ -150,6 +160,23 @@ func renderDOT(cmd *cobra.Command, g *graph.Graph) {
 		}
 	}
 	fmt.Fprintln(w, "}")
+}
+
+// filterLinksBySchema removes links from records whose type has no rule in the schema.
+// If the schema is empty, no filtering is performed (backward compatible).
+func filterLinksBySchema(records []*extract.Record, schema rules.LinkSchema) {
+	if schema.IsEmpty() {
+		return
+	}
+	for _, rec := range records {
+		filtered := rec.Links[:0]
+		for _, link := range rec.Links {
+			if _, ok := schema.Rules[link.Type]; ok {
+				filtered = append(filtered, link)
+			}
+		}
+		rec.Links = filtered
+	}
 }
 
 func renderMermaid(cmd *cobra.Command, g *graph.Graph) {

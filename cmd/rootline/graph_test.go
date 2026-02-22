@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 func TestGraphJSON_Empty(t *testing.T) {
@@ -136,5 +139,66 @@ func TestGraphFormat_Invalid(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unknown format") {
 		t.Errorf("expected 'unknown format' error, got: %v", err)
+	}
+}
+
+func TestFilterLinksBySchema_WithRules(t *testing.T) {
+	records := []*extract.Record{
+		{
+			Path: "a.md",
+			Links: []extract.Link{
+				{Target: "T001-task.md", Type: "blocks", Line: 1},
+				{Target: "something", Type: "reference", Line: 2},
+			},
+		},
+	}
+	schema := rules.LinkSchema{
+		Allowed: []string{"blocks", "reference"},
+		Rules:   map[string]rules.LinkRule{"blocks": {Target: "T*"}},
+	}
+
+	filterLinksBySchema(records, schema)
+
+	if len(records[0].Links) != 1 {
+		t.Fatalf("expected 1 link after filter, got %d", len(records[0].Links))
+	}
+	if records[0].Links[0].Type != "blocks" {
+		t.Errorf("expected blocks link, got %s", records[0].Links[0].Type)
+	}
+}
+
+func TestFilterLinksBySchema_EmptySchema(t *testing.T) {
+	records := []*extract.Record{
+		{
+			Path: "a.md",
+			Links: []extract.Link{
+				{Target: "b.md", Type: "reference", Line: 1},
+				{Target: "c.md", Type: "blocks", Line: 2},
+			},
+		},
+	}
+	schema := rules.LinkSchema{}
+
+	filterLinksBySchema(records, schema)
+
+	if len(records[0].Links) != 2 {
+		t.Errorf("expected 2 links (no filtering), got %d", len(records[0].Links))
+	}
+}
+
+func TestGraphCheck_SchemaFiltersReferenceLinks(t *testing.T) {
+	dir := t.TempDir()
+	// .stem with links schema that only has rules for "blocks"
+	stem := "version: 1\nlinks:\n  allowed: [blocks, reference]\n  blocks:\n    target: \"*.md\"\n"
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stem), 0644)
+	// doc with a [[reference]] link to nonexistent target — should be filtered out
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[nonexistent]]\n"), 0644)
+
+	out, err := runCmd(t, "graph", "--check", dir)
+	if err != nil {
+		t.Fatalf("expected no error (reference links filtered), got: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "No cycles or broken links") {
+		t.Errorf("expected clean check, got: %s", out)
 	}
 }
