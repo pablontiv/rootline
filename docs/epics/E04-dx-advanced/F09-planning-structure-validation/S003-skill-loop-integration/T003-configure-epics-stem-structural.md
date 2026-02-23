@@ -1,5 +1,5 @@
 ---
-estado: Completado
+estado: Completed
 tipo: documentation
 ---
 # T003: Configurar structural rules en docs/epics/.stem y crear READMEs faltantes

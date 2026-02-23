@@ -1,5 +1,5 @@
 ---
-estado: Completado
+estado: Completed
 tipo: ci-cd
 ejecutable_en: 1 sesion
 ---

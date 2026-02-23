@@ -1,5 +1,5 @@
 ---
-estado: Completado
+estado: Completed
 tipo: documentation
 ---
 # T002: Actualizar /roadmap loop para usar rootline graph en orden de ejecucion
