@@ -38,3 +38,5 @@ changelog:
       - "^test:"
       - "^ci:"
       - "^chore:"
+      - "^style:"
+      - "^refactor:"
