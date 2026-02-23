@@ -353,3 +353,126 @@ func TestAnalyze_Mixed(t *testing.T) {
 		t.Errorf("summary.add_field = %d, want 1", report.Summary.AddField)
 	}
 }
+
+func TestExtendEnum_SkipsParenthesizedValues(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+		},
+	}
+
+	// Same parenthesized value in 3 records — should NOT generate extend_enum.
+	errs := map[string][]rules.ValidationError{
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completado]`}},
+		"b.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completado]`}},
+		"c.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completado]`}},
+	}
+
+	proposals := detectExtendEnum(stem, errs)
+	if len(proposals) != 0 {
+		t.Errorf("got %d proposals, want 0 (parenthesized values should be skipped)", len(proposals))
+	}
+}
+
+func TestAnalyze_MigrateValueSuppressesCorrectValue(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Bloqueada", "Completado"}, Required: true},
+		},
+	}
+
+	// This error triggers both migrate_value (has parentheses) and correct_value (base is close to "Pending").
+	errs := map[string][]rules.ValidationError{
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Bloqueada, Completado]`}},
+	}
+
+	report := Analyze([]*extract.Record{}, stem, errs)
+
+	if report.Summary.MigrateValue != 1 {
+		t.Errorf("summary.migrate_value = %d, want 1", report.Summary.MigrateValue)
+	}
+	if report.Summary.CorrectValue != 0 {
+		t.Errorf("summary.correct_value = %d, want 0 (suppressed by migrate_value)", report.Summary.CorrectValue)
+	}
+	if report.Summary.ExtendEnum != 0 {
+		t.Errorf("summary.extend_enum = %d, want 0", report.Summary.ExtendEnum)
+	}
+}
+
+func TestAnalyze_MigrateValueSuppressesExtendEnum(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+		},
+	}
+
+	// Same parenthesized value in 2 records — should produce migrate_value but NOT extend_enum.
+	errs := map[string][]rules.ValidationError{
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completado]`}},
+		"b.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completado]`}},
+	}
+
+	report := Analyze([]*extract.Record{}, stem, errs)
+
+	if report.Summary.MigrateValue != 2 {
+		t.Errorf("summary.migrate_value = %d, want 2", report.Summary.MigrateValue)
+	}
+	if report.Summary.ExtendEnum != 0 {
+		t.Errorf("summary.extend_enum = %d, want 0 (suppressed by migrate_value / parentheses)", report.Summary.ExtendEnum)
+	}
+	if report.Summary.CorrectValue != 0 {
+		t.Errorf("summary.correct_value = %d, want 0 (suppressed by migrate_value)", report.Summary.CorrectValue)
+	}
+}
+
+func TestMigrateValue_NotesOnlyHasWikiLinks(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+		},
+	}
+
+	// "human" is a note (not an ID-like target) but should still produce wiki_links.
+	errs := map[string][]rules.ValidationError{
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by human)" not in allowed values: [Pending, Completado]`}},
+	}
+
+	proposals := detectMigrateValue(stem, errs)
+	if len(proposals) != 1 {
+		t.Fatalf("got %d proposals, want 1", len(proposals))
+	}
+	p := proposals[0]
+	if len(p.WikiLinks) == 0 {
+		t.Errorf("wiki_links is empty, want non-empty for notes-only migrate_value")
+	}
+	if p.WikiLinks[0] != "[[note:human]]" {
+		t.Errorf("wiki_links[0] = %q, want [[note:human]]", p.WikiLinks[0])
+	}
+}
+
+func TestMigrateValue_MixedTargetsAndNotes(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+		},
+	}
+
+	errs := map[string][]rules.ValidationError{
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by E04 + human)" not in allowed values: [Pending, Completado]`}},
+	}
+
+	proposals := detectMigrateValue(stem, errs)
+	if len(proposals) != 1 {
+		t.Fatalf("got %d proposals, want 1", len(proposals))
+	}
+	p := proposals[0]
+	if len(p.WikiLinks) != 2 {
+		t.Fatalf("wiki_links = %v, want 2 entries", p.WikiLinks)
+	}
+	if p.WikiLinks[0] != "[[blocks:E04]]" {
+		t.Errorf("wiki_links[0] = %q, want [[blocks:E04]]", p.WikiLinks[0])
+	}
+	if p.WikiLinks[1] != "[[note:human]]" {
+		t.Errorf("wiki_links[1] = %q, want [[note:human]]", p.WikiLinks[1])
+	}
+}

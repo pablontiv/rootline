@@ -193,6 +193,10 @@ func detectExtendEnum(effective *rules.StemFile, errs map[string][]rules.Validat
 		if len(paths) < 2 {
 			continue
 		}
+		// Skip values with parentheses — they are migration candidates, not enum extensions.
+		if strings.Contains(fv.value, "(") {
+			continue
+		}
 		proposals = append(proposals, Proposal{
 			Type:        ExtendEnum,
 			Field:       fv.field,
@@ -232,6 +236,9 @@ func detectMigrateValue(effective *rules.StemFile, errs map[string][]rules.Valid
 			var wikiLinks []string
 			for _, t := range targets {
 				wikiLinks = append(wikiLinks, "[[blocks:"+t+"]]")
+			}
+			for _, n := range notes {
+				wikiLinks = append(wikiLinks, "[[note:"+n+"]]")
 			}
 
 			desc := fmt.Sprintf("migrate %q to %q", val, newValue)
