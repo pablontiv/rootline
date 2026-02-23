@@ -11,7 +11,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var statsFrom string
+var (
+	statsFrom  string
+	statsWhere []string
+)
 
 var statsCmd = &cobra.Command{
 	Use:   "stats [path]",
@@ -23,6 +26,7 @@ var statsCmd = &cobra.Command{
 
 func init() {
 	statsCmd.Flags().StringVar(&statsFrom, "from", ".", "root path to scan")
+	statsCmd.Flags().StringArrayVar(&statsWhere, "where", nil, "filter expression (e.g. \"estado == 'Pending'\")")
 	rootCmd.AddCommand(statsCmd)
 }
 
@@ -55,6 +59,12 @@ func runStats(cmd *cobra.Command, args []string) error {
 	// Run derivation and aggregation (best-effort, errors silently skipped).
 	derive.DeriveAllSimple(records, absRoot)
 	derive.AggregateAllSimple(records, absRoot)
+
+	// Apply --where filter.
+	records, err = filterRecords(records, statsWhere)
+	if err != nil {
+		return fmt.Errorf("filtering records: %w", err)
+	}
 
 	byEstado := make(map[string]int)
 	byTipo := make(map[string]int)

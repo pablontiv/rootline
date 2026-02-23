@@ -55,6 +55,7 @@ func resetFlags() {
 	fixAll = false
 	hooksForce = false
 	treeWhere = nil
+	statsWhere = nil
 	graphFormat = "dot"
 	graphCheck = false
 	migrateDryRun = false
@@ -63,6 +64,10 @@ func resetFlags() {
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
 	if f := treeCmd.Flags().Lookup("where"); f != nil {
+		_ = f.Value.Set("")
+		f.Changed = false
+	}
+	if f := statsCmd.Flags().Lookup("where"); f != nil {
 		_ = f.Value.Set("")
 		f.Changed = false
 	}
@@ -302,6 +307,29 @@ func TestStatsJSON(t *testing.T) {
 	}
 	if result.ByEstado["Pending"] != 1 {
 		t.Errorf("expected 1 Pending, got %d", result.ByEstado["Pending"])
+	}
+}
+
+func TestStatsWhere(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "stats", dir, "--where", "tipo == 'test'")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result StatsResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if result.Total != 1 {
+		t.Errorf("expected 1 total with --where tipo=test, got %d", result.Total)
+	}
+}
+
+func TestStatsWhereInvalid(t *testing.T) {
+	dir := setupTestDir(t)
+	_, err := runCmd(t, "stats", dir, "--where", "== bad")
+	if err == nil {
+		t.Fatal("expected error for invalid where expression")
 	}
 }
 
