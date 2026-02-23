@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
@@ -72,19 +71,14 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		Limit: queryLimit,
 	}
 
-	// Filter empty strings — StringArrayVar may produce [""] on cobra re-execution
-	var wheres []string
-	for _, w := range queryWhere {
-		if w != "" {
-			wheres = append(wheres, w)
-		}
+	// Filter records using shared helper.
+	filtered, err := filterRecords(records, queryWhere)
+	if err != nil {
+		return fmt.Errorf("filtering records: %w", err)
 	}
 
-	// Join multiple --where with && for expr evaluation
-	whereExpr := strings.Join(wheres, " && ")
-
-	// Execute query with expr-based filtering
-	result, err := query.ExecuteExpr(records, whereExpr, q)
+	// Execute query (count/limit) on filtered records.
+	result, err := query.ExecuteExpr(filtered, "", q)
 	if err != nil {
 		return fmt.Errorf("executing query: %w", err)
 	}
