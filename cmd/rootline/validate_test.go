@@ -270,6 +270,47 @@ func TestSplitDotPath(t *testing.T) {
 	}
 }
 
+func TestValidateCmd_AllWhere(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":     "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n  tipo:\n    type: string\n",
+		"good.md":   "---\nestado: Pending\ntipo: test\n---\n",
+		"bad.md":    "---\nestado: Completed\n---\n",
+		"broken.md": "---\ntipo: test\n---\n",
+	})
+
+	mustChdir(t, root)
+
+	// Filter to only tipo=test records (good.md and broken.md)
+	stdout, err := executeValidate(t, "--all", "--where", "tipo == 'test'")
+	if err != ErrValidationFailed {
+		t.Fatalf("expected ErrValidationFailed (broken.md missing estado), got: %v", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	summary := result["summary"].(map[string]any)
+	// Should validate 2 files (good.md + broken.md), not 3
+	if summary["total"].(float64) != 2 {
+		t.Errorf("total = %v, want 2 (filtered)", summary["total"])
+	}
+}
+
+func TestValidateCmd_AllWhereInvalid(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n",
+		"doc.md": "---\ntitle: Test\n---\n",
+	})
+
+	mustChdir(t, root)
+	_, err := executeValidate(t, "--all", "--where", "== bad syntax")
+	if err == nil {
+		t.Fatal("expected error for invalid where expression")
+	}
+}
+
 func TestValidateCmd_EnumError(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
 		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values:\n      - Pending\n      - Completado\n    required: true\n",

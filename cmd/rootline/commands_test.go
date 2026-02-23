@@ -44,6 +44,7 @@ func resetFlags() {
 	validateAll = false
 	validateStrict = false
 	validateStaged = false
+	validateWhere = nil
 	outputFormat = "json"
 	fieldPath = nil
 	statsFrom = "."
@@ -68,6 +69,10 @@ func resetFlags() {
 		f.Changed = false
 	}
 	if f := statsCmd.Flags().Lookup("where"); f != nil {
+		_ = f.Value.Set("")
+		f.Changed = false
+	}
+	if f := validateCmd.Flags().Lookup("where"); f != nil {
 		_ = f.Value.Set("")
 		f.Changed = false
 	}

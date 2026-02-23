@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -23,6 +24,7 @@ var (
 	validateAll    bool
 	validateStrict bool
 	validateStaged bool
+	validateWhere  []string
 )
 
 var validateCmd = &cobra.Command{
@@ -36,6 +38,7 @@ func init() {
 	validateCmd.Flags().BoolVar(&validateAll, "all", false, "validate all files in scope from current directory")
 	validateCmd.Flags().BoolVar(&validateStrict, "strict", false, "treat warnings as errors (exit code 1)")
 	validateCmd.Flags().BoolVar(&validateStaged, "staged", false, "validate only files in git staging area")
+	validateCmd.Flags().StringArrayVar(&validateWhere, "where", nil, "filter expression for --all mode (e.g. \"estado == 'Pending'\")")
 	rootCmd.AddCommand(validateCmd)
 }
 
@@ -130,6 +133,16 @@ func runValidateAll(cmd *cobra.Command) error {
 	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
+	}
+
+	// Run derivation for --where filtering on derived fields.
+	derive.DeriveAllSimple(records, root)
+	derive.AggregateAllSimple(records, root)
+
+	// Apply --where filter.
+	records, err = filterRecords(records, validateWhere)
+	if err != nil {
+		return fmt.Errorf("filtering records: %w", err)
 	}
 
 	var results []*rules.ValidationResult
