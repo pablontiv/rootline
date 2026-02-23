@@ -14,7 +14,7 @@ const hookMarker = "# rootline-managed"
 const hookScript = `#!/bin/sh
 # rootline-managed
 # Pre-commit hook: validate staged markdown files
-rootline validate --staged --all
+rootline validate --staged
 `
 
 var hooksForce bool

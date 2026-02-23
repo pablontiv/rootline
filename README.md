@@ -58,7 +58,7 @@ rootline validate --all
 rootline describe docs/api/
 
 # 4. Query — find documents by metadata (expr-lang syntax)
-rootline query --where 'status == "published"'
+rootline query --where 'estado == "published"'
 
 # 5. Scaffold — create a new document from the schema
 rootline new docs/api/auth.md
@@ -144,6 +144,7 @@ links:
 structural:
   require_index: true
   min_children: 1
+  max_children: 10
 ```
 
 ---
@@ -154,8 +155,8 @@ Rootline ships as a **single static Go binary** with no dependencies.
 
 ```bash
 # Core
-rootline validate [file|--all|--staged]   # Check documents against .stem rules
-rootline query --where 'expr'             # Search by metadata (expr-lang syntax)
+rootline validate [file|--all|--staged] [--where 'expr']  # Check documents against .stem rules
+rootline query [path] --where 'expr' [--count] [--limit N]  # Search by metadata (expr-lang syntax)
 rootline describe <path>                  # Show effective schema for a directory
 rootline tree [path] [--where 'expr']     # Hierarchical view with completion counts
 rootline stats [path] [--where 'expr']    # Summary counts by estado and tipo
@@ -163,8 +164,8 @@ rootline graph [path] [--where 'expr']    # Dependency graph (DOT, Mermaid, --ch
 rootline explain <file>                   # Trace field origins, derivations, and errors
 
 # Document lifecycle
-rootline init [path]                      # Infer .stem from existing documents
-rootline new <file>                       # Scaffold document from effective schema
+rootline init [path] [--force]            # Infer .stem from existing documents
+rootline new <file> [--force] [--dry-run] # Scaffold document from effective schema
 rootline fix [file|--all]                 # Auto-repair: add fields, fix enums, propose changes
 rootline validate --all --where 'expr'   # Validate only records matching filter
 rootline migrate [path]                   # Detect schema changes, rename fields
