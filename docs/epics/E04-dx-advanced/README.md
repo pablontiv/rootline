@@ -23,3 +23,4 @@ Extender rootline con capacidades avanzadas que mejoran la experiencia del desar
 | [F09 Planning Structure Validation](F09-planning-structure-validation/README.md) | Validación estructural de directorios |
 | [F10 Proposal Fix Engine](F10-proposal-fix-engine/README.md) | Motor de propuestas para fix command |
 | [F11 Conditional Field Validation](F11-conditional-field-validation/README.md) | Exclusión de required para campos computados por aggregate |
+| [F12 Estado System Standardization](F12-estado-standardization/README.md) | Migración de estados a inglés, hold field, aggregate fallback fix |
