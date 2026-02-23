@@ -72,6 +72,8 @@ Use `rootline` CLI as the primary tool for querying project data — not manual 
 - `rootline tree` — view directory structure with metadata
 - `rootline validate` / `rootline fix` — verify and correct files against `.stem` schemas
 
+All transversal commands (`tree`, `stats`, `graph`, `validate --all`) support `--where "expr"` for filtering records with the same expr-lang syntax as `query`.
+
 Only fall back to `Read` when you need raw markdown body content that rootline doesn't expose.
 
 ## Commit Convention

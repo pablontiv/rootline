@@ -150,11 +150,10 @@ Después de la aprobación, informar al usuario que puede ejecutar `/roadmap pla
 Vista jerárquica filtrada: solo Features con trabajo pendiente.
 
 **Procedimiento**:
-1. Ejecutar `rootline query docs/epics/ --where "tipo not in ['feature', 'historia']" --where "estado in ['Pending', 'Specified', 'In Progress', 'Blocked', 'On Hold']" --output json`
-2. Del resultado, extraer los Feature paths únicos (segundo nivel del path: `EXX-name/FXX-name/`)
-3. Para cada Feature path único, ejecutar `rootline tree docs/epics/<epic>/<feature>/ --output table`
-4. Presentar cada tree tal cual, agrupado bajo su Epic
-5. Después de los trees, mostrar `rootline stats docs/epics/ --output table`
+1. Ejecutar `rootline tree docs/epics/ --where "estado != 'Completed'" --output table`
+2. Ejecutar `rootline stats docs/epics/ --output table`
+
+Presenta ambos outputs al usuario.
 
 ---
 
@@ -340,8 +339,9 @@ Después de crear un artefacto, actualizar la tabla en el README padre:
 | `rootline describe <dir> --field schema.id.next` | Auto-numbering: obtener próximo ID en cualquier nivel |
 | `rootline new <path>` | Scaffolding: crear archivo con frontmatter correcto según .stem |
 | `rootline query <path> --where "expr"` | Discovery: buscar records por frontmatter (estado, tipo, etc.) |
-| `rootline tree <path> --output table` | Vista jerárquica: `/roadmap` |
-| `rootline stats <path> --output table` | Resumen estadístico: conteos por estado y tipo |
+| `rootline tree <path> --where "expr" --output table` | Vista jerárquica filtrada: `/roadmap pending` |
+| `rootline stats <path> --where "expr" --output table` | Resumen estadístico filtrado por expresión |
+| `rootline graph <path> --where "expr" --check` | Grafo de dependencias filtrado |
 
 ## Referencia
 

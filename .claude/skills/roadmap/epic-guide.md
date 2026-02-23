@@ -29,6 +29,8 @@ Un epic debe partirse cuando:
 - No existe un "done" unificado — cada feature tiene su propio "done" independiente
 - Stakeholder no puede explicar qué cambia cuando el epic está "completo"
 
+> **Tip**: Usa `rootline tree docs/epics/<epic>/ --where "estado != 'Completed'" -o table` para ver solo el trabajo pendiente de un epic, sin necesidad de query + filtrado manual.
+
 ## Tamaño
 
 - **Target**: 3-5 Features con substancia
