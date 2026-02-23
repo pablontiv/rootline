@@ -302,14 +302,18 @@ func applyProposals(report *proposal.Report, root string, records []*extract.Rec
 	}
 
 	// Apply data-level proposals (modify frontmatter/body of individual files).
+	// Track which proposals are actually applied so reporting is accurate.
+	var applied []proposal.Proposal
 	for _, p := range report.Proposals {
 		switch p.Type {
 		case proposal.ExtendEnum:
-			continue // already applied above
+			applied = append(applied, p) // already applied above
+			continue
 		case proposal.MigrateValue:
 			if err := applyMigrateValue(p, root, recordMap); err != nil {
 				return fmt.Errorf("migrate_value %s: %w", p.Paths[0], err)
 			}
+			applied = append(applied, p)
 		case proposal.CorrectValue:
 			// Skip if extend_enum made the original value valid.
 			if freshStem != nil {
@@ -329,12 +333,17 @@ func applyProposals(report *proposal.Report, root string, records []*extract.Rec
 			if err := applyCorrectValue(p, root, recordMap); err != nil {
 				return fmt.Errorf("correct_value %s: %w", p.Paths[0], err)
 			}
+			applied = append(applied, p)
 		case proposal.ExtractBody, proposal.InferFromChildren, proposal.AddField:
 			if err := applySetField(p, root, recordMap); err != nil {
 				return fmt.Errorf("%s %s: %w", p.Type, p.Paths[0], err)
 			}
+			applied = append(applied, p)
 		}
 	}
+
+	// Update report to reflect only applied proposals.
+	report.Proposals = applied
 	return nil
 }
 

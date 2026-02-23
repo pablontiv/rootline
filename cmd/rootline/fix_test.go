@@ -491,6 +491,92 @@ func TestFixAllApplyExtendEnum(t *testing.T) {
 	if !strings.Contains(string(content), "Obsoleto") {
 		t.Errorf("expected .stem to contain 'Obsoleto' after extend_enum, got:\n%s", string(content))
 	}
+
+	// T003: Verify files with estado: Obsoleto are NOT changed to Completado.
+	// After extend_enum makes "Obsoleto" valid, correct_value should be skipped.
+	for _, name := range []string{"file1.md", "file2.md"} {
+		fileContent, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("reading %s: %v", name, err)
+		}
+		if strings.Contains(string(fileContent), "Completado") {
+			t.Errorf("%s: estado was changed to Completado — correct_value should have been skipped after extend_enum", name)
+		}
+		if !strings.Contains(string(fileContent), "Obsoleto") {
+			t.Errorf("%s: expected estado: Obsoleto preserved, got:\n%s", name, string(fileContent))
+		}
+	}
+}
+
+func TestFixAllSkipCorrectAfterExtendButFixTypos(t *testing.T) {
+	dir := setupTestDir(t)
+	// 2 files with "Obsoleto" -> triggers extend_enum (adds Obsoleto to .stem).
+	mustWriteFile(t, filepath.Join(dir, "obs1.md"), []byte("---\nestado: Obsoleto\ntipo: test\n---\n# Obs1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "obs2.md"), []byte("---\nestado: Obsoleto\ntipo: test\n---\n# Obs2\n"), 0644)
+	// 1 file with a typo -> should still be corrected by correct_value.
+	mustWriteFile(t, filepath.Join(dir, "typo.md"), []byte("---\nestado: Compltado\ntipo: test\n---\n# Typo\n"), 0644)
+	mustChdir(t, dir)
+
+	_, err := runCmd(t, "fix", "--all", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Obsoleto files should be preserved (not changed to Completado).
+	for _, name := range []string{"obs1.md", "obs2.md"} {
+		content, readErr := os.ReadFile(filepath.Join(dir, name))
+		if readErr != nil {
+			t.Fatalf("reading %s: %v", name, readErr)
+		}
+		if !strings.Contains(string(content), "Obsoleto") {
+			t.Errorf("%s: expected estado: Obsoleto preserved, got:\n%s", name, string(content))
+		}
+	}
+
+	// Typo file should be corrected to Completado.
+	typoContent, err := os.ReadFile(filepath.Join(dir, "typo.md"))
+	if err != nil {
+		t.Fatalf("reading typo.md: %v", err)
+	}
+	if !strings.Contains(string(typoContent), "Completado") {
+		t.Errorf("typo.md: expected estado corrected to Completado, got:\n%s", string(typoContent))
+	}
+	if strings.Contains(string(typoContent), "Compltado") {
+		t.Errorf("typo.md: typo 'Compltado' was not corrected")
+	}
+}
+
+func TestFixAllSkipCorrectAfterExtendReportAccuracy(t *testing.T) {
+	dir := setupTestDir(t)
+	// 2 files with "Obsoleto" -> triggers extend_enum.
+	mustWriteFile(t, filepath.Join(dir, "obs1.md"), []byte("---\nestado: Obsoleto\ntipo: test\n---\n# Obs1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "obs2.md"), []byte("---\nestado: Obsoleto\ntipo: test\n---\n# Obs2\n"), 0644)
+	mustChdir(t, dir)
+
+	out, err := runCmd(t, "fix", "--all", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var batch BatchFixResult
+	if err := json.Unmarshal([]byte(out), &batch); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// The obs1.md and obs2.md should NOT report ValuesCorrected since
+	// correct_value was skipped after extend_enum made the value valid.
+	for _, r := range batch.Results {
+		if strings.Contains(r.Path, "obs1") || strings.Contains(r.Path, "obs2") {
+			if r.ValuesCorrected > 0 {
+				t.Errorf("%s: expected ValuesCorrected=0 (skipped after extend_enum), got %d", r.Path, r.ValuesCorrected)
+			}
+			for _, c := range r.Changes {
+				if strings.Contains(c, "correct") {
+					t.Errorf("%s: unexpected correction in changes: %s", r.Path, c)
+				}
+			}
+		}
+	}
 }
 
 func TestFixAllApplyExtractBody(t *testing.T) {
@@ -537,5 +623,131 @@ func TestFixAllDryRunWithProposals(t *testing.T) {
 	}
 	if !strings.Contains(out, "add_field") {
 		t.Errorf("expected add_field proposal, got: %s", out)
+	}
+}
+
+// TestFixAllSelectsRichestStem verifies that runFixAll picks the stem with the
+// richest schema (most fields) instead of a random map entry. This prevents
+// losing enum definitions like estado/tipo when multiple stems coexist.
+func TestFixAllSelectsRichestStem(t *testing.T) {
+	root := t.TempDir()
+
+	// Rich stem at root: has estado enum with known values.
+	richStem := `version: 1
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completado]
+  tipo:
+    type: string
+    required: false
+`
+	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(richStem), 0644)
+
+	// Subdirectory with a poor stem (only id field, no enums).
+	subdir := filepath.Join(root, "sub")
+	if err := os.MkdirAll(subdir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	poorStem := `version: 1
+scope:
+  match: "*.md"
+schema:
+  id:
+    type: string
+`
+	mustWriteFile(t, filepath.Join(subdir, ".stem"), []byte(poorStem), 0644)
+
+	// Two files with the same unknown enum value -> triggers extend_enum
+	// when the rich stem is correctly selected.
+	mustWriteFile(t, filepath.Join(root, "a.md"), []byte("---\nestado: Archivado\ntipo: test\n---\n# A\n"), 0644)
+	mustWriteFile(t, filepath.Join(root, "b.md"), []byte("---\nestado: Archivado\ntipo: test\n---\n# B\n"), 0644)
+
+	// File in subdirectory (merges rich + poor stem).
+	mustWriteFile(t, filepath.Join(subdir, "c.md"), []byte("---\nid: x1\nestado: Pending\n---\n# C\n"), 0644)
+
+	mustChdir(t, root)
+
+	// Run multiple times to catch non-determinism from map iteration order.
+	for i := 0; i < 5; i++ {
+		out, err := runCmd(t, "fix", "--all", "--dry-run", "--output", "json")
+		if err != nil {
+			t.Fatalf("iteration %d: unexpected error: %v", i, err)
+		}
+
+		var report proposal.Report
+		if err := json.Unmarshal([]byte(out), &report); err != nil {
+			t.Fatalf("iteration %d: invalid JSON: %v\nraw: %s", i, err, out)
+		}
+
+		// The richest stem has estado as enum. Two files use "Archivado"
+		// which is not in the enum -> extend_enum proposal.
+		if report.Summary.ExtendEnum == 0 {
+			t.Errorf("iteration %d: expected extend_enum > 0, got 0.\nFull output: %s", i, out)
+		}
+	}
+}
+
+// TestFixAllDryRunConsistentFromRootAndSubdir verifies that running fix --all
+// from the repo root and from a subdirectory produces the same proposal types.
+func TestFixAllDryRunConsistentFromRootAndSubdir(t *testing.T) {
+	root := t.TempDir()
+
+	stemContent := `version: 1
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completado]
+  tipo:
+    type: string
+`
+	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(stemContent), 0644)
+
+	subdir := filepath.Join(root, "docs")
+	if err := os.MkdirAll(subdir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Files with unknown enum value in the subdirectory.
+	mustWriteFile(t, filepath.Join(subdir, "x.md"), []byte("---\nestado: Obsoleto\ntipo: a\n---\n# X\n"), 0644)
+	mustWriteFile(t, filepath.Join(subdir, "y.md"), []byte("---\nestado: Obsoleto\ntipo: b\n---\n# Y\n"), 0644)
+
+	// Run from root.
+	mustChdir(t, root)
+	outRoot, err := runCmd(t, "fix", "--all", "--dry-run", "--output", "json")
+	if err != nil {
+		t.Fatalf("from root: unexpected error: %v", err)
+	}
+	var reportRoot proposal.Report
+	if err := json.Unmarshal([]byte(outRoot), &reportRoot); err != nil {
+		t.Fatalf("from root: invalid JSON: %v", err)
+	}
+
+	// Run from subdir.
+	mustChdir(t, subdir)
+	outSub, err := runCmd(t, "fix", "--all", "--dry-run", "--output", "json")
+	if err != nil {
+		t.Fatalf("from subdir: unexpected error: %v", err)
+	}
+	var reportSub proposal.Report
+	if err := json.Unmarshal([]byte(outSub), &reportSub); err != nil {
+		t.Fatalf("from subdir: invalid JSON: %v", err)
+	}
+
+	// Both should have extend_enum proposals.
+	if reportRoot.Summary.ExtendEnum == 0 {
+		t.Errorf("from root: expected extend_enum > 0, got 0.\nOutput: %s", outRoot)
+	}
+	if reportSub.Summary.ExtendEnum == 0 {
+		t.Errorf("from subdir: expected extend_enum > 0, got 0.\nOutput: %s", outSub)
+	}
+	if reportRoot.Summary.ExtendEnum != reportSub.Summary.ExtendEnum {
+		t.Errorf("extend_enum mismatch: root=%d subdir=%d", reportRoot.Summary.ExtendEnum, reportSub.Summary.ExtendEnum)
 	}
 }
