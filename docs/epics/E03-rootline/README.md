@@ -17,3 +17,5 @@ Completar la distribución de rootline como herramienta CLI independiente: MCP s
 | Feature | Descripcion |
 |---------|-------------|
 | [F05 MCP Distribution](F05-mcp-distribution/README.md) | MCP server y release pipeline |
+| [F06 GitHub Action](F06-github-action/README.md) | Validacion de docs en CI con annotations en PRs |
+| [F07 Claude Code Plugin](F07-claude-code-plugin/README.md) | Skills /validate, /describe, /new-doc para Claude Code |

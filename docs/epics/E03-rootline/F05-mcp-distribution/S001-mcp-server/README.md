@@ -26,6 +26,7 @@ cliente: Platform Owner
 |------|-------------|
 | [T001](T001-jsonrpc-server.md) | Implementar JSON-RPC 2.0 server con transporte stdio |
 | [T002](T002-mcp-tools-registration.md) | Registrar MCP tools: query, validate, describe, tree, stats |
+| [T003](T003-mcp-engine-power-tools.md) | Registrar MCP tools de engine-power: explain, fix, graph |
 
 ## Fuente de verdad
 

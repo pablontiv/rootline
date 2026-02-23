@@ -1,5 +1,5 @@
 ---
-estado: Bloqueada
+estado: Pending
 tipo: software-module
 ejecutable_en: 1 sesion
 ---
