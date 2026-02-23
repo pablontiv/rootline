@@ -32,7 +32,7 @@ func TestFixMissingRequired(t *testing.T) {
 }
 
 func TestFixInvalidEnum(t *testing.T) {
-	dir := setupTestDir(t) // .stem has estado: enum [Completado, Pending]
+	dir := setupTestDir(t) // .stem has estado: enum [Completed, Pending]
 	target := filepath.Join(dir, "bad-enum.md")
 	mustWriteFile(t, target, []byte("---\nestado: Compltado\n---\n# Bad\n"), 0644)
 
@@ -45,8 +45,8 @@ func TestFixInvalidEnum(t *testing.T) {
 	}
 
 	content := mustReadFile(t, target)
-	if !strings.Contains(string(content), "Completado") {
-		t.Errorf("expected 'Completado' after fix, got: %s", string(content))
+	if !strings.Contains(string(content), "Completed") {
+		t.Errorf("expected 'Completed' after fix, got: %s", string(content))
 	}
 }
 
@@ -112,7 +112,7 @@ func TestLevenshtein(t *testing.T) {
 		{"abc", "", 3},
 		{"", "abc", 3},
 		{"kitten", "sitting", 3},
-		{"Completado", "Compltado", 1},
+		{"Completed", "Complted", 1},
 	}
 	for _, tt := range tests {
 		got := levenshtein(tt.a, tt.b)
@@ -123,10 +123,10 @@ func TestLevenshtein(t *testing.T) {
 }
 
 func TestClosestMatch(t *testing.T) {
-	candidates := []string{"Pending", "Completado"}
-	got := closestMatch("Compltado", candidates)
-	if got != "Completado" {
-		t.Errorf("closestMatch('Compltado') = %q, want 'Completado'", got)
+	candidates := []string{"Pending", "Completed"}
+	got := closestMatch("Complted", candidates)
+	if got != "Completed" {
+		t.Errorf("closestMatch('Complted') = %q, want 'Completed'", got)
 	}
 }
 
@@ -492,15 +492,15 @@ func TestFixAllApplyExtendEnum(t *testing.T) {
 		t.Errorf("expected .stem to contain 'Obsoleto' after extend_enum, got:\n%s", string(content))
 	}
 
-	// T003: Verify files with estado: Obsoleto are NOT changed to Completado.
+	// T003: Verify files with estado: Obsoleto are NOT changed to Completed.
 	// After extend_enum makes "Obsoleto" valid, correct_value should be skipped.
 	for _, name := range []string{"file1.md", "file2.md"} {
 		fileContent, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatalf("reading %s: %v", name, err)
 		}
-		if strings.Contains(string(fileContent), "Completado") {
-			t.Errorf("%s: estado was changed to Completado — correct_value should have been skipped after extend_enum", name)
+		if strings.Contains(string(fileContent), "Completed") {
+			t.Errorf("%s: estado was changed to Completed — correct_value should have been skipped after extend_enum", name)
 		}
 		if !strings.Contains(string(fileContent), "Obsoleto") {
 			t.Errorf("%s: expected estado: Obsoleto preserved, got:\n%s", name, string(fileContent))
@@ -522,7 +522,7 @@ func TestFixAllSkipCorrectAfterExtendButFixTypos(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Obsoleto files should be preserved (not changed to Completado).
+	// Obsoleto files should be preserved (not changed to Completed).
 	for _, name := range []string{"obs1.md", "obs2.md"} {
 		content, readErr := os.ReadFile(filepath.Join(dir, name))
 		if readErr != nil {
@@ -533,13 +533,13 @@ func TestFixAllSkipCorrectAfterExtendButFixTypos(t *testing.T) {
 		}
 	}
 
-	// Typo file should be corrected to Completado.
+	// Typo file should be corrected to Completed.
 	typoContent, err := os.ReadFile(filepath.Join(dir, "typo.md"))
 	if err != nil {
 		t.Fatalf("reading typo.md: %v", err)
 	}
-	if !strings.Contains(string(typoContent), "Completado") {
-		t.Errorf("typo.md: expected estado corrected to Completado, got:\n%s", string(typoContent))
+	if !strings.Contains(string(typoContent), "Completed") {
+		t.Errorf("typo.md: expected estado corrected to Completed, got:\n%s", string(typoContent))
 	}
 	if strings.Contains(string(typoContent), "Compltado") {
 		t.Errorf("typo.md: typo 'Compltado' was not corrected")
@@ -582,7 +582,7 @@ func TestFixAllSkipCorrectAfterExtendReportAccuracy(t *testing.T) {
 func TestFixAllApplyExtractBody(t *testing.T) {
 	dir := setupTestDir(t)
 	// File with no frontmatter estado but has it in body.
-	mustWriteFile(t, filepath.Join(dir, "legacy.md"), []byte("---\ntipo: test\n---\n# Legacy\n\n**Estado**: Completado\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "legacy.md"), []byte("---\ntipo: test\n---\n# Legacy\n\n**Estado**: Completed\n"), 0644)
 	mustChdir(t, dir)
 
 	out, err := runCmd(t, "fix", "--all", "--output", "json")
@@ -640,7 +640,7 @@ schema:
   estado:
     type: enum
     required: true
-    values: [Pending, Completado]
+    values: [Pending, Completed]
   tipo:
     type: string
     required: false
@@ -703,7 +703,7 @@ schema:
   estado:
     type: enum
     required: true
-    values: [Pending, Completado]
+    values: [Pending, Completed]
   tipo:
     type: string
 `
