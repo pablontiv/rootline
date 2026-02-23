@@ -291,6 +291,126 @@ func TestClassifier_BreakingChangesFirst(t *testing.T) {
 	}
 }
 
+func TestClassifier_RuleAdded_AllFilesAffected(t *testing.T) {
+	before := &rules.StemFile{
+		Validate: []rules.ValidationRule{},
+	}
+	after := &rules.StemFile{
+		Validate: []rules.ValidationRule{
+			{Rule: "non_empty", Field: "estado", Severity: "error"},
+		},
+	}
+
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "Done"}},
+		{Path: "b.md", Frontmatter: map[string]any{"estado": "Pending"}},
+		{Path: "c.md", Frontmatter: map[string]any{}},
+	}
+
+	result := Diff(".stem", before, after)
+	Classify(result, records)
+
+	if len(result.Changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(result.Changes))
+	}
+	c := result.Changes[0]
+	if c.Kind != RuleAdded {
+		t.Errorf("expected rule_added, got %s", c.Kind)
+	}
+	if c.AffectedFiles != 3 {
+		t.Errorf("expected 3 affected files (all records), got %d", c.AffectedFiles)
+	}
+}
+
+func TestClassifier_RuleRemoved_AllFilesAffected(t *testing.T) {
+	before := &rules.StemFile{
+		Validate: []rules.ValidationRule{
+			{Rule: "non_empty", Field: "estado", Severity: "error"},
+		},
+	}
+	after := &rules.StemFile{
+		Validate: []rules.ValidationRule{},
+	}
+
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "Done"}},
+		{Path: "b.md", Frontmatter: map[string]any{}},
+	}
+
+	result := Diff(".stem", before, after)
+	Classify(result, records)
+
+	if len(result.Changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(result.Changes))
+	}
+	c := result.Changes[0]
+	if c.Kind != RuleRemoved {
+		t.Errorf("expected rule_removed, got %s", c.Kind)
+	}
+	if c.AffectedFiles != 2 {
+		t.Errorf("expected 2 affected files (all records), got %d", c.AffectedFiles)
+	}
+}
+
+func TestClassifier_DefaultChanged_NonBreaking(t *testing.T) {
+	before := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "string", Default: "Pending"},
+		},
+	}
+	after := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "string", Default: "Done"},
+		},
+	}
+
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "Done"}},
+	}
+
+	result := Diff(".stem", before, after)
+	Classify(result, records)
+
+	if len(result.Changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(result.Changes))
+	}
+	c := result.Changes[0]
+	if c.Kind != DefaultChanged {
+		t.Errorf("expected default_changed, got %s", c.Kind)
+	}
+	if c.AffectedFiles != 0 {
+		t.Errorf("expected 0 affected files for non-breaking change, got %d", c.AffectedFiles)
+	}
+}
+
+func TestClassifier_SeverityChanged_NonBreaking(t *testing.T) {
+	before := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "string", Severity: "warning"},
+		},
+	}
+	after := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "string", Severity: "error"},
+		},
+	}
+
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "Done"}},
+	}
+
+	result := Diff(".stem", before, after)
+	Classify(result, records)
+
+	if len(result.Changes) != 1 {
+		t.Fatalf("expected 1 change, got %d", len(result.Changes))
+	}
+	c := result.Changes[0]
+	if c.AffectedFiles != 0 {
+		t.Errorf("expected 0 affected files for severity_changed, got %d", c.AffectedFiles)
+	}
+}
+
 func TestClassifier_EmptyRecords(t *testing.T) {
 	before := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{

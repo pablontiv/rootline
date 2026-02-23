@@ -56,6 +56,9 @@ func resetFlags() {
 	hooksForce = false
 	graphFormat = "dot"
 	graphCheck = false
+	migrateDryRun = false
+	migrateFrom = ""
+	migrateRename = ""
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
 	if f := queryCmd.Flags().Lookup("where"); f != nil {
@@ -68,6 +71,18 @@ func resetFlags() {
 	}
 	if f := rootCmd.PersistentFlags().Lookup("output"); f != nil {
 		_ = f.Value.Set("json")
+		f.Changed = false
+	}
+	if f := migrateCmd.Flags().Lookup("rename"); f != nil {
+		_ = f.Value.Set("")
+		f.Changed = false
+	}
+	if f := migrateCmd.Flags().Lookup("from"); f != nil {
+		_ = f.Value.Set("")
+		f.Changed = false
+	}
+	if f := migrateCmd.Flags().Lookup("dry-run"); f != nil {
+		_ = f.Value.Set("false")
 		f.Changed = false
 	}
 }
@@ -595,6 +610,57 @@ derive:
 	}
 	if !found {
 		t.Errorf("slug derived field not found in explain output.\nfields: %v", fields)
+	}
+}
+
+func TestExplainTableWithErrors(t *testing.T) {
+	dir := setupTestDir(t)
+	// Create a file missing required field.
+	mustWriteFile(t, filepath.Join(dir, "bad.md"), []byte("---\ntipo: test\n---\n# Bad\n"), 0644)
+	out, err := runCmd(t, "explain", filepath.Join(dir, "bad.md"), "-o", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "Validation Errors") {
+		t.Errorf("expected 'Validation Errors' section in table output, got: %s", out)
+	}
+}
+
+func TestExplainWithSchemaDefault(t *testing.T) {
+	dir := setupTestDir(t)
+	// Add a default value to schema.
+	stemContent := `version: 1
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completado]
+  tipo:
+    type: string
+    required: false
+    default: "unknown"
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	// Create file without tipo (will use default).
+	mustWriteFile(t, filepath.Join(dir, "defaulttest.md"), []byte("---\nestado: Pending\n---\n# Test\n"), 0644)
+	out, err := runCmd(t, "explain", filepath.Join(dir, "defaulttest.md"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "unknown") {
+		t.Errorf("expected default value 'unknown' in output, got: %s", out)
+	}
+	if !strings.Contains(out, "schema") {
+		t.Errorf("expected 'schema' origin in output, got: %s", out)
+	}
+}
+
+func TestExplainNonexistentFile(t *testing.T) {
+	_, err := runCmd(t, "explain", "/nonexistent/path.md")
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
 	}
 }
 

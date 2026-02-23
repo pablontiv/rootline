@@ -327,6 +327,91 @@ func TestDiff_ValidationRules(t *testing.T) {
 	}
 }
 
+func TestDiff_DefaultChanged(t *testing.T) {
+	before := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "string", Default: "Pending", Severity: "error"},
+		},
+	}
+	after := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "string", Default: "Done", Severity: "error"},
+		},
+	}
+
+	result := Diff(".stem", before, after)
+
+	if result.TotalCount != 1 {
+		t.Fatalf("expected 1 change, got %d", result.TotalCount)
+	}
+	c := result.Changes[0]
+	if c.Kind != DefaultChanged {
+		t.Errorf("expected default_changed, got %s", c.Kind)
+	}
+	if c.Breaking {
+		t.Errorf("default_changed should be non-breaking")
+	}
+	if c.Before != "Pending" || c.After != "Done" {
+		t.Errorf("expected Pending->Done, got %s->%s", c.Before, c.After)
+	}
+}
+
+func TestDiff_SeverityChanged(t *testing.T) {
+	before := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "string", Severity: "warning"},
+		},
+	}
+	after := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "string", Severity: "error"},
+		},
+	}
+
+	result := Diff(".stem", before, after)
+
+	if result.TotalCount != 1 {
+		t.Fatalf("expected 1 change, got %d", result.TotalCount)
+	}
+	c := result.Changes[0]
+	if c.Kind != SeverityChanged {
+		t.Errorf("expected severity_changed, got %s", c.Kind)
+	}
+	if c.Breaking {
+		t.Errorf("severity_changed should be non-breaking")
+	}
+	if c.Before != "warning" || c.After != "error" {
+		t.Errorf("expected warning->error, got %s->%s", c.Before, c.After)
+	}
+}
+
+func TestDiff_RuleRemoved(t *testing.T) {
+	before := &rules.StemFile{
+		Validate: []rules.ValidationRule{
+			{Rule: "requires", Field: "tipo", Severity: "error"},
+			{Rule: "non_empty", Field: "estado", Severity: "error"},
+		},
+	}
+	after := &rules.StemFile{
+		Validate: []rules.ValidationRule{
+			{Rule: "requires", Field: "tipo", Severity: "error"},
+		},
+	}
+
+	result := Diff(".stem", before, after)
+
+	if result.TotalCount != 1 {
+		t.Fatalf("expected 1 change, got %d", result.TotalCount)
+	}
+	c := result.Changes[0]
+	if c.Kind != RuleRemoved {
+		t.Errorf("expected rule_removed, got %s", c.Kind)
+	}
+	if !c.Breaking {
+		t.Errorf("rule_removed should be breaking")
+	}
+}
+
 func TestDiff_DeterministicOrder(t *testing.T) {
 	before := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{},
