@@ -188,11 +188,12 @@ func runFixAll(cmd *cobra.Command) error {
 
 	// In dry-run mode, use proposal engine for richer output.
 	if fixDryRun {
-		// Use the first effective stem (they should all be equivalent for the root).
+		// Use the effective stem with the richest schema (most fields defined).
 		var effective *rules.StemFile
 		for _, s := range effectiveStems {
-			effective = s
-			break
+			if effective == nil || len(s.Schema) > len(effective.Schema) {
+				effective = s
+			}
 		}
 
 		report := proposal.Analyze(records, effective, allErrs)
@@ -206,8 +207,9 @@ func runFixAll(cmd *cobra.Command) error {
 	// Apply mode: use proposal engine internally, output BatchFixResult for compatibility.
 	var effective *rules.StemFile
 	for _, s := range effectiveStems {
-		effective = s
-		break
+		if effective == nil || len(s.Schema) > len(effective.Schema) {
+			effective = s
+		}
 	}
 
 	report := proposal.Analyze(records, effective, allErrs)
@@ -292,6 +294,13 @@ func applyProposals(report *proposal.Report, root string, records []*extract.Rec
 		}
 	}
 
+	// Re-read stem after extend_enum to get updated enum values.
+	var freshStem *rules.StemFile
+	freshEntries, freshErr := rules.WalkUp(root)
+	if freshErr == nil {
+		freshStem = rules.MergeStemFiles(freshEntries)
+	}
+
 	// Apply data-level proposals (modify frontmatter/body of individual files).
 	for _, p := range report.Proposals {
 		switch p.Type {
@@ -302,6 +311,21 @@ func applyProposals(report *proposal.Report, root string, records []*extract.Rec
 				return fmt.Errorf("migrate_value %s: %w", p.Paths[0], err)
 			}
 		case proposal.CorrectValue:
+			// Skip if extend_enum made the original value valid.
+			if freshStem != nil {
+				if sf, ok := freshStem.Schema[p.Field]; ok && sf.Type == "enum" {
+					nowValid := false
+					for _, v := range sf.Values {
+						if v == p.From {
+							nowValid = true
+							break
+						}
+					}
+					if nowValid {
+						continue
+					}
+				}
+			}
 			if err := applyCorrectValue(p, root, recordMap); err != nil {
 				return fmt.Errorf("correct_value %s: %w", p.Paths[0], err)
 			}

@@ -9,6 +9,7 @@ import (
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
+	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
 )
 
@@ -54,7 +55,14 @@ func runTree(cmd *cobra.Command, args []string) error {
 	}
 
 	reg := extract.NewRegistry()
-	records, err := index.Scan(absRoot, reg)
+	resolver := func(dir string) *rules.StemFile {
+		entries, err := rules.WalkUp(dir)
+		if err != nil {
+			return nil
+		}
+		return rules.MergeStemFiles(entries)
+	}
+	records, err := index.Scan(absRoot, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}

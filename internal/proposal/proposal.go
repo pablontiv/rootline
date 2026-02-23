@@ -61,12 +61,76 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 	var proposals []Proposal
 
 	if effective != nil && len(errs) > 0 {
-		proposals = append(proposals, detectExtendEnum(effective, errs)...)
-		proposals = append(proposals, detectMigrateValue(effective, errs)...)
-		proposals = append(proposals, detectCorrectValue(effective, errs)...)
-		proposals = append(proposals, detectExtractBody(records, effective, errs)...)
-		proposals = append(proposals, detectInferFromChildren(records, effective, errs)...)
-		proposals = append(proposals, detectAddField(effective, errs)...)
+		// Phase 1: detect migrate_value first (needed to filter extend_enum and correct_value)
+		migrateProposals := detectMigrateValue(effective, errs)
+
+		// Build set of values that are migrate candidates (should not be added to enum).
+		migrateValues := make(map[string]bool)
+		for _, p := range migrateProposals {
+			if p.From != "" {
+				migrateValues[p.From] = true
+			}
+		}
+
+		// Phase 1b: schema-level proposals — filter out values that should be migrated, not extended
+		for _, p := range detectExtendEnum(effective, errs) {
+			if migrateValues[p.Value] {
+				continue // this value should be migrated, not added to enum
+			}
+			proposals = append(proposals, p)
+		}
+
+		// Phase 2: migrate_value has priority over correct_value for same path/field
+		proposals = append(proposals, migrateProposals...)
+
+		migratedKeys := make(map[string]bool)
+		for _, p := range migrateProposals {
+			for _, path := range p.Paths {
+				migratedKeys[path+"\x00"+p.Field] = true
+			}
+		}
+		for _, p := range detectCorrectValue(effective, errs) {
+			skip := false
+			for _, path := range p.Paths {
+				if migratedKeys[path+"\x00"+p.Field] {
+					skip = true
+					break
+				}
+			}
+			if !skip {
+				proposals = append(proposals, p)
+			}
+		}
+
+		// Phase 3: extract_body and infer_from_children have priority over add_field
+		extractBodyProposals := detectExtractBody(records, effective, errs)
+		inferProposals := detectInferFromChildren(records, effective, errs)
+		proposals = append(proposals, extractBodyProposals...)
+		proposals = append(proposals, inferProposals...)
+
+		coveredKeys := make(map[string]bool)
+		for _, p := range extractBodyProposals {
+			for _, path := range p.Paths {
+				coveredKeys[path+"\x00"+p.Field] = true
+			}
+		}
+		for _, p := range inferProposals {
+			for _, path := range p.Paths {
+				coveredKeys[path+"\x00"+p.Field] = true
+			}
+		}
+		for _, p := range detectAddField(effective, errs) {
+			skip := false
+			for _, path := range p.Paths {
+				if coveredKeys[path+"\x00"+p.Field] {
+					skip = true
+					break
+				}
+			}
+			if !skip {
+				proposals = append(proposals, p)
+			}
+		}
 	}
 
 	summary := Summary{Total: len(proposals)}
