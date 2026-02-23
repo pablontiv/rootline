@@ -1,0 +1,5 @@
+schema:
+  id:
+    type: sequence
+    prefix: F
+    digits: 2

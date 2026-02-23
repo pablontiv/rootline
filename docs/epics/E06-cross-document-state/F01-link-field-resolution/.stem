@@ -1,0 +1,5 @@
+schema:
+  id:
+    type: sequence
+    prefix: S
+    digits: 3
