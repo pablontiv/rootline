@@ -193,6 +193,64 @@ func TestDoctorTableWithFailures(t *testing.T) {
 	}
 }
 
+func TestDoctorAggregatedRequired(t *testing.T) {
+	dir := t.TempDir()
+	stemContent := `version: 1
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completado]
+aggregate:
+  estado: "len(filter(descendants, {.estado == 'Completado'})) == len(descendants) ? 'Completado' : 'Pending'"
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+
+	out, _ := runCmd(t, "doctor", dir, "-o", "table")
+	if !strings.Contains(out, "aggregated-required") {
+		t.Errorf("expected aggregated-required warning, got: %s", out)
+	}
+	if !strings.Contains(out, "estado") {
+		t.Errorf("expected field name in message, got: %s", out)
+	}
+}
+
+func TestDoctorRequiredWithoutAggregate_NoWarning(t *testing.T) {
+	dir := t.TempDir()
+	stemContent := `version: 1
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completado]
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	mustWriteFile(t, filepath.Join(dir, "test.md"), []byte("---\nestado: Pending\n---\n"), 0644)
+
+	out, _ := runCmd(t, "doctor", dir, "-o", "table")
+	if strings.Contains(out, "aggregated-required") {
+		t.Errorf("unexpected aggregated-required warning, got: %s", out)
+	}
+}
+
+func TestDoctorAggregateWithoutRequired_NoWarning(t *testing.T) {
+	dir := t.TempDir()
+	stemContent := `version: 1
+schema:
+  estado:
+    type: enum
+    values: [Pending, Completado]
+aggregate:
+  estado: "some_expr"
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+
+	out, _ := runCmd(t, "doctor", dir, "-o", "table")
+	if strings.Contains(out, "aggregated-required") {
+		t.Errorf("unexpected aggregated-required warning, got: %s", out)
+	}
+}
+
 func TestDoctorNoStems(t *testing.T) {
 	dir := t.TempDir()
 

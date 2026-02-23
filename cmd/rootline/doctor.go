@@ -235,6 +235,27 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Check 7: Aggregated required fields (required + aggregate on same field)
+	for sf, stem := range parsedStems {
+		relPath, _ := filepath.Rel(absRoot, sf)
+		for fieldName, field := range stem.Schema {
+			if !field.Required {
+				continue
+			}
+			if _, hasAggregate := stem.Aggregate[fieldName]; hasAggregate {
+				checks = append(checks, DoctorCheck{
+					Name:   "aggregated-required",
+					Status: "warn",
+					Message: fmt.Sprintf(
+						"field %q is required but also has an aggregate expression; required is auto-skipped on index files — consider removing required or using excludes",
+						fieldName,
+					),
+					Path: relPath,
+				})
+			}
+		}
+	}
+
 	// Build summary
 	summary := DoctorSummary{Total: len(checks)}
 	for _, c := range checks {
