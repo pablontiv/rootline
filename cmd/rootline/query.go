@@ -101,10 +101,13 @@ func renderQueryTable(cmd *cobra.Command, result any) error {
 		return outputJSON(cmd, result, false)
 	}
 
-	// Collect all frontmatter keys across rows
+	// Collect all effective field keys across rows (frontmatter + derived)
 	keySet := map[string]bool{}
 	for _, row := range qr.Rows {
 		for k := range row.Frontmatter {
+			keySet[k] = true
+		}
+		for k := range row.Derived {
 			keySet[k] = true
 		}
 	}
@@ -119,7 +122,7 @@ func renderQueryTable(cmd *cobra.Command, result any) error {
 	for _, row := range qr.Rows {
 		r := []string{row.Path}
 		for _, k := range keys {
-			if v, ok := row.Frontmatter[k]; ok {
+			if v, ok := row.EffectiveField(k); ok {
 				r = append(r, fmt.Sprintf("%v", v))
 			} else {
 				r = append(r, "")
