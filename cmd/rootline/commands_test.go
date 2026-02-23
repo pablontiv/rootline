@@ -59,6 +59,7 @@ func resetFlags() {
 	statsWhere = nil
 	graphFormat = "dot"
 	graphCheck = false
+	graphWhere = nil
 	migrateDryRun = false
 	migrateFrom = ""
 	migrateRename = ""
@@ -73,6 +74,10 @@ func resetFlags() {
 		f.Changed = false
 	}
 	if f := validateCmd.Flags().Lookup("where"); f != nil {
+		_ = f.Value.Set("")
+		f.Changed = false
+	}
+	if f := graphCmd.Flags().Lookup("where"); f != nil {
 		_ = f.Value.Set("")
 		f.Changed = false
 	}

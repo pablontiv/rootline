@@ -16,6 +16,7 @@ import (
 var (
 	graphFormat string
 	graphCheck  bool
+	graphWhere  []string
 )
 
 var graphCmd = &cobra.Command{
@@ -29,6 +30,7 @@ var graphCmd = &cobra.Command{
 func init() {
 	graphCmd.Flags().StringVar(&graphFormat, "format", "dot", "output format: dot or mermaid")
 	graphCmd.Flags().BoolVar(&graphCheck, "check", false, "validate only (cycles + broken links), no diagram")
+	graphCmd.Flags().StringArrayVar(&graphWhere, "where", nil, "filter expression (e.g. \"tipo != 'feature'\")")
 	rootCmd.AddCommand(graphCmd)
 }
 
@@ -57,6 +59,12 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	records, err := index.Scan(absRoot, reg)
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
+	}
+
+	// Apply --where filter.
+	records, err = filterRecords(records, graphWhere)
+	if err != nil {
+		return fmt.Errorf("filtering records: %w", err)
 	}
 
 	// Load .stem schema and filter links to only include structurally relevant ones.

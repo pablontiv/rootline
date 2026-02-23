@@ -186,6 +186,37 @@ func TestFilterLinksBySchema_EmptySchema(t *testing.T) {
 	}
 }
 
+func TestGraphWhere_Filters(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 1\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: string\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\ntipo: test\n---\n# A\n[[b.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\ntipo: prod\n---\n# B\n"), 0644)
+
+	out, err := runCmd(t, "graph", dir, "--where", "tipo == 'test'")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", err, out)
+	}
+	nodes := result["nodes"].([]any)
+	if len(nodes) != 1 {
+		t.Errorf("nodes = %d, want 1 (only tipo=test)", len(nodes))
+	}
+}
+
+func TestGraphWhere_InvalidExpr(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n"), 0644)
+
+	_, err := runCmd(t, "graph", dir, "--where", "== bad")
+	if err == nil {
+		t.Fatal("expected error for invalid where expression")
+	}
+}
+
 func TestGraphCheck_SchemaFiltersReferenceLinks(t *testing.T) {
 	dir := t.TempDir()
 	// .stem with links schema that only has rules for "blocks"
