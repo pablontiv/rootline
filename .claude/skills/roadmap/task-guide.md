@@ -32,18 +32,20 @@ Evaluar qué tipo de Task se necesita según la descripción:
 | `documentation` | Documentación, knowledge capture, o refactoring simple |
 
 **Cuándo usar cada categoría:**
-- **IaC Types**: Tasks que producen infraestructura materializada (contenedores, módulos, scripts). Incluyen sección `## Especificacion Tecnica` con YAML type-specific.
-- **Software Types**: Tasks que producen código fuente (módulos Go/Python/etc., tests, pipelines). Incluyen sección `## Especificacion Tecnica` con datos del software.
-- **General Types**: Tasks sin especificación técnica (documentation, refactoring). Omiten `## Especificacion Tecnica`.
+- **IaC Types**: Tasks que producen infraestructura materializada (contenedores, módulos, scripts).
+- **Software Types**: Tasks que producen código fuente (módulos Go/Python/etc., tests, pipelines).
+- **General Types**: Tasks de documentación, knowledge capture, o refactoring simple.
+
+Todos los tipos pueden incluir `## Especificacion Tecnica` cuando se beneficien de una spec estructurada. Usar el bloque YAML del tipo correspondiente, o un bloque libre si no hay template.
 
 ### Paso 2: Verificar Story Padre
 
 ```bash
 # Resolver path real
-ls -d docs/epics/E01-*/F13-*/S001-*/README.md 2>/dev/null
+rootline describe docs/epics/E01-*/F13-*/S001-*/
 ```
 
-Si no existe → informar a Pones. Sugerir crear con `/roadmap story` primero.
+Si no existe → informar al usuario. Sugerir crear con `/roadmap story` primero.
 
 Si existe → leer el README de la Story para:
 - Entender la capacidad objetivo
@@ -107,7 +109,7 @@ ejecutable_en: 1 sesion
 
 ## Especificacion Tecnica
 
-> Incluir SOLO para Tasks de tipo IaC (servicio-docker, modulo-sistema, operacion-sistema, lxc, vm, modulo-infraestructura). Omitir para host-script, instance-script, documentation.
+> Incluir cuando el Task se beneficie de una especificación estructurada — aplica a cualquier tipo (IaC, software, ci-cd, etc.). Omitir solo si el Task es puramente textual (ej: documentation sin componente técnico). Usar el bloque YAML correspondiente al tipo, o un bloque libre si no hay template predefinido.
 
 Usar el bloque YAML correspondiente al tipo:
 

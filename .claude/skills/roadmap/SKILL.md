@@ -1,21 +1,20 @@
 ---
 name: roadmap
 description: |
-  Framework de planificación AI-native: crear epics, stories o tasks.
-  Acepta texto libre para descomposición autónoma de proyectos completos,
-  o subcomandos explícitos (epic, story, task, pending, view, loop).
-  Tasks son unidades auto-contenidas con especificaciones técnicas
-  y criterios de aceptación binarios.
-  Usar cuando Pones pida "crear epic", "crear story", "crear task",
-  "descomponer en features", "crear roadmap de X", "estructura de X",
+  AI-native planning framework: create epics, stories, or tasks.
+  Accepts free text for autonomous project decomposition or explicit
+  subcommands (epic, story, task, pending, view, loop).
+  Tasks are self-contained units with technical specs and binary acceptance criteria.
+  This skill should be used when the user says "crear epic", "crear story",
+  "crear task", "descomponer en features", "crear roadmap de X", "estructura de X",
   "planificar implementación de X", "qué sigue", "ver roadmap",
-  "ver progreso", "qué falta", "Tasks pendientes",
+  "ver progreso", "qué falta", "tasks pendientes",
   "loop de tasks", "ejecutar pendientes", "implementar tasks",
   "roadmap loop", "ejecutar roadmap",
-  o texto libre describiendo trabajo a descomponer.
+  or provides free text describing work to decompose.
   Argumento: <texto libre> | epic|story|task|pending|view|loop [path] [name] [description]
 argument-hint: "<texto libre> | [epic|story|task|pending|view|loop] [args]"
-allowed-tools: Write, Read, Grep, Glob, Bash, TaskCreate, TaskList, TaskUpdate, TaskGet, Skill, AskUserQuestion
+allowed-tools: Write, Read, Grep, Glob, Bash, TaskCreate, TaskList, TaskUpdate, TaskGet, Skill, AskUserQuestion, ExitPlanMode
 ---
 
 # /roadmap — Framework de Planificación AI-Native
@@ -75,35 +74,7 @@ Leer [framework-reference.md](framework-reference.md) y aplicar estos criterios 
 | Story | ¿Qué capacidades nuevas existen? | Antes/después claro, testeable, no ejecutable en 1 sesión |
 | Task | ¿Qué puede hacer un agente en 1 sesión? | 6 condiciones de task-guide.md |
 
-**Criterios de escala** (decision tree numérico):
-
-```
-1. ¿Cuántos OBJETIVOS SISTÉMICOS distintos tiene el proyecto?
-   → 1 objetivo claro → 1 Epic
-   → 2-3 objetivos independientes → 2-3 Epics
-   → Señal de separación: si dos Features NO comparten dependencias
-     ni contribuyen al mismo objetivo → son Epics distintos
-   → Señal de splitting: nombre del Epic requiere palabras genéricas
-     ("Advanced", "Misc", "Improvements") → dividir por objetivo
-
-2. ¿Cuántos MILESTONES independientes tiene cada Epic?
-   → Target: 3-5 Features por Epic
-   → > 7 Features → el Epic es demasiado grande, dividir
-   → Feature con 1 sola Story → absorber en Feature vecino
-
-3. ¿Cuántas CAPACIDADES NUEVAS tiene cada Feature?
-   → Target: 1-4 Stories por Feature
-   → Story con > 5 Tasks → probablemente es un Feature, elevar nivel
-
-4. ¿Cuántas SESIONES requiere cada Story?
-   → Target: 1-5 Tasks por Story
-   → Task que requiere > 1 sesión → dividir en Tasks más pequeños
-```
-
-**Señales de que un nivel está mal**:
-- Nivel con 1 solo hijo → probablemente no merece ser un nivel (absorber)
-- Nivel con > 10 hijos → demasiado ancho, necesita un nivel intermedio
-- Todos los Tasks del mismo tipo → posible Feature artificial (¿realmente es un milestone?)
+Apply the **scale criteria and decision tree** from [framework-reference.md](framework-reference.md) — targets: 3-5 Features/Epic, 1-4 Stories/Feature, 1-5 Tasks/Story. Split when exceeding limits, absorb when only 1 child exists.
 
 ### Paso 4: Generar Descomposición en Plan File
 
@@ -255,7 +226,7 @@ Ejecutar Tasks pendientes en loop con confirmación entre cada uno.
 2. Ejecutar `rootline query docs/epics/ --where "tipo not in ['feature', 'historia']" --where "estado in ['Pending', 'Especificado', 'Specified', 'Bloqueada', 'Diferida', 'In Progress']" --output table` para obtener tasks pendientes
 3. Si `--filter PATTERN` proporcionado, filtrar resultados por Epic/Feature path match
 4. Si `--max N`, tomar solo los primeros N tasks
-5. Mostrar tabla de tasks encontradas a Pones
+5. Mostrar tabla de tasks encontradas al usuario
 
 #### Fase 2: TodoList Setup
 
@@ -364,7 +335,7 @@ SIEMPRE verificar que el directorio padre existe antes de crear:
 - `/roadmap story E01/F13 ...` → verificar con `rootline describe docs/epics/E01-*/F13-*/`
 - `/roadmap task E01/F13/S001 ...` → verificar con `rootline describe docs/epics/E01-*/F13-*/S001-*/`
 
-Si no existe → informar a Pones y sugerir crearlo primero.
+Si no existe → informar al usuario y sugerir crearlo primero.
 
 ### Cascading Links
 
