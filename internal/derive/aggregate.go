@@ -64,7 +64,14 @@ func AggregateAll(records []*extract.Record, root string, resolver StemResolver)
 		}
 
 		idxDir := filepath.Dir(idx.Path)
+
+		// When index is at root ("README.md"), filepath.Dir returns "."
+		// and prefix "./" won't match any record. Use empty prefix instead
+		// so all records are treated as descendants.
 		prefix := idxDir + "/"
+		if idxDir == "." {
+			prefix = ""
+		}
 
 		// Collect descendants: all non-index records under this directory.
 		var descendants []*extract.Record

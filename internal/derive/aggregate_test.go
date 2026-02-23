@@ -180,3 +180,29 @@ func TestAggregateAll_EmptyDescendants(t *testing.T) {
 		t.Errorf("estado = %v, want Pending (fallback)", records[0].Derived["estado"])
 	}
 }
+
+func TestAggregateAll_RootReadme(t *testing.T) {
+	// When scanned from a subdirectory, the root README.md has filepath.Dir = ".".
+	// Descendants should still be collected correctly (not empty due to "./" prefix mismatch).
+	records := []*extract.Record{
+		{Path: "README.md", Type: "markdown", Frontmatter: map[string]any{"estado": "In Progress"}},
+		{Path: "F01/README.md", Type: "markdown", Frontmatter: map[string]any{"estado": "Completed"}},
+		{Path: "F01/T001-task.md", Type: "markdown", Frontmatter: map[string]any{"estado": "Completed"}},
+		{Path: "F02/README.md", Type: "markdown", Frontmatter: map[string]any{"estado": "Pending"}},
+		{Path: "F02/T001-task.md", Type: "markdown", Frontmatter: map[string]any{"estado": "Pending"}},
+	}
+
+	stem := &rules.StemFile{
+		Aggregate: map[string]any{
+			"estado": `all(descendants, {.estado == "Completed"}) ? "Completed" : "In Progress"`,
+		},
+	}
+	resolver := func(dir string) *rules.StemFile { return stem }
+
+	AggregateAll(records, "/root", resolver)
+
+	// Root README should see all descendants including F02/T001 which is Pending.
+	if records[0].Derived["estado"] != "In Progress" {
+		t.Errorf("root README estado = %v, want 'In Progress' (not all descendants completed)", records[0].Derived["estado"])
+	}
+}
