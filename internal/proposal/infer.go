@@ -4,7 +4,7 @@ import "strings"
 
 // valueMapping maps body text values (lowercase) to canonical enum values.
 var valueMapping = map[string]string{
-	"completada": "Completado",
+	"completada": "Completed",
 	"activa":     "In Progress",
 	"activo":     "In Progress",
 	"pendiente":  "Pending",
@@ -20,7 +20,7 @@ func mapValue(val string) string {
 }
 
 // InferEstado infers a parent estado from child estados.
-// All Completado → Completado, all Pending → Pending, mixed → In Progress.
+// All Completed → Completed, all Pending → Pending, mixed → In Progress.
 // Empty slice → Pending.
 func InferEstado(childEstados []string) string {
 	if len(childEstados) == 0 {

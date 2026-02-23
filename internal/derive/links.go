@@ -20,9 +20,9 @@
 //	      field: blocked_by
 //
 // Given a record with [[blocks:B.md]] and [[blocks:C.md]], where B has
-// estado=Completado and C has estado=Pending, the env will contain:
+// estado=Completed and C has estado=Pending, the env will contain:
 //
-//	blocked_by = []any{"Completado", "Pending"}
+//	blocked_by = []any{"Completed", "Pending"}
 //
 // If no links of that type exist (or none resolve), the variable is
 // not set in the env (i.e., it is nil in expr-lang expressions).
@@ -31,8 +31,8 @@
 //
 // The injected variables can be used with expr-lang builtins:
 //
-//	all(blocked_by, {# == "Completado"})  # true if all blockers are done
-//	any(blocked_by, {# == "Bloqueada"})   # true if any blocker is blocked
+//	all(blocked_by, {# == "Completed"})  # true if all blockers are done
+//	any(blocked_by, {# == "Blocked"})    # true if any blocker is blocked
 //	len(blocked_by)                       # number of resolved links
 //	blocked_by == nil                     # true if no links of this type
 //	blocked_by[0]                         # first linked value
@@ -126,7 +126,7 @@ func InjectLinkedFields(env map[string]any, record *extract.Record, stem *rules.
 		}
 
 		// Extract the target's "estado" field value.
-		val, ok := target.Frontmatter["estado"]
+		val, ok := target.EffectiveField("estado")
 		if ok {
 			fieldValues[rule.Field] = append(fieldValues[rule.Field], fmt.Sprintf("%v", val))
 		}
