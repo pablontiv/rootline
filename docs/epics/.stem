@@ -9,11 +9,11 @@ schema:
     type: enum
     values:
       - Pending
-      - In Progress
       - Specified
-      - Completado
-      - Diferida
-      - Bloqueada
+      - In Progress
+      - Completed
+      - Blocked
+      - On Hold
     required: true
   tipo:
     type: enum
@@ -41,6 +41,8 @@ schema:
     type: string
   ejecutable_en:
     type: string
+  hold:
+    type: string
 
 structural:
   subdirs:
@@ -56,7 +58,7 @@ links:
 
 derive:
   estado: |
-    blocked_by != nil && len(blocked_by) > 0 && !all(blocked_by, {# == "Completado"}) ? "Bloqueada" : estado
+    hold != nil ? "On Hold" : blocked_by != nil && len(blocked_by) > 0 && !all(blocked_by, {# == "Completed"}) ? "Blocked" : estado
 
 validate:
   - rule: requires
@@ -68,7 +70,9 @@ validate:
 
 aggregate:
   estado: |
-    all(descendants, {.estado == "Completado"}) ? "Completado" :
-    any(descendants, {.estado == "Bloqueada"}) ? "Bloqueada" :
+    all(descendants, {.estado == "Completed"}) ? "Completed" :
+    any(descendants, {.estado == "Blocked"}) ? "Blocked" :
+    any(descendants, {.estado == "On Hold"}) ? "On Hold" :
     any(descendants, {.estado == "In Progress"}) ? "In Progress" :
-    estado
+    any(descendants, {.estado == "Specified"}) ? "Specified" :
+    "Pending"
