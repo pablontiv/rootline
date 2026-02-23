@@ -12,9 +12,20 @@ description: |
   "loop de tasks", "ejecutar pendientes", "implementar tasks",
   "roadmap loop", "ejecutar roadmap",
   or provides free text describing work to decompose.
-  Argumento: <texto libre> | epic|story|task|pending|view|loop [path] [name] [description]
 argument-hint: "<texto libre> | [epic|story|task|pending|view|loop] [args]"
-allowed-tools: Write, Read, Grep, Glob, Bash, TaskCreate, TaskList, TaskUpdate, TaskGet, Skill, AskUserQuestion, ExitPlanMode
+allowed-tools:
+  - Write
+  - Read
+  - Grep
+  - Glob
+  - Bash
+  - TaskCreate
+  - TaskList
+  - TaskUpdate
+  - TaskGet
+  - Skill
+  - AskUserQuestion
+  - ExitPlanMode
 ---
 
 # /roadmap — Framework de Planificación AI-Native
@@ -43,7 +54,7 @@ Este skill es **plan-mode aware**. Cuando `defaultMode: "plan"` está activo:
 
 ## Modo Autónomo (default — sin subcomando explícito)
 
-Cuando `$ARGUMENTS` NO empieza con `epic|story|task|pending|view`, activar modo de evaluación autónoma.
+Cuando `$ARGUMENTS` NO empieza con `epic|story|task|pending|view|loop`, activar modo de evaluación autónoma.
 
 ### Paso 1: Análisis de Intención
 
@@ -257,7 +268,7 @@ Para cada task en orden:
    - Si no tiene skill asociado, implementar directamente siguiendo
      las instrucciones del Task
 
-4. **Commit+Push** (centralizado, NO delegado a skills hijos):
+5. **Commit+Push** (centralizado, NO delegado a skills hijos):
    - Identificar archivos modificados/creados por la implementación
    - `git add` archivos relevantes (específicos, no `git add .`)
    - `git commit` con mensaje en formato **conventional commits**: `type(scope): description`
@@ -265,15 +276,15 @@ Para cada task en orden:
      - El hook `.githooks/commit-msg` rechazará mensajes que no sigan el formato
    - `git push`
 
-5. **Verificar ACs**:
+6. **Verificar ACs**:
    - Leer sección "Criterios de Aceptación" del Task .md
    - Ejecutar CADA verificación documentada (comandos, checks, observables)
    - Reportar resultado por AC: ✅ PASS / ❌ FAIL
    - Si algún AC falla → reportar y **parar** (bug encontrado)
 
-6. **Marcar completado**: `TaskUpdate` → status: `completed`
+7. **Marcar completado**: `TaskUpdate` → status: `completed`
 
-7. **Resumen de iteración**:
+8. **Resumen de iteración**:
    ```
    📊 ITERACIÓN N/TOTAL
    ├─ Task: TXXX - título
@@ -283,12 +294,12 @@ Para cada task en orden:
    └─ Siguiente: TXXX+1 - título
    ```
 
-8. **Confirmar**: `AskUserQuestion` con opciones:
+9. **Confirmar**: `AskUserQuestion` con opciones:
    - Sí, continuar (Recommended)
    - Saltar siguiente y continuar
    - Parar aquí
 
-9. **Reintentar bloqueados**: Al terminar la cola, si quedan tasks que fueron skipped por dependencias bloqueadas y ahora sus dependencias están Completadas → reintentar. Si ningún task progresó en la pasada → parar (deadlock de dependencias).
+10. **Reintentar bloqueados**: Al terminar la cola, si quedan tasks que fueron skipped por dependencias bloqueadas y ahora sus dependencias están Completadas → reintentar. Si ningún task progresó en la pasada → parar (deadlock de dependencias).
 
 #### Fase 4: Resumen Final
 

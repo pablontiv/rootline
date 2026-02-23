@@ -9,7 +9,7 @@ De `$ARGUMENTS`, extraer:
 - **task-name**: slug kebab-case (ej: `add-k8s-phase`)
 - **descripción**: qué debe hacer el agente AI
 
-### Paso 1.5: Determinar Tipo de Task
+### Paso 2: Determinar Tipo de Task
 
 Evaluar qué tipo de Task se necesita según la descripción:
 
@@ -38,7 +38,7 @@ Evaluar qué tipo de Task se necesita según la descripción:
 
 Todos los tipos pueden incluir `## Especificacion Tecnica` cuando se beneficien de una spec estructurada. Usar el bloque YAML del tipo correspondiente, o un bloque libre si no hay template.
 
-### Paso 2: Verificar Story Padre
+### Paso 3: Verificar Story Padre
 
 ```bash
 # Resolver path real
@@ -52,7 +52,7 @@ Si existe → leer el README de la Story para:
 - Extraer contexto relevante para el Task
 - Ver Tasks existentes (evitar duplicación)
 
-### Paso 3: Auto-numbering
+### Paso 4: Auto-numbering
 
 ```bash
 # Detectar próximo TXXX en la Story (requiere .stem con id: {type: sequence, prefix: T, digits: 3})
@@ -61,9 +61,9 @@ rootline describe <story-dir> --field schema.id.next
 
 El comando retorna directamente el próximo identificador (ej: `"T004"`). Requiere que el directorio padre tenga un `.stem` con `id: {type: sequence}` configurado.
 
-### Paso 4: Generar Task File
+### Paso 5: Generar Task File
 
-**4.1**: Crear el archivo con frontmatter correcto usando `rootline new`:
+**5.1**: Crear el archivo con frontmatter correcto usando `rootline new`:
 
 ```bash
 rootline new <story-dir>/TXXX-task-name.md
@@ -71,11 +71,11 @@ rootline new <story-dir>/TXXX-task-name.md
 
 Esto genera el frontmatter según el `.stem` del directorio, con valores de enum correctos y comentados. El agente edita el contenido del task (contexto, alcance, ACs) pero NO modifica el schema del frontmatter — solo selecciona el valor correcto de cada enum.
 
-**4.2**: Editar el contenido con toda la información necesaria para que un agente AI lo ejecute sin contexto adicional.
+**5.2**: Editar el contenido con toda la información necesaria para que un agente AI lo ejecute sin contexto adicional.
 
 **CRÍTICO**: El Task debe ser auto-contenido. Un agente que lea SOLO este archivo debe poder ejecutar el trabajo completo.
 
-### Paso 5: Actualizar Story README
+### Paso 6: Actualizar Story README
 
 Agregar fila en la tabla "Tasks" del Story README padre:
 
@@ -89,10 +89,14 @@ Agregar fila en la tabla "Tasks" del Story README padre:
 
 ## Template: Task File
 
+**Notas sobre el template**:
+- **Wiki-links de dependencia**: Si el Task depende de otro, agregar `[[blocks:TXXX-name]]` debajo del link a la Story. `rootline graph` lee estos links automaticamente para detectar ciclos y resolver orden de ejecucion. Omitir si no hay dependencias.
+- **Especificacion Tecnica**: Incluir cuando el Task se beneficie de una especificacion estructurada — aplica a cualquier tipo (IaC, software, ci-cd, etc.). Omitir solo si el Task es puramente textual (ej: documentation sin componente tecnico). Usar el bloque YAML correspondiente al tipo, o un bloque libre si no hay template predefinido.
+
 ```markdown
 ---
 estado: Pending
-tipo: servicio-docker | modulo-sistema | operacion-sistema | lxc | vm | modulo-infraestructura | host-script | instance-script | documentation
+tipo: servicio-docker | modulo-sistema | operacion-sistema | lxc | vm | modulo-infraestructura | host-script | instance-script | software-module | software-test | ci-cd | documentation
 ejecutable_en: 1 sesion
 ---
 # TXXX: [Descripción accionable del task]
@@ -101,15 +105,11 @@ ejecutable_en: 1 sesion
 
 [[blocks:TXXX-prerequisite-task]]
 
-> **Wiki-links de dependencia**: Si este Task depende de otro, agregar `[[blocks:TXXX-name]]` aquí (debajo del link a la Story). `rootline graph` lee estos links automáticamente para detectar ciclos y resolver orden de ejecución. Omitir si no hay dependencias.
-
 ## Contexto
 
 [Párrafo breve explicando el contexto necesario. Extraído de la Story padre pero auto-contenido. El agente no necesita leer otro archivo para entender qué hacer.]
 
 ## Especificacion Tecnica
-
-> Incluir cuando el Task se beneficie de una especificación estructurada — aplica a cualquier tipo (IaC, software, ci-cd, etc.). Omitir solo si el Task es puramente textual (ej: documentation sin componente técnico). Usar el bloque YAML correspondiente al tipo, o un bloque libre si no hay template predefinido.
 
 Usar el bloque YAML correspondiente al tipo:
 

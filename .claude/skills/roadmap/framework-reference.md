@@ -2,7 +2,7 @@
 
 **Versión:** 1.0
 **Audiencia:** Agentes AI y operadores humanos
-**Cliente principal:** Platform Owner (Pones)
+**Cliente principal:** Platform Owner
 
 ---
 
@@ -117,7 +117,7 @@ La story es:
 
 La **task es el átomo del sistema**.
 
-Tasks may include an **Especificacion Tecnica** section for IaC work (services, modules, operations, infrastructure). This makes each Task self-contained: both specification and execution instructions live in one file. The `Tipo` field indicates the nature of the Task and determines which technical specification template applies.
+La task es auto-contenida: toda la informacion necesaria para ejecutarla vive en un solo archivo.
 
 ---
 
@@ -135,15 +135,9 @@ Una **task válida para agentes AI** cumple **todas**:
 
 Si no cumple una → **no es task**
 
-### 5.1 Task Types and Technical Specifications
+### 5.1 Tipos de Task y Especificaciones Tecnicas
 
-Tasks are classified by `Tipo` in three categories:
-
-* **IaC types** (servicio-docker, modulo-sistema, operacion-sistema, lxc, vm, modulo-infraestructura, host-script, instance-script): Include `Especificacion Tecnica` with infrastructure YAML.
-* **Software types** (software-module, software-test, ci-cd): Include `Especificacion Tecnica` with software development YAML (paquete, interfaces, tests, etc.).
-* **General types** (documentation): Omit `Especificacion Tecnica`.
-
-See `task-guide.md` for the complete template and type-specific YAML blocks.
+Las Tasks se clasifican por `Tipo` en categorias IaC, Software y General. Ver [task-guide.md](task-guide.md) para tipos validos, templates y bloques YAML.
 
 ---
 

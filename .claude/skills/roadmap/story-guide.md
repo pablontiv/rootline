@@ -16,7 +16,7 @@ De `$ARGUMENTS`, extraer:
 rootline describe <feature-dir>
 ```
 
-Si no existe → informar a Pones. Sugerir crear con `/roadmap epic` primero.
+Si no existe → informar al usuario. Sugerir crear con `/roadmap epic` primero.
 
 Si existe → leer el README del Feature para entender contexto y scope.
 
@@ -44,7 +44,11 @@ Esto genera el frontmatter según el `.stem` heredado. El agente edita el conten
 
 ### Paso 5: Actualizar Feature README
 
-Agregar fila en la tabla "Stories" del Feature README padre.
+Agregar fila en la tabla "Stories" del Feature README padre:
+
+```markdown
+| [SXXX](SXXX-story-name/) | Capacidad entregada |
+```
 
 ---
 
@@ -54,8 +58,6 @@ Agregar fila en la tabla "Stories" del Feature README padre.
 # SXXX: [Nombre descriptivo de la capacidad]
 
 **Feature**: [FXX Feature Name](../README.md)
-**Estado**: Specified
-**Cliente**: Platform Owner
 **Capacidad**: [una línea describiendo qué capacidad nueva existe]
 
 ## Antes / Despues
@@ -66,8 +68,8 @@ Agregar fila en la tabla "Stories" del Feature README padre.
 
 ## Criterios de Aceptacion (semanticos)
 
-- [ ] [Capacidad observable 1 — Pones verifica]
-- [ ] [Capacidad observable 2 — Pones verifica]
+- [ ] [Capacidad observable 1 — usuario verifica]
+- [ ] [Capacidad observable 2 — usuario verifica]
 
 ## Tasks
 

@@ -56,10 +56,10 @@ El comando retorna directamente el próximo identificador (ej: `"E05"`). Requier
 
 Antes de crear, verificar:
 1. Leer READMEs de epics existentes → ¿hay overlap con la intención propuesta?
-2. Buscar PRDs relacionados → `grep -rl "keyword" docs/prd/`
-3. Verificar roadmaps existentes → `docs/roadmap-*.md`
+2. Buscar documentación relacionada → `rootline query docs/ --where "..."` con keywords relevantes
+3. Verificar roadmaps existentes en `docs/epics/`
 
-Si hay overlap significativo → informar a Pones antes de crear.
+Si hay overlap significativo → informar al usuario antes de crear.
 
 ### Paso 4: Descomposición
 
@@ -108,9 +108,12 @@ Las Stories se crean como placeholders en las tablas de Features, no como direct
 ## Template: Epic README
 
 ```markdown
+---
+estado: In Progress
+tipo: feature
+---
 # EXX: [Nombre del Epic]
 
-**Estado**: Activa
 **Metrica de exito**: [métrica medible]
 **Timeline**: YYYY-QX — en curso
 
@@ -120,9 +123,9 @@ Las Stories se crean como placeholders en las tablas de Features, no como direct
 
 ## Features
 
-| ID | Nombre | Estado | Descripcion |
-|----|--------|--------|-------------|
-| FXX | [Feature Name](FXX-name/) | 0% | [una línea] |
+| ID | Nombre | Descripcion |
+|----|--------|-------------|
+| FXX | [Feature Name](FXX-name/) | [una línea] |
 
 ## Orden de Ejecucion
 
@@ -144,6 +147,10 @@ Las Stories se crean como placeholders en las tablas de Features, no como direct
 ## Template: Feature README
 
 ```markdown
+---
+estado: Pending
+tipo: feature
+---
 # FXX: [Nombre del Feature]
 
 **Epic**: [EXX](../README.md)
