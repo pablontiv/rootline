@@ -1,11 +1,13 @@
 ---
-estado: Bloqueada
+estado: Pending
 tipo: ci-cd
 ejecutable_en: 1 sesion
 ---
 # T002: Crear Homebrew tap y formula
 
 **Story**: [S002 Release Pipeline](README.md)
+
+[[blocks:T001-goreleaser-config]]
 
 ## Contexto
 

@@ -52,6 +52,11 @@ links:
   allowed: [blocks, reference]
   blocks:
     target: "^T\\d{3}-"
+    field: blocked_by
+
+derive:
+  estado: |
+    blocked_by != nil && len(blocked_by) > 0 && !all(blocked_by, {# == "Completado"}) ? "Bloqueada" : estado
 
 validate:
   - rule: requires
