@@ -24,3 +24,4 @@ Extender rootline con capacidades avanzadas que mejoran la experiencia del desar
 | [F10 Proposal Fix Engine](F10-proposal-fix-engine/README.md) | Motor de propuestas para fix command |
 | [F11 Conditional Field Validation](F11-conditional-field-validation/README.md) | Exclusión de required para campos computados por aggregate |
 | [F12 Estado System Standardization](F12-estado-standardization/README.md) | Migración de estados a inglés, hold field, aggregate fallback fix |
+| [F13 Transversal --where Filter](F13-transversal-where-filter/README.md) | --where flag consistente en tree, stats, validate, graph |
