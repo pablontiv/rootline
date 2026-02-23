@@ -29,12 +29,13 @@ const (
 
 // Change represents a single schema change between two .stem versions.
 type Change struct {
-	Kind     ChangeKind `json:"kind"`
-	Field    string     `json:"field"`
-	Breaking bool       `json:"breaking"`
-	Before   string     `json:"before,omitempty"`
-	After    string     `json:"after,omitempty"`
-	Message  string     `json:"message"`
+	Kind          ChangeKind `json:"kind"`
+	Field         string     `json:"field"`
+	Breaking      bool       `json:"breaking"`
+	Before        string     `json:"before,omitempty"`
+	After         string     `json:"after,omitempty"`
+	Message       string     `json:"message"`
+	AffectedFiles int        `json:"affected_files"`
 }
 
 // DiffResult holds the complete diff between two .stem files.

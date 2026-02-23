@@ -70,6 +70,19 @@ func runMigrateRename(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Append to migration log (skip for dry-run).
+	if !migrateDryRun && result.Summary.FilesUpdated+result.Summary.StemsUpdated > 0 {
+		absRoot, absErr := filepath.Abs(rootPath)
+		if absErr != nil {
+			return fmt.Errorf("resolving root path for log: %w", absErr)
+		}
+		ml := migrate.NewMigrationLog(absRoot)
+		entry := migrate.NewRenameEntry(parts[0], parts[1], result.Summary.FilesUpdated+result.Summary.StemsUpdated)
+		if logErr := ml.Append(entry); logErr != nil {
+			return fmt.Errorf("writing migration log: %w", logErr)
+		}
+	}
+
 	if outputFormat == "table" {
 		return renderMigrateRenameTable(cmd, result)
 	}
