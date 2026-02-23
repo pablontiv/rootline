@@ -1,10 +1,10 @@
 ---
-estado: Pending
+estado: Completado
 tipo: feature
 ---
 # E07: Schema Evolution
 
-**Estado**: Pending
+**Estado**: Completado
 **Metrica de exito**: `rootline migrate --dry-run` detecta breaking changes en .stem; `rootline migrate --rename` actualiza campo en N archivos atomicamente
 **Timeline**: 2026-Q1
 

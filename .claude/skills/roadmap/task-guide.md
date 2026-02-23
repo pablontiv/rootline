@@ -284,7 +284,7 @@ Antes de finalizar el Task, verificar mentalmente:
 | 5 | Idempotente | ¿Se puede re-ejecutar sin daño? |
 | 6 | I/O explícitos | ¿Estado inicial, resultado y fuentes están declarados? |
 
-**Nota**: Agent hooks PreToolUse y PostToolUse validarán automáticamente estas condiciones al escribir el archivo. Si un hook bloquea, corregir según sus indicaciones.
+**Nota**: Estas condiciones se validan manualmente al revisar el Task. No hay hooks automáticos configurados actualmente.
 
 ---
 

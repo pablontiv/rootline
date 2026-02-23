@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completado
 tipo: feature
 ---
 # F01: Migration Tooling

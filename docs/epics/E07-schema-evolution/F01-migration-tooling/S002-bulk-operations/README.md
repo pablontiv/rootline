@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completado
 tipo: historia
 cliente: Platform Owner
 ---

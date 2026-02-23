@@ -1,5 +1,5 @@
 ---
-estado: Diferida
+estado: Completado
 tipo: feature
 ---
 # F04: Derivation Engine
