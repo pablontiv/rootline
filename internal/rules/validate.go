@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -40,6 +41,10 @@ func Validate(record *extract.Record, effective *StemFile) []ValidationError {
 
 		// required: true → field must exist
 		if field.Required && !exists {
+			// Skip required check for aggregate-computed fields on index files.
+			if _, hasAggregate := effective.Aggregate[name]; hasAggregate && isIndexFile(record.Path, effective) {
+				continue
+			}
 			errs = append(errs, ValidationError{
 				Rule:     "required",
 				Field:    name,
@@ -276,6 +281,16 @@ func stringSliceContains(slice []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// isIndexFile reports whether a record path is a directory index file.
+// It checks structural.subdirs.require_index (default "README.md").
+func isIndexFile(path string, stem *StemFile) bool {
+	indexName := "README.md"
+	if stem != nil && stem.Structural.Subdirs.RequireIndex != "" {
+		indexName = stem.Structural.Subdirs.RequireIndex
+	}
+	return filepath.Base(path) == indexName
 }
 
 // formatCondition renders a condition map as a readable string.

@@ -354,6 +354,104 @@ func TestValidate_SourceTracking(t *testing.T) {
 	}
 }
 
+func TestValidate_RequiredAggregateOnIndexFile_Skipped(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"estado": {Type: "enum", Required: true, Source: "root/.stem", Severity: "error"},
+		},
+		Aggregate: map[string]any{
+			"estado": "len(filter(descendants, {.estado == 'Completado'})) == len(descendants) ? 'Completado' : 'Pending'",
+		},
+	}
+	record := &extract.Record{
+		Path:        "docs/epics/E01/README.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+	}
+	errs := Validate(record, stem)
+	if len(errs) != 0 {
+		t.Errorf("got %d errors, want 0 (aggregate field on index file)", len(errs))
+	}
+}
+
+func TestValidate_RequiredAggregateOnNonIndexFile_Error(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"estado": {Type: "enum", Required: true, Source: "root/.stem", Severity: "error"},
+		},
+		Aggregate: map[string]any{
+			"estado": "some expr",
+		},
+	}
+	record := &extract.Record{
+		Path:        "docs/epics/E01/T001-task.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+	}
+	errs := Validate(record, stem)
+	if len(errs) != 1 {
+		t.Fatalf("got %d errors, want 1 (non-index file)", len(errs))
+	}
+	if errs[0].Rule != "required" {
+		t.Errorf("rule = %q, want required", errs[0].Rule)
+	}
+}
+
+func TestValidate_RequiredNoAggregateOnIndexFile_Error(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"estado": {Type: "enum", Required: true, Source: "root/.stem", Severity: "error"},
+		},
+	}
+	record := &extract.Record{
+		Path:        "docs/epics/E01/README.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+	}
+	errs := Validate(record, stem)
+	if len(errs) != 1 {
+		t.Fatalf("got %d errors, want 1 (no aggregate)", len(errs))
+	}
+	if errs[0].Rule != "required" {
+		t.Errorf("rule = %q, want required", errs[0].Rule)
+	}
+}
+
+func TestValidate_RequiredAggregateCustomIndexName(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"estado": {Type: "enum", Required: true, Source: "root/.stem", Severity: "error"},
+		},
+		Aggregate: map[string]any{
+			"estado": "some expr",
+		},
+		Structural: StructuralRules{
+			Subdirs: SubdirRules{RequireIndex: "index.md"},
+		},
+	}
+	// Custom index file — should skip
+	record := &extract.Record{
+		Path:        "docs/index.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+	}
+	errs := Validate(record, stem)
+	if len(errs) != 0 {
+		t.Errorf("got %d errors, want 0 (custom index name match)", len(errs))
+	}
+
+	// README.md is NOT the index file when custom name is set — should error
+	record2 := &extract.Record{
+		Path:        "docs/README.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+	}
+	errs2 := Validate(record2, stem)
+	if len(errs2) != 1 {
+		t.Errorf("got %d errors, want 1 (README.md is not the custom index)", len(errs2))
+	}
+}
+
 func TestValidateLinks_AllowedType(t *testing.T) {
 	stem := &StemFile{
 		Links: LinkSchema{Allowed: []string{"blocks", "parent"}},
