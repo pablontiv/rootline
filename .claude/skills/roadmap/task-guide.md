@@ -265,9 +265,11 @@ artefactos:
 | Estado | Emoji | Cuándo |
 |--------|-------|--------|
 | Pending | - | Task creado, sin especificación técnica |
-| Especificado | 📋 | Especificación técnica completa, listo para implementar |
-| Completado | ✅ | Ejecutado y verificado exitosamente |
-| Obsoleto | ❌ | Reemplazado o ya no relevante |
+| Specified | 📋 | Especificación técnica completa, listo para implementar |
+| In Progress | 🔄 | Ejecución en curso por un agente |
+| Completed | ✅ | Ejecutado y verificado exitosamente |
+| Blocked | 🚫 | Bloqueado por dependencia externa o task previo |
+| On Hold | ⏸️ | Diferido intencionalmente, se retomará después |
 
 ---
 
