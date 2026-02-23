@@ -8,6 +8,21 @@ import (
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
+// deriveConfig holds optional configuration for DeriveRecord.
+type deriveConfig struct {
+	resolver RecordResolver
+}
+
+// DeriveOption configures optional behavior for DeriveRecord.
+type DeriveOption func(*deriveConfig)
+
+// WithResolver sets a RecordResolver for resolving linked field values.
+func WithResolver(r RecordResolver) DeriveOption {
+	return func(c *deriveConfig) {
+		c.resolver = r
+	}
+}
+
 // DeriveError records a non-fatal derivation failure for a single field.
 type DeriveError struct {
 	Field      string `json:"field"`
@@ -24,17 +39,28 @@ func (e *DeriveError) Error() string {
 //
 // Each derive entry maps a field name to an expression string. The expression
 // is compiled and evaluated with the record's frontmatter as environment,
-// plus a "children" variable if provided. Results are stored in record.Derived.
+// plus a "children" variable if provided. If a RecordResolver is provided,
+// linked field values from wiki-links are also injected into the environment
+// based on the stem's LinkSchema rules. Results are stored in record.Derived.
 //
 // A single field failure does not block other fields — errors are collected
 // and returned together.
-func DeriveRecord(record *extract.Record, effective *rules.StemFile, children []*extract.Record) (map[string]any, error) {
+func DeriveRecord(record *extract.Record, effective *rules.StemFile, children []*extract.Record, opts ...DeriveOption) (map[string]any, error) {
 	if effective == nil || len(effective.Derive) == 0 {
 		return map[string]any{}, nil
 	}
 
+	// Apply options.
+	var cfg deriveConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	ev := NewEvaluatorWithBuiltins()
 	env := BuildEnv(record.Frontmatter)
+
+	// Inject linked field values from wiki-links if a resolver is available.
+	InjectLinkedFields(env, record, effective, cfg.resolver)
 
 	// Add children as []any for expr compatibility.
 	if children != nil {

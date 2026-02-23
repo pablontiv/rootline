@@ -26,6 +26,9 @@ func DeriveAll(records []*extract.Record, root string, resolver StemResolver) {
 		byDir[dir] = append(byDir[dir], rec)
 	}
 
+	// Build a record resolver for linked field injection.
+	recResolver := NewMapResolver(records)
+
 	// Cache effective stems per directory.
 	stemCache := make(map[string]*rules.StemFile)
 
@@ -54,7 +57,7 @@ func DeriveAll(records []*extract.Record, root string, resolver StemResolver) {
 		}
 
 		// Best-effort: ignore derivation errors.
-		_, _ = DeriveRecord(rec, eff, children)
+		_, _ = DeriveRecord(rec, eff, children, WithResolver(recResolver))
 	}
 }
 
