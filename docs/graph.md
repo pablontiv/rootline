@@ -45,6 +45,16 @@ rootline graph docs/epics/ --check            # Validate only: cycles + broken l
 |------|-------------|
 | `--format dot\|mermaid` | Output format (default: `dot`) |
 | `--check` | Validate only — reports cycles and broken links, no diagram |
+| `--where "expr"` | Filter records before building graph (expr-lang syntax, repeatable) |
+
+### With --where
+
+Filter records before building the dependency graph:
+
+```bash
+rootline graph docs/epics/ --where 'tipo != "feature"'           # Exclude features
+rootline graph docs/epics/ --where 'estado == "Specified"' --check  # Check only specified tasks
+```
 
 ### With --check
 

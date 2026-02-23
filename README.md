@@ -157,15 +157,16 @@ Rootline ships as a **single static Go binary** with no dependencies.
 rootline validate [file|--all|--staged]   # Check documents against .stem rules
 rootline query --where 'expr'             # Search by metadata (expr-lang syntax)
 rootline describe <path>                  # Show effective schema for a directory
-rootline tree [path]                      # Hierarchical view with completion counts
-rootline stats [path]                     # Summary counts by estado and tipo
-rootline graph [path]                     # Dependency graph (DOT, Mermaid, --check)
+rootline tree [path] [--where 'expr']     # Hierarchical view with completion counts
+rootline stats [path] [--where 'expr']    # Summary counts by estado and tipo
+rootline graph [path] [--where 'expr']    # Dependency graph (DOT, Mermaid, --check)
 rootline explain <file>                   # Trace field origins, derivations, and errors
 
 # Document lifecycle
 rootline init [path]                      # Infer .stem from existing documents
 rootline new <file>                       # Scaffold document from effective schema
 rootline fix [file|--all]                 # Auto-repair: add fields, fix enums, propose changes
+rootline validate --all --where 'expr'   # Validate only records matching filter
 rootline migrate [path]                   # Detect schema changes, rename fields
 
 # Tooling
@@ -185,6 +186,10 @@ rootline describe docs/prd/ --field schema.id.next
 
 rootline query --where 'estado == "Pending"' --field path
 # docs/epics/E01/F01/S001/T005-deploy-grafana.md
+
+rootline tree docs/epics/ --where 'estado != "Completed"'
+rootline stats docs/epics/ --where 'tipo == "software-module"'
+rootline graph docs/epics/ --where 'tipo != "feature"' --check
 ```
 
 ### Query Expressions

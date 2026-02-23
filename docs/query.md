@@ -21,6 +21,8 @@ rootline query --where 'estado == "Pending"' --limit 10
 
 Frontmatter fields are promoted to top-level variables — use `status` directly, not `frontmatter.status`. Derived fields take precedence over frontmatter fields of the same name.
 
+> **Note**: The `--where` flag is also available on `tree`, `stats`, `graph`, and `validate --all`. All transversal commands share the same expr-lang syntax and AND semantics for multiple `--where` flags.
+
 ## Operators
 
 Standard expr-lang operators apply:
