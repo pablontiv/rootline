@@ -10,14 +10,14 @@ import (
 func TestDetectExtendEnum(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}, Required: true},
 		},
 	}
 
 	errs := map[string][]rules.ValidationError{
-		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Obsoleto" not in allowed values: [Pending, Completado]`}},
-		"b.md": {{Rule: "enum", Field: "estado", Message: `value "Obsoleto" not in allowed values: [Pending, Completado]`}},
-		"c.md": {{Rule: "enum", Field: "estado", Message: `value "Obsoleto" not in allowed values: [Pending, Completado]`}},
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Obsoleto" not in allowed values: [Pending, Completed]`}},
+		"b.md": {{Rule: "enum", Field: "estado", Message: `value "Obsoleto" not in allowed values: [Pending, Completed]`}},
+		"c.md": {{Rule: "enum", Field: "estado", Message: `value "Obsoleto" not in allowed values: [Pending, Completed]`}},
 	}
 
 	proposals := detectExtendEnum(stem, errs)
@@ -38,12 +38,12 @@ func TestDetectExtendEnum(t *testing.T) {
 func TestDetectCorrectValue(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado", "In Progress"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed", "In Progress"}, Required: true},
 		},
 	}
 
 	errs := map[string][]rules.ValidationError{
-		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Completo" not in allowed values: [Pending, Completado, In Progress]`}},
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Completo" not in allowed values: [Pending, Completed, In Progress]`}},
 	}
 
 	proposals := detectCorrectValue(stem, errs)
@@ -56,15 +56,15 @@ func TestDetectCorrectValue(t *testing.T) {
 	if proposals[0].From != "Completo" {
 		t.Errorf("from = %q, want Completo", proposals[0].From)
 	}
-	if proposals[0].To != "Completado" {
-		t.Errorf("to = %q, want Completado", proposals[0].To)
+	if proposals[0].To != "Completed" {
+		t.Errorf("to = %q, want Completed", proposals[0].To)
 	}
 }
 
 func TestDetectAddField(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}, Required: true},
 		},
 	}
 
@@ -133,12 +133,12 @@ func TestParseBlockingInfo_NoParens(t *testing.T) {
 func TestDetectMigrateValue(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Bloqueada", "Completado"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Blocked", "Completed"}, Required: true},
 		},
 	}
 
 	errs := map[string][]rules.ValidationError{
-		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Bloqueada, Completado]`}},
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Blocked, Completed]`}},
 	}
 
 	proposals := detectMigrateValue(stem, errs)
@@ -163,7 +163,7 @@ func TestDetectMigrateValue(t *testing.T) {
 func TestDetectExtractBody_Completada(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado", "In Progress"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed", "In Progress"}, Required: true},
 		},
 	}
 	records := []*extract.Record{
@@ -180,15 +180,15 @@ func TestDetectExtractBody_Completada(t *testing.T) {
 	if proposals[0].Type != ExtractBody {
 		t.Errorf("type = %q, want extract_body", proposals[0].Type)
 	}
-	if proposals[0].To != "Completado" {
-		t.Errorf("to = %q, want Completado (mapped from Completada)", proposals[0].To)
+	if proposals[0].To != "Completed" {
+		t.Errorf("to = %q, want Completed (mapped from Completada)", proposals[0].To)
 	}
 }
 
 func TestDetectExtractBody_Activa(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado", "In Progress"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed", "In Progress"}, Required: true},
 		},
 	}
 	records := []*extract.Record{
@@ -207,15 +207,15 @@ func TestDetectExtractBody_Activa(t *testing.T) {
 	}
 }
 
-func TestInferEstado_AllCompletado(t *testing.T) {
-	got := InferEstado([]string{"Completado", "Completado"})
-	if got != "Completado" {
-		t.Errorf("got %q, want Completado", got)
+func TestInferEstado_AllCompleted(t *testing.T) {
+	got := InferEstado([]string{"Completed", "Completed"})
+	if got != "Completed" {
+		t.Errorf("got %q, want Completed", got)
 	}
 }
 
 func TestInferEstado_Mixed(t *testing.T) {
-	got := InferEstado([]string{"Pending", "Completado"})
+	got := InferEstado([]string{"Pending", "Completed"})
 	if got != "In Progress" {
 		t.Errorf("got %q, want 'In Progress'", got)
 	}
@@ -238,12 +238,12 @@ func TestInferEstado_Empty(t *testing.T) {
 func TestDetectInferFromChildren(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado", "In Progress"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed", "In Progress"}, Required: true},
 		},
 	}
 	records := []*extract.Record{
 		{Path: "dir/README.md", Body: "# Dir", Frontmatter: map[string]any{}},
-		{Path: "dir/a.md", Frontmatter: map[string]any{"estado": "Completado"}},
+		{Path: "dir/a.md", Frontmatter: map[string]any{"estado": "Completed"}},
 		{Path: "dir/b.md", Frontmatter: map[string]any{"estado": "Pending"}},
 	}
 	errs := map[string][]rules.ValidationError{
@@ -263,14 +263,14 @@ func TestDetectInferFromChildren(t *testing.T) {
 }
 
 func TestExtractEnumValue_Quoted(t *testing.T) {
-	val := extractEnumValue(`value "Obsoleto" not in allowed values: [Pending, Completado]`, nil)
+	val := extractEnumValue(`value "Obsoleto" not in allowed values: [Pending, Completed]`, nil)
 	if val != "Obsoleto" {
 		t.Errorf("got %q, want Obsoleto", val)
 	}
 }
 
 func TestExtractEnumValue_Unquoted(t *testing.T) {
-	val := extractEnumValue(`value Compltado is not in allowed values: [Pending, Completado]`, nil)
+	val := extractEnumValue(`value Compltado is not in allowed values: [Pending, Completed]`, nil)
 	if val != "Compltado" {
 		t.Errorf("got %q, want Compltado", val)
 	}
@@ -287,7 +287,7 @@ func TestMapValue(t *testing.T) {
 	tests := []struct {
 		input, want string
 	}{
-		{"Completada", "Completado"},
+		{"Completada", "Completed"},
 		{"activa", "In Progress"},
 		{"pendiente", "Pending"},
 		{"Unknown", "Unknown"},
@@ -328,14 +328,14 @@ func TestAnalyze_NoErrors(t *testing.T) {
 func TestAnalyze_Mixed(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}, Required: true},
 			"tipo":   {Type: "enum", Values: []string{"feature", "bug"}, Required: true},
 		},
 	}
 
 	errs := map[string][]rules.ValidationError{
 		"a.md": {
-			{Rule: "enum", Field: "estado", Message: `value "Completo" not in allowed values: [Pending, Completado]`},
+			{Rule: "enum", Field: "estado", Message: `value "Completo" not in allowed values: [Pending, Completed]`},
 		},
 		"b.md": {
 			{Rule: "required", Field: "tipo", Message: `required field "tipo" is missing`},
@@ -357,15 +357,15 @@ func TestAnalyze_Mixed(t *testing.T) {
 func TestExtendEnum_SkipsParenthesizedValues(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}, Required: true},
 		},
 	}
 
 	// Same parenthesized value in 3 records — should NOT generate extend_enum.
 	errs := map[string][]rules.ValidationError{
-		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completado]`}},
-		"b.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completado]`}},
-		"c.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completado]`}},
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completed]`}},
+		"b.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completed]`}},
+		"c.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completed]`}},
 	}
 
 	proposals := detectExtendEnum(stem, errs)
@@ -377,13 +377,13 @@ func TestExtendEnum_SkipsParenthesizedValues(t *testing.T) {
 func TestAnalyze_MigrateValueSuppressesCorrectValue(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Bloqueada", "Completado"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Blocked", "Completed"}, Required: true},
 		},
 	}
 
 	// This error triggers both migrate_value (has parentheses) and correct_value (base is close to "Pending").
 	errs := map[string][]rules.ValidationError{
-		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Bloqueada, Completado]`}},
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Blocked, Completed]`}},
 	}
 
 	report := Analyze([]*extract.Record{}, stem, errs)
@@ -402,14 +402,14 @@ func TestAnalyze_MigrateValueSuppressesCorrectValue(t *testing.T) {
 func TestAnalyze_MigrateValueSuppressesExtendEnum(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}, Required: true},
 		},
 	}
 
 	// Same parenthesized value in 2 records — should produce migrate_value but NOT extend_enum.
 	errs := map[string][]rules.ValidationError{
-		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completado]`}},
-		"b.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completado]`}},
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completed]`}},
+		"b.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Completed]`}},
 	}
 
 	report := Analyze([]*extract.Record{}, stem, errs)
@@ -428,13 +428,13 @@ func TestAnalyze_MigrateValueSuppressesExtendEnum(t *testing.T) {
 func TestMigrateValue_NotesOnlyHasWikiLinks(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}, Required: true},
 		},
 	}
 
 	// "human" is a note (not an ID-like target) but should still produce wiki_links.
 	errs := map[string][]rules.ValidationError{
-		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by human)" not in allowed values: [Pending, Completado]`}},
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by human)" not in allowed values: [Pending, Completed]`}},
 	}
 
 	proposals := detectMigrateValue(stem, errs)
@@ -453,12 +453,12 @@ func TestMigrateValue_NotesOnlyHasWikiLinks(t *testing.T) {
 func TestMigrateValue_MixedTargetsAndNotes(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}, Required: true},
 		},
 	}
 
 	errs := map[string][]rules.ValidationError{
-		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by E04 + human)" not in allowed values: [Pending, Completado]`}},
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by E04 + human)" not in allowed values: [Pending, Completed]`}},
 	}
 
 	proposals := detectMigrateValue(stem, errs)
@@ -480,7 +480,7 @@ func TestMigrateValue_MixedTargetsAndNotes(t *testing.T) {
 func TestAnalyze_ExtractBodySuppressesAddField(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado", "In Progress"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed", "In Progress"}, Required: true},
 		},
 	}
 	records := []*extract.Record{
@@ -507,12 +507,12 @@ func TestAnalyze_ExtractBodySuppressesAddField(t *testing.T) {
 func TestAnalyze_InferFromChildrenSuppressesAddField(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado", "In Progress"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed", "In Progress"}, Required: true},
 		},
 	}
 	records := []*extract.Record{
 		{Path: "dir/README.md", Body: "# Dir", Frontmatter: map[string]any{}},
-		{Path: "dir/a.md", Frontmatter: map[string]any{"estado": "Completado"}},
+		{Path: "dir/a.md", Frontmatter: map[string]any{"estado": "Completed"}},
 		{Path: "dir/b.md", Frontmatter: map[string]any{"estado": "Pending"}},
 	}
 	errs := map[string][]rules.ValidationError{
@@ -536,7 +536,7 @@ func TestAnalyze_InferFromChildrenSuppressesAddField(t *testing.T) {
 func TestAnalyze_AddFieldSurvivesWithoutCoverage(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}, Required: true},
 		},
 	}
 	// No body hints, not a README with children — add_field should survive.
@@ -563,12 +563,12 @@ func TestAnalyze_AddFieldSurvivesWithoutCoverage(t *testing.T) {
 func TestAnalyze_MigrateValueSuppressesExtendAndCorrect(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Values: []string{"Pending", "Bloqueada", "Completado"}, Required: true},
+			"estado": {Type: "enum", Values: []string{"Pending", "Blocked", "Completed"}, Required: true},
 		},
 	}
 	errs := map[string][]rules.ValidationError{
-		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Bloqueada, Completado]`}},
-		"b.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Bloqueada, Completado]`}},
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Blocked, Completed]`}},
+		"b.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Blocked, Completed]`}},
 	}
 
 	report := Analyze([]*extract.Record{}, stem, errs)

@@ -11,7 +11,7 @@ func FuzzExtract(f *testing.F) {
 		"# No frontmatter at all\nJust body text.\n",
 		"",
 		"---\nkey: value with: colons\nnested:\n  sub: item\n---\n",
-		"---\nestado: Completado\n---",
+		"---\nestado: Completed\n---",
 		"\xef\xbb\xbf---\nbom: true\n---\n# BOM file\n",
 		"---\ntitle: \"quoted \\\"value\\\"\"\n---\n# Quoted\n",
 		"---\nlist:\n  - one\n  - two\n---\n# List frontmatter\n",

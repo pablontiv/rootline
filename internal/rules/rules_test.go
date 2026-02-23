@@ -35,7 +35,7 @@ derive:
     using: slugify
 
 aggregate:
-  estado: 'all(descendants, {.estado == "Completado"}) ? "Completado" : estado'
+  estado: 'all(descendants, {.estado == "Completed"}) ? "Completed" : estado'
 
 links:
   allowed: [decision, reference]
@@ -241,7 +241,7 @@ schema:
   estado:
     type: enum
     required: true
-    values: [Pending, Completado]
+    values: [Pending, Completed]
     excludes:
       match: "*/README.md"
 `)

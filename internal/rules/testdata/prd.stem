@@ -5,7 +5,7 @@ schema:
     type: enum
     values:
       - "Especificado"
-      - "Completado"
+      - "Completed"
       - "Obsoleto"
     required: true
   Tipo:
@@ -28,5 +28,5 @@ schema:
 
 validate:
   - rule: requires
-    if: { Estado: "Completado" }
+    if: { Estado: "Completed" }
     then: { fields: [Fecha] }

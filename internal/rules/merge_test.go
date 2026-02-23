@@ -146,12 +146,12 @@ func TestMergeStemFiles_ThreeLevels(t *testing.T) {
 			Scope:   Scope{Match: "*.md"},
 			Schema: map[string]SchemaField{
 				"Fecha":  {Type: "string", Required: true},
-				"Estado": {Type: "enum", Values: []string{"Activa", "Completada"}},
+				"Estado": {Type: "enum", Values: []string{"Active", "Completed"}},
 			},
 		}),
 		stemEntry("parent/.stem", &StemFile{
 			Schema: map[string]SchemaField{
-				"Estado":  {Type: "enum", Values: []string{"Pending", "Completado"}},
+				"Estado":  {Type: "enum", Values: []string{"Pending", "Completed"}},
 				"Cliente": {Type: "string", Default: "Platform Owner"},
 			},
 		}),
@@ -175,7 +175,7 @@ func TestMergeStemFiles_ThreeLevels(t *testing.T) {
 		t.Errorf("Estado.source = %q, want parent/.stem", result.Schema["Estado"].Source)
 	}
 	if len(result.Schema["Estado"].Values) != 2 || result.Schema["Estado"].Values[0] != "Pending" {
-		t.Errorf("Estado.values = %v, want [Pending, Completado]", result.Schema["Estado"].Values)
+		t.Errorf("Estado.values = %v, want [Pending, Completed]", result.Schema["Estado"].Values)
 	}
 	if result.Schema["Cliente"].Source != "parent/.stem" {
 		t.Errorf("Cliente.source = %q, want parent/.stem", result.Schema["Cliente"].Source)
@@ -191,7 +191,7 @@ func TestMergeStemFiles_FourLevelChain(t *testing.T) {
 		stemEntry("root/.stem", &StemFile{
 			Version: 1,
 			Schema: map[string]SchemaField{
-				"estado": {Type: "enum", Values: []string{"Pending", "Completado"}},
+				"estado": {Type: "enum", Values: []string{"Pending", "Completed"}},
 			},
 		}),
 		stemEntry("epic/.stem", &StemFile{

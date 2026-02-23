@@ -56,7 +56,7 @@ func TestValidate_EnumValidValue(t *testing.T) {
 		Schema: map[string]SchemaField{
 			"estado": {
 				Type:   "enum",
-				Values: []string{"Pending", "Completado"},
+				Values: []string{"Pending", "Completed"},
 				Source: "tasks/.stem",
 			},
 		},
@@ -74,7 +74,7 @@ func TestValidate_EnumInvalidValue(t *testing.T) {
 		Schema: map[string]SchemaField{
 			"estado": {
 				Type:     "enum",
-				Values:   []string{"Pending", "Completado"},
+				Values:   []string{"Pending", "Completed"},
 				Required: true,
 				Source:   "tasks/.stem",
 			},
@@ -178,13 +178,13 @@ func TestValidate_Requires_ConditionTrue_FieldMissing(t *testing.T) {
 		Validate: []ValidationRule{
 			{
 				Rule:   "requires",
-				If:     map[string]any{"Estado": "Completado"},
+				If:     map[string]any{"Estado": "Completed"},
 				Then:   map[string]any{"fields": []any{"Fecha"}},
 				Source: "prd/.stem",
 			},
 		},
 	}
-	record := makeRecord(map[string]any{"Estado": "Completado"})
+	record := makeRecord(map[string]any{"Estado": "Completed"})
 
 	errs := Validate(record, stem)
 	if len(errs) != 1 {
@@ -203,7 +203,7 @@ func TestValidate_Requires_ConditionFalse_NoCheck(t *testing.T) {
 		Validate: []ValidationRule{
 			{
 				Rule:   "requires",
-				If:     map[string]any{"Estado": "Completado"},
+				If:     map[string]any{"Estado": "Completed"},
 				Then:   map[string]any{"fields": []any{"Fecha"}},
 				Source: "prd/.stem",
 			},
@@ -222,14 +222,14 @@ func TestValidate_Requires_ConditionTrue_FieldPresent(t *testing.T) {
 		Validate: []ValidationRule{
 			{
 				Rule:   "requires",
-				If:     map[string]any{"Estado": "Completado"},
+				If:     map[string]any{"Estado": "Completed"},
 				Then:   map[string]any{"fields": []any{"Fecha"}},
 				Source: "prd/.stem",
 			},
 		},
 	}
 	record := makeRecord(map[string]any{
-		"Estado": "Completado",
+		"Estado": "Completed",
 		"Fecha":  "2026-01-15",
 	})
 
@@ -243,7 +243,7 @@ func TestValidate_ValidDocument_NoErrors(t *testing.T) {
 	stem := &StemFile{
 		Schema: map[string]SchemaField{
 			"title":  {Type: "string", Required: true, Source: "root/.stem"},
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true, Source: "tasks/.stem"},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}, Required: true, Source: "tasks/.stem"},
 		},
 		Validate: []ValidationRule{
 			{Field: "title", Rule: "non_empty", Source: "root/.stem"},
@@ -272,7 +272,7 @@ func TestValidate_MultipleErrors(t *testing.T) {
 	stem := &StemFile{
 		Schema: map[string]SchemaField{
 			"title":  {Type: "string", Required: true, Source: "root/.stem"},
-			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true, Source: "tasks/.stem"},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}, Required: true, Source: "tasks/.stem"},
 			"tipo":   {Type: "enum", Values: []string{"code", "docs"}, Source: "tasks/.stem"},
 		},
 	}
@@ -318,13 +318,13 @@ func TestValidate_RequiresMultipleFields(t *testing.T) {
 		Validate: []ValidationRule{
 			{
 				Rule:   "requires",
-				If:     map[string]any{"Estado": "Completado"},
+				If:     map[string]any{"Estado": "Completed"},
 				Then:   map[string]any{"fields": []any{"Fecha", "Autor"}},
 				Source: "prd/.stem",
 			},
 		},
 	}
-	record := makeRecord(map[string]any{"Estado": "Completado"})
+	record := makeRecord(map[string]any{"Estado": "Completed"})
 
 	errs := Validate(record, stem)
 	if len(errs) != 2 {
@@ -360,7 +360,7 @@ func TestValidate_RequiredAggregateOnIndexFile_Skipped(t *testing.T) {
 			"estado": {Type: "enum", Required: true, Source: "root/.stem", Severity: "error"},
 		},
 		Aggregate: map[string]any{
-			"estado": "len(filter(descendants, {.estado == 'Completado'})) == len(descendants) ? 'Completado' : 'Pending'",
+			"estado": "len(filter(descendants, {.estado == 'Completed'})) == len(descendants) ? 'Completed' : 'Pending'",
 		},
 	}
 	record := &extract.Record{

@@ -16,7 +16,7 @@ func makeRecords() []*extract.Record {
 		},
 		{
 			Path: "tasks/T002.md", Type: "markdown",
-			Frontmatter: map[string]any{"estado": "Completado", "tipo": "modulo-sistema", "title": "Auth Module"},
+			Frontmatter: map[string]any{"estado": "Completed", "tipo": "modulo-sistema", "title": "Auth Module"},
 			Body:        "# Auth Module\n\nImplement authentication.",
 		},
 		{
@@ -49,7 +49,7 @@ func TestExecute_Eq(t *testing.T) {
 func TestExecute_Ne(t *testing.T) {
 	records := makeRecords()
 	result, err := Execute(records, &Query{
-		Where: &Condition{Op: OpNe, Field: "estado", Value: "Completado"},
+		Where: &Condition{Op: OpNe, Field: "estado", Value: "Completed"},
 	})
 	if err != nil {
 		t.Fatalf("error: %v", err)

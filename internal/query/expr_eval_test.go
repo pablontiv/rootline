@@ -15,7 +15,7 @@ func makeExprRecords() []*extract.Record {
 		},
 		{
 			Path: "tasks/T002.md", Type: "markdown",
-			Frontmatter: map[string]any{"estado": "Completado", "tipo": "modulo-sistema", "title": "Auth Module"},
+			Frontmatter: map[string]any{"estado": "Completed", "tipo": "modulo-sistema", "title": "Auth Module"},
 			Body:        "# Auth Module\n\nImplement authentication.",
 		},
 		{
@@ -48,7 +48,7 @@ func TestMatchRecord_Eq(t *testing.T) {
 
 func TestMatchRecord_Ne(t *testing.T) {
 	rec := makeExprRecords()[0]
-	prog, err := CompileWhere("estado != 'Completado'")
+	prog, err := CompileWhere("estado != 'Completed'")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestMatchRecord_Ne(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !match {
-		t.Error("expected match for estado != 'Completado'")
+		t.Error("expected match for estado != 'Completed'")
 	}
 }
 
@@ -122,7 +122,7 @@ func TestMatchRecord_Contains(t *testing.T) {
 }
 
 func TestMatchRecord_NoMatch(t *testing.T) {
-	rec := makeExprRecords()[1] // estado: Completado
+	rec := makeExprRecords()[1] // estado: Completed
 	prog, err := CompileWhere("estado == 'Pending'")
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestMatchRecord_NoMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	if match {
-		t.Error("expected no match for Completado record")
+		t.Error("expected no match for Completed record")
 	}
 }
 

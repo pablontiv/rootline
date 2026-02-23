@@ -3,7 +3,7 @@ version: 1
 schema:
   Estado:
     type: enum
-    values: [Activa, Completada, Diferida]
+    values: [Active, Completed, Deferred]
     required: true
   Cliente:
     type: string

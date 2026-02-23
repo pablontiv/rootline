@@ -8,13 +8,13 @@ import (
 )
 
 func TestInjectLinkedFields_BlockedBy(t *testing.T) {
-	// Record A has a [[blocks:B]] link. B has estado=Completado.
+	// Record A has a [[blocks:B]] link. B has estado=Completed.
 	// The stem defines link type "blocks" with field "blocked_by".
-	// After injection, env["blocked_by"] should be ["Completado"].
+	// After injection, env["blocked_by"] should be ["Completed"].
 	target := &extract.Record{
 		Path:        "tasks/B.md",
 		Type:        "markdown",
-		Frontmatter: map[string]any{"estado": "Completado"},
+		Frontmatter: map[string]any{"estado": "Completed"},
 	}
 	source := &extract.Record{
 		Path:        "tasks/A.md",
@@ -45,8 +45,8 @@ func TestInjectLinkedFields_BlockedBy(t *testing.T) {
 	if len(slice) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(slice))
 	}
-	if slice[0] != "Completado" {
-		t.Errorf("blocked_by[0] = %v, want %q", slice[0], "Completado")
+	if slice[0] != "Completed" {
+		t.Errorf("blocked_by[0] = %v, want %q", slice[0], "Completed")
 	}
 }
 
@@ -104,7 +104,7 @@ func TestInjectLinkedFields_MultipleLinks(t *testing.T) {
 	targetB := &extract.Record{
 		Path:        "tasks/B.md",
 		Type:        "markdown",
-		Frontmatter: map[string]any{"estado": "Completado"},
+		Frontmatter: map[string]any{"estado": "Completed"},
 	}
 	targetC := &extract.Record{
 		Path:        "tasks/C.md",
@@ -143,9 +143,9 @@ func TestInjectLinkedFields_MultipleLinks(t *testing.T) {
 	if len(slice) != 2 {
 		t.Fatalf("expected 2 values, got %d", len(slice))
 	}
-	// Values should be "Completado" and "Pending" (order matches link order).
-	if slice[0] != "Completado" {
-		t.Errorf("blocked_by[0] = %v, want %q", slice[0], "Completado")
+	// Values should be "Completed" and "Pending" (order matches link order).
+	if slice[0] != "Completed" {
+		t.Errorf("blocked_by[0] = %v, want %q", slice[0], "Completed")
 	}
 	if slice[1] != "Pending" {
 		t.Errorf("blocked_by[1] = %v, want %q", slice[1], "Pending")
@@ -178,7 +178,7 @@ func TestInjectLinkedFields_NoFieldInRule(t *testing.T) {
 	// Link rule without Field should not inject anything.
 	target := &extract.Record{
 		Path:        "tasks/B.md",
-		Frontmatter: map[string]any{"estado": "Completado"},
+		Frontmatter: map[string]any{"estado": "Completed"},
 	}
 	source := &extract.Record{
 		Path:        "tasks/A.md",
@@ -208,7 +208,7 @@ func TestDeriveRecord_WithResolver(t *testing.T) {
 	target := &extract.Record{
 		Path:        "tasks/B.md",
 		Type:        "markdown",
-		Frontmatter: map[string]any{"estado": "Completado"},
+		Frontmatter: map[string]any{"estado": "Completed"},
 	}
 	source := &extract.Record{
 		Path:        "tasks/A.md",
@@ -232,8 +232,8 @@ func TestDeriveRecord_WithResolver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
-	if derived["status"] != "Completado" {
-		t.Errorf("status = %v, want %q", derived["status"], "Completado")
+	if derived["status"] != "Completed" {
+		t.Errorf("status = %v, want %q", derived["status"], "Completed")
 	}
 }
 
@@ -277,16 +277,16 @@ func TestMapResolver_NotFound(t *testing.T) {
 }
 
 func TestLinkedValues_AllPattern(t *testing.T) {
-	// all(blocked_by, {# == "Completado"}) returns true when all blockers are Completado.
+	// all(blocked_by, {# == "Completed"}) returns true when all blockers are Completed.
 	targetB := &extract.Record{
 		Path:        "tasks/B.md",
 		Type:        "markdown",
-		Frontmatter: map[string]any{"estado": "Completado"},
+		Frontmatter: map[string]any{"estado": "Completed"},
 	}
 	targetC := &extract.Record{
 		Path:        "tasks/C.md",
 		Type:        "markdown",
-		Frontmatter: map[string]any{"estado": "Completado"},
+		Frontmatter: map[string]any{"estado": "Completed"},
 	}
 	source := &extract.Record{
 		Path:        "tasks/A.md",
@@ -299,7 +299,7 @@ func TestLinkedValues_AllPattern(t *testing.T) {
 	}
 	stem := &rules.StemFile{
 		Derive: map[string]any{
-			"all_done": `all(blocked_by, {# == "Completado"})`,
+			"all_done": `all(blocked_by, {# == "Completed"})`,
 		},
 		Links: rules.LinkSchema{
 			Rules: map[string]rules.LinkRule{
@@ -339,16 +339,16 @@ func TestLinkedValues_AllPattern(t *testing.T) {
 }
 
 func TestLinkedValues_AnyPattern(t *testing.T) {
-	// any(blocked_by, {# == "Bloqueada"}) returns true if any blocker is Bloqueada.
+	// any(blocked_by, {# == "Blocked"}) returns true if any blocker is Blocked.
 	targetB := &extract.Record{
 		Path:        "tasks/B.md",
 		Type:        "markdown",
-		Frontmatter: map[string]any{"estado": "Completado"},
+		Frontmatter: map[string]any{"estado": "Completed"},
 	}
 	targetC := &extract.Record{
 		Path:        "tasks/C.md",
 		Type:        "markdown",
-		Frontmatter: map[string]any{"estado": "Bloqueada"},
+		Frontmatter: map[string]any{"estado": "Blocked"},
 	}
 	source := &extract.Record{
 		Path:        "tasks/A.md",
@@ -361,7 +361,7 @@ func TestLinkedValues_AnyPattern(t *testing.T) {
 	}
 	stem := &rules.StemFile{
 		Derive: map[string]any{
-			"has_blocked": `any(blocked_by, {# == "Bloqueada"})`,
+			"has_blocked": `any(blocked_by, {# == "Blocked"})`,
 		},
 		Links: rules.LinkSchema{
 			Rules: map[string]rules.LinkRule{
@@ -379,8 +379,8 @@ func TestLinkedValues_AnyPattern(t *testing.T) {
 		t.Errorf("has_blocked = %v, want true", derived["has_blocked"])
 	}
 
-	// With no Bloqueada states, any() should return false.
-	targetC.Frontmatter["estado"] = "Completado"
+	// With no Blocked states, any() should return false.
+	targetC.Frontmatter["estado"] = "Completed"
 	source2 := &extract.Record{
 		Path:        "tasks/A2.md",
 		Type:        "markdown",
@@ -396,7 +396,7 @@ func TestLinkedValues_AnyPattern(t *testing.T) {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
 	if derived2["has_blocked"] != false {
-		t.Errorf("has_blocked = %v, want false (no Bloqueada)", derived2["has_blocked"])
+		t.Errorf("has_blocked = %v, want false (no Blocked)", derived2["has_blocked"])
 	}
 }
 
@@ -431,7 +431,7 @@ func TestLinkedValues_NilCheck(t *testing.T) {
 	target := &extract.Record{
 		Path:        "tasks/B.md",
 		Type:        "markdown",
-		Frontmatter: map[string]any{"estado": "Completado"},
+		Frontmatter: map[string]any{"estado": "Completed"},
 	}
 	sourceWithLinks := &extract.Record{
 		Path:        "tasks/A2.md",
@@ -454,7 +454,7 @@ func TestLinkedValues_LenPattern(t *testing.T) {
 	targetB := &extract.Record{
 		Path:        "tasks/B.md",
 		Type:        "markdown",
-		Frontmatter: map[string]any{"estado": "Completado"},
+		Frontmatter: map[string]any{"estado": "Completed"},
 	}
 	targetC := &extract.Record{
 		Path:        "tasks/C.md",
@@ -464,7 +464,7 @@ func TestLinkedValues_LenPattern(t *testing.T) {
 	targetD := &extract.Record{
 		Path:        "tasks/D.md",
 		Type:        "markdown",
-		Frontmatter: map[string]any{"estado": "Bloqueada"},
+		Frontmatter: map[string]any{"estado": "Blocked"},
 	}
 	source := &extract.Record{
 		Path:        "tasks/A.md",

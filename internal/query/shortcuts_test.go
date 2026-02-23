@@ -80,7 +80,7 @@ func TestExecute_WithShortcuts(t *testing.T) {
 		},
 		{
 			Path: "t2.md", Type: "markdown",
-			Frontmatter: map[string]any{"estado": "Completado", "tipo": "vm"},
+			Frontmatter: map[string]any{"estado": "Completed", "tipo": "vm"},
 		},
 	}
 

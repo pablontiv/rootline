@@ -60,7 +60,7 @@ func TestDeriveAllNoDerive(t *testing.T) {
 func TestDeriveAllWithChildren(t *testing.T) {
 	records := []*extract.Record{
 		{Path: "dir/parent.md", Frontmatter: map[string]any{"titulo": "Parent"}},
-		{Path: "dir/child1.md", Frontmatter: map[string]any{"estado": "Completado"}},
+		{Path: "dir/child1.md", Frontmatter: map[string]any{"estado": "Completed"}},
 		{Path: "dir/child2.md", Frontmatter: map[string]any{"estado": "Pending"}},
 	}
 

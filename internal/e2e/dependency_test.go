@@ -16,8 +16,8 @@ import (
 //
 // The derive expression logic:
 //   - If no blockers (blocked_by == nil): keep original estado
-//   - If all blockers are Completado: "Pending" (unblocked, ready to work)
-//   - Otherwise: "Bloqueada" (blocked by incomplete dependencies)
+//   - If all blockers are Completed: "Pending" (unblocked, ready to work)
+//   - Otherwise: "Blocked" (blocked by incomplete dependencies)
 const stemWithDeriveAndLinks = `version: 1
 scope:
   match: "*.md"
@@ -29,16 +29,16 @@ links:
     target: "*.md"
     field: blocked_by
 derive:
-  estado: 'blocked_by == nil ? estado : (all(blocked_by, {# == "Completado"}) ? "Pending" : "Bloqueada")'
+  estado: 'blocked_by == nil ? estado : (all(blocked_by, {# == "Completed"}) ? "Pending" : "Blocked")'
 `
 
 // TestDependencyChain_LinearChain tests a linear dependency chain:
-// C (Completado, no deps) -> B blocks C (should derive Pending) -> A blocks B (should derive Bloqueada)
+// C (Completed, no deps) -> B blocks C (should derive Pending) -> A blocks B (should derive Blocked)
 //
 // Chain: A --blocks--> B --blocks--> C
-// C has estado=Completado and no blockers.
-// B has estado=Pending and blocks C (C is Completado, so B stays Pending).
-// A has estado=Pending and blocks B (B frontmatter is Pending but *not* Completado, so A is Bloqueada).
+// C has estado=Completed and no blockers.
+// B has estado=Pending and blocks C (C is Completed, so B stays Pending).
+// A has estado=Pending and blocks B (B frontmatter is Pending but *not* Completed, so A is Blocked).
 //
 // Note: The derive engine reads from Frontmatter["estado"] of targets, not
 // from Derived["estado"]. This is a single-pass design — no transitive
@@ -47,13 +47,13 @@ func TestDependencyChain_LinearChain(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		".stem": stemWithDeriveAndLinks,
 
-		// C: leaf node, already Completado, no blockers
-		"tasks/C.md": "---\nestado: Completado\n---\n# Task C\n",
+		// C: leaf node, already Completed, no blockers
+		"tasks/C.md": "---\nestado: Completed\n---\n# Task C\n",
 
-		// B: blocks C (C is Completado, so all blockers done -> Pending)
+		// B: blocks C (C is Completed, so all blockers done -> Pending)
 		"tasks/B.md": "---\nestado: Pending\n---\n# Task B\n\n[[blocks:C.md]]\n",
 
-		// A: blocks B (B frontmatter is Pending, not Completado -> Bloqueada)
+		// A: blocks B (B frontmatter is Pending, not Completed -> Blocked)
 		"tasks/A.md": "---\nestado: Pending\n---\n# Task A\n\n[[blocks:B.md]]\n",
 	})
 
@@ -78,7 +78,7 @@ func TestDependencyChain_LinearChain(t *testing.T) {
 		byPath[r.Path] = r
 	}
 
-	// C: no blockers -> estado preserved as "Completado"
+	// C: no blockers -> estado preserved as "Completed"
 	recC := byPath["tasks/C.md"]
 	if recC == nil {
 		t.Fatal("missing tasks/C.md")
@@ -87,11 +87,11 @@ func TestDependencyChain_LinearChain(t *testing.T) {
 	if !ok {
 		t.Fatal("C: missing estado")
 	}
-	if estadoC != "Completado" {
-		t.Errorf("C: estado = %v, want Completado", estadoC)
+	if estadoC != "Completed" {
+		t.Errorf("C: estado = %v, want Completed", estadoC)
 	}
 
-	// B: blocks C (Completado) -> all blockers done -> derived "Pending"
+	// B: blocks C (Completed) -> all blockers done -> derived "Pending"
 	recB := byPath["tasks/B.md"]
 	if recB == nil {
 		t.Fatal("missing tasks/B.md")
@@ -104,7 +104,7 @@ func TestDependencyChain_LinearChain(t *testing.T) {
 		t.Errorf("B: estado = %v, want Pending", estadoB)
 	}
 
-	// A: blocks B (B frontmatter is "Pending", not Completado) -> derived "Bloqueada"
+	// A: blocks B (B frontmatter is "Pending", not Completed) -> derived "Blocked"
 	recA := byPath["tasks/A.md"]
 	if recA == nil {
 		t.Fatal("missing tasks/A.md")
@@ -113,18 +113,18 @@ func TestDependencyChain_LinearChain(t *testing.T) {
 	if !ok {
 		t.Fatal("A: missing estado")
 	}
-	if estadoA != "Bloqueada" {
-		t.Errorf("A: estado = %v, want Bloqueada", estadoA)
+	if estadoA != "Blocked" {
+		t.Errorf("A: estado = %v, want Blocked", estadoA)
 	}
 }
 
 // TestDependencyChain_MultipleBlockers tests a record blocked by multiple dependencies.
-// A blocks B and C. Both B and C must be Completado for A to be unblocked.
+// A blocks B and C. Both B and C must be Completed for A to be unblocked.
 func TestDependencyChain_MultipleBlockers(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		".stem": stemWithDeriveAndLinks,
 
-		"tasks/B.md": "---\nestado: Completado\n---\n# Task B\n",
+		"tasks/B.md": "---\nestado: Completed\n---\n# Task B\n",
 		"tasks/C.md": "---\nestado: Pending\n---\n# Task C\n",
 
 		// A blocks both B and C
@@ -146,7 +146,7 @@ func TestDependencyChain_MultipleBlockers(t *testing.T) {
 		byPath[r.Path] = r
 	}
 
-	// A: B is Completado but C is Pending -> not all done -> "Bloqueada"
+	// A: B is Completed but C is Pending -> not all done -> "Blocked"
 	recA := byPath["tasks/A.md"]
 	if recA == nil {
 		t.Fatal("missing tasks/A.md")
@@ -155,21 +155,21 @@ func TestDependencyChain_MultipleBlockers(t *testing.T) {
 	if !ok {
 		t.Fatal("A: missing estado")
 	}
-	if estadoA != "Bloqueada" {
-		t.Errorf("A: estado = %v, want Bloqueada (C is still Pending)", estadoA)
+	if estadoA != "Blocked" {
+		t.Errorf("A: estado = %v, want Blocked (C is still Pending)", estadoA)
 	}
 }
 
 // TestDependencyChain_MultipleBlockersAllDone tests that when all blockers
-// are Completado, the record is derived as Pending (unblocked).
+// are Completed, the record is derived as Pending (unblocked).
 func TestDependencyChain_MultipleBlockersAllDone(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		".stem": stemWithDeriveAndLinks,
 
-		"tasks/B.md": "---\nestado: Completado\n---\n# Task B\n",
-		"tasks/C.md": "---\nestado: Completado\n---\n# Task C\n",
+		"tasks/B.md": "---\nestado: Completed\n---\n# Task B\n",
+		"tasks/C.md": "---\nestado: Completed\n---\n# Task C\n",
 
-		// A blocks both B and C — both Completado
+		// A blocks both B and C — both Completed
 		"tasks/A.md": "---\nestado: Pending\n---\n# Task A\n\n[[blocks:B.md]]\n[[blocks:C.md]]\n",
 	})
 
@@ -188,7 +188,7 @@ func TestDependencyChain_MultipleBlockersAllDone(t *testing.T) {
 		byPath[r.Path] = r
 	}
 
-	// A: both B and C are Completado -> all blockers done -> "Pending"
+	// A: both B and C are Completed -> all blockers done -> "Pending"
 	recA := byPath["tasks/A.md"]
 	if recA == nil {
 		t.Fatal("missing tasks/A.md")
@@ -198,15 +198,15 @@ func TestDependencyChain_MultipleBlockersAllDone(t *testing.T) {
 		t.Fatal("A: missing estado")
 	}
 	if estadoA != "Pending" {
-		t.Errorf("A: estado = %v, want Pending (all blockers Completado)", estadoA)
+		t.Errorf("A: estado = %v, want Pending (all blockers Completed)", estadoA)
 	}
 }
 
 // TestDependencyChain_Cycle tests that a circular dependency (A blocks B,
 // B blocks A) does not cause an infinite loop. The derive engine is single-pass
 // and reads from Frontmatter, not Derived, so cycles resolve naturally without
-// hanging. Both records should derive "Bloqueada" because neither target has
-// estado=Completado in frontmatter.
+// hanging. Both records should derive "Blocked" because neither target has
+// estado=Completed in frontmatter.
 func TestDependencyChain_Cycle(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		".stem": stemWithDeriveAndLinks,
@@ -232,8 +232,8 @@ func TestDependencyChain_Cycle(t *testing.T) {
 		byPath[r.Path] = r
 	}
 
-	// Both A and B reference each other. Since neither has estado=Completado
-	// in frontmatter, both should derive "Bloqueada".
+	// Both A and B reference each other. Since neither has estado=Completed
+	// in frontmatter, both should derive "Blocked".
 	recA := byPath["tasks/A.md"]
 	if recA == nil {
 		t.Fatal("missing tasks/A.md")
@@ -242,8 +242,8 @@ func TestDependencyChain_Cycle(t *testing.T) {
 	if !ok {
 		t.Fatal("A: missing estado")
 	}
-	if estadoA != "Bloqueada" {
-		t.Errorf("A: estado = %v, want Bloqueada (cycle: B is Pending)", estadoA)
+	if estadoA != "Blocked" {
+		t.Errorf("A: estado = %v, want Blocked (cycle: B is Pending)", estadoA)
 	}
 
 	recB := byPath["tasks/B.md"]
@@ -254,8 +254,8 @@ func TestDependencyChain_Cycle(t *testing.T) {
 	if !ok {
 		t.Fatal("B: missing estado")
 	}
-	if estadoB != "Bloqueada" {
-		t.Errorf("B: estado = %v, want Bloqueada (cycle: A is Pending)", estadoB)
+	if estadoB != "Blocked" {
+		t.Errorf("B: estado = %v, want Blocked (cycle: A is Pending)", estadoB)
 	}
 }
 
@@ -303,7 +303,7 @@ func TestDependencyChain_NoLinks(t *testing.T) {
 		".stem": stemWithDeriveAndLinks,
 
 		// A has no links at all
-		"tasks/A.md": "---\nestado: Completado\n---\n# Task A (no deps)\n",
+		"tasks/A.md": "---\nestado: Completed\n---\n# Task A (no deps)\n",
 	})
 
 	reg := extract.NewRegistry()
@@ -325,8 +325,8 @@ func TestDependencyChain_NoLinks(t *testing.T) {
 	if !ok {
 		t.Fatal("missing estado")
 	}
-	if estado != "Completado" {
-		t.Errorf("estado = %v, want Completado (no links, preserved)", estado)
+	if estado != "Completed" {
+		t.Errorf("estado = %v, want Completed (no links, preserved)", estado)
 	}
 }
 
@@ -338,7 +338,7 @@ func TestDependencyChain_QueryAfterDerive(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		".stem": stemWithDeriveAndLinks,
 
-		"tasks/C.md": "---\nestado: Completado\n---\n# Task C\n",
+		"tasks/C.md": "---\nestado: Completed\n---\n# Task C\n",
 		"tasks/B.md": "---\nestado: Pending\n---\n# Task B\n\n[[blocks:C.md]]\n",
 		"tasks/A.md": "---\nestado: Pending\n---\n# Task A\n\n[[blocks:B.md]]\n",
 	})
@@ -365,16 +365,16 @@ func TestDependencyChain_QueryAfterDerive(t *testing.T) {
 		t.Errorf("frontmatter Pending count = %d, want 2 (A and B)", qr.Meta.Count)
 	}
 
-	// Query on frontmatter Completado — only C.
+	// Query on frontmatter Completed — only C.
 	result2, err := query.Execute(records, &query.Query{
-		Where: &query.Condition{Op: query.OpEq, Field: "estado", Value: "Completado"},
+		Where: &query.Condition{Op: query.OpEq, Field: "estado", Value: "Completed"},
 	})
 	if err != nil {
 		t.Fatalf("query error: %v", err)
 	}
 	qr2 := result2.(*query.QueryResult)
 	if qr2.Meta.Count != 1 {
-		t.Errorf("frontmatter Completado count = %d, want 1 (C)", qr2.Meta.Count)
+		t.Errorf("frontmatter Completed count = %d, want 1 (C)", qr2.Meta.Count)
 	}
 
 	// Verify EffectiveField returns derived estado (takes precedence over frontmatter).
@@ -388,9 +388,9 @@ func TestDependencyChain_QueryAfterDerive(t *testing.T) {
 		want    string
 		comment string
 	}{
-		{"tasks/A.md", "Bloqueada", "A blocked by B (Pending)"},
-		{"tasks/B.md", "Pending", "B unblocked (C is Completado)"},
-		{"tasks/C.md", "Completado", "C has no deps, preserved"},
+		{"tasks/A.md", "Blocked", "A blocked by B (Pending)"},
+		{"tasks/B.md", "Pending", "B unblocked (C is Completed)"},
+		{"tasks/C.md", "Completed", "C has no deps, preserved"},
 	}
 	for _, tt := range tests {
 		rec := byPath[tt.path]

@@ -403,7 +403,7 @@ schema:
     type: enum
     values:
       - Pending
-      - Completado
+      - Completed
     required: true
   Tipo:
     type: enum
@@ -413,7 +413,7 @@ schema:
     required: true
 validate:
   - rule: requires
-    if: { Estado: Completado }
+    if: { Estado: Completed }
     then: { fields: [Fecha] }
   - rule: non_empty
     field: Tipo
@@ -427,8 +427,8 @@ validate:
 		// Invalid PRD: missing required Fecha
 		"prd/missing-required.md": "---\nEstado: Pending\nTipo: servicio-docker\n---\n# Missing Required",
 
-		// Invalid PRD: Estado=Completado but no Fecha (requires rule fires)
-		"prd/requires-fail.md": "---\nEstado: Completado\nTipo: modulo-sistema\n---\n# Requires Fail",
+		// Invalid PRD: Estado=Completed but no Fecha (requires rule fires)
+		"prd/requires-fail.md": "---\nEstado: Completed\nTipo: modulo-sistema\n---\n# Requires Fail",
 	})
 
 	reg := extract.NewRegistry()
@@ -488,7 +488,7 @@ validate:
 		}
 	}
 
-	// requires-fail.md: Estado=Completado without Fecha triggers requires rule
+	// requires-fail.md: Estado=Completed without Fecha triggers requires rule
 	if errs := results["prd/requires-fail.md"]; len(errs) == 0 {
 		t.Error("requires-fail.md: expected requires error for Fecha")
 	} else {
@@ -599,11 +599,11 @@ schema:
     type: enum
     values:
       - Pending
-      - Completado
+      - Completed
     required: true
 validate:
   - rule: requires
-    if: { Estado: Completado }
+    if: { Estado: Completed }
     then: { fields: [Fecha] }
 `,
 	})
@@ -694,7 +694,7 @@ func TestPipeline_QueryAfterScanExtract(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		".stem":         "version: 1\nscope:\n  match: \"*.md\"\n",
 		"tasks/T001.md": "---\ntitle: Deploy Redis\nestado: Pending\ntipo: servicio-docker\n---\n# Deploy",
-		"tasks/T002.md": "---\ntitle: Auth Module\nestado: Completado\ntipo: modulo-sistema\n---\n# Auth",
+		"tasks/T002.md": "---\ntitle: Auth Module\nestado: Completed\ntipo: modulo-sistema\n---\n# Auth",
 		"tasks/T003.md": "---\ntitle: LXC Setup\nestado: Pending\ntipo: lxc\n---\n# LXC\n\nMigration needed.",
 	})
 
@@ -738,12 +738,12 @@ func TestPipeline_QueryAfterScanExtract(t *testing.T) {
 
 	// Count query
 	result4, _ := query.Execute(records, &query.Query{
-		Where: &query.Condition{Op: query.OpEq, Field: "estado", Value: "Completado"},
+		Where: &query.Condition{Op: query.OpEq, Field: "estado", Value: "Completed"},
 		Count: true,
 	})
 	cr := result4.(*query.CountResult)
 	if cr.Count != 1 {
-		t.Errorf("count Completado: %d, want 1", cr.Count)
+		t.Errorf("count Completed: %d, want 1", cr.Count)
 	}
 
 	// And query: tipo eq servicio-docker AND estado eq Pending

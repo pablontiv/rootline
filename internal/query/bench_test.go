@@ -13,7 +13,7 @@ func BenchmarkExecuteExpr(b *testing.B) {
 	for i := 0; i < 50; i++ {
 		estado := "Pending"
 		if i%3 == 0 {
-			estado = "Completado"
+			estado = "Completed"
 		}
 		records = append(records, &extract.Record{
 			Path: fmt.Sprintf("doc%03d.md", i),
@@ -29,7 +29,7 @@ func BenchmarkExecuteExpr(b *testing.B) {
 
 	b.Run("eq", func(b *testing.B) {
 		for b.Loop() {
-			_, err := ExecuteExpr(records, `estado == "Completado"`, q)
+			_, err := ExecuteExpr(records, `estado == "Completed"`, q)
 			if err != nil {
 				b.Fatal(err)
 			}

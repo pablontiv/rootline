@@ -39,9 +39,9 @@ func TestDeriveRecordWithChildren(t *testing.T) {
 		Frontmatter: map[string]any{"titulo": "Parent"},
 	}
 	children := []*extract.Record{
-		{Path: "a.md", Frontmatter: map[string]any{"estado": "Completado"}},
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "Completed"}},
 		{Path: "b.md", Frontmatter: map[string]any{"estado": "Pending"}},
-		{Path: "c.md", Frontmatter: map[string]any{"estado": "Completado"}},
+		{Path: "c.md", Frontmatter: map[string]any{"estado": "Completed"}},
 	}
 	stem := &rules.StemFile{
 		Derive: map[string]any{
@@ -65,13 +65,13 @@ func TestDeriveRecordCountChildren(t *testing.T) {
 		Frontmatter: map[string]any{},
 	}
 	children := []*extract.Record{
-		{Path: "a.md", Frontmatter: map[string]any{"estado": "Completado"}},
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "Completed"}},
 		{Path: "b.md", Frontmatter: map[string]any{"estado": "Pending"}},
-		{Path: "c.md", Frontmatter: map[string]any{"estado": "Completado"}},
+		{Path: "c.md", Frontmatter: map[string]any{"estado": "Completed"}},
 	}
 	stem := &rules.StemFile{
 		Derive: map[string]any{
-			"done": `count(children, {.estado == "Completado"})`,
+			"done": `count(children, {.estado == "Completed"})`,
 		},
 	}
 

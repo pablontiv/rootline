@@ -84,11 +84,11 @@ func TestLenArray(t *testing.T) {
 func TestCountWithPredicate(t *testing.T) {
 	// expr built-in count() with closure syntax.
 	children := []any{
-		map[string]any{"estado": "Completado"},
+		map[string]any{"estado": "Completed"},
 		map[string]any{"estado": "Pending"},
-		map[string]any{"estado": "Completado"},
+		map[string]any{"estado": "Completed"},
 	}
-	result := evalExpr(t, `count(children, {.estado == "Completado"})`, map[string]any{
+	result := evalExpr(t, `count(children, {.estado == "Completed"})`, map[string]any{
 		"children": children,
 	})
 	if result != 2 {
@@ -98,7 +98,7 @@ func TestCountWithPredicate(t *testing.T) {
 
 func TestAnyWithPredicate(t *testing.T) {
 	children := []any{
-		map[string]any{"estado": "Completado"},
+		map[string]any{"estado": "Completed"},
 		map[string]any{"estado": "Pending"},
 	}
 	result := evalExpr(t, `any(children, {.estado == "Pending"})`, map[string]any{
@@ -111,10 +111,10 @@ func TestAnyWithPredicate(t *testing.T) {
 
 func TestAllWithPredicate(t *testing.T) {
 	children := []any{
-		map[string]any{"estado": "Completado"},
-		map[string]any{"estado": "Completado"},
+		map[string]any{"estado": "Completed"},
+		map[string]any{"estado": "Completed"},
 	}
-	result := evalExpr(t, `all(children, {.estado == "Completado"})`, map[string]any{
+	result := evalExpr(t, `all(children, {.estado == "Completed"})`, map[string]any{
 		"children": children,
 	})
 	if result != true {
@@ -123,7 +123,7 @@ func TestAllWithPredicate(t *testing.T) {
 
 	// Negative case.
 	children = append(children, map[string]any{"estado": "Pending"})
-	result = evalExpr(t, `all(children, {.estado == "Completado"})`, map[string]any{
+	result = evalExpr(t, `all(children, {.estado == "Completed"})`, map[string]any{
 		"children": children,
 	})
 	if result != false {

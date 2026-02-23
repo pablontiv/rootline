@@ -69,7 +69,7 @@ func TestAnalyzeNotRequired(t *testing.T) {
 func TestAnalyzeEnum(t *testing.T) {
 	// 10 records with "estado" having 3 unique values -> enum
 	records := make([]*extract.Record, 10)
-	vals := []string{"Pending", "Completado", "Draft"}
+	vals := []string{"Pending", "Completed", "Draft"}
 	for i := 0; i < 10; i++ {
 		records[i] = &extract.Record{
 			Path:        "doc.md",
