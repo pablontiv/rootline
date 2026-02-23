@@ -60,7 +60,7 @@ Derivation evaluates per-record expressions from `.stem` `derive:` fields. Aggre
 
 ## Project Documentation
 
-- `docs/research/` — Pre-research for deferred features (I2 plugin architecture, I3 derivation engine, I9 opportunity areas)
+- `docs/research/` — Pre-research for deferred features (plugin architecture)
 - `docs/epics/` — Roadmap for features. Completed: derivation engine (E04/F04), dependency graph (E04/F05), fix proposals (E04/F10), schema migration (E07/F01). Pending: MCP server/distribution (E03/F05), repo best practices (E05).
 - Documentation is written in a mix of Spanish and English (field names like `estado`, `tipo`, `ejecutable_en` are in Spanish)
 

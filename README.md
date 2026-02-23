@@ -8,7 +8,7 @@ A **file-based database and constraint engine** for structured documentation.
 
 Rootline treats the filesystem as a database: directories are tables, files are records, metadata comes from YAML frontmatter, and structure is inherited via `.stem` files.
 
-> **Status**: Engine complete — validation, query, derivation, dependency graph, explain, and fix all functional.
+> **Status**: Engine complete — validation, query, derivation, dependency graph, explain, fix, and migrate all functional.
 > Only `serve` (MCP server) remains as a stub.
 
 ---
@@ -166,6 +166,7 @@ rootline explain <file>                   # Trace field origins, derivations, an
 rootline init [path]                      # Infer .stem from existing documents
 rootline new <file>                       # Scaffold document from effective schema
 rootline fix [file|--all]                 # Auto-repair: add fields, fix enums, propose changes
+rootline migrate [path]                   # Detect schema changes, rename fields
 
 # Tooling
 rootline doctor [path]                    # Check .stem configuration health
@@ -262,6 +263,9 @@ A **Model Context Protocol (MCP)** server is planned (`rootline serve`) to expos
 |-------|-------------|
 | [Query Engine](docs/query.md) | Query contract, operators, result shapes |
 | [Describe](docs/describe.md) | Describe output, field extraction, source tracking |
+| [Derivation Engine](docs/derivation.md) | Derive and aggregate expressions, builtins, linked fields |
+| [Dependency Graph](docs/graph.md) | Wiki-links, link schema, cycle detection, DOT/Mermaid |
+| [Schema Migration](docs/migrate.md) | Breaking change detection, field rename, migration log |
 | [JSON-RPC Protocol](docs/json-rpc.md) | MCP server protocol (planned) |
 | [Extensibility](docs/extensibility.md) | Extractor architecture, future formats |
 | [Visual Identity](docs/identity.md) | Logo, colors, usage guidelines |
