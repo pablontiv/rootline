@@ -384,6 +384,51 @@ func TestMergeStemFiles_StructuralOverridden(t *testing.T) {
 	}
 }
 
+func TestMergeStemFiles_ExcludesChildOverridesParent(t *testing.T) {
+	entries := []StemEntry{
+		stemEntry("parent/.stem", &StemFile{
+			Version: 1,
+			Schema: map[string]SchemaField{
+				"estado": {Type: "enum", Required: true, Excludes: &ExcludeRule{Match: "*/README.md"}},
+			},
+		}),
+		stemEntry("child/.stem", &StemFile{
+			Schema: map[string]SchemaField{
+				"estado": {Type: "enum", Required: true},
+			},
+		}),
+	}
+
+	result := MergeStemFiles(entries)
+	if result.Schema["estado"].Excludes != nil {
+		t.Error("expected child to clear parent's excludes")
+	}
+}
+
+func TestMergeStemFiles_ExcludesChildSetsNew(t *testing.T) {
+	entries := []StemEntry{
+		stemEntry("parent/.stem", &StemFile{
+			Version: 1,
+			Schema: map[string]SchemaField{
+				"estado": {Type: "enum", Required: true},
+			},
+		}),
+		stemEntry("child/.stem", &StemFile{
+			Schema: map[string]SchemaField{
+				"estado": {Type: "enum", Required: true, Excludes: &ExcludeRule{Match: "*/index.md"}},
+			},
+		}),
+	}
+
+	result := MergeStemFiles(entries)
+	if result.Schema["estado"].Excludes == nil {
+		t.Fatal("expected child to set excludes")
+	}
+	if result.Schema["estado"].Excludes.Match != "*/index.md" {
+		t.Errorf("excludes.match = %q, want */index.md", result.Schema["estado"].Excludes.Match)
+	}
+}
+
 func TestMergeStemFiles_ChildValidateNilDoesNotReplaceParent(t *testing.T) {
 	// If child has no validate section (nil), parent's validate survives.
 	entries := []StemEntry{

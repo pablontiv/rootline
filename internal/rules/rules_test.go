@@ -235,6 +235,45 @@ structural:
 	}
 }
 
+func TestParseStem_ExcludesField(t *testing.T) {
+	content := []byte(`version: 1
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completado]
+    excludes:
+      match: "*/README.md"
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	field := stem.Schema["estado"]
+	if field.Excludes == nil {
+		t.Fatal("excludes is nil, want non-nil")
+	}
+	if field.Excludes.Match != "*/README.md" {
+		t.Errorf("excludes.match = %q, want */README.md", field.Excludes.Match)
+	}
+}
+
+func TestParseStem_ExcludesAbsent(t *testing.T) {
+	content := []byte(`version: 1
+schema:
+  estado:
+    type: enum
+    required: true
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if stem.Schema["estado"].Excludes != nil {
+		t.Error("excludes should be nil when not defined")
+	}
+}
+
 func TestParseStem_NoStructural(t *testing.T) {
 	content := []byte("version: 1\n")
 	dir := t.TempDir()

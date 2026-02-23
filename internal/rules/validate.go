@@ -41,9 +41,15 @@ func Validate(record *extract.Record, effective *StemFile) []ValidationError {
 
 		// required: true → field must exist
 		if field.Required && !exists {
-			// Skip required check for aggregate-computed fields on index files.
+			// Layer 1: Skip for aggregate-computed fields on index files.
 			if _, hasAggregate := effective.Aggregate[name]; hasAggregate && isIndexFile(record.Path, effective) {
 				continue
+			}
+			// Layer 2: Skip if excludes.match pattern matches the record path.
+			if field.Excludes != nil && field.Excludes.Match != "" {
+				if matched, _ := filepath.Match(field.Excludes.Match, record.Path); matched {
+					continue
+				}
 			}
 			errs = append(errs, ValidationError{
 				Rule:     "required",

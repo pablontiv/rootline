@@ -452,6 +452,77 @@ func TestValidate_RequiredAggregateCustomIndexName(t *testing.T) {
 	}
 }
 
+func TestValidate_ExcludesMatchSkipsRequired(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"estado": {
+				Type:     "enum",
+				Required: true,
+				Source:   "root/.stem",
+				Severity: "error",
+				Excludes: &ExcludeRule{Match: "*/README.md"},
+			},
+		},
+	}
+	record := &extract.Record{
+		Path:        "docs/README.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+	}
+	errs := Validate(record, stem)
+	if len(errs) != 0 {
+		t.Errorf("got %d errors, want 0 (excludes match)", len(errs))
+	}
+}
+
+func TestValidate_ExcludesNoMatchKeepsRequired(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"estado": {
+				Type:     "enum",
+				Required: true,
+				Source:   "root/.stem",
+				Severity: "error",
+				Excludes: &ExcludeRule{Match: "*/README.md"},
+			},
+		},
+	}
+	record := &extract.Record{
+		Path:        "docs/T001-task.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+	}
+	errs := Validate(record, stem)
+	if len(errs) != 1 {
+		t.Fatalf("got %d errors, want 1 (excludes no match)", len(errs))
+	}
+	if errs[0].Rule != "required" {
+		t.Errorf("rule = %q, want required", errs[0].Rule)
+	}
+}
+
+func TestValidate_ExcludesNilNoEffect(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"estado": {
+				Type:     "enum",
+				Required: true,
+				Source:   "root/.stem",
+				Severity: "error",
+			},
+		},
+	}
+	record := &extract.Record{
+		Path:        "docs/README.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+	}
+	errs := Validate(record, stem)
+	if len(errs) != 1 {
+		t.Fatalf("got %d errors, want 1 (nil excludes)", len(errs))
+	}
+}
+
 func TestValidateLinks_AllowedType(t *testing.T) {
 	stem := &StemFile{
 		Links: LinkSchema{Allowed: []string{"blocks", "parent"}},

@@ -104,17 +104,23 @@ type Scope struct {
 	Match string `yaml:"match" json:"match,omitempty"`
 }
 
+// ExcludeRule defines a path-based exclusion for schema field validation.
+type ExcludeRule struct {
+	Match string `yaml:"match" json:"match"`
+}
+
 // SchemaField defines a single field in the schema.
 type SchemaField struct {
-	Type     string   `yaml:"type" json:"type"`
-	Required bool     `yaml:"required" json:"required"`
-	Values   []string `yaml:"values" json:"values,omitempty"`
-	Default  string   `yaml:"default" json:"default,omitempty"`
-	Severity string   `yaml:"severity" json:"severity,omitempty"`
-	Source   string   `yaml:"-" json:"source,omitempty"`
-	Prefix   string   `yaml:"prefix" json:"prefix,omitempty"`
-	Digits   int      `yaml:"digits" json:"digits,omitempty"`
-	Next     string   `yaml:"-" json:"next,omitempty"`
+	Type     string       `yaml:"type" json:"type"`
+	Required bool         `yaml:"required" json:"required"`
+	Values   []string     `yaml:"values" json:"values,omitempty"`
+	Default  string       `yaml:"default" json:"default,omitempty"`
+	Severity string       `yaml:"severity" json:"severity,omitempty"`
+	Source   string       `yaml:"-" json:"source,omitempty"`
+	Prefix   string       `yaml:"prefix" json:"prefix,omitempty"`
+	Digits   int          `yaml:"digits" json:"digits,omitempty"`
+	Next     string       `yaml:"-" json:"next,omitempty"`
+	Excludes *ExcludeRule `yaml:"excludes" json:"excludes,omitempty"`
 }
 
 // ValidationRule defines a single validation constraint.
