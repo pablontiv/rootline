@@ -1,5 +1,5 @@
 ---
-estado: Completado
+estado: Completed
 ---
 # Schema Migration
 

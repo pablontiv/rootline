@@ -1,5 +1,5 @@
 ---
-estado: Completado
+estado: Completed
 ---
 # Dependency Graph
 

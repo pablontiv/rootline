@@ -1,5 +1,5 @@
 ---
-estado: Completado
+estado: Completed
 ---
 # Query Engine
 
@@ -13,7 +13,7 @@ The `--where` flag accepts [expr-lang/expr](https://expr-lang.org/) expressions.
 
 ```bash
 rootline query --where 'status == "published"'
-rootline query --where 'tipo in ["lxc", "vm"]' --where 'estado != "Completado"'
+rootline query --where 'tipo in ["lxc", "vm"]' --where 'estado != "Completed"'
 rootline query --where 'body contains "migration"'
 rootline query --where 'tags != nil' --count
 rootline query --where 'estado == "Pending"' --limit 10

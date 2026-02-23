@@ -1,5 +1,5 @@
 ---
-estado: Completado
+estado: Completed
 ---
 # Derivation Engine
 
@@ -20,7 +20,7 @@ derive:
 
 aggregate:
   total: "len(descendants)"
-  completados: "len(filter(descendants, .estado == 'Completado'))"
+  completed: "len(filter(descendants, .estado == 'Completed'))"
 ```
 
 `derive:` expressions run per-record. `aggregate:` expressions run on index files (README.md) with access to `descendants` (all non-index records) and `children` (sub-index records).
@@ -50,7 +50,7 @@ links:
       estado: estado  # inject linked record's "estado" into expression env
 ```
 
-This enables derived state from dependencies — e.g., a task is blocked if any linked blocker has `estado != "Completado"`.
+This enables derived state from dependencies — e.g., a task is blocked if any linked blocker has `estado != "Completed"`.
 
 ## Pipeline
 
@@ -78,7 +78,7 @@ Derived and aggregated fields appear in query results alongside frontmatter:
 {
   "path": "docs/api/endpoints.md",
   "type": "markdown",
-  "frontmatter": { "titulo": "Endpoints", "estado": "Completado" },
-  "derived": { "slug": "endpoints", "status_lower": "completado" }
+  "frontmatter": { "titulo": "Endpoints", "estado": "Completed" },
+  "derived": { "slug": "endpoints", "status_lower": "completed" }
 }
 ```

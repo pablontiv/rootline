@@ -1,5 +1,5 @@
 ---
-estado: Completado
+estado: Completed
 ---
 # Identidad visual básica · Rootline
 

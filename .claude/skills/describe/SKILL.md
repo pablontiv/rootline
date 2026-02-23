@@ -71,7 +71,7 @@ Present the schema as a table:
 ```markdown
 | Field | Type | Required | Values | Source |
 |-------|------|----------|--------|--------|
-| estado | enum | yes | Pending, Completado | .stem |
+| estado | enum | yes | Pending, Completed | .stem |
 | tipo | enum | yes | feature, historia | ../.stem |
 | id | sequence | yes | (next: T005) | .stem |
 ```

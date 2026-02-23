@@ -21,7 +21,7 @@ Create a new document with frontmatter pre-populated from the effective `.stem` 
 
 - If `$ARGUMENTS` is a **file path** (ends in `.md`) → use as target path directly
 - If `$ARGUMENTS` is a **directory** → need to build filename (go to step 2)
-- If `$ARGUMENTS` is **empty** → run `rootline tree --depth 1` to show available directories, then use `AskUserQuestion` to let the user pick a target directory
+- If `$ARGUMENTS` is **empty** → run `rootline tree . --output table` to show available directories, then use `AskUserQuestion` to let the user pick a target directory
 
 ### 2. Auto-numbering (if target is a directory)
 

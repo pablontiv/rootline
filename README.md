@@ -185,7 +185,7 @@ rootline describe docs/prd/ --field schema.id.next
 # "T004"
 
 rootline query --where 'estado == "Pending"' --field path
-# docs/epics/E01/F01/S001/T005-deploy-grafana.md
+# docs/projects/P01/tasks/T005-deploy-grafana.md
 
 rootline tree docs/epics/ --where 'estado != "Completed"'
 rootline stats docs/epics/ --where 'tipo == "software-module"'
@@ -198,7 +198,7 @@ Queries use [expr-lang/expr](https://expr-lang.org/) syntax. Multiple `--where` 
 
 ```bash
 rootline query --where 'estado == "Pending"'
-rootline query --where 'tipo in ["lxc", "vm"]' --where 'estado != "Completado"'
+rootline query --where 'tipo in ["lxc", "vm"]' --where 'estado != "Completed"'
 rootline query --where 'body contains "migration"'
 rootline query --where 'tags != nil' --count
 ```
@@ -214,7 +214,7 @@ derive:
 
 aggregate:
   total: 'len(descendants)'
-  completados: 'len(filter(descendants, .estado == "Completado"))'
+  completed: 'len(filter(descendants, .estado == "Completed"))'
 ```
 
 Derived and aggregated fields appear alongside frontmatter in query results, stats, and tree output.
@@ -247,7 +247,7 @@ Proposals include: correct misspelled enum values (Levenshtein matching), extend
 `rootline explain` traces **why** a document has its current state — field origins, derivation expressions, aggregation sources, and validation errors:
 
 ```bash
-rootline explain docs/epics/E01/F01/README.md
+rootline explain docs/projects/P01/F01/README.md
 ```
 
 Shows each field's origin (frontmatter, schema default, derived, or aggregated) with the source `.stem` file and expression.
