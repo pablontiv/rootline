@@ -32,6 +32,13 @@ rootline describe docs/api/
       "values": ["draft", "review", "published"],
       "default": "draft",
       "source": "docs/api/.stem"
+    },
+    "id": {
+      "type": "sequence",
+      "prefix": "T",
+      "digits": 3,
+      "next": "T004",
+      "source": "docs/api/.stem"
     }
   },
   "validate": [
@@ -42,14 +49,35 @@ rootline describe docs/api/
       "source": "docs/.stem"
     }
   ],
-  "derive": {},
-  "state": {},
-  "links": {}
+  "derive": {
+    "slug": "slugify(title)"
+  },
+  "aggregate": {
+    "total": "len(descendants)"
+  },
+  "links": {
+    "allowed": ["blocks", "depends"]
+  },
+  "structural": {
+    "require_index": true,
+    "min_children": 1
+  }
 }
 ```
 
 Every field includes `source` — the `.stem` file that defined it.
 This makes the merge cascade transparent and debuggable.
+
+### Sections
+
+| Section | Purpose |
+|---------|---------|
+| `schema` | Field definitions with types, enums, defaults, and sequence auto-numbering |
+| `validate` | Explicit validation rules (non_empty, exists, requires, enum) |
+| `derive` | Per-record expressions evaluated via expr-lang (e.g., `slugify(title)`) |
+| `aggregate` | Bottom-up expressions for index files (e.g., `len(descendants)`) |
+| `links` | Wiki-link schema: allowed types and target validation patterns |
+| `structural` | Directory constraints: require_index, min/max_children |
 
 ## Field Extraction
 

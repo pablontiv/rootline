@@ -5,9 +5,37 @@ estado: Completado
 
 Rootline exposes data through a **declarative query model**.
 
-Queries return **records**, not rendered documents.
+Queries return **records**, not rendered documents. Derived and aggregated fields are computed automatically and appear alongside frontmatter in results.
 
-## Query Request Contract
+## CLI Usage
+
+The `--where` flag accepts [expr-lang/expr](https://expr-lang.org/) expressions. Multiple `--where` flags are combined with AND:
+
+```bash
+rootline query --where 'status == "published"'
+rootline query --where 'tipo in ["lxc", "vm"]' --where 'estado != "Completado"'
+rootline query --where 'body contains "migration"'
+rootline query --where 'tags != nil' --count
+rootline query --where 'estado == "Pending"' --limit 10
+```
+
+Frontmatter fields are promoted to top-level variables — use `status` directly, not `frontmatter.status`. Derived fields take precedence over frontmatter fields of the same name.
+
+## Operators
+
+Standard expr-lang operators apply:
+
+| Operator | Semantics | Example |
+|----------|-----------|---------|
+| `==` | Equals | `status == "published"` |
+| `!=` | Not equals | `status != "draft"` |
+| `in` | One of | `tipo in ["lxc", "vm"]` |
+| `contains` | Substring match | `body contains "migration"` |
+| `!= nil` | Field exists | `tags != nil` |
+| `&&` | AND | `tipo == "lxc" && estado == "Pending"` |
+| `\|\|` | OR | `estado == "Pending" \|\| estado == "Bloqueada"` |
+
+## Query Request Contract (JSON)
 
 ```json
 {
@@ -23,26 +51,7 @@ Queries return **records**, not rendered documents.
 }
 ```
 
-When `where` contains multiple conditions without an explicit `and` wrapper,
-they are combined with `and` semantics (implicit `and`).
-
-## Operators
-
-| Operator | Semantics | Example |
-|----------|-----------|---------|
-| `eq` | Equals | `{"eq": ["status", "published"]}` |
-| `ne` | Not equals | `{"ne": ["status", "draft"]}` |
-| `in` | One of | `{"in": ["tipo", ["lxc", "vm"]]}` |
-| `contains` | Substring match | `{"contains": ["body", "migration"]}` |
-| `exists` | Field is present | `{"exists": "owner"}` |
-| `and` | All conditions match | `{"and": [cond1, cond2]}` |
-
-Query functions: `limit`, `count`.
-
-- Queries are **purely declarative**
-- No embedded code or scripts
-- Stable semantics for automation and AI
-- Operator set derived from real consumer analysis
+The JSON contract uses declarative operators (`eq`, `ne`, `in`, `contains`, `exists`, `and`) for programmatic use. The CLI `--where` flag uses expr-lang syntax instead.
 
 ## Query Result Shape
 
@@ -60,11 +69,16 @@ Query functions: `limit`, `count`.
       "frontmatter": {
         "title": "Endpoints",
         "status": "published"
+      },
+      "derived": {
+        "slug": "endpoints"
       }
     }
   ]
 }
 ```
+
+Rows include `derived` when the effective `.stem` defines `derive:` or `aggregate:` fields.
 
 ## Count Result Shape
 
