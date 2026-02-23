@@ -7,6 +7,8 @@ package proposal
 
 import (
 	"fmt"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -23,6 +25,7 @@ const (
 	ExtractBody       Type = "extract_body"
 	InferFromChildren Type = "infer_from_children"
 	AddField          Type = "add_field"
+	CorrectLink       Type = "correct_link"
 )
 
 // Proposal represents a suggested fix for one or more validation errors.
@@ -54,6 +57,7 @@ type Summary struct {
 	ExtractBody       int `json:"extract_body"`
 	InferFromChildren int `json:"infer_from_children"`
 	AddField          int `json:"add_field"`
+	CorrectLink       int `json:"correct_link"`
 }
 
 // Analyze runs all detectors against validation errors and returns a Report.
@@ -131,6 +135,9 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 				proposals = append(proposals, p)
 			}
 		}
+
+		// Phase 4: link target fixes
+		proposals = append(proposals, detectCorrectLink(records, effective, errs)...)
 	}
 
 	summary := Summary{Total: len(proposals)}
@@ -148,6 +155,8 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 			summary.InferFromChildren++
 		case AddField:
 			summary.AddField++
+		case CorrectLink:
+			summary.CorrectLink++
 		}
 	}
 
@@ -233,6 +242,9 @@ func detectMigrateValue(effective *rules.StemFile, errs map[string][]rules.Valid
 
 			// Find the closest valid enum value for the base.
 			newValue := closestMatch(base, sf.Values)
+			if newValue == "" {
+				newValue = base // preserve original base if no close match
+			}
 			var wikiLinks []string
 			for _, t := range targets {
 				wikiLinks = append(wikiLinks, "[[blocks:"+t+"]]")
@@ -484,15 +496,17 @@ func extractEnumValue(msg string, _ []string) string {
 }
 
 // closestMatch finds the closest string by Levenshtein distance.
+// Returns "" if no candidate is within the adaptive threshold max(2, len(s)/3).
 func closestMatch(s string, candidates []string) string {
 	if len(candidates) == 0 {
 		return ""
 	}
 
-	best := candidates[0]
-	bestDist := levenshtein(strings.ToLower(s), strings.ToLower(best))
+	threshold := max(2, len(s)/3)
+	best := ""
+	bestDist := threshold + 1
 
-	for _, c := range candidates[1:] {
+	for _, c := range candidates {
 		d := levenshtein(strings.ToLower(s), strings.ToLower(c))
 		if d < bestDist {
 			bestDist = d
@@ -531,4 +545,153 @@ func levenshtein(a, b string) int {
 		prev, curr = curr, prev
 	}
 	return prev[lb]
+}
+
+// detectCorrectLink finds link_target errors and proposes fixes.
+// Two strategies:
+//  1. Retype: if the target would be valid under a different allowed link type,
+//     propose changing the link type (e.g., [[blocks:E04]] → [[reference:E04]]).
+//  2. Expand: if the target is an abbreviated basename and a sibling record
+//     matches the prefix, propose expanding (e.g., [[blocks:T001]] → [[blocks:T001-full-name]]).
+func detectCorrectLink(records []*extract.Record, effective *rules.StemFile, errs map[string][]rules.ValidationError) []Proposal {
+	if effective == nil || effective.Links.IsEmpty() {
+		return nil
+	}
+
+	// Build record map and basename index for expansion.
+	recordMap := make(map[string]*extract.Record)
+	for _, rec := range records {
+		recordMap[rec.Path] = rec
+	}
+
+	var proposals []Proposal
+
+	for path, pathErrs := range errs {
+		rec := recordMap[path]
+		if rec == nil {
+			continue
+		}
+
+		for _, e := range pathErrs {
+			if e.Rule != "link_target" {
+				continue
+			}
+
+			target, pattern := extractLinkTargetAndPattern(e.Message)
+			if target == "" {
+				continue
+			}
+
+			// Find the link in the record to get its type.
+			var linkType string
+			for _, link := range rec.Links {
+				if link.Target == target {
+					linkType = link.Type
+					break
+				}
+			}
+			if linkType == "" {
+				continue
+			}
+
+			// Strategy 1: Expand — find sibling file matching abbreviated target.
+			// Expand has priority because it preserves the original link type's semantics.
+			if expanded := tryExpandTarget(target, path, records); expanded != "" {
+				proposals = append(proposals, Proposal{
+					Type:        CorrectLink,
+					Field:       "links",
+					Description: fmt.Sprintf("link [[%s:%s]] target abbreviated; expand to [[%s:%s]]", linkType, target, linkType, expanded),
+					Paths:       []string{path},
+					From:        "[[" + linkType + ":" + target + "]]",
+					To:          "[[" + linkType + ":" + expanded + "]]",
+				})
+				continue
+			}
+
+			// Strategy 2: Retype — check if another allowed type accepts this target.
+			if retyped := tryRetypeLink(target, linkType, pattern, effective.Links); retyped != "" {
+				proposals = append(proposals, Proposal{
+					Type:        CorrectLink,
+					Field:       "links",
+					Description: fmt.Sprintf("link [[%s:%s]] target does not match %s pattern; change to [[%s:%s]]", linkType, target, linkType, retyped, target),
+					Paths:       []string{path},
+					From:        "[[" + linkType + ":" + target + "]]",
+					To:          "[[" + retyped + ":" + target + "]]",
+				})
+				continue
+			}
+		}
+	}
+	return proposals
+}
+
+// extractLinkTargetAndPattern parses the target and pattern from a link_target error message.
+// Format: link target "E04" does not match pattern "^T\\d{3}-"
+func extractLinkTargetAndPattern(msg string) (target, pattern string) {
+	// Extract first quoted string (target).
+	start := strings.Index(msg, `"`)
+	if start < 0 {
+		return "", ""
+	}
+	end := strings.Index(msg[start+1:], `"`)
+	if end < 0 {
+		return "", ""
+	}
+	target = msg[start+1 : start+1+end]
+
+	// Extract second quoted string (pattern).
+	rest := msg[start+1+end+1:]
+	start2 := strings.Index(rest, `"`)
+	if start2 < 0 {
+		return target, ""
+	}
+	end2 := strings.Index(rest[start2+1:], `"`)
+	if end2 < 0 {
+		return target, ""
+	}
+	pattern = rest[start2+1 : start2+1+end2]
+	return target, pattern
+}
+
+// tryRetypeLink checks if the target would be valid under a different allowed link type.
+func tryRetypeLink(target, currentType, _ string, schema rules.LinkSchema) string {
+	for _, allowed := range schema.Allowed {
+		if allowed == currentType {
+			continue
+		}
+		rule, hasRule := schema.Rules[allowed]
+		if !hasRule || rule.Target == "" {
+			// This type has no target constraint — target is valid.
+			return allowed
+		}
+		// Check if target matches this type's pattern.
+		matched, err := regexp.MatchString(rule.Target, target)
+		if err == nil && matched {
+			return allowed
+		}
+	}
+	return ""
+}
+
+// tryExpandTarget looks for a sibling record whose basename starts with target+"-".
+// Returns the expanded basename (without .md) if exactly one match is found.
+func tryExpandTarget(target, recordPath string, records []*extract.Record) string {
+	dir := filepath.Dir(recordPath)
+	prefix := target + "-"
+	var matches []string
+
+	for _, rec := range records {
+		if filepath.Dir(rec.Path) != dir {
+			continue
+		}
+		base := strings.TrimSuffix(filepath.Base(rec.Path), ".md")
+		if strings.HasPrefix(base, prefix) {
+			matches = append(matches, base)
+		}
+	}
+
+	if len(matches) == 1 {
+		return matches[0]
+	}
+	return ""
 }

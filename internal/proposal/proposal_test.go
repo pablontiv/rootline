@@ -560,6 +560,169 @@ func TestAnalyze_AddFieldSurvivesWithoutCoverage(t *testing.T) {
 	}
 }
 
+func TestDetectCorrectLink_Retype(t *testing.T) {
+	stem := &rules.StemFile{
+		Links: rules.LinkSchema{
+			Allowed: []string{"blocks", "reference"},
+			Rules: map[string]rules.LinkRule{
+				"blocks": {Target: `^T\d{3}-`},
+			},
+		},
+	}
+	records := []*extract.Record{
+		{
+			Path: "dir/T001-task.md",
+			Links: []extract.Link{
+				{Type: "blocks", Target: "E04", Line: 5},
+			},
+		},
+	}
+	errs := map[string][]rules.ValidationError{
+		"dir/T001-task.md": {{
+			Rule:    "link_target",
+			Field:   "links",
+			Message: `link target "E04" does not match pattern "^T\d{3}-"`,
+		}},
+	}
+
+	proposals := detectCorrectLink(records, stem, errs)
+	if len(proposals) != 1 {
+		t.Fatalf("got %d proposals, want 1", len(proposals))
+	}
+	p := proposals[0]
+	if p.Type != CorrectLink {
+		t.Errorf("type = %q, want correct_link", p.Type)
+	}
+	if p.From != "[[blocks:E04]]" {
+		t.Errorf("from = %q, want [[blocks:E04]]", p.From)
+	}
+	if p.To != "[[reference:E04]]" {
+		t.Errorf("to = %q, want [[reference:E04]]", p.To)
+	}
+}
+
+func TestDetectCorrectLink_Expand(t *testing.T) {
+	stem := &rules.StemFile{
+		Links: rules.LinkSchema{
+			Allowed: []string{"blocks"},
+			Rules: map[string]rules.LinkRule{
+				"blocks": {Target: `^T\d{3}-`},
+			},
+		},
+	}
+	records := []*extract.Record{
+		{
+			Path: "dir/T002-validate.md",
+			Links: []extract.Link{
+				{Type: "blocks", Target: "T001", Line: 5},
+			},
+		},
+		{
+			Path:  "dir/T001-add-feature.md",
+			Links: []extract.Link{},
+		},
+	}
+	errs := map[string][]rules.ValidationError{
+		"dir/T002-validate.md": {{
+			Rule:    "link_target",
+			Field:   "links",
+			Message: `link target "T001" does not match pattern "^T\d{3}-"`,
+		}},
+	}
+
+	proposals := detectCorrectLink(records, stem, errs)
+	if len(proposals) != 1 {
+		t.Fatalf("got %d proposals, want 1", len(proposals))
+	}
+	p := proposals[0]
+	if p.From != "[[blocks:T001]]" {
+		t.Errorf("from = %q, want [[blocks:T001]]", p.From)
+	}
+	if p.To != "[[blocks:T001-add-feature]]" {
+		t.Errorf("to = %q, want [[blocks:T001-add-feature]]", p.To)
+	}
+}
+
+func TestDetectCorrectLink_ExpandPriorityOverRetype(t *testing.T) {
+	// When both expand and retype are possible, expand wins (preserves link semantics).
+	stem := &rules.StemFile{
+		Links: rules.LinkSchema{
+			Allowed: []string{"blocks", "reference"},
+			Rules: map[string]rules.LinkRule{
+				"blocks": {Target: `^T\d{3}-`},
+			},
+		},
+	}
+	records := []*extract.Record{
+		{
+			Path: "dir/T002-validate.md",
+			Links: []extract.Link{
+				{Type: "blocks", Target: "T001", Line: 5},
+			},
+		},
+		{
+			Path: "dir/T001-add-feature.md",
+		},
+	}
+	errs := map[string][]rules.ValidationError{
+		"dir/T002-validate.md": {{
+			Rule:    "link_target",
+			Field:   "links",
+			Message: `link target "T001" does not match pattern "^T\d{3}-"`,
+		}},
+	}
+
+	proposals := detectCorrectLink(records, stem, errs)
+	if len(proposals) != 1 {
+		t.Fatalf("got %d proposals, want 1", len(proposals))
+	}
+	// Expand wins: [[blocks:T001]] → [[blocks:T001-add-feature]]
+	if proposals[0].To != "[[blocks:T001-add-feature]]" {
+		t.Errorf("to = %q, want [[blocks:T001-add-feature]] (expand has priority)", proposals[0].To)
+	}
+}
+
+func TestDetectCorrectLink_NoMatch(t *testing.T) {
+	stem := &rules.StemFile{
+		Links: rules.LinkSchema{
+			Allowed: []string{"blocks"},
+			Rules: map[string]rules.LinkRule{
+				"blocks": {Target: `^T\d{3}-`},
+			},
+		},
+	}
+	records := []*extract.Record{
+		{
+			Path: "dir/T001-task.md",
+			Links: []extract.Link{
+				{Type: "blocks", Target: "UNKNOWN", Line: 5},
+			},
+		},
+	}
+	errs := map[string][]rules.ValidationError{
+		"dir/T001-task.md": {{
+			Rule:    "link_target",
+			Field:   "links",
+			Message: `link target "UNKNOWN" does not match pattern "^T\d{3}-"`,
+		}},
+	}
+
+	proposals := detectCorrectLink(records, stem, errs)
+	if len(proposals) != 0 {
+		t.Errorf("got %d proposals, want 0 (no fix possible)", len(proposals))
+	}
+}
+
+func TestExtractLinkTargetAndPattern(t *testing.T) {
+	target, pattern := extractLinkTargetAndPattern(`link target "E04" does not match pattern "^T\d{3}-"`)
+	if target != "E04" {
+		t.Errorf("target = %q, want E04", target)
+	}
+	if pattern != `^T\d{3}-` {
+		t.Errorf("pattern = %q, want ^T\\d{3}-", pattern)
+	}
+}
+
 func TestAnalyze_MigrateValueSuppressesExtendAndCorrect(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
@@ -582,5 +745,43 @@ func TestAnalyze_MigrateValueSuppressesExtendAndCorrect(t *testing.T) {
 	}
 	if report.Summary.CorrectValue != 0 {
 		t.Errorf("summary.correct_value = %d, want 0 (suppressed by migrate_value)", report.Summary.CorrectValue)
+	}
+}
+
+func TestClosestMatch_NoCloseMatch(t *testing.T) {
+	got := closestMatch("xyz", []string{"Pending", "Completed"})
+	if got != "" {
+		t.Errorf("closestMatch(\"xyz\", ...) = %q, want \"\" (too far from any candidate)", got)
+	}
+}
+
+func TestClosestMatch_CloseMatch(t *testing.T) {
+	got := closestMatch("Completo", []string{"Pending", "Completed"})
+	if got != "Completed" {
+		t.Errorf("closestMatch(\"Completo\", ...) = %q, want \"Completed\"", got)
+	}
+}
+
+func TestClosestMatch_EmptyCandidates(t *testing.T) {
+	got := closestMatch("anything", []string{})
+	if got != "" {
+		t.Errorf("closestMatch with empty candidates = %q, want \"\"", got)
+	}
+}
+
+func TestDetectCorrectValue_NoSuggestionWhenTooFar(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed", "In Progress"}, Required: true},
+		},
+	}
+
+	errs := map[string][]rules.ValidationError{
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "xyz" not in allowed values: [Pending, Completed, In Progress]`}},
+	}
+
+	proposals := detectCorrectValue(stem, errs)
+	if len(proposals) != 0 {
+		t.Errorf("got %d proposals, want 0 (value too far from any candidate)", len(proposals))
 	}
 }

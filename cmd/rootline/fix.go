@@ -258,7 +258,7 @@ func proposalsToFixResults(report *proposal.Report, records []*extract.Record) [
 			case proposal.AddField, proposal.ExtractBody, proposal.InferFromChildren:
 				fieldsAdded++
 				changes = append(changes, fmt.Sprintf("add %s=%q", p.Field, p.Value))
-			case proposal.CorrectValue, proposal.MigrateValue:
+			case proposal.CorrectValue, proposal.MigrateValue, proposal.CorrectLink:
 				valuesCorrected++
 				changes = append(changes, fmt.Sprintf("correct %s: %q -> %q", p.Field, p.From, p.To))
 			case proposal.ExtendEnum:
@@ -337,6 +337,11 @@ func applyProposals(report *proposal.Report, root string, records []*extract.Rec
 		case proposal.ExtractBody, proposal.InferFromChildren, proposal.AddField:
 			if err := applySetField(p, root, recordMap); err != nil {
 				return fmt.Errorf("%s %s: %w", p.Type, p.Paths[0], err)
+			}
+			applied = append(applied, p)
+		case proposal.CorrectLink:
+			if err := applyCorrectLink(p, root); err != nil {
+				return fmt.Errorf("correct_link %s: %w", p.Paths[0], err)
 			}
 			applied = append(applied, p)
 		}
@@ -501,6 +506,21 @@ func rewriteRecordFile(root, path string, fm map[string]any) error {
 	}
 	newContent := rewriteFrontmatter(string(content), fm)
 	return os.WriteFile(absPath, []byte(newContent), 0644)
+}
+
+func applyCorrectLink(p proposal.Proposal, root string) error {
+	for _, path := range p.Paths {
+		absPath := filepath.Join(root, path)
+		content, err := os.ReadFile(absPath)
+		if err != nil {
+			return err
+		}
+		newContent := strings.Replace(string(content), p.From, p.To, 1)
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func insertWikiLinksBeforeHeading(content string, links []string) string {
