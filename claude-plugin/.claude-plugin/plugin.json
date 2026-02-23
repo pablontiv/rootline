@@ -1,0 +1,8 @@
+{
+  "name": "rootline-tools",
+  "version": "1.0.0",
+  "description": "Validate, describe, and scaffold structured documents using rootline CLI. Wraps rootline validate, describe, and new commands as Claude Code skills for AI-assisted document authoring.",
+  "repository": "https://github.com/pablontiv/rootline",
+  "license": "MIT",
+  "keywords": ["rootline", "documentation", "validation", "schema", "frontmatter"]
+}
