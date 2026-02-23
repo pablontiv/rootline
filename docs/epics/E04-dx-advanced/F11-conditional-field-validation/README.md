@@ -1,5 +1,4 @@
 ---
-estado: Completado
 tipo: feature
 ---
 # F11: Conditional Field Validation

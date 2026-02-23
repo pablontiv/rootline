@@ -1,5 +1,4 @@
 ---
-estado: In Progress
 tipo: feature
 ---
 # E03: Rootline Core & Distribution

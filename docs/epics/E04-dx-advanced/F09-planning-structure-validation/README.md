@@ -1,5 +1,4 @@
 ---
-estado: Pending
 tipo: feature
 ---
 # F09: Planning Structure Validation

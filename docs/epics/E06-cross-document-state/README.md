@@ -1,5 +1,4 @@
 ---
-estado: Pending
 tipo: feature
 ---
 # E06: Cross-Document State

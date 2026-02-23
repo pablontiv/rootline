@@ -1,5 +1,4 @@
 ---
-estado: Pending
 tipo: feature
 ---
 # F06: GitHub Action

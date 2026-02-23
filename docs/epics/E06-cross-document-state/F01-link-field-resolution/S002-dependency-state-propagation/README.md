@@ -1,5 +1,4 @@
 ---
-estado: Pending
 tipo: historia
 cliente: Platform Owner
 ---

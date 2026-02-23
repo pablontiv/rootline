@@ -1,5 +1,4 @@
 ---
-estado: Pending
 tipo: feature
 ---
 # F07: Claude Code Plugin

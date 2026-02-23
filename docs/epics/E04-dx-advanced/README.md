@@ -1,5 +1,4 @@
 ---
-estado: In Progress
 tipo: feature
 ---
 # E04: Developer Experience — Advanced Features
@@ -23,3 +22,4 @@ Extender rootline con capacidades avanzadas que mejoran la experiencia del desar
 | [F08 Edge Case Coverage](F08-edge-case-coverage/README.md) | Tests de edge cases para robustez |
 | [F09 Planning Structure Validation](F09-planning-structure-validation/README.md) | Validación estructural de directorios |
 | [F10 Proposal Fix Engine](F10-proposal-fix-engine/README.md) | Motor de propuestas para fix command |
+| [F11 Conditional Field Validation](F11-conditional-field-validation/README.md) | Exclusión de required para campos computados por aggregate |

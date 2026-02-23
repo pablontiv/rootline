@@ -1,5 +1,4 @@
 ---
-estado: Pending
 tipo: feature
 ---
 # F02: CI Quality Gates

@@ -1,5 +1,4 @@
 ---
-estado: Pending
 tipo: feature
 ---
 # F08: Edge Case Test Coverage

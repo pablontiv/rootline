@@ -1,5 +1,4 @@
 ---
-estado: Pending
 tipo: feature
 ---
 # F01: Supply Chain Security

@@ -1,5 +1,4 @@
 ---
-estado: Specified
 tipo: historia
 cliente: Platform Owner
 ---

@@ -1,5 +1,4 @@
 ---
-estado: Pending
 tipo: feature
 ---
 # F10: Proposal-Based Fix Engine

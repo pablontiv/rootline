@@ -1,5 +1,4 @@
 ---
-estado: Pending
 tipo: feature
 ---
 # E05: Repo Best Practices

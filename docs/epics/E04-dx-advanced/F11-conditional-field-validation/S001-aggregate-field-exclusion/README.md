@@ -1,5 +1,4 @@
 ---
-estado: Completado
 tipo: historia
 cliente: Platform Owner
 ---

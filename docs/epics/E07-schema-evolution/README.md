@@ -1,5 +1,4 @@
 ---
-estado: Completado
 tipo: feature
 ---
 # E07: Schema Evolution

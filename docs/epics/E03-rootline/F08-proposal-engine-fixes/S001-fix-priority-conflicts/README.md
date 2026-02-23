@@ -1,5 +1,4 @@
 ---
-estado: Pending
 tipo: historia
 ---
 # S001: Fix Priority Conflicts

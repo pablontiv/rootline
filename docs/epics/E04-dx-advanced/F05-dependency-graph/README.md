@@ -1,5 +1,4 @@
 ---
-estado: Completado
 tipo: feature
 ---
 # F05: Dependency Graph
