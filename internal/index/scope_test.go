@@ -92,7 +92,7 @@ func TestScan_WithScopeResolver_PerDirectory(t *testing.T) {
 		"src/main.md":   "---\ntitle: Main\n---\n",
 	})
 
-	// docs/ scope only matches api.md, src/ matches everything, root has no scope.
+	// docs/ scope only matches api.md, src/ matches everything, root has no stem.
 	resolver := func(dir string) *rules.StemFile {
 		rel, _ := filepath.Rel(root, dir)
 		switch rel {
@@ -101,7 +101,7 @@ func TestScan_WithScopeResolver_PerDirectory(t *testing.T) {
 		case "src":
 			return &rules.StemFile{Scope: rules.Scope{Match: "*.md"}}
 		default:
-			return nil // no scope = match all
+			return nil // no stem = exclude
 		}
 	}
 
@@ -111,13 +111,13 @@ func TestScan_WithScopeResolver_PerDirectory(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// root.md (no scope) + docs/api.md (matches) + src/main.md (matches) = 3
-	if len(records) != 3 {
+	// root.md excluded (nil stem) + docs/api.md (matches) + src/main.md (matches) = 2
+	if len(records) != 2 {
 		names := make([]string, len(records))
 		for i, r := range records {
 			names[i] = r.Path
 		}
-		t.Fatalf("got %d records %v, want 3", len(records), names)
+		t.Fatalf("got %d records %v, want 2", len(records), names)
 	}
 }
 
@@ -148,7 +148,7 @@ func TestScan_ScopeResolverCachesPerDirectory(t *testing.T) {
 	calls := 0
 	resolver := func(dir string) *rules.StemFile {
 		calls++
-		return nil // match all
+		return &rules.StemFile{} // empty stem = match all
 	}
 
 	reg := extract.NewRegistry()

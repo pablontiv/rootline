@@ -57,7 +57,7 @@ func runTree(cmd *cobra.Command, args []string) error {
 	reg := extract.NewRegistry()
 	resolver := func(dir string) *rules.StemFile {
 		entries, err := rules.WalkUp(dir)
-		if err != nil {
+		if err != nil || len(entries) == 0 {
 			return nil
 		}
 		return rules.MergeStemFiles(entries)

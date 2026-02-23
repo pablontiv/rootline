@@ -121,7 +121,7 @@ func runValidateAll(cmd *cobra.Command) error {
 	reg := extract.NewRegistry()
 	resolver := func(dir string) *rules.StemFile {
 		entries, err := rules.WalkUp(dir)
-		if err != nil {
+		if err != nil || len(entries) == 0 {
 			return nil
 		}
 		return rules.MergeStemFiles(entries)

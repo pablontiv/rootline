@@ -1,0 +1,583 @@
+package main
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/pablontiv/rootline/internal/extract"
+)
+
+// setupTreeProject creates a temp directory with .git marker, .stem, and
+// markdown files for tree command testing.
+func setupTreeProject(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for relPath, content := range files {
+		absPath := filepath.Join(root, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(absPath, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+func TestTreeCmd_ScopeFiltering_ExcludesOutOfScope(t *testing.T) {
+	// Root .stem scopes only to docs/ subdirectory patterns via a nested stem.
+	// Files at root level without a matching .stem scope should be excluded.
+	root := setupTreeProject(t, map[string]string{
+		"docs/.stem":    "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completado]\n    required: true\n",
+		"docs/task1.md": "---\nestado: Pending\n---\n# Task 1\n",
+		"docs/task2.md": "---\nestado: Completado\n---\n# Task 2\n",
+		// These files at root have no .stem => no scope => should be excluded
+		// when scope resolver returns nil (no stem found)
+		"CHANGELOG.md":    "---\n---\n# Changelog\n",
+		"CONTRIBUTING.md": "---\n---\n# Contributing\n",
+	})
+
+	out, err := runCmd(t, "tree", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result TreeResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	// Only docs/task1.md and docs/task2.md should be included.
+	if result.Root.Total != 2 {
+		t.Errorf("total = %d, want 2 (only scoped files)", result.Root.Total)
+	}
+}
+
+func TestTreeCmd_ScopeFiltering_SubdirOnly(t *testing.T) {
+	// When running tree on a subdirectory, only files matching that
+	// subdirectory's scope should appear.
+	root := setupTreeProject(t, map[string]string{
+		"docs/.stem":        "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completado]\n    required: true\n",
+		"docs/epic1/F01.md": "---\nestado: Pending\n---\n# F01\n",
+		"docs/epic1/F02.md": "---\nestado: Completado\n---\n# F02\n",
+	})
+
+	out, err := runCmd(t, "tree", filepath.Join(root, "docs"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result TreeResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	if result.Root.Total != 2 {
+		t.Errorf("total = %d, want 2", result.Root.Total)
+	}
+	if result.Root.Completed != 1 {
+		t.Errorf("completed = %d, want 1", result.Root.Completed)
+	}
+}
+
+func TestTreeCmd_ScopeFiltering_ASCIIOutput(t *testing.T) {
+	root := setupTreeProject(t, map[string]string{
+		"docs/.stem":    "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completado]\n    required: true\n",
+		"docs/task1.md": "---\nestado: Pending\n---\n# Task 1\n",
+		"CHANGELOG.md":  "---\n---\n# Changelog\n",
+	})
+
+	out, err := runCmd(t, "tree", root, "-o", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(out, "CHANGELOG.md") {
+		t.Errorf("tree ASCII output should NOT contain CHANGELOG.md (out of scope)\noutput: %s", out)
+	}
+	if !strings.Contains(out, "task1.md") {
+		t.Errorf("tree ASCII output should contain task1.md\noutput: %s", out)
+	}
+}
+
+func TestTreeCmd_JSONStructure(t *testing.T) {
+	root := setupTreeProject(t, map[string]string{
+		".stem":    "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completado]\n    required: true\n",
+		"a.md":     "---\nestado: Completado\n---\n",
+		"sub/b.md": "---\nestado: Pending\n---\n",
+	})
+
+	out, err := runCmd(t, "tree", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result TreeResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	if result.Version != 1 {
+		t.Errorf("version = %d, want 1", result.Version)
+	}
+	if result.Kind != "rootline/tree" {
+		t.Errorf("kind = %q, want rootline/tree", result.Kind)
+	}
+	if result.Root.Total != 2 {
+		t.Errorf("root total = %d, want 2", result.Root.Total)
+	}
+	if result.Root.Completed != 1 {
+		t.Errorf("root completed = %d, want 1", result.Root.Completed)
+	}
+}
+
+func TestTreeCmd_EmptyDirectory(t *testing.T) {
+	root := setupTreeProject(t, map[string]string{
+		".stem": "version: 1\nscope:\n  match: \"*.md\"\n",
+	})
+
+	out, err := runCmd(t, "tree", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result TreeResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	if result.Root.Total != 0 {
+		t.Errorf("total = %d, want 0 for empty directory", result.Root.Total)
+	}
+}
+
+func TestTreeCmd_DefaultsToCurrentDir(t *testing.T) {
+	root := setupTreeProject(t, map[string]string{
+		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending]\n    required: true\n",
+		"doc.md": "---\nestado: Pending\n---\n",
+	})
+
+	mustChdir(t, root)
+
+	out, err := runCmd(t, "tree")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result TreeResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	if result.Root.Total != 1 {
+		t.Errorf("total = %d, want 1", result.Root.Total)
+	}
+}
+
+func TestTreeCmd_ASCIIRendering(t *testing.T) {
+	root := setupTreeProject(t, map[string]string{
+		".stem":    "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completado]\n    required: true\n",
+		"a.md":     "---\nestado: Completado\n---\n",
+		"sub/b.md": "---\nestado: Pending\n---\n",
+		"sub/c.md": "---\nestado: Completado\n---\n",
+	})
+
+	out, err := runCmd(t, "tree", root, "-o", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Check root line has total counts.
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) == 0 {
+		t.Fatal("expected non-empty output")
+	}
+	if !strings.Contains(lines[0], "[2/3]") {
+		t.Errorf("root line = %q, want [2/3]", lines[0])
+	}
+
+	// Should contain tree connectors.
+	if !strings.Contains(out, "├──") && !strings.Contains(out, "└──") {
+		t.Errorf("expected tree connectors in output:\n%s", out)
+	}
+
+	// Leaf nodes show estado.
+	if !strings.Contains(out, "[Completado]") {
+		t.Errorf("expected [Completado] in leaf output:\n%s", out)
+	}
+	if !strings.Contains(out, "[Pending]") {
+		t.Errorf("expected [Pending] in leaf output:\n%s", out)
+	}
+}
+
+func TestTreeCmd_NoEstadoShowsDash(t *testing.T) {
+	root := setupTreeProject(t, map[string]string{
+		".stem":  "version: 1\nscope:\n  match: \"*.md\"\n",
+		"doc.md": "---\ntitle: Hello\n---\n",
+	})
+
+	out, err := runCmd(t, "tree", root, "-o", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Files without estado show "—" (em dash).
+	if !strings.Contains(out, "[\xe2\x80\x94]") {
+		t.Errorf("expected em-dash for missing estado, got:\n%s", out)
+	}
+}
+
+func TestTreeCmd_DeepNesting(t *testing.T) {
+	root := setupTreeProject(t, map[string]string{
+		".stem":             "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completado]\n    required: true\n",
+		"a/b/c/deep.md":     "---\nestado: Pending\n---\n",
+		"a/b/c/d/deeper.md": "---\nestado: Completado\n---\n",
+	})
+
+	out, err := runCmd(t, "tree", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result TreeResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	if result.Root.Total != 2 {
+		t.Errorf("total = %d, want 2", result.Root.Total)
+	}
+	if result.Root.Completed != 1 {
+		t.Errorf("completed = %d, want 1", result.Root.Completed)
+	}
+
+	// Verify nesting: root -> a -> b -> c -> ...
+	if len(result.Root.Children) != 1 || result.Root.Children[0].Name != "a" {
+		t.Errorf("expected single child 'a', got %v", result.Root.Children)
+	}
+}
+
+// --- Unit tests for buildTree internals ---
+
+func TestBuildTree_Basic(t *testing.T) {
+	records := []*extract.Record{
+		{Path: "doc1.md", Frontmatter: map[string]any{"estado": "Completado"}},
+		{Path: "doc2.md", Frontmatter: map[string]any{"estado": "Pending"}},
+	}
+
+	root := buildTree(records, "project")
+	if root.Name != "project" {
+		t.Errorf("root name = %q, want project", root.Name)
+	}
+	if root.Total != 2 {
+		t.Errorf("total = %d, want 2", root.Total)
+	}
+	if root.Completed != 1 {
+		t.Errorf("completed = %d, want 1", root.Completed)
+	}
+	if len(root.Children) != 2 {
+		t.Errorf("children = %d, want 2", len(root.Children))
+	}
+}
+
+func TestBuildTree_WithSubdirs(t *testing.T) {
+	records := []*extract.Record{
+		{Path: "sub/a.md", Frontmatter: map[string]any{"estado": "Completado"}},
+		{Path: "sub/b.md", Frontmatter: map[string]any{"estado": "Completado"}},
+		{Path: "other/c.md", Frontmatter: map[string]any{"estado": "Pending"}},
+	}
+
+	root := buildTree(records, "root")
+	if root.Total != 3 {
+		t.Errorf("total = %d, want 3", root.Total)
+	}
+	if root.Completed != 2 {
+		t.Errorf("completed = %d, want 2", root.Completed)
+	}
+
+	// Should have 2 directory children: other and sub (sorted).
+	if len(root.Children) != 2 {
+		t.Fatalf("children = %d, want 2", len(root.Children))
+	}
+	if root.Children[0].Name != "other" {
+		t.Errorf("first child = %q, want other", root.Children[0].Name)
+	}
+	if root.Children[1].Name != "sub" {
+		t.Errorf("second child = %q, want sub", root.Children[1].Name)
+	}
+}
+
+func TestBuildTree_NoEstado(t *testing.T) {
+	records := []*extract.Record{
+		{Path: "doc.md", Frontmatter: map[string]any{"title": "Hello"}},
+	}
+
+	root := buildTree(records, "root")
+	if root.Total != 1 {
+		t.Errorf("total = %d, want 1", root.Total)
+	}
+	if root.Completed != 0 {
+		t.Errorf("completed = %d, want 0 (no estado)", root.Completed)
+	}
+}
+
+func TestBuildTree_EmptyRecords(t *testing.T) {
+	root := buildTree(nil, "empty")
+	if root.Total != 0 {
+		t.Errorf("total = %d, want 0", root.Total)
+	}
+	if root.Completed != 0 {
+		t.Errorf("completed = %d, want 0", root.Completed)
+	}
+	if len(root.Children) != 0 {
+		t.Errorf("children = %d, want 0", len(root.Children))
+	}
+}
+
+func TestFindChild_Found(t *testing.T) {
+	parent := &treeNode{
+		Children: []*treeNode{
+			{Name: "dir1"},
+			{Name: "dir2"},
+		},
+	}
+	child := findChild(parent, "dir1")
+	if child == nil {
+		t.Fatal("expected to find child dir1")
+	}
+	if child.Name != "dir1" {
+		t.Errorf("name = %q, want dir1", child.Name)
+	}
+}
+
+func TestFindChild_NotFound(t *testing.T) {
+	parent := &treeNode{
+		Children: []*treeNode{
+			{Name: "dir1"},
+		},
+	}
+	child := findChild(parent, "nonexistent")
+	if child != nil {
+		t.Errorf("expected nil for nonexistent child, got %v", child)
+	}
+}
+
+func TestFindChild_SkipsLeaves(t *testing.T) {
+	parent := &treeNode{
+		Children: []*treeNode{
+			{Name: "file.md", IsLeaf: true},
+		},
+	}
+	child := findChild(parent, "file.md")
+	if child != nil {
+		t.Errorf("expected nil for leaf node, got %v", child)
+	}
+}
+
+func TestRenderASCII_EmptyRoot(t *testing.T) {
+	root := &treeNode{Name: "empty", Total: 0, Completed: 0}
+	lines := renderASCII(root, "")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d", len(lines))
+	}
+	if lines[0] != "empty [0/0]" {
+		t.Errorf("line = %q, want 'empty [0/0]'", lines[0])
+	}
+}
+
+func TestRenderASCII_NonRootPrefix(t *testing.T) {
+	node := &treeNode{Name: "sub", Total: 1}
+	lines := renderASCII(node, "  ")
+	// Non-root calls return empty since prefix != ""
+	if len(lines) != 0 {
+		t.Errorf("expected 0 lines for non-root prefix, got %d", len(lines))
+	}
+}
+
+func TestRenderChild_Leaf(t *testing.T) {
+	leaf := &treeNode{Name: "doc.md", IsLeaf: true, Estado: "Pending"}
+	lines := renderChild(leaf, "", false)
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d", len(lines))
+	}
+	if !strings.Contains(lines[0], "doc.md") {
+		t.Errorf("line = %q, missing doc.md", lines[0])
+	}
+	if !strings.Contains(lines[0], "[Pending]") {
+		t.Errorf("line = %q, missing [Pending]", lines[0])
+	}
+	if !strings.Contains(lines[0], "├──") {
+		t.Errorf("line = %q, expected ├── connector", lines[0])
+	}
+}
+
+func TestRenderChild_LastLeaf(t *testing.T) {
+	leaf := &treeNode{Name: "last.md", IsLeaf: true, Estado: "Completado"}
+	lines := renderChild(leaf, "", true)
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d", len(lines))
+	}
+	if !strings.Contains(lines[0], "└──") {
+		t.Errorf("line = %q, expected └── connector for last child", lines[0])
+	}
+}
+
+func TestRenderChild_Directory(t *testing.T) {
+	dir := &treeNode{
+		Name:      "subdir",
+		Total:     2,
+		Completed: 1,
+		Children: []*treeNode{
+			{Name: "a.md", IsLeaf: true, Estado: "Completado", Total: 1, Completed: 1},
+			{Name: "b.md", IsLeaf: true, Estado: "Pending", Total: 1, Completed: 0},
+		},
+	}
+	lines := renderChild(dir, "", false)
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines, got %d: %v", len(lines), lines)
+	}
+	if !strings.Contains(lines[0], "subdir [1/2]") {
+		t.Errorf("dir line = %q, want subdir [1/2]", lines[0])
+	}
+}
+
+func TestRenderChild_LeafNoEstado(t *testing.T) {
+	leaf := &treeNode{Name: "doc.md", IsLeaf: true, Estado: ""}
+	lines := renderChild(leaf, "", true)
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d", len(lines))
+	}
+	// Empty estado shows em-dash.
+	if !strings.Contains(lines[0], "[\xe2\x80\x94]") {
+		t.Errorf("line = %q, expected em-dash for missing estado", lines[0])
+	}
+}
+
+func TestPropagateCounts_NestedDirs(t *testing.T) {
+	root := &treeNode{
+		Name: "root",
+		Children: []*treeNode{
+			{
+				Name: "sub",
+				Children: []*treeNode{
+					{Name: "a.md", IsLeaf: true, Total: 1, Completed: 1},
+					{Name: "b.md", IsLeaf: true, Total: 1, Completed: 0},
+				},
+			},
+			{Name: "c.md", IsLeaf: true, Total: 1, Completed: 1},
+		},
+	}
+
+	propagateCounts(root)
+
+	if root.Total != 3 {
+		t.Errorf("root total = %d, want 3", root.Total)
+	}
+	if root.Completed != 2 {
+		t.Errorf("root completed = %d, want 2", root.Completed)
+	}
+
+	// Find the sub node (sorting puts "c.md" before "sub" alphabetically).
+	var subNode *treeNode
+	for _, c := range root.Children {
+		if c.Name == "sub" {
+			subNode = c
+		}
+	}
+	if subNode == nil {
+		t.Fatal("sub node not found")
+	}
+	if subNode.Total != 2 {
+		t.Errorf("sub total = %d, want 2", subNode.Total)
+	}
+	if subNode.Completed != 1 {
+		t.Errorf("sub completed = %d, want 1", subNode.Completed)
+	}
+}
+
+func TestPropagateCounts_SortsByName(t *testing.T) {
+	root := &treeNode{
+		Name: "root",
+		Children: []*treeNode{
+			{Name: "zebra.md", IsLeaf: true, Total: 1},
+			{Name: "alpha.md", IsLeaf: true, Total: 1},
+			{Name: "mid.md", IsLeaf: true, Total: 1},
+		},
+	}
+
+	propagateCounts(root)
+
+	if root.Children[0].Name != "alpha.md" {
+		t.Errorf("first child = %q, want alpha.md", root.Children[0].Name)
+	}
+	if root.Children[1].Name != "mid.md" {
+		t.Errorf("second child = %q, want mid.md", root.Children[1].Name)
+	}
+	if root.Children[2].Name != "zebra.md" {
+		t.Errorf("third child = %q, want zebra.md", root.Children[2].Name)
+	}
+}
+
+func TestTreeCmd_FieldExtraction(t *testing.T) {
+	root := setupTreeProject(t, map[string]string{
+		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending]\n    required: true\n",
+		"doc.md": "---\nestado: Pending\n---\n",
+	})
+
+	out, err := runCmd(t, "tree", root, "--field", "root.total")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.TrimSpace(out) != "1" {
+		t.Errorf("output = %q, want 1", strings.TrimSpace(out))
+	}
+}
+
+func TestTreeCmd_RestrictedScopePattern(t *testing.T) {
+	// .stem with a restrictive scope pattern that only matches T*.md files.
+	root := setupTreeProject(t, map[string]string{
+		".stem":        "version: 1\nscope:\n  match: \"T*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completado]\n    required: true\n",
+		"T001.md":      "---\nestado: Pending\n---\n",
+		"T002.md":      "---\nestado: Completado\n---\n",
+		"README.md":    "---\nestado: Pending\n---\n",
+		"CHANGELOG.md": "---\n---\n# Changelog\n",
+	})
+
+	out, err := runCmd(t, "tree", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result TreeResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	// Only T001.md and T002.md should match the T*.md scope.
+	if result.Root.Total != 2 {
+		t.Errorf("total = %d, want 2 (only T*.md files)", result.Root.Total)
+	}
+
+	// Verify in ASCII output as well.
+	asciiOut, err := runCmd(t, "tree", root, "-o", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(asciiOut, "README.md") {
+		t.Errorf("ASCII output should NOT contain README.md:\n%s", asciiOut)
+	}
+	if strings.Contains(asciiOut, "CHANGELOG.md") {
+		t.Errorf("ASCII output should NOT contain CHANGELOG.md:\n%s", asciiOut)
+	}
+	if !strings.Contains(asciiOut, "T001.md") {
+		t.Errorf("ASCII output should contain T001.md:\n%s", asciiOut)
+	}
+}

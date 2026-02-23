@@ -21,8 +21,9 @@ type scanConfig struct {
 }
 
 // WithScopeResolver adds scope filtering to Scan. The resolver is called
-// once per directory to obtain the effective StemFile. Files that don't
-// match scope.match are skipped before extraction.
+// once per directory to obtain the effective StemFile. If the resolver
+// returns nil, no .stem governs the directory and all its files are
+// excluded. Files that don't match scope.match are also skipped.
 func WithScopeResolver(fn func(dir string) *rules.StemFile) ScanOption {
 	return func(c *scanConfig) { c.scopeResolver = fn }
 }
@@ -94,6 +95,11 @@ func Scan(rootPath string, registry *extract.Registry, opts ...ScanOption) ([]*e
 			if !cached {
 				stem = cfg.scopeResolver(dir)
 				scopeCache[dir] = stem
+			}
+			// If the resolver returned nil, no .stem governs this
+			// directory — exclude the file from scoped results.
+			if stem == nil {
+				return nil
 			}
 			if !MatchesScope(path, stem) {
 				return nil

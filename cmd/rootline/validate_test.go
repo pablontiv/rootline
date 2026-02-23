@@ -34,8 +34,7 @@ func executeValidate(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 
 	// Reset global flags to defaults
-	fieldPath = nil
-	validateAll = false
+	resetFlags()
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
