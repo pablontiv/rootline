@@ -34,7 +34,7 @@ func TestFixMissingRequired(t *testing.T) {
 func TestFixInvalidEnum(t *testing.T) {
 	dir := setupTestDir(t) // .stem has estado: enum [Completed, Pending]
 	target := filepath.Join(dir, "bad-enum.md")
-	mustWriteFile(t, target, []byte("---\nestado: Compltado\n---\n# Bad\n"), 0644)
+	mustWriteFile(t, target, []byte("---\nestado: Completd\n---\n# Bad\n"), 0644)
 
 	out, err := runCmd(t, "fix", target)
 	if err != nil {
@@ -112,7 +112,7 @@ func TestLevenshtein(t *testing.T) {
 		{"abc", "", 3},
 		{"", "abc", 3},
 		{"kitten", "sitting", 3},
-		{"Completed", "Complted", 1},
+		{"Completed", "Completd", 1},
 	}
 	for _, tt := range tests {
 		got := levenshtein(tt.a, tt.b)
@@ -124,9 +124,9 @@ func TestLevenshtein(t *testing.T) {
 
 func TestClosestMatch(t *testing.T) {
 	candidates := []string{"Pending", "Completed"}
-	got := closestMatch("Complted", candidates)
+	got := closestMatch("Completd", candidates)
 	if got != "Completed" {
-		t.Errorf("closestMatch('Complted') = %q, want 'Completed'", got)
+		t.Errorf("closestMatch('Completd') = %q, want 'Completed'", got)
 	}
 }
 
@@ -307,7 +307,7 @@ func TestFixAllWithEnumCorrection(t *testing.T) {
 	dir := setupTestDir(t)
 
 	// Create file with bad enum value
-	mustWriteFile(t, filepath.Join(dir, "bad-enum.md"), []byte("---\nestado: Compltado\ntipo: test\n---\n# Bad\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "bad-enum.md"), []byte("---\nestado: Completd\ntipo: test\n---\n# Bad\n"), 0644)
 
 	mustChdir(t, dir)
 
@@ -450,7 +450,7 @@ func TestFixAllApplyMissingField(t *testing.T) {
 
 func TestFixAllDryRunTable(t *testing.T) {
 	dir := setupTestDir(t)
-	mustWriteFile(t, filepath.Join(dir, "bad.md"), []byte("---\nestado: Compltado\ntipo: test\n---\n# Bad\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "bad.md"), []byte("---\nestado: Completd\ntipo: test\n---\n# Bad\n"), 0644)
 	mustChdir(t, dir)
 
 	out, err := runCmd(t, "fix", "--all", "--dry-run", "--output", "table")
@@ -514,7 +514,7 @@ func TestFixAllSkipCorrectAfterExtendButFixTypos(t *testing.T) {
 	mustWriteFile(t, filepath.Join(dir, "obs1.md"), []byte("---\nestado: Obsoleto\ntipo: test\n---\n# Obs1\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "obs2.md"), []byte("---\nestado: Obsoleto\ntipo: test\n---\n# Obs2\n"), 0644)
 	// 1 file with a typo -> should still be corrected by correct_value.
-	mustWriteFile(t, filepath.Join(dir, "typo.md"), []byte("---\nestado: Compltado\ntipo: test\n---\n# Typo\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "typo.md"), []byte("---\nestado: Completd\ntipo: test\n---\n# Typo\n"), 0644)
 	mustChdir(t, dir)
 
 	_, err := runCmd(t, "fix", "--all", "--output", "json")
@@ -541,8 +541,8 @@ func TestFixAllSkipCorrectAfterExtendButFixTypos(t *testing.T) {
 	if !strings.Contains(string(typoContent), "Completed") {
 		t.Errorf("typo.md: expected estado corrected to Completed, got:\n%s", string(typoContent))
 	}
-	if strings.Contains(string(typoContent), "Compltado") {
-		t.Errorf("typo.md: typo 'Compltado' was not corrected")
+	if strings.Contains(string(typoContent), "Completd") {
+		t.Errorf("typo.md: typo 'Completd' was not corrected")
 	}
 }
 
