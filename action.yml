@@ -1,0 +1,244 @@
+name: Validate with rootline
+description: Validate structured documentation using rootline, a file-based database and constraint engine.
+
+inputs:
+  version:
+    description: >
+      Version of rootline to use (e.g. "v0.5.0"). Defaults to "latest", which
+      resolves to the most recent GitHub Release of pablontiv/rootline.
+    required: false
+    default: latest
+  path:
+    description: Path to the directory containing structured documentation to validate.
+    required: false
+    default: .
+  fail-on:
+    description: >
+      Severity threshold that causes the action to exit with a non-zero code.
+      Accepted values: "error" (default) — fail only when errors are present;
+      "warning" — fail on warnings or errors; "never" — always exit 0.
+    required: false
+    default: error
+
+outputs:
+  valid:
+    description: >
+      "true" if no issues at or above the fail-on threshold were found,
+      "false" otherwise.
+    value: ${{ steps.validate.outputs.valid }}
+  error_count:
+    description: Number of validation errors found.
+    value: ${{ steps.validate.outputs.error_count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve rootline binary
+      id: resolve
+      shell: bash
+      run: |
+        # ------------------------------------------------------------------
+        # 1. Use the binary already in PATH when available.
+        # ------------------------------------------------------------------
+        if command -v rootline >/dev/null 2>&1; then
+          echo "source=path" >> "$GITHUB_OUTPUT"
+          echo "rootline_bin=$(command -v rootline)" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # ------------------------------------------------------------------
+        # 2. Determine target platform.
+        # ------------------------------------------------------------------
+        OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        ARCH="$(uname -m)"
+
+        # Normalise architecture to the names used by goreleaser/Go toolchain.
+        case "$ARCH" in
+          x86_64)  ARCH="amd64" ;;
+          aarch64|arm64) ARCH="arm64" ;;
+          *)
+            echo "::error::Unsupported architecture: $ARCH"
+            exit 1
+            ;;
+        esac
+
+        # Normalise OS name (goreleaser uses lowercase uname output as-is for
+        # linux/darwin; Windows runners ship rootline.exe in a .zip archive).
+        case "$OS" in
+          linux|darwin) EXT="tar.gz" ;;
+          mingw*|msys*|cygwin*|windows*)
+            OS="windows"
+            EXT="zip"
+            ;;
+          *)
+            echo "::error::Unsupported OS: $OS"
+            exit 1
+            ;;
+        esac
+
+        echo "os=$OS"     >> "$GITHUB_OUTPUT"
+        echo "arch=$ARCH" >> "$GITHUB_OUTPUT"
+        echo "ext=$EXT"   >> "$GITHUB_OUTPUT"
+        echo "source=download" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve version tag
+      id: version
+      shell: bash
+      # Only runs when we need to download the binary.
+      if: steps.resolve.outputs.source == 'download'
+      run: |
+        INPUT_VERSION="${{ inputs.version }}"
+
+        if [ "$INPUT_VERSION" = "latest" ]; then
+          # Query the GitHub Releases API to find the latest tag.
+          LATEST=$(curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/pablontiv/rootline/releases/latest \
+            | grep '"tag_name"' \
+            | head -1 \
+            | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+
+          if [ -z "$LATEST" ]; then
+            echo "::error::Could not resolve the latest rootline release tag."
+            exit 1
+          fi
+
+          echo "tag=$LATEST" >> "$GITHUB_OUTPUT"
+        else
+          # Caller supplied an explicit version; normalise to ensure it starts
+          # with 'v' (goreleaser tags are vX.Y.Z).
+          case "$INPUT_VERSION" in
+            v*) echo "tag=$INPUT_VERSION" >> "$GITHUB_OUTPUT" ;;
+            *)  echo "tag=v$INPUT_VERSION" >> "$GITHUB_OUTPUT" ;;
+          esac
+        fi
+
+    - name: Download rootline
+      id: download
+      shell: bash
+      if: steps.resolve.outputs.source == 'download'
+      run: |
+        TAG="${{ steps.version.outputs.tag }}"
+        OS="${{ steps.resolve.outputs.os }}"
+        ARCH="${{ steps.resolve.outputs.arch }}"
+        EXT="${{ steps.resolve.outputs.ext }}"
+
+        # Strip the leading 'v' from the tag to match goreleaser's
+        # name_template: rootline_<VERSION>_<OS>_<ARCH>.<EXT>
+        VERSION="${TAG#v}"
+
+        ARCHIVE="rootline_${VERSION}_${OS}_${ARCH}.${EXT}"
+        URL="https://github.com/pablontiv/rootline/releases/download/${TAG}/${ARCHIVE}"
+
+        echo "Downloading $URL"
+        curl -fsSL "$URL" -o "$ARCHIVE"
+
+        # Verify checksum when the checksums file is available.
+        CHECKSUM_URL="https://github.com/pablontiv/rootline/releases/download/${TAG}/checksums.txt"
+        if curl -fsSL "$CHECKSUM_URL" -o checksums.txt 2>/dev/null; then
+          grep "$ARCHIVE" checksums.txt | sha256sum --check --status
+          echo "Checksum verified."
+        else
+          echo "::warning::Could not fetch checksums.txt — skipping checksum verification."
+        fi
+
+        # Extract the binary.
+        INSTALL_DIR="$RUNNER_TEMP/rootline-bin"
+        mkdir -p "$INSTALL_DIR"
+
+        if [ "$EXT" = "zip" ]; then
+          unzip -q "$ARCHIVE" -d "$INSTALL_DIR"
+        else
+          tar -xzf "$ARCHIVE" -C "$INSTALL_DIR"
+        fi
+
+        # Locate the extracted binary (may be inside a sub-directory).
+        if [ "$OS" = "windows" ]; then
+          BIN_NAME="rootline.exe"
+        else
+          BIN_NAME="rootline"
+        fi
+
+        BIN_PATH=$(find "$INSTALL_DIR" -name "$BIN_NAME" -type f | head -1)
+        if [ -z "$BIN_PATH" ]; then
+          echo "::error::Could not locate the rootline binary after extraction."
+          exit 1
+        fi
+
+        chmod +x "$BIN_PATH"
+
+        echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+        echo "rootline_bin=$BIN_PATH" >> "$GITHUB_OUTPUT"
+
+    - name: Run rootline validate
+      id: validate
+      shell: bash
+      run: |
+        TARGET_PATH="${{ inputs.path }}"
+        FAIL_ON="${{ inputs.fail-on }}"
+
+        # Capture JSON output; allow non-zero exit from rootline itself without
+        # immediately failing the shell — we will handle exit behaviour below.
+        set +e
+        RESULT=$(rootline validate --all --output json "$TARGET_PATH" 2>&1)
+        ROOTLINE_EXIT=$?
+        set -e
+
+        echo "rootline validate output:"
+        echo "$RESULT"
+
+        # Parse error_count from the JSON output.
+        # The JSON contract guarantees a top-level "error_count" integer.
+        ERROR_COUNT=$(echo "$RESULT" \
+          | grep -o '"error_count":[[:space:]]*[0-9]*' \
+          | grep -o '[0-9]*$' \
+          || echo "0")
+
+        # Default to 0 if parsing failed.
+        ERROR_COUNT="${ERROR_COUNT:-0}"
+
+        # Determine validity based on the fail-on threshold.
+        case "$FAIL_ON" in
+          error)
+            if [ "$ERROR_COUNT" -eq 0 ]; then
+              VALID="true"
+              EXIT_CODE=0
+            else
+              VALID="false"
+              EXIT_CODE=1
+            fi
+            ;;
+          warning)
+            # Parse warning_count from JSON as well.
+            WARNING_COUNT=$(echo "$RESULT" \
+              | grep -o '"warning_count":[[:space:]]*[0-9]*' \
+              | grep -o '[0-9]*$' \
+              || echo "0")
+            WARNING_COUNT="${WARNING_COUNT:-0}"
+
+            if [ "$ERROR_COUNT" -eq 0 ] && [ "$WARNING_COUNT" -eq 0 ]; then
+              VALID="true"
+              EXIT_CODE=0
+            else
+              VALID="false"
+              EXIT_CODE=1
+            fi
+            ;;
+          never)
+            VALID="true"
+            EXIT_CODE=0
+            ;;
+          *)
+            echo "::error::Invalid fail-on value: '$FAIL_ON'. Must be one of: error, warning, never."
+            exit 1
+            ;;
+        esac
+
+        echo "valid=$VALID"           >> "$GITHUB_OUTPUT"
+        echo "error_count=$ERROR_COUNT" >> "$GITHUB_OUTPUT"
+
+        if [ "$VALID" = "false" ]; then
+          echo "::error::rootline validation failed: $ERROR_COUNT error(s) found."
+        fi
+
+        exit $EXIT_CODE
