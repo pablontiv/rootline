@@ -36,7 +36,18 @@ jobs:
           echo "Current: $CURRENT, Next: $NEXT"
 
       - name: Create and push tag
+        id: tag
         if: steps.version.outputs.current != steps.version.outputs.next
         run: |
           git tag "${{ steps.version.outputs.next }}"
           git push origin "${{ steps.version.outputs.next }}"
+
+      - name: Release
+        if: steps.tag.outcome == 'success'
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ steps.version.outputs.next }}
