@@ -21,6 +21,7 @@ func CompileWhere(whereExpr string) (*vm.Program, error) {
 
 // BuildEnv constructs an expr environment from a Record.
 // Frontmatter fields are promoted to top-level keys alongside path, body, and type.
+// Derived fields override frontmatter (no prefix).
 func BuildEnv(rec *extract.Record) map[string]any {
 	env := map[string]any{
 		"path": rec.Path,
@@ -28,6 +29,9 @@ func BuildEnv(rec *extract.Record) map[string]any {
 		"type": rec.Type,
 	}
 	for k, v := range rec.Frontmatter {
+		env[k] = v
+	}
+	for k, v := range rec.Derived {
 		env[k] = v
 	}
 	return env

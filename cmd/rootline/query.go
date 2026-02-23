@@ -63,8 +63,9 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
-	// Run derivation (best-effort, errors silently skipped).
+	// Run derivation and aggregation (best-effort, errors silently skipped).
 	derive.DeriveAllSimple(records, absRoot)
+	derive.AggregateAllSimple(records, absRoot)
 
 	q := &query.Query{
 		Count: queryCount,

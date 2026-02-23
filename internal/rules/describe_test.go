@@ -165,7 +165,7 @@ func TestDescribeResult_NilFieldsBecomeMaps(t *testing.T) {
 	}
 
 	// All should be objects/arrays, never null
-	for _, key := range []string{"schema", "validate", "derive", "state", "links", "applies"} {
+	for _, key := range []string{"schema", "validate", "derive", "aggregate", "links", "applies"} {
 		if parsed[key] == nil {
 			t.Errorf("%s is null, want empty object/array", key)
 		}

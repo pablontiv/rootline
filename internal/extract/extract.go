@@ -33,6 +33,18 @@ type Record struct {
 	Errors      []ExtractionError `json:"errors,omitempty"`
 }
 
+// EffectiveField returns the effective value for a field name.
+// Derived fields take precedence over frontmatter.
+func (r *Record) EffectiveField(key string) (any, bool) {
+	if r.Derived != nil {
+		if v, ok := r.Derived[key]; ok {
+			return v, true
+		}
+	}
+	v, ok := r.Frontmatter[key]
+	return v, ok
+}
+
 // ExtractionError represents a non-fatal issue during extraction.
 type ExtractionError struct {
 	Line    int    `json:"line"`

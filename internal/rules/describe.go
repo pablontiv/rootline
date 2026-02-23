@@ -12,17 +12,17 @@ import (
 // It shows the effective schema for a directory after merging all
 // ancestor .stem files.
 type DescribeResult struct {
-	Version  int                    `json:"version"`
-	Kind     string                 `json:"kind"`
-	Path     string                 `json:"path"`
-	Applies  []string               `json:"applies"`
-	Scope    Scope                  `json:"scope"`
-	Schema   map[string]SchemaField `json:"schema"`
-	Validate []ValidationRule       `json:"validate"`
-	Derive   map[string]any         `json:"derive"`
-	State    map[string]any         `json:"state"`
-	Links    LinkSchema             `json:"links"`
-	Hints    []string               `json:"hints,omitempty"`
+	Version   int                    `json:"version"`
+	Kind      string                 `json:"kind"`
+	Path      string                 `json:"path"`
+	Applies   []string               `json:"applies"`
+	Scope     Scope                  `json:"scope"`
+	Schema    map[string]SchemaField `json:"schema"`
+	Validate  []ValidationRule       `json:"validate"`
+	Derive    map[string]any         `json:"derive"`
+	Aggregate map[string]any         `json:"aggregate"`
+	Links     LinkSchema             `json:"links"`
+	Hints     []string               `json:"hints,omitempty"`
 }
 
 // NewDescribeResult builds a DescribeResult from walk-up entries and
@@ -48,9 +48,9 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 		derive = map[string]any{}
 	}
 
-	state := effective.State
-	if state == nil {
-		state = map[string]any{}
+	aggregate := effective.Aggregate
+	if aggregate == nil {
+		aggregate = map[string]any{}
 	}
 
 	// Compute Next for sequence fields
@@ -62,16 +62,16 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 	}
 
 	return &DescribeResult{
-		Version:  1,
-		Kind:     "rootline/describe",
-		Path:     path,
-		Applies:  applies,
-		Scope:    effective.Scope,
-		Schema:   schema,
-		Validate: validate,
-		Derive:   derive,
-		State:    state,
-		Links:    effective.Links,
+		Version:   1,
+		Kind:      "rootline/describe",
+		Path:      path,
+		Applies:   applies,
+		Scope:     effective.Scope,
+		Schema:    schema,
+		Validate:  validate,
+		Derive:    derive,
+		Aggregate: aggregate,
+		Links:     effective.Links,
 	}
 }
 

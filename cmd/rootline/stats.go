@@ -52,17 +52,18 @@ func runStats(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
-	// Run derivation (best-effort, errors silently skipped).
+	// Run derivation and aggregation (best-effort, errors silently skipped).
 	derive.DeriveAllSimple(records, absRoot)
+	derive.AggregateAllSimple(records, absRoot)
 
 	byEstado := make(map[string]int)
 	byTipo := make(map[string]int)
 
 	for _, rec := range records {
-		if e, ok := rec.Frontmatter["estado"]; ok {
+		if e, ok := rec.EffectiveField("estado"); ok {
 			byEstado[fmt.Sprintf("%v", e)]++
 		}
-		if t, ok := rec.Frontmatter["tipo"]; ok {
+		if t, ok := rec.EffectiveField("tipo"); ok {
 			byTipo[fmt.Sprintf("%v", t)]++
 		}
 	}

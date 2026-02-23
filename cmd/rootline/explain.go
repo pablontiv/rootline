@@ -8,6 +8,7 @@ import (
 
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
 )
@@ -93,6 +94,25 @@ func runExplain(cmd *cobra.Command, args []string) error {
 		_, _ = derive.DeriveRecord(record, effective, nil)
 	}
 
+	// Run aggregation for index files.
+	if effective != nil && len(effective.Aggregate) > 0 && isExplainIndexFile(absPath) {
+		scanDir := filepath.Dir(absPath)
+		reg2 := extract.NewRegistry()
+		siblings, scanErr := index.Scan(scanDir, reg2)
+		if scanErr == nil && len(siblings) > 0 {
+			derive.DeriveAllSimple(siblings, scanDir)
+			derive.AggregateAllSimple(siblings, scanDir)
+			// Copy derived values from the scanned version of this record.
+			for _, s := range siblings {
+				sAbs := filepath.Join(scanDir, s.Path)
+				if sAbs == absPath {
+					record.Derived = s.Derived
+					break
+				}
+			}
+		}
+	}
+
 	// Run validation.
 	var valErrs []rules.ValidationError
 	if effective != nil {
@@ -158,7 +178,7 @@ func buildExplainResult(
 		}
 	}
 
-	// Derived fields.
+	// Derived fields (from derive and aggregate).
 	if effective != nil {
 		derivedKeys := sortedMapKeys(record.Derived)
 		for _, k := range derivedKeys {
@@ -168,6 +188,11 @@ func buildExplainResult(
 				Origin: "derived",
 			}
 			if exprVal, ok := effective.Derive[k]; ok {
+				if exprStr, ok := exprVal.(string); ok {
+					f.Expression = exprStr
+				}
+			} else if exprVal, ok := effective.Aggregate[k]; ok {
+				f.Origin = "aggregate"
 				if exprStr, ok := exprVal.(string); ok {
 					f.Expression = exprStr
 				}
@@ -235,4 +260,8 @@ func sortedMapKeys(m map[string]any) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func isExplainIndexFile(absPath string) bool {
+	return filepath.Base(absPath) == "README.md"
 }

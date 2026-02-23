@@ -59,8 +59,9 @@ func runTree(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
-	// Run derivation (best-effort, errors silently skipped).
+	// Run derivation and aggregation (best-effort, errors silently skipped).
 	derive.DeriveAllSimple(records, absRoot)
+	derive.AggregateAllSimple(records, absRoot)
 
 	root := buildTree(records, filepath.Base(absRoot))
 
@@ -96,7 +97,7 @@ func buildTree(records []*extract.Record, rootName string) *treeNode {
 
 		// Create leaf node for the file
 		estado := ""
-		if e, ok := rec.Frontmatter["estado"]; ok {
+		if e, ok := rec.EffectiveField("estado"); ok {
 			estado = fmt.Sprintf("%v", e)
 		}
 		leaf := &treeNode{

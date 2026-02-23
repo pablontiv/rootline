@@ -2,7 +2,6 @@ package derive
 
 import (
 	"path/filepath"
-	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -82,15 +81,4 @@ func DeriveAllSimple(records []*extract.Record, root string) {
 // check happens inside DeriveAll per-directory.
 func HasDeriveFields(records []*extract.Record) bool {
 	return len(records) > 0
-}
-
-// EnvWithDerived extends a query env with derived fields under a "derived." prefix.
-func EnvWithDerived(env map[string]any, rec *extract.Record) map[string]any {
-	if len(rec.Derived) == 0 {
-		return env
-	}
-	for k, v := range rec.Derived {
-		env["derived_"+strings.ReplaceAll(k, ".", "_")] = v
-	}
-	return env
 }

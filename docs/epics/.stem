@@ -60,3 +60,10 @@ validate:
   - rule: requires
     if: { tipo: "ci-cd" }
     then: { fields: [ejecutable_en] }
+
+aggregate:
+  estado: |
+    all(descendants, {.estado == "Completado"}) ? "Completado" :
+    any(descendants, {.estado == "Bloqueada"}) ? "Bloqueada" :
+    any(descendants, {.estado == "In Progress"}) ? "In Progress" :
+    estado

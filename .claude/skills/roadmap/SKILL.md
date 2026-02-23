@@ -219,7 +219,7 @@ Cada Task tiene un campo `Tipo` que determina su naturaleza (servicio-docker, mo
 
 Mostrar solo Tasks pendientes en formato tabla, agrupados por Epic/Feature.
 
-**Procedimiento**: Ejecutar `rootline query docs/epics/ --where "estado in ['Pending', 'Especificado']" --output table`
+**Procedimiento**: Ejecutar `rootline query docs/epics/ --where "tipo not in ['feature', 'historia']" --where "estado in ['Pending', 'Especificado', 'Specified', 'Bloqueada', 'Diferida', 'In Progress']" --output table`
 
 Presenta el output tal cual, sin modificaciones.
 
@@ -252,7 +252,7 @@ Ejecutar Tasks pendientes en loop con confirmación entre cada uno.
 1. Ejecutar `rootline graph --check docs/epics/` para validar dependencias antes de empezar
    - Si hay ciclos → reportar y **parar** (dependencias circulares impiden ejecución)
    - Si hay broken links → reportar como warning (pueden ser tasks aún no creados)
-2. Ejecutar `rootline query docs/epics/ --where "estado in ['Pending', 'Especificado']" --output table` para obtener tasks pendientes
+2. Ejecutar `rootline query docs/epics/ --where "tipo not in ['feature', 'historia']" --where "estado in ['Pending', 'Especificado', 'Specified', 'Bloqueada', 'Diferida', 'In Progress']" --output table` para obtener tasks pendientes
 3. Si `--filter PATTERN` proporcionado, filtrar resultados por Epic/Feature path match
 4. Si `--max N`, tomar solo los primeros N tasks
 5. Mostrar tabla de tasks encontradas a Pones

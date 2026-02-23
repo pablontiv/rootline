@@ -34,9 +34,9 @@ func MergeStemFiles(entries []StemEntry) *StemFile {
 			result.Validate = s.Validate
 		}
 
-		// Derive, State: generic type-driven merge.
+		// Derive, Aggregate: generic type-driven merge.
 		result.Derive = mergeAnyMap(result.Derive, s.Derive)
-		result.State = mergeAnyMap(result.State, s.State)
+		result.Aggregate = mergeAnyMap(result.Aggregate, s.Aggregate)
 
 		// Links: typed merge (Allowed replaces, Rules map-merges).
 		result.Links = mergeLinkSchema(result.Links, s.Links)

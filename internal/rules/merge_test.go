@@ -277,7 +277,7 @@ func TestMergeStemFiles_DeepMapMerge(t *testing.T) {
 	entries := []StemEntry{
 		stemEntry("parent/.stem", &StemFile{
 			Version: 1,
-			State: map[string]any{
+			Aggregate: map[string]any{
 				"visibility": map[string]any{
 					"derive": map[string]any{
 						"when": "published",
@@ -288,7 +288,7 @@ func TestMergeStemFiles_DeepMapMerge(t *testing.T) {
 			},
 		}),
 		stemEntry("child/.stem", &StemFile{
-			State: map[string]any{
+			Aggregate: map[string]any{
 				"visibility": map[string]any{
 					"derive": map[string]any{
 						"then": "private",
@@ -300,13 +300,13 @@ func TestMergeStemFiles_DeepMapMerge(t *testing.T) {
 
 	result := MergeStemFiles(entries)
 
-	vis, ok := result.State["visibility"].(map[string]any)
+	vis, ok := result.Aggregate["visibility"].(map[string]any)
 	if !ok {
-		t.Fatalf("state.visibility is not a map")
+		t.Fatalf("aggregate.visibility is not a map")
 	}
 	derive, ok := vis["derive"].(map[string]any)
 	if !ok {
-		t.Fatalf("state.visibility.derive is not a map")
+		t.Fatalf("aggregate.visibility.derive is not a map")
 	}
 	// "when" inherited from parent, "then" overridden by child.
 	if derive["when"] != "published" {
@@ -316,8 +316,8 @@ func TestMergeStemFiles_DeepMapMerge(t *testing.T) {
 		t.Errorf("derive.then = %v, want private", derive["then"])
 	}
 	// "other" inherited.
-	if result.State["other"] != "keep" {
-		t.Errorf("state.other = %v, want keep", result.State["other"])
+	if result.Aggregate["other"] != "keep" {
+		t.Errorf("aggregate.other = %v, want keep", result.Aggregate["other"])
 	}
 }
 

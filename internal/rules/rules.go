@@ -19,7 +19,7 @@ type StemFile struct {
 	Schema     map[string]SchemaField `yaml:"schema"`
 	Validate   []ValidationRule       `yaml:"validate"`
 	Derive     map[string]any         `yaml:"derive"`
-	State      map[string]any         `yaml:"state"`
+	Aggregate  map[string]any         `yaml:"aggregate"`
 	Links      LinkSchema             `yaml:"links"`
 	Structural StructuralRules        `yaml:"structural"`
 }

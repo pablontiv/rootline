@@ -34,11 +34,8 @@ derive:
     from: title
     using: slugify
 
-state:
-  visibility:
-    derive:
-      when: { status: published }
-      then: public
+aggregate:
+  estado: 'all(descendants, {.estado == "Completado"}) ? "Completado" : estado'
 
 links:
   allowed: [decision, reference]
@@ -86,12 +83,12 @@ links:
 		t.Errorf("validate[1].source = %q, want %q", stem.Validate[1].Source, "docs/.stem")
 	}
 
-	// Derive, State, Links (opaque maps)
+	// Derive, Aggregate, Links (opaque maps)
 	if stem.Derive == nil || len(stem.Derive) != 1 {
 		t.Errorf("derive = %v, want 1 entry", stem.Derive)
 	}
-	if stem.State == nil || len(stem.State) != 1 {
-		t.Errorf("state = %v, want 1 entry", stem.State)
+	if stem.Aggregate == nil || len(stem.Aggregate) != 1 {
+		t.Errorf("aggregate = %v, want 1 entry", stem.Aggregate)
 	}
 	if len(stem.Links.Allowed) != 2 {
 		t.Errorf("links.allowed = %v, want [decision, reference]", stem.Links.Allowed)

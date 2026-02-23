@@ -90,27 +90,3 @@ func TestDeriveAllResolverReturnsNil(t *testing.T) {
 		t.Error("expected nil Derived when resolver returns nil")
 	}
 }
-
-func TestEnvWithDerived(t *testing.T) {
-	rec := &extract.Record{
-		Derived: map[string]any{"slug": "hello-world", "count": 5},
-	}
-	env := map[string]any{"path": "test.md"}
-	env = EnvWithDerived(env, rec)
-
-	if env["derived_slug"] != "hello-world" {
-		t.Errorf("derived_slug = %v, want %q", env["derived_slug"], "hello-world")
-	}
-	if env["derived_count"] != 5 {
-		t.Errorf("derived_count = %v, want 5", env["derived_count"])
-	}
-}
-
-func TestEnvWithDerivedEmpty(t *testing.T) {
-	rec := &extract.Record{}
-	env := map[string]any{"path": "test.md"}
-	result := EnvWithDerived(env, rec)
-	if len(result) != 1 {
-		t.Errorf("expected 1 key, got %d", len(result))
-	}
-}
