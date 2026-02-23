@@ -2,6 +2,7 @@
 estado: Specified
 tipo: ci-cd
 ejecutable_en: 1 sesion
+hold: Pendiente aprobación de usuario
 ---
 # T002: Crear Homebrew tap y formula
 

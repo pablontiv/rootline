@@ -2,6 +2,7 @@
 estado: Specified
 tipo: software-module
 ejecutable_en: 1 sesion
+hold: Pendiente aprobación de usuario
 ---
 # T003: Registrar MCP tools de engine-power: explain, fix, graph
 
