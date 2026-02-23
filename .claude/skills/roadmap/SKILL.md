@@ -1,18 +1,19 @@
 ---
 name: roadmap
 description: |
-  AI-native planning framework: create epics, stories, or tasks.
-  Accepts free text for autonomous project decomposition or explicit
-  subcommands (epic, story, task, pending, view, loop).
+  AI-native planning framework for autonomous project decomposition.
+  Accepts free text to decompose into epics, features, stories, and tasks.
+  Subcommands: pending, loop, plan.
   Tasks are self-contained units with technical specs and binary acceptance criteria.
-  This skill should be used when the user says "crear epic", "crear story",
-  "crear task", "descomponer en features", "crear roadmap de X", "estructura de X",
+  This skill should be used when the user says "descomponer en features",
+  "crear roadmap de X", "estructura de X",
   "planificar implementación de X", "qué sigue", "ver roadmap",
   "ver progreso", "qué falta", "tasks pendientes",
   "loop de tasks", "ejecutar pendientes", "implementar tasks",
   "roadmap loop", "ejecutar roadmap",
+  "crear roadmap del plan", "materializar plan",
   or provides free text describing work to decompose.
-argument-hint: "<texto libre> | [epic|story|task|pending|view|loop] [args]"
+argument-hint: "<texto libre> | [pending|loop|plan] [args]"
 allowed-tools:
   - Write
   - Read
@@ -40,21 +41,15 @@ Este skill es **plan-mode aware**. Cuando `defaultMode: "plan"` está activo:
 3. Ejecutar discovery y generar contenido completo en el plan file
 4. Llamar `ExitPlanMode` para aprobación
 
-### Fase 2: Ejecución (post-aprobación)
+### Fase 2: Post-aprobación
 
-**IMPORTANTE**: Esta fase SOLO crea archivos .md de planificación. NO implementar el trabajo descrito en los tasks — eso lo hace `/roadmap loop`.
-
-1. Crear archivos .md según el plan aprobado (READMEs de Epic/Feature/Story, archivos de Task)
-2. Después de cada Write, ejecutar `rootline validate <path>` para verificar contra el schema .stem
-3. Si la validación falla, ejecutar `rootline fix <path>` como fallback
-4. Actualizar tabla en el README padre (cascading link)
-5. Confirmar creación exitosa
+Después de que el usuario aprueba el plan, informarle que puede ejecutar `/roadmap plan` para crear los archivos del roadmap.
 
 ---
 
 ## Modo Autónomo (default — sin subcomando explícito)
 
-Cuando `$ARGUMENTS` NO empieza con `epic|story|task|pending|view|loop`, activar modo de evaluación autónoma.
+Cuando `$ARGUMENTS` NO empieza con `pending|loop|plan`, activar modo de evaluación autónoma.
 
 ### Paso 1: Análisis de Intención
 
@@ -142,72 +137,51 @@ El plan se presenta como **propuesta fundamentada**, no como pregunta abierta.
 - ❌ Proponer 1 Epic para un producto completo — Escala mal
 - ❌ Preguntar por cada nivel — Generar TODO y presentar junto
 
-### Paso 6: Crear Estructura (post-aprobación)
+### Paso 6: Informar siguiente paso
 
-**IMPORTANTE**: Solo crear archivos .md de planificación. NO implementar el trabajo descrito en los tasks.
-
-Una vez aprobada, crear TODOS los archivos usando los templates de:
-- [epic-guide.md](epic-guide.md) para READMEs de Epic y Feature
-- [story-guide.md](story-guide.md) para READMEs de Story
-- [task-guide.md](task-guide.md) para archivos de Task
-
-Después de crear cada archivo, validar contra el schema:
-1. `rootline validate <path>` — verificar que el archivo cumple el .stem
-2. Si falla, `rootline fix <path>` — corregir automáticamente lo que se pueda
+Después de la aprobación, informar al usuario que puede ejecutar `/roadmap plan` para materializar la estructura como archivos .md.
 
 ---
 
 ## Subcomandos
 
-### `/roadmap epic <name> <description>`
-
-Descomponer intención estratégica en features y stories.
-
-**Leer**: [epic-guide.md](epic-guide.md) para workflow completo.
-
-**Output**: `docs/epics/EXX-name/README.md` + subdirectorios Feature con READMEs skeleton.
-
-**Ejemplo**: `/roadmap epic disaster-recovery Garantizar recuperación completa en < 2 horas`
-
----
-
-### `/roadmap story <feature-path> <name> <description>`
-
-Crear story como contrato semántico con estructura antes/después.
-
-**Leer**: [story-guide.md](story-guide.md) para workflow completo.
-
-**Output**: `docs/epics/.../SXXX-name/README.md` bajo el Feature indicado.
-
-**Ejemplo**: `/roadmap story E01/F13 layer3-validation k8s workloads validados en CST`
-
----
-
-### `/roadmap task <story-path> <name> <description>`
-
-Crear task AI-ready con criterios de aceptación binarios.
-
-Cada Task tiene un campo `Tipo` que determina su naturaleza (servicio-docker, modulo-sistema, operacion-sistema, lxc, vm, modulo-infraestructura, host-script, instance-script, documentation). Tasks con tipos IaC incluyen una sección `Especificacion Tecnica` con YAML type-specific, haciendo cada Task auto-contenida (spec + ejecución en un solo archivo).
-
-**Leer**: [task-guide.md](task-guide.md) para workflow completo.
-
-**Output**: `docs/epics/.../TXXX-name.md` bajo la Story indicada.
-
-**Ejemplo**: `/roadmap task E01/F13/S001 add-k8s-phase Agregar fase k8s al playbook CST`
-
----
-
 ### `/roadmap pending`
 
-Mostrar solo Tasks pendientes en formato tabla, agrupados por Epic/Feature.
+Vista jerárquica filtrada: solo Features con trabajo pendiente.
 
-**Procedimiento**: Ejecutar `rootline query docs/epics/ --where "tipo not in ['feature', 'historia']" --where "estado in ['Pending', 'Specified', 'In Progress', 'Blocked', 'On Hold']" --output table`
-
-Presenta el output tal cual, sin modificaciones.
+**Procedimiento**:
+1. Ejecutar `rootline query docs/epics/ --where "tipo not in ['feature', 'historia']" --where "estado in ['Pending', 'Specified', 'In Progress', 'Blocked', 'On Hold']" --output json`
+2. Del resultado, extraer los Feature paths únicos (segundo nivel del path: `EXX-name/FXX-name/`)
+3. Para cada Feature path único, ejecutar `rootline tree docs/epics/<epic>/<feature>/ --output table`
+4. Presentar cada tree tal cual, agrupado bajo su Epic
+5. Después de los trees, mostrar `rootline stats docs/epics/ --output table`
 
 ---
 
-### `/roadmap` o `/roadmap view`
+### `/roadmap plan`
+
+Materializar el plan aprobado más reciente como archivos de roadmap.
+
+**Cuándo usar**: Después de aprobar un plan en plan mode que contiene una descomposición de roadmap (estructura epic/feature/story/task).
+
+**Procedimiento**:
+1. Buscar el plan file más reciente en `~/.claude/plans/` (ordenar por fecha de modificación, tomar el más reciente)
+2. Leer el contenido del plan file
+3. Parsear la estructura jerárquica del plan (epics, features, stories, tasks)
+4. Para cada artefacto, crear archivos .md usando los templates de:
+   - [epic-guide.md](epic-guide.md) para READMEs de Epic y Feature
+   - [story-guide.md](story-guide.md) para READMEs de Story
+   - [task-guide.md](task-guide.md) para archivos de Task
+5. Después de cada Write, ejecutar `rootline validate <path>`
+6. Si falla, `rootline fix <path>` como fallback
+7. Actualizar tablas en READMEs padre (cascading links)
+8. Confirmar creación exitosa
+
+**IMPORTANTE**: Solo crear archivos .md de planificación. NO implementar el trabajo descrito en los tasks — eso lo hace `/roadmap loop`.
+
+---
+
+### `/roadmap` (sin argumentos)
 
 Mostrar árbol jerárquico y resumen estadístico del estado actual (read-only).
 
@@ -342,9 +316,8 @@ El comando retorna el próximo identificador directamente (ej: `"T004"`).
 
 ### Verificación de Padre
 
-SIEMPRE verificar que el directorio padre existe antes de crear:
-- `/roadmap story E01/F13 ...` → verificar con `rootline describe docs/epics/E01-*/F13-*/`
-- `/roadmap task E01/F13/S001 ...` → verificar con `rootline describe docs/epics/E01-*/F13-*/S001-*/`
+SIEMPRE verificar que el directorio padre existe antes de crear un artefacto:
+- Verificar con `rootline describe docs/epics/<path>/` que el directorio destino existe
 
 Si no existe → informar al usuario y sugerir crearlo primero.
 
@@ -354,7 +327,7 @@ Después de crear un artefacto, actualizar la tabla en el README padre:
 - Task creado → agregar fila en la tabla "Tasks" del Story README (solo Task + Descripcion, sin Estado)
 - Story creada → agregar fila en la sección "Stories" del Feature README (sin Estado)
 
-**Nota**: Las tablas NO incluyen columna Estado. El estado se lee del YAML frontmatter de cada Task y se deriva para Stories/Features en `/roadmap view`.
+**Nota**: Las tablas NO incluyen columna Estado. El estado se lee del YAML frontmatter de cada Task y se deriva para Stories/Features en `/roadmap`.
 
 ---
 
@@ -367,7 +340,7 @@ Después de crear un artefacto, actualizar la tabla en el README padre:
 | `rootline describe <dir> --field schema.id.next` | Auto-numbering: obtener próximo ID en cualquier nivel |
 | `rootline new <path>` | Scaffolding: crear archivo con frontmatter correcto según .stem |
 | `rootline query <path> --where "expr"` | Discovery: buscar records por frontmatter (estado, tipo, etc.) |
-| `rootline tree <path> --output table` | Vista jerárquica: `/roadmap view` |
+| `rootline tree <path> --output table` | Vista jerárquica: `/roadmap` |
 | `rootline stats <path> --output table` | Resumen estadístico: conteos por estado y tipo |
 
 ## Referencia
