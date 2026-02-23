@@ -49,9 +49,9 @@ The output follows this structure:
       "default": "value",
       "severity": "error|warn|off",
       "source": ".stem file path",
-      "prefix": "E",      // only on sequence-type fields
-      "digits": 2,        // only on sequence-type fields
-      "next": "E03"       // only on sequence-type fields
+      "prefix": "E",
+      "digits": 2,
+      "next": "E03"
     }
   },
   "validate": [
