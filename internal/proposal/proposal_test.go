@@ -476,3 +476,111 @@ func TestMigrateValue_MixedTargetsAndNotes(t *testing.T) {
 		t.Errorf("wiki_links[1] = %q, want [[note:human]]", p.WikiLinks[1])
 	}
 }
+
+func TestAnalyze_ExtractBodySuppressesAddField(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completado", "In Progress"}, Required: true},
+		},
+	}
+	records := []*extract.Record{
+		{Path: "a.md", Body: "# Title\n\n**Estado**: Completada"},
+	}
+	errs := map[string][]rules.ValidationError{
+		"a.md": {{Rule: "required", Field: "estado", Message: `required field "estado" is missing`}},
+	}
+
+	report := Analyze(records, stem, errs)
+
+	// extract_body should be present, add_field should be suppressed.
+	if report.Summary.ExtractBody != 1 {
+		t.Errorf("summary.extract_body = %d, want 1", report.Summary.ExtractBody)
+	}
+	if report.Summary.AddField != 0 {
+		t.Errorf("summary.add_field = %d, want 0 (suppressed by extract_body)", report.Summary.AddField)
+	}
+	if report.Summary.Total != 1 {
+		t.Errorf("summary.total = %d, want 1", report.Summary.Total)
+	}
+}
+
+func TestAnalyze_InferFromChildrenSuppressesAddField(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completado", "In Progress"}, Required: true},
+		},
+	}
+	records := []*extract.Record{
+		{Path: "dir/README.md", Body: "# Dir", Frontmatter: map[string]any{}},
+		{Path: "dir/a.md", Frontmatter: map[string]any{"estado": "Completado"}},
+		{Path: "dir/b.md", Frontmatter: map[string]any{"estado": "Pending"}},
+	}
+	errs := map[string][]rules.ValidationError{
+		"dir/README.md": {{Rule: "required", Field: "estado", Message: `required field "estado" is missing`}},
+	}
+
+	report := Analyze(records, stem, errs)
+
+	// infer_from_children should be present, add_field should be suppressed.
+	if report.Summary.InferFromChildren != 1 {
+		t.Errorf("summary.infer_from_children = %d, want 1", report.Summary.InferFromChildren)
+	}
+	if report.Summary.AddField != 0 {
+		t.Errorf("summary.add_field = %d, want 0 (suppressed by infer_from_children)", report.Summary.AddField)
+	}
+	if report.Summary.Total != 1 {
+		t.Errorf("summary.total = %d, want 1", report.Summary.Total)
+	}
+}
+
+func TestAnalyze_AddFieldSurvivesWithoutCoverage(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completado"}, Required: true},
+		},
+	}
+	// No body hints, not a README with children — add_field should survive.
+	records := []*extract.Record{
+		{Path: "standalone.md", Body: "# No hints here", Frontmatter: map[string]any{}},
+	}
+	errs := map[string][]rules.ValidationError{
+		"standalone.md": {{Rule: "required", Field: "estado", Message: `required field "estado" is missing`}},
+	}
+
+	report := Analyze(records, stem, errs)
+
+	if report.Summary.AddField != 1 {
+		t.Errorf("summary.add_field = %d, want 1 (no other detector covers this)", report.Summary.AddField)
+	}
+	if report.Summary.ExtractBody != 0 {
+		t.Errorf("summary.extract_body = %d, want 0", report.Summary.ExtractBody)
+	}
+	if report.Summary.InferFromChildren != 0 {
+		t.Errorf("summary.infer_from_children = %d, want 0", report.Summary.InferFromChildren)
+	}
+}
+
+func TestAnalyze_MigrateValueSuppressesExtendAndCorrect(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Bloqueada", "Completado"}, Required: true},
+		},
+	}
+	errs := map[string][]rules.ValidationError{
+		"a.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Bloqueada, Completado]`}},
+		"b.md": {{Rule: "enum", Field: "estado", Message: `value "Pending (blocked by T001)" not in allowed values: [Pending, Bloqueada, Completado]`}},
+	}
+
+	report := Analyze([]*extract.Record{}, stem, errs)
+
+	// migrate_value should handle these, not extend_enum or correct_value.
+	if report.Summary.MigrateValue != 2 {
+		t.Errorf("summary.migrate_value = %d, want 2", report.Summary.MigrateValue)
+	}
+	if report.Summary.ExtendEnum != 0 {
+		t.Errorf("summary.extend_enum = %d, want 0 (suppressed by migrate_value)", report.Summary.ExtendEnum)
+	}
+	if report.Summary.CorrectValue != 0 {
+		t.Errorf("summary.correct_value = %d, want 0 (suppressed by migrate_value)", report.Summary.CorrectValue)
+	}
+}
