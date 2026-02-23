@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Specified
 tipo: software-module
 ejecutable_en: 1 sesion
 ---

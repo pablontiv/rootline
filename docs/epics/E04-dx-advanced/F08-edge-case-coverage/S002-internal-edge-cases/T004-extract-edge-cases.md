@@ -1,5 +1,5 @@
 ---
-estado: Completado
+estado: Completed
 tipo: software-test
 ejecutable_en: 1 sesion
 ---

@@ -1,5 +1,5 @@
 ---
-estado: Completado
+estado: Completed
 tipo: documentation
 ---
 # T001: Actualizar template de task-guide.md para usar wiki-links de dependencia

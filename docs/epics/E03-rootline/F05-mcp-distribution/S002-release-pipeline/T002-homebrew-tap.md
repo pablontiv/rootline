@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Specified
 tipo: ci-cd
 ejecutable_en: 1 sesion
 ---
