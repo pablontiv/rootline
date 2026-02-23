@@ -3,8 +3,9 @@ name: validate
 description: |
   Validate documents against .stem schemas using rootline CLI.
   Checks frontmatter fields for required values, enum constraints, and structural rules.
-  Use when the user says "validate", "check schema", "validar", "check this file",
-  or wants to verify documents comply with their .stem definitions.
+  This skill should be used when the user says "validate", "check schema", "validar",
+  "verificar", "check this file", "are there any errors", "is this correct", "lint",
+  "verify", "revisar esquema", or wants to confirm documents comply with .stem definitions.
 argument-hint: "[file-or-directory]"
 allowed-tools: Bash, Read
 ---
@@ -23,15 +24,17 @@ Validate documents against their effective `.stem` schema using `rootline valida
 
 ### 2. Execute validation
 
-Run the appropriate command via Bash:
+Run the appropriate command via Bash. Use absolute paths to avoid working directory issues.
 
 ```bash
 # Single file
-rootline validate <file> --output json
+rootline validate /absolute/path/to/file.md --output json
 
-# Directory or all
-cd <directory> && rootline validate --all --output json
+# Directory
+rootline validate --all --output json /absolute/path/to/directory
 ```
+
+If `rootline validate` fails with a non-validation error (e.g., command not found, invalid path, no `.stem` files), report the error to the user and suggest checking that `rootline` is installed and `.stem` files exist in the directory hierarchy.
 
 ### 3. Parse and present results
 
@@ -59,7 +62,7 @@ The JSON output has two possible shapes:
 }
 ```
 
-Each error/warning has: `rule`, `field`, `message`, `source` (.stem path), `severity`.
+Each item in `results` follows the same shape as the single-file output. Each error/warning has: `rule`, `field`, `message`, `source` (.stem path), `severity`.
 
 ### 4. Format output
 
@@ -89,6 +92,10 @@ End with summary for batch:
 Summary: N/TOTAL valid | ERRORS errors | WARNINGS warnings
 ```
 
+### 4b. Show context for errors (optional)
+
+When errors are found, use `Read` to show the file's frontmatter section so the user can see the current field values alongside the validation errors.
+
 ### 5. Suggest fixes
 
-If errors are found, suggest running `rootline fix <path>` to auto-correct fixable issues.
+If errors are found, suggest running `rootline fix <path>` (CLI command) to auto-correct fixable issues. Note: there is no `/fix` skill yet — this is a direct CLI command.

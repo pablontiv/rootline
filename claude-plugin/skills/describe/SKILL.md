@@ -3,9 +3,11 @@ name: describe
 description: |
   Show the effective .stem schema for a directory using rootline CLI.
   Displays fields, types, required status, enum values, and which .stem file defines each rule.
-  Use when the user says "describe schema", "show schema", "que campos necesito",
-  "what fields are required", or wants to understand document structure.
-argument-hint: "<directory>"
+  This skill should be used when the user says "describe schema", "show schema",
+  "que campos necesito", "what fields are required", "what metadata is needed",
+  "show me the fields", "stem rules", "describe this directory",
+  or wants to understand document structure for a path.
+argument-hint: "[directory-or-file]"
 allowed-tools: Bash
 ---
 
@@ -27,6 +29,8 @@ Show the effective schema for a directory by merging all ancestor `.stem` files.
 rootline describe <directory> --output json
 ```
 
+If `rootline describe` fails (e.g., directory not found, no `.stem` files in hierarchy), report the error and suggest checking that `.stem` files exist in the directory or its ancestors.
+
 ### 3. Parse JSON output
 
 The output follows this structure:
@@ -45,9 +49,9 @@ The output follows this structure:
       "default": "value",
       "severity": "error|warn|off",
       "source": ".stem file path",
-      "prefix": "E",
-      "digits": 2,
-      "next": "E03"
+      "prefix": "E",      // only on sequence-type fields
+      "digits": 2,        // only on sequence-type fields
+      "next": "E03"       // only on sequence-type fields
     }
   },
   "validate": [
