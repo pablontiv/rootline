@@ -21,7 +21,7 @@ schema:
   estado:
     type: enum
     required: true
-    values: [Pending, Completado]
+    values: [Pending, Completed]
   tipo:
     type: string
     required: false
@@ -30,7 +30,7 @@ schema:
 
 	// Two markdown files
 	mustWriteFile(t, filepath.Join(dir, "doc1.md"), []byte("---\nestado: Pending\ntipo: test\n---\n# Doc 1\n"), 0644)
-	mustWriteFile(t, filepath.Join(dir, "doc2.md"), []byte("---\nestado: Completado\ntipo: prod\n---\n# Doc 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "doc2.md"), []byte("---\nestado: Completed\ntipo: prod\n---\n# Doc 2\n"), 0644)
 
 	return dir
 }
@@ -54,6 +54,7 @@ func resetFlags() {
 	fixDryRun = false
 	fixAll = false
 	hooksForce = false
+	treeWhere = nil
 	graphFormat = "dot"
 	graphCheck = false
 	migrateDryRun = false
@@ -61,6 +62,10 @@ func resetFlags() {
 	migrateRename = ""
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
+	if f := treeCmd.Flags().Lookup("where"); f != nil {
+		_ = f.Value.Set("")
+		f.Changed = false
+	}
 	if f := queryCmd.Flags().Lookup("where"); f != nil {
 		_ = f.Value.Set("")
 		f.Changed = false
@@ -187,7 +192,7 @@ func TestQueryWhereIn(t *testing.T) {
 
 func TestQueryWhereInArray(t *testing.T) {
 	dir := setupTestDir(t)
-	out, err := runCmd(t, "query", "--from", dir, "--where", "estado in ['Pending', 'Completado']")
+	out, err := runCmd(t, "query", "--from", dir, "--where", "estado in ['Pending', 'Completed']")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -195,14 +200,14 @@ func TestQueryWhereInArray(t *testing.T) {
 		t.Errorf("expected doc1.md (Pending) in results, got: %s", out)
 	}
 	if !strings.Contains(out, "doc2.md") {
-		t.Errorf("expected doc2.md (Completado) in results, got: %s", out)
+		t.Errorf("expected doc2.md (Completed) in results, got: %s", out)
 	}
 }
 
 func TestQueryWhereInWithMultipleWhere(t *testing.T) {
 	dir := setupTestDir(t)
 	// Multiple --where flags combined with && (AND logic)
-	out, err := runCmd(t, "query", "--from", dir, "--where", "estado in ['Pending', 'Completado']", "--where", "tipo == 'test'")
+	out, err := runCmd(t, "query", "--from", dir, "--where", "estado in ['Pending', 'Completed']", "--where", "tipo == 'test'")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -575,7 +580,7 @@ schema:
   estado:
     type: enum
     required: true
-    values: [Pending, Completado]
+    values: [Pending, Completed]
   tipo:
     type: string
     required: false
@@ -636,7 +641,7 @@ schema:
   estado:
     type: enum
     required: true
-    values: [Pending, Completado]
+    values: [Pending, Completed]
   tipo:
     type: string
     required: false

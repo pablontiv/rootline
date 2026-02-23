@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var treeWhere []string
+
 var treeCmd = &cobra.Command{
 	Use:   "tree [path]",
 	Short: "Hierarchical view with completion counts",
@@ -22,6 +24,7 @@ var treeCmd = &cobra.Command{
 }
 
 func init() {
+	treeCmd.Flags().StringArrayVar(&treeWhere, "where", nil, "filter expression (e.g. \"estado == 'Pending'\")")
 	rootCmd.AddCommand(treeCmd)
 }
 
@@ -71,6 +74,12 @@ func runTree(cmd *cobra.Command, args []string) error {
 	derive.DeriveAllSimple(records, absRoot)
 	derive.AggregateAllSimple(records, absRoot)
 
+	// Apply --where filter.
+	records, err = filterRecords(records, treeWhere)
+	if err != nil {
+		return fmt.Errorf("filtering records: %w", err)
+	}
+
 	root := buildTree(records, filepath.Base(absRoot))
 
 	if outputFormat == "json" {
@@ -114,7 +123,7 @@ func buildTree(records []*extract.Record, rootName string) *treeNode {
 			IsLeaf: true,
 			Estado: estado,
 		}
-		if estado == "Completado" {
+		if estado == "Completed" {
 			leaf.Completed = 1
 		}
 		leaf.Total = 1
