@@ -1,0 +1,300 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/pablontiv/rootline/internal/migrate"
+	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/spf13/cobra"
+)
+
+var (
+	migrateDryRun bool
+	migrateFrom   string
+	migrateRename string
+)
+
+var migrateCmd = &cobra.Command{
+	Use:   "migrate [path]",
+	Short: "Detect and apply schema changes in .stem files",
+	Long: `Compare current .stem files against a previous version and report changes,
+or perform bulk migration operations like field renaming.
+
+By default, compares against the git HEAD version. Use --from to compare
+against a specific file. The --dry-run flag reports changes without modifying
+any files. Use --rename old=new to rename a field across all documents.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runMigrate,
+}
+
+func init() {
+	migrateCmd.Flags().BoolVar(&migrateDryRun, "dry-run", false, "report changes without modifying files")
+	migrateCmd.Flags().StringVar(&migrateFrom, "from", "", "compare against specified .stem file instead of git HEAD")
+	migrateCmd.Flags().StringVar(&migrateRename, "rename", "", "rename a field: old_field=new_field")
+	rootCmd.AddCommand(migrateCmd)
+}
+
+func runMigrate(cmd *cobra.Command, args []string) error {
+	if migrateRename != "" {
+		return runMigrateRename(cmd, args)
+	}
+	return runMigrateDiff(cmd, args)
+}
+
+// --- Rename operation ---
+
+func runMigrateRename(cmd *cobra.Command, args []string) error {
+	parts := strings.SplitN(migrateRename, "=", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return fmt.Errorf("invalid --rename format; expected old_field=new_field")
+	}
+
+	rootPath := "."
+	if len(args) > 0 {
+		rootPath = args[0]
+	}
+
+	op := &migrate.RenameOperation{
+		OldField: parts[0],
+		NewField: parts[1],
+		RootPath: rootPath,
+		DryRun:   migrateDryRun,
+	}
+
+	result, err := op.Execute()
+	if err != nil {
+		return err
+	}
+
+	if outputFormat == "table" {
+		return renderMigrateRenameTable(cmd, result)
+	}
+	return outputJSON(cmd, result, false)
+}
+
+func renderMigrateRenameTable(cmd *cobra.Command, result *migrate.RenameResult) error {
+	w := cmd.OutOrStdout()
+
+	if result.Summary.FilesUpdated == 0 && result.Summary.StemsUpdated == 0 {
+		_, _ = fmt.Fprintf(w, "No files affected (field %q not found in any documents)\n", result.OldField)
+		return nil
+	}
+
+	prefix := ""
+	if migrateDryRun {
+		prefix = "would "
+	}
+
+	if len(result.FilesUpdated) > 0 {
+		_, _ = fmt.Fprintf(w, "Files %supdated (%s → %s):\n", prefix, result.OldField, result.NewField)
+		for _, f := range result.FilesUpdated {
+			_, _ = fmt.Fprintf(w, "  %s\n", f)
+		}
+	}
+
+	if len(result.StemsUpdated) > 0 {
+		_, _ = fmt.Fprintf(w, "\n.stem schemas %supdated:\n", prefix)
+		for _, s := range result.StemsUpdated {
+			_, _ = fmt.Fprintf(w, "  %s\n", s)
+		}
+	}
+
+	_, _ = fmt.Fprintf(w, "\nSummary: %d files %supdated, %d stems %supdated (of %d scanned)\n",
+		result.Summary.FilesUpdated, prefix,
+		result.Summary.StemsUpdated, prefix,
+		result.Summary.FilesScanned)
+
+	return nil
+}
+
+// --- Diff operation ---
+
+func runMigrateDiff(cmd *cobra.Command, args []string) error {
+	targetPath := "."
+	if len(args) > 0 {
+		targetPath = args[0]
+	}
+
+	absPath, err := filepath.Abs(targetPath)
+	if err != nil {
+		return fmt.Errorf("resolving path: %w", err)
+	}
+
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", targetPath, err)
+	}
+
+	var stemPaths []string
+	if info.IsDir() {
+		stemPaths, err = migrate.FindStemFiles(absPath)
+		if err != nil {
+			return fmt.Errorf("finding .stem files: %w", err)
+		}
+		if len(stemPaths) == 0 {
+			return fmt.Errorf("no .stem files found in %s", targetPath)
+		}
+	} else {
+		stemPaths = []string{absPath}
+	}
+
+	if migrateFrom != "" && len(stemPaths) > 1 {
+		return fmt.Errorf("--from can only be used when targeting a single .stem file")
+	}
+
+	var results []*migrate.DiffResult
+	for _, stemPath := range stemPaths {
+		result, diffErr := diffSingleStem(stemPath)
+		if diffErr != nil {
+			current, parseErr := rules.ParseStemFile(stemPath)
+			if parseErr != nil {
+				return fmt.Errorf("parsing %s: %w", stemPath, parseErr)
+			}
+			result = migrate.Diff(stemPath, nil, current)
+		}
+		results = append(results, result)
+	}
+
+	if len(results) == 1 {
+		return renderMigrateResult(cmd, results[0])
+	}
+	return renderMigrateBatch(cmd, results)
+}
+
+func diffSingleStem(stemPath string) (*migrate.DiffResult, error) {
+	current, err := rules.ParseStemFile(stemPath)
+	if err != nil {
+		return nil, fmt.Errorf("parsing current %s: %w", stemPath, err)
+	}
+
+	previous, err := migrate.LoadPreviousStem(stemPath, migrateFrom)
+	if err != nil {
+		return nil, err
+	}
+
+	return migrate.Diff(stemPath, previous, current), nil
+}
+
+// MigrateBatchResult wraps multiple diff results for JSON output.
+type MigrateBatchResult struct {
+	Version int                   `json:"version"`
+	Kind    string                `json:"kind"`
+	Results []*migrate.DiffResult `json:"results"`
+	Summary MigrateBatchSummary   `json:"summary"`
+}
+
+// MigrateBatchSummary holds aggregate counts.
+type MigrateBatchSummary struct {
+	StemsChecked  int `json:"stems_checked"`
+	TotalChanges  int `json:"total_changes"`
+	BreakingCount int `json:"breaking_count"`
+}
+
+func renderMigrateResult(cmd *cobra.Command, result *migrate.DiffResult) error {
+	if outputFormat == "table" {
+		return renderMigrateTable(cmd, result)
+	}
+	return renderMigrateJSON(cmd, result)
+}
+
+func renderMigrateBatch(cmd *cobra.Command, results []*migrate.DiffResult) error {
+	batch := &MigrateBatchResult{
+		Version: 1,
+		Kind:    "rootline/migrate-batch",
+		Results: results,
+	}
+	for _, r := range results {
+		batch.Summary.StemsChecked++
+		batch.Summary.TotalChanges += r.TotalCount
+		batch.Summary.BreakingCount += r.BreakingCount
+	}
+
+	if outputFormat == "table" {
+		return renderMigrateBatchTable(cmd, batch)
+	}
+	data, err := json.Marshal(batch)
+	if err != nil {
+		return fmt.Errorf("marshaling JSON: %w", err)
+	}
+	if len(fieldPath) > 0 {
+		data, err = extractField(data, fieldPath[0])
+		if err != nil {
+			return err
+		}
+	}
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+	return nil
+}
+
+func renderMigrateJSON(cmd *cobra.Command, result *migrate.DiffResult) error {
+	data, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("marshaling JSON: %w", err)
+	}
+	if len(fieldPath) > 0 {
+		data, err = extractField(data, fieldPath[0])
+		if err != nil {
+			return err
+		}
+	}
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+	return nil
+}
+
+func renderMigrateTable(cmd *cobra.Command, result *migrate.DiffResult) error {
+	if len(result.Changes) == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "no changes detected")
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Schema changes in %s:\n\n", result.StemPath)
+
+	headers := []string{"Kind", "Field", "Breaking", "Message"}
+	var rows [][]string
+	for _, c := range result.Changes {
+		breakingStr := "no"
+		if c.Breaking {
+			breakingStr = "YES"
+		}
+		rows = append(rows, []string{string(c.Kind), c.Field, breakingStr, c.Message})
+	}
+
+	renderTable(cmd.OutOrStdout(), headers, rows)
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nTotal: %d changes (%d breaking)\n", result.TotalCount, result.BreakingCount)
+	return nil
+}
+
+func renderMigrateBatchTable(cmd *cobra.Command, batch *MigrateBatchResult) error {
+	if batch.Summary.TotalChanges == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "no changes detected")
+		return nil
+	}
+
+	for _, result := range batch.Results {
+		if len(result.Changes) == 0 {
+			continue
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Schema changes in %s:\n\n", result.StemPath)
+
+		headers := []string{"Kind", "Field", "Breaking", "Message"}
+		var rows [][]string
+		for _, c := range result.Changes {
+			breakingStr := "no"
+			if c.Breaking {
+				breakingStr = "YES"
+			}
+			rows = append(rows, []string{string(c.Kind), c.Field, breakingStr, c.Message})
+		}
+		renderTable(cmd.OutOrStdout(), headers, rows)
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Summary: %d stems checked, %d changes (%d breaking)\n",
+		batch.Summary.StemsChecked, batch.Summary.TotalChanges, batch.Summary.BreakingCount)
+	return nil
+}
