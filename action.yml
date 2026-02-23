@@ -187,15 +187,31 @@ runs:
         echo "rootline validate output:"
         echo "$RESULT"
 
-        # Parse error_count from the JSON output.
-        # The JSON contract guarantees a top-level "error_count" integer.
-        ERROR_COUNT=$(echo "$RESULT" \
-          | grep -o '"error_count":[[:space:]]*[0-9]*' \
-          | grep -o '[0-9]*$' \
-          || echo "0")
+        # Persist JSON output to a temp file so the annotation step can read it.
+        RESULT_FILE="$RUNNER_TEMP/rootline-validate-result.json"
+        echo "$RESULT" > "$RESULT_FILE"
+        echo "result_file=$RESULT_FILE" >> "$GITHUB_OUTPUT"
+
+        # Parse counts from the JSON summary object.
+        # BatchValidationResult.Summary.ErrorsCount   → JSON key: summary.errors_count
+        # BatchValidationResult.Summary.WarningsCount → JSON key: summary.warnings_count
+        if command -v jq >/dev/null 2>&1; then
+          ERROR_COUNT=$(echo "$RESULT" | jq -r '.summary.errors_count // 0' 2>/dev/null || echo "0")
+          WARNING_COUNT=$(echo "$RESULT" | jq -r '.summary.warnings_count // 0' 2>/dev/null || echo "0")
+        else
+          ERROR_COUNT=$(echo "$RESULT" \
+            | grep -o '"errors_count":[[:space:]]*[0-9]*' \
+            | grep -o '[0-9]*$' \
+            || echo "0")
+          WARNING_COUNT=$(echo "$RESULT" \
+            | grep -o '"warnings_count":[[:space:]]*[0-9]*' \
+            | grep -o '[0-9]*$' \
+            || echo "0")
+        fi
 
         # Default to 0 if parsing failed.
         ERROR_COUNT="${ERROR_COUNT:-0}"
+        WARNING_COUNT="${WARNING_COUNT:-0}"
 
         # Determine validity based on the fail-on threshold.
         case "$FAIL_ON" in
@@ -209,13 +225,6 @@ runs:
             fi
             ;;
           warning)
-            # Parse warning_count from JSON as well.
-            WARNING_COUNT=$(echo "$RESULT" \
-              | grep -o '"warning_count":[[:space:]]*[0-9]*' \
-              | grep -o '[0-9]*$' \
-              || echo "0")
-            WARNING_COUNT="${WARNING_COUNT:-0}"
-
             if [ "$ERROR_COUNT" -eq 0 ] && [ "$WARNING_COUNT" -eq 0 ]; then
               VALID="true"
               EXIT_CODE=0
@@ -234,7 +243,7 @@ runs:
             ;;
         esac
 
-        echo "valid=$VALID"           >> "$GITHUB_OUTPUT"
+        echo "valid=$VALID"             >> "$GITHUB_OUTPUT"
         echo "error_count=$ERROR_COUNT" >> "$GITHUB_OUTPUT"
 
         if [ "$VALID" = "false" ]; then
@@ -242,3 +251,111 @@ runs:
         fi
 
         exit $EXIT_CODE
+
+    - name: Emit PR annotations and step summary
+      id: annotate
+      shell: bash
+      # Run even when the validate step fails so annotations are always emitted.
+      if: always()
+      run: |
+        RESULT_FILE="${{ steps.validate.outputs.result_file }}"
+
+        # If the result file was not produced (e.g. rootline binary not found),
+        # skip annotation gracefully.
+        if [ -z "$RESULT_FILE" ] || [ ! -f "$RESULT_FILE" ]; then
+          echo "No result file found — skipping annotations."
+          exit 0
+        fi
+
+        RESULT="$(cat "$RESULT_FILE")"
+
+        # ---------------------------------------------------------------
+        # Require jq for structured JSON parsing of per-file results.
+        # ---------------------------------------------------------------
+        if ! command -v jq >/dev/null 2>&1; then
+          echo "::warning::jq not found — skipping per-file PR annotations."
+          exit 0
+        fi
+
+        # ---------------------------------------------------------------
+        # Emit ::error and ::warning workflow commands for each file.
+        # GitHub converts these into PR annotations when run in a workflow.
+        # Format: ::error file=<path>::<message>
+        # ---------------------------------------------------------------
+        echo "$RESULT" | jq -c '.results[]?' | while IFS= read -r record; do
+          FILE_PATH=$(echo "$record" | jq -r '.path // ""')
+
+          # Emit an annotation for each error in this file.
+          echo "$record" | jq -c '.errors[]?' | while IFS= read -r err; do
+            FIELD=$(echo "$err" | jq -r '.field // ""')
+            RULE=$(echo "$err"  | jq -r '.rule  // ""')
+            MSG=$(echo "$err"   | jq -r '.message // "validation error"')
+
+            # Build a concise annotation message including rule and field when present.
+            ANNOTATION_MSG="$MSG"
+            if [ -n "$RULE" ] && [ -n "$FIELD" ]; then
+              ANNOTATION_MSG="[$RULE/$FIELD] $MSG"
+            elif [ -n "$RULE" ]; then
+              ANNOTATION_MSG="[$RULE] $MSG"
+            elif [ -n "$FIELD" ]; then
+              ANNOTATION_MSG="[$FIELD] $MSG"
+            fi
+
+            echo "::error file=${FILE_PATH}::${ANNOTATION_MSG}"
+          done
+
+          # Emit an annotation for each warning in this file.
+          echo "$record" | jq -c '.warnings[]?' | while IFS= read -r warn; do
+            FIELD=$(echo "$warn" | jq -r '.field // ""')
+            RULE=$(echo "$warn"  | jq -r '.rule  // ""')
+            MSG=$(echo "$warn"   | jq -r '.message // "validation warning"')
+
+            ANNOTATION_MSG="$MSG"
+            if [ -n "$RULE" ] && [ -n "$FIELD" ]; then
+              ANNOTATION_MSG="[$RULE/$FIELD] $MSG"
+            elif [ -n "$RULE" ]; then
+              ANNOTATION_MSG="[$RULE] $MSG"
+            elif [ -n "$FIELD" ]; then
+              ANNOTATION_MSG="[$FIELD] $MSG"
+            fi
+
+            echo "::warning file=${FILE_PATH}::${ANNOTATION_MSG}"
+          done
+        done
+
+        # ---------------------------------------------------------------
+        # Write job summary to $GITHUB_STEP_SUMMARY.
+        # ---------------------------------------------------------------
+        TOTAL=$(echo "$RESULT"   | jq -r '.summary.total         // 0')
+        VALID=$(echo "$RESULT"   | jq -r '.summary.valid         // 0')
+        INVALID=$(echo "$RESULT" | jq -r '.summary.invalid       // 0')
+        ERRORS=$(echo "$RESULT"  | jq -r '.summary.errors_count  // 0')
+        WARNS=$(echo "$RESULT"   | jq -r '.summary.warnings_count // 0')
+
+        {
+          echo "## Rootline Validation Summary"
+          echo ""
+          echo "| Metric | Count |"
+          echo "| ------ | ----- |"
+          echo "| Files checked | $TOTAL |"
+          echo "| Valid | $VALID |"
+          echo "| Invalid | $INVALID |"
+          echo "| Errors | $ERRORS |"
+          echo "| Warnings | $WARNS |"
+
+          if [ "$ERRORS" -gt 0 ] || [ "$WARNS" -gt 0 ]; then
+            echo ""
+            echo "### Issues found"
+            echo ""
+            echo "$RESULT" | jq -r '
+              .results[]?
+              | select((.errors | length) > 0 or (.warnings | length) > 0)
+              | "**" + .path + "**",
+                (.errors[]?  | "- ERROR: [" + (.rule // "?") + "/" + (.field // "?") + "] " + (.message // "")),
+                (.warnings[]? | "- WARN:  [" + (.rule // "?") + "/" + (.field // "?") + "] " + (.message // ""))
+            ' 2>/dev/null || true
+          else
+            echo ""
+            echo "All documents are valid."
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
