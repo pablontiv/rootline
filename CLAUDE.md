@@ -96,13 +96,17 @@ Format: `type(scope): description` — scope is optional. Add `!` before `:` for
 
 ## Release Flow
 
+Releases are **fully automated**. When CI passes on `master`, the `Auto Tag` workflow (`auto-tag.yml`) calculates the next semver from conventional commits using `svu`, creates a git tag, and pushes it. The existing `Release` workflow (`release.yml`) then picks up the tag and runs goreleaser to build binaries and create a GitHub release.
+
+Pipeline: `push to master → CI passes → auto-tag → goreleaser release`
+
+For manual tagging (e.g., pre-releases):
+
 ```bash
 svu current              # Show current version (from latest git tag)
 svu next                 # Preview next version based on commits since last tag
 git tag "$(svu next)" && git push --tags  # Tag and trigger goreleaser
 ```
-
-Requires `svu` installed: `go install github.com/caarlos0/svu/v2@latest`
 
 ## Module Path
 
