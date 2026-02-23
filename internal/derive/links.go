@@ -1,3 +1,41 @@
+// Linked Field Injection
+//
+// When a .stem file defines link rules with a Field, the derive engine
+// resolves wiki-links on each record and injects the referenced field
+// values into the expression environment before evaluation.
+//
+// # Injected Variables
+//
+// For each link type with a Field defined in the stem's links.rules,
+// a variable named after the Field is injected into the env map.
+// The variable is a []any (slice of any) containing the string values
+// of the "estado" frontmatter field from each resolved target record.
+//
+// Example .stem configuration:
+//
+//	links:
+//	  rules:
+//	    blocks:
+//	      target: "*.md"
+//	      field: blocked_by
+//
+// Given a record with [[blocks:B.md]] and [[blocks:C.md]], where B has
+// estado=Completado and C has estado=Pending, the env will contain:
+//
+//	blocked_by = []any{"Completado", "Pending"}
+//
+// If no links of that type exist (or none resolve), the variable is
+// not set in the env (i.e., it is nil in expr-lang expressions).
+//
+// # Usage in Derive Expressions
+//
+// The injected variables can be used with expr-lang builtins:
+//
+//	all(blocked_by, {# == "Completado"})  # true if all blockers are done
+//	any(blocked_by, {# == "Bloqueada"})   # true if any blocker is blocked
+//	len(blocked_by)                       # number of resolved links
+//	blocked_by == nil                     # true if no links of this type
+//	blocked_by[0]                         # first linked value
 package derive
 
 import (

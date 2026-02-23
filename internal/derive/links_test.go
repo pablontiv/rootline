@@ -276,6 +276,227 @@ func TestMapResolver_NotFound(t *testing.T) {
 	}
 }
 
+func TestLinkedValues_AllPattern(t *testing.T) {
+	// all(blocked_by, {# == "Completado"}) returns true when all blockers are Completado.
+	targetB := &extract.Record{
+		Path:        "tasks/B.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"estado": "Completado"},
+	}
+	targetC := &extract.Record{
+		Path:        "tasks/C.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"estado": "Completado"},
+	}
+	source := &extract.Record{
+		Path:        "tasks/A.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"titulo": "Task A"},
+		Links: []extract.Link{
+			{Type: "blocks", Target: "B.md", Line: 1},
+			{Type: "blocks", Target: "C.md", Line: 2},
+		},
+	}
+	stem := &rules.StemFile{
+		Derive: map[string]any{
+			"all_done": `all(blocked_by, {# == "Completado"})`,
+		},
+		Links: rules.LinkSchema{
+			Rules: map[string]rules.LinkRule{
+				"blocks": {Target: "*.md", Field: "blocked_by"},
+			},
+		},
+	}
+	resolver := NewMapResolver([]*extract.Record{source, targetB, targetC})
+
+	derived, err := DeriveRecord(source, stem, nil, WithResolver(resolver))
+	if err != nil {
+		t.Fatalf("DeriveRecord: %v", err)
+	}
+	if derived["all_done"] != true {
+		t.Errorf("all_done = %v, want true", derived["all_done"])
+	}
+
+	// Now test with mixed states — all() should return false.
+	targetC.Frontmatter["estado"] = "Pending"
+	source2 := &extract.Record{
+		Path:        "tasks/A2.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"titulo": "Task A2"},
+		Links: []extract.Link{
+			{Type: "blocks", Target: "B.md", Line: 1},
+			{Type: "blocks", Target: "C.md", Line: 2},
+		},
+	}
+	resolver2 := NewMapResolver([]*extract.Record{source2, targetB, targetC})
+	derived2, err := DeriveRecord(source2, stem, nil, WithResolver(resolver2))
+	if err != nil {
+		t.Fatalf("DeriveRecord: %v", err)
+	}
+	if derived2["all_done"] != false {
+		t.Errorf("all_done = %v, want false (mixed states)", derived2["all_done"])
+	}
+}
+
+func TestLinkedValues_AnyPattern(t *testing.T) {
+	// any(blocked_by, {# == "Bloqueada"}) returns true if any blocker is Bloqueada.
+	targetB := &extract.Record{
+		Path:        "tasks/B.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"estado": "Completado"},
+	}
+	targetC := &extract.Record{
+		Path:        "tasks/C.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"estado": "Bloqueada"},
+	}
+	source := &extract.Record{
+		Path:        "tasks/A.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"titulo": "Task A"},
+		Links: []extract.Link{
+			{Type: "blocks", Target: "B.md", Line: 1},
+			{Type: "blocks", Target: "C.md", Line: 2},
+		},
+	}
+	stem := &rules.StemFile{
+		Derive: map[string]any{
+			"has_blocked": `any(blocked_by, {# == "Bloqueada"})`,
+		},
+		Links: rules.LinkSchema{
+			Rules: map[string]rules.LinkRule{
+				"blocks": {Target: "*.md", Field: "blocked_by"},
+			},
+		},
+	}
+	resolver := NewMapResolver([]*extract.Record{source, targetB, targetC})
+
+	derived, err := DeriveRecord(source, stem, nil, WithResolver(resolver))
+	if err != nil {
+		t.Fatalf("DeriveRecord: %v", err)
+	}
+	if derived["has_blocked"] != true {
+		t.Errorf("has_blocked = %v, want true", derived["has_blocked"])
+	}
+
+	// With no Bloqueada states, any() should return false.
+	targetC.Frontmatter["estado"] = "Completado"
+	source2 := &extract.Record{
+		Path:        "tasks/A2.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"titulo": "Task A2"},
+		Links: []extract.Link{
+			{Type: "blocks", Target: "B.md", Line: 1},
+			{Type: "blocks", Target: "C.md", Line: 2},
+		},
+	}
+	resolver2 := NewMapResolver([]*extract.Record{source2, targetB, targetC})
+	derived2, err := DeriveRecord(source2, stem, nil, WithResolver(resolver2))
+	if err != nil {
+		t.Fatalf("DeriveRecord: %v", err)
+	}
+	if derived2["has_blocked"] != false {
+		t.Errorf("has_blocked = %v, want false (no Bloqueada)", derived2["has_blocked"])
+	}
+}
+
+func TestLinkedValues_NilCheck(t *testing.T) {
+	// blocked_by == nil returns true when there are no links of type blocks.
+	source := &extract.Record{
+		Path:        "tasks/A.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"titulo": "Task A"},
+	}
+	stem := &rules.StemFile{
+		Derive: map[string]any{
+			"is_unblocked": `blocked_by == nil`,
+		},
+		Links: rules.LinkSchema{
+			Rules: map[string]rules.LinkRule{
+				"blocks": {Target: "*.md", Field: "blocked_by"},
+			},
+		},
+	}
+	resolver := NewMapResolver([]*extract.Record{source})
+
+	derived, err := DeriveRecord(source, stem, nil, WithResolver(resolver))
+	if err != nil {
+		t.Fatalf("DeriveRecord: %v", err)
+	}
+	if derived["is_unblocked"] != true {
+		t.Errorf("is_unblocked = %v, want true (no links)", derived["is_unblocked"])
+	}
+
+	// With links present, blocked_by != nil.
+	target := &extract.Record{
+		Path:        "tasks/B.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"estado": "Completado"},
+	}
+	sourceWithLinks := &extract.Record{
+		Path:        "tasks/A2.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"titulo": "Task A2"},
+		Links:       []extract.Link{{Type: "blocks", Target: "B.md", Line: 1}},
+	}
+	resolver2 := NewMapResolver([]*extract.Record{sourceWithLinks, target})
+	derived2, err := DeriveRecord(sourceWithLinks, stem, nil, WithResolver(resolver2))
+	if err != nil {
+		t.Fatalf("DeriveRecord: %v", err)
+	}
+	if derived2["is_unblocked"] != false {
+		t.Errorf("is_unblocked = %v, want false (has links)", derived2["is_unblocked"])
+	}
+}
+
+func TestLinkedValues_LenPattern(t *testing.T) {
+	// len(blocked_by) returns the correct number of links.
+	targetB := &extract.Record{
+		Path:        "tasks/B.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"estado": "Completado"},
+	}
+	targetC := &extract.Record{
+		Path:        "tasks/C.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"estado": "Pending"},
+	}
+	targetD := &extract.Record{
+		Path:        "tasks/D.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"estado": "Bloqueada"},
+	}
+	source := &extract.Record{
+		Path:        "tasks/A.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"titulo": "Task A"},
+		Links: []extract.Link{
+			{Type: "blocks", Target: "B.md", Line: 1},
+			{Type: "blocks", Target: "C.md", Line: 2},
+			{Type: "blocks", Target: "D.md", Line: 3},
+		},
+	}
+	stem := &rules.StemFile{
+		Derive: map[string]any{
+			"blocker_count": `len(blocked_by)`,
+		},
+		Links: rules.LinkSchema{
+			Rules: map[string]rules.LinkRule{
+				"blocks": {Target: "*.md", Field: "blocked_by"},
+			},
+		},
+	}
+	resolver := NewMapResolver([]*extract.Record{source, targetB, targetC, targetD})
+
+	derived, err := DeriveRecord(source, stem, nil, WithResolver(resolver))
+	if err != nil {
+		t.Fatalf("DeriveRecord: %v", err)
+	}
+	if derived["blocker_count"] != 3 {
+		t.Errorf("blocker_count = %v, want 3", derived["blocker_count"])
+	}
+}
+
 func TestResolveTarget(t *testing.T) {
 	tests := []struct {
 		source, target, want string
