@@ -67,6 +67,26 @@ function Install-Binary {
         Write-Host "Downloading $archive..."
         Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
 
+        # Verify checksum — mandatory, abort on mismatch.
+        Write-Host "Verifying checksum..."
+        $checksumUrl = "https://github.com/$Repo/releases/download/$Version/checksums.txt"
+        $checksumPath = Join-Path $tmpDir "checksums.txt"
+        try {
+            Invoke-WebRequest -Uri $checksumUrl -OutFile $checksumPath -UseBasicParsing
+        } catch {
+            throw "Could not fetch checksums.txt: $_"
+        }
+        $expectedLine = Select-String -Path $checksumPath -Pattern ([regex]::Escape($archive)) | Select-Object -First 1
+        if (-not $expectedLine) {
+            throw "Archive '$archive' not found in checksums.txt"
+        }
+        $expectedHash = ($expectedLine.Line -split '\s+')[0].ToUpper()
+        $actualHash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToUpper()
+        if ($actualHash -ne $expectedHash) {
+            throw "Checksum mismatch for ${archive}: expected $expectedHash, got $actualHash"
+        }
+        Write-Host "Checksum verified."
+
         Write-Host "Extracting..."
         Expand-Archive -Path $zipPath -DestinationPath $tmpDir -Force
 

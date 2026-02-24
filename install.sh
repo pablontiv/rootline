@@ -67,6 +67,17 @@ download_and_install() {
     log "Downloading ${ARCHIVE}..."
     fetch "$URL" > "$TMPDIR/$ARCHIVE"
 
+    # Verify checksum — mandatory, abort on failure.
+    CHECKSUM_URL="https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt"
+    log "Verifying checksum..."
+    if ! fetch "$CHECKSUM_URL" > "$TMPDIR/checksums.txt" 2>/dev/null; then
+        abort "Could not fetch checksums.txt from ${CHECKSUM_URL}"
+    fi
+    if ! grep -F "$ARCHIVE" "$TMPDIR/checksums.txt" | sha256sum --check --status; then
+        abort "Checksum verification failed for ${ARCHIVE}"
+    fi
+    log "Checksum verified."
+
     log "Extracting..."
     tar -xzf "$TMPDIR/$ARCHIVE" -C "$TMPDIR"
 
