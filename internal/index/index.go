@@ -160,7 +160,8 @@ func isIgnored(absPath string, stack []ignoreEntry) bool {
 	name := filepath.Base(absPath)
 	for _, entry := range stack {
 		// Only apply if file is under the .stemignore's directory.
-		if !strings.HasPrefix(absPath, entry.dir) {
+		// Use path separator to prevent /sub from matching /sub-extra.
+		if absPath != entry.dir && !strings.HasPrefix(absPath, entry.dir+string(filepath.Separator)) {
 			continue
 		}
 		for _, pattern := range entry.patterns {

@@ -217,6 +217,43 @@ func TestScan_DelegatesExtractionCorrectly(t *testing.T) {
 	}
 }
 
+func TestScan_StemignoreDoesNotApplyToSiblingPrefix(t *testing.T) {
+	// Regression: a .stemignore in "sub/" must NOT apply to "sub-extra/"
+	// because "sub-extra" starts with "sub" as a string prefix.
+	root := setupScanTree(t, map[string]string{
+		"sub/keep.md":       "---\ntitle: Keep\n---\n",
+		"sub/ignored.md":    "---\ntitle: Ignored\n---\n",
+		"sub/.stemignore":   "ignored.md\n",
+		"sub-extra/keep.md": "---\ntitle: SiblingKeep\n---\n",
+		"sub-extra/also.md": "---\ntitle: SiblingAlso\n---\n",
+	})
+
+	reg := extract.NewRegistry()
+	records, err := Scan(root, reg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// sub/keep.md + sub-extra/keep.md + sub-extra/also.md = 3
+	// sub/ignored.md is excluded by sub/.stemignore.
+	if len(records) != 3 {
+		t.Fatalf("got %d records, want 3", len(records))
+	}
+
+	titles := map[string]bool{}
+	for _, r := range records {
+		if title, ok := r.Frontmatter["title"].(string); ok {
+			titles[title] = true
+		}
+	}
+	if titles["Ignored"] {
+		t.Error("sub/ignored.md should be excluded by sub/.stemignore")
+	}
+	if !titles["SiblingKeep"] || !titles["SiblingAlso"] {
+		t.Error("sub-extra/ files should NOT be excluded by sub/.stemignore")
+	}
+}
+
 func TestParseStemignore(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".stemignore")
