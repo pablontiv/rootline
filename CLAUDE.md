@@ -92,20 +92,31 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/). The
 | `perf` | patch | Performance improvement |
 | `style` | none | Formatting, whitespace |
 
-Format: `type(scope): description` — scope is optional. Add `!` before `:` for breaking changes (bumps major).
+Format: `type(scope): description` — scope is optional. Add `!` before `:` for breaking changes.
+
+### Pre-1.0 Version Strategy
+
+While in v0.x, semver bumps follow pre-1.0 convention:
+
+| Commit type | Bump | Example |
+|---|---|---|
+| `fix`, `perf` | patch | v0.9.0 → v0.9.1 |
+| `feat` | patch | v0.9.0 → v0.9.1 |
+| `feat!`, `fix!` (breaking) | minor | v0.9.0 → v0.10.0 |
+
+After v1.0: `feat` bumps minor, breaking bumps major (standard semver).
 
 ## Release Flow
 
-Releases are **fully automated**. When CI passes on `master`, the `Auto Tag` workflow (`auto-tag.yml`) calculates the next semver from conventional commits using `svu`, creates a git tag, and pushes it. The existing `Release` workflow (`release.yml`) then picks up the tag and runs goreleaser to build binaries and create a GitHub release.
+Releases are **fully automated**. When CI passes on `master`, the `auto-tag` job iterates over all untagged commits since the last tag, creates individual version tags for each `feat`/`fix`/`perf` commit, and runs goreleaser for the latest tag. This handles both individual and batch pushes correctly.
 
-Pipeline: `push to master → CI passes → auto-tag → goreleaser release`
+Pipeline: `push to master → CI passes → tag each untagged commit → goreleaser release`
 
 For manual tagging (e.g., pre-releases):
 
 ```bash
-svu current              # Show current version (from latest git tag)
-svu next                 # Preview next version based on commits since last tag
-git tag "$(svu next)" && git push --tags  # Tag and trigger goreleaser
+git describe --tags --abbrev=0   # Show current version (latest git tag)
+git tag v1.0.0 && git push --tags  # Manual tag and trigger goreleaser
 ```
 
 ## Module Path

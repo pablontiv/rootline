@@ -124,35 +124,76 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: stable
-
-      - name: Install svu
-        run: go install github.com/caarlos0/svu/v2@latest
-
-      - name: Calculate next version
-        id: version
-        run: |
-          CURRENT=$(svu current || echo "v0.0.0")
-          NEXT=$(svu next || echo "v0.0.0")
-          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
-          echo "Current: $CURRENT, Next: $NEXT"
-
-      - name: Create and push tag
+      - name: Tag untagged commits
         id: tag
-        if: steps.version.outputs.current != steps.version.outputs.next
         run: |
-          git tag "${{ steps.version.outputs.next }}"
-          git push origin "${{ steps.version.outputs.next }}"
+          set -e
+
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git rev-list --reverse HEAD)
+            LAST_TAG="v0.0.0"
+          else
+            COMMITS=$(git rev-list --reverse "${LAST_TAG}..HEAD")
+          fi
+
+          LATEST_TAG=""
+          for COMMIT in $COMMITS; do
+            # Skip already-tagged commits
+            EXISTING=$(git tag --points-at "$COMMIT" 2>/dev/null | head -1)
+            if [ -n "$EXISTING" ]; then
+              LAST_TAG="$EXISTING"
+              continue
+            fi
+
+            MSG=$(git log -1 --format=%s "$COMMIT")
+
+            # Determine bump type from conventional commit prefix
+            BUMP=""
+            case "$MSG" in
+              feat\!*|fix\!*|refactor\!*|perf\!*)  BUMP="breaking" ;;
+              feat*)                                 BUMP="feat" ;;
+              fix*|perf*)                            BUMP="fix" ;;
+            esac
+            [ -z "$BUMP" ] && continue
+
+            # Parse current version
+            MAJOR=$(echo "$LAST_TAG" | sed 's/^v//' | cut -d. -f1)
+            MINOR=$(echo "$LAST_TAG" | sed 's/^v//' | cut -d. -f2)
+            PATCH=$(echo "$LAST_TAG" | sed 's/^v//' | cut -d. -f3)
+
+            # Apply pre-1.0 vs post-1.0 strategy
+            if [ "$MAJOR" -eq 0 ]; then
+              # Pre-1.0: feat=patch, fix=patch, breaking=minor
+              case "$BUMP" in
+                breaking)  MINOR=$((MINOR + 1)); PATCH=0 ;;
+                *)         PATCH=$((PATCH + 1)) ;;
+              esac
+            else
+              # Post-1.0: feat=minor, fix=patch, breaking=major
+              case "$BUMP" in
+                breaking)  MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+                feat)      MINOR=$((MINOR + 1)); PATCH=0 ;;
+                *)         PATCH=$((PATCH + 1)) ;;
+              esac
+            fi
+
+            NEXT="v${MAJOR}.${MINOR}.${PATCH}"
+            echo "Tagging $COMMIT (${MSG%%:*}) as $NEXT"
+            git tag "$NEXT" "$COMMIT"
+            git push origin "$NEXT"
+            LAST_TAG="$NEXT"
+            LATEST_TAG="$NEXT"
+          done
+
+          echo "latest=${LATEST_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Release
-        if: steps.tag.outcome == 'success'
+        if: steps.tag.outputs.latest != ''
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           version: "~> v2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ steps.version.outputs.next }}
+          GORELEASER_CURRENT_TAG: ${{ steps.tag.outputs.latest }}
