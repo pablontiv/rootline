@@ -232,6 +232,93 @@ func TestInitAutoHierarchyDryRun(t *testing.T) {
 	}
 }
 
+func TestInitAutoHierarchy_GeneratesAggregate(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a 2-level hierarchy with enum field "estado" that has overlapping values
+	// at both levels (required for fieldsCompatible to classify as root field).
+	estados := []string{"Pending", "In Progress", "Completed"}
+	for i, epic := range []string{"E01-infra", "E02-platform"} {
+		epicDir := filepath.Join(dir, epic)
+		_ = os.MkdirAll(epicDir, 0755)
+		mustWriteFile(t, filepath.Join(epicDir, "README.md"),
+			[]byte("---\nestado: "+estados[i]+"\n---\n# "+epic+"\n"), 0644)
+
+		for j, feat := range []string{"F01-net", "F02-store"} {
+			featDir := filepath.Join(epicDir, feat)
+			_ = os.MkdirAll(featDir, 0755)
+			mustWriteFile(t, filepath.Join(featDir, "README.md"),
+				[]byte("---\nestado: "+estados[j]+"\n---\n# "+feat+"\n"), 0644)
+		}
+	}
+
+	out, err := runCmd(t, "init", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should contain the note about auto-generated aggregate.
+	if !strings.Contains(out, "Note: auto-generated aggregate for 'estado'") {
+		t.Errorf("expected aggregate note in output, got: %s", out)
+	}
+
+	// Root .stem should have aggregate section.
+	rootStem := filepath.Join(dir, ".stem")
+	content, err := os.ReadFile(rootStem)
+	if err != nil {
+		t.Fatalf("expected root .stem: %v", err)
+	}
+	s := string(content)
+	if !strings.Contains(s, "aggregate:") {
+		t.Errorf("expected aggregate: section in root .stem, got:\n%s", s)
+	}
+	if !strings.Contains(s, "estado:") {
+		t.Errorf("expected estado field in aggregate section, got:\n%s", s)
+	}
+	// Should use descendants-based expressions.
+	if !strings.Contains(s, "descendants") {
+		t.Errorf("expected descendants-based expression, got:\n%s", s)
+	}
+}
+
+func TestInitAutoHierarchy_NoAggregateForNonEnum(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create hierarchy where the shared field is string, not enum.
+	for _, epic := range []string{"E01-a", "E02-b"} {
+		epicDir := filepath.Join(dir, epic)
+		_ = os.MkdirAll(epicDir, 0755)
+		mustWriteFile(t, filepath.Join(epicDir, "README.md"),
+			[]byte("---\ntitle: something\n---\n# "+epic+"\n"), 0644)
+
+		for _, feat := range []string{"F01-x", "F02-y"} {
+			featDir := filepath.Join(epicDir, feat)
+			_ = os.MkdirAll(featDir, 0755)
+			mustWriteFile(t, filepath.Join(featDir, "README.md"),
+				[]byte("---\ntitle: other\n---\n# "+feat+"\n"), 0644)
+		}
+	}
+
+	out, err := runCmd(t, "init", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should NOT contain aggregate note.
+	if strings.Contains(out, "Note: auto-generated aggregate") {
+		t.Errorf("expected no aggregate note for non-enum fields, got: %s", out)
+	}
+
+	// Root .stem should NOT have aggregate section.
+	content, err := os.ReadFile(filepath.Join(dir, ".stem"))
+	if err != nil {
+		t.Fatalf("expected root .stem: %v", err)
+	}
+	if strings.Contains(string(content), "aggregate:") {
+		t.Errorf("expected no aggregate section for non-enum fields, got:\n%s", string(content))
+	}
+}
+
 func TestInitFlatFallback(t *testing.T) {
 	dir := t.TempDir()
 

@@ -10,6 +10,7 @@ import (
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/infer"
+	"github.com/pablontiv/rootline/internal/migrate"
 	"github.com/spf13/cobra"
 )
 
@@ -108,7 +109,12 @@ func runInitFlat(cmd *cobra.Command, absTarget, target string, records []*extrac
 
 func runInitHierarchical(cmd *cobra.Command, absTarget, target string, hierarchy *infer.HierarchyResult, records []*extract.Record) error {
 	// Build the list of .stem files to write.
-	stemFiles := buildHierarchicalStems(absTarget, hierarchy)
+	stemFiles, generatedAggNames := buildHierarchicalStems(absTarget, hierarchy)
+
+	// Emit notes for auto-generated aggregates.
+	for _, name := range generatedAggNames {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Note: auto-generated aggregate for '%s'\n", name)
+	}
 
 	// Check for existing .stem files.
 	if !initForce && !initDryRun {
@@ -152,11 +158,20 @@ type stemFile struct {
 }
 
 // buildHierarchicalStems generates the root and per-level .stem file contents.
-func buildHierarchicalStems(absTarget string, hierarchy *infer.HierarchyResult) []stemFile {
+// Returns the stem files and a sorted list of field names for which aggregates were generated.
+func buildHierarchicalStems(absTarget string, hierarchy *infer.HierarchyResult) ([]stemFile, []string) {
 	var files []stemFile
 
-	// Root .stem: common fields + first level's sequence.
-	rootYAML := generateHierarchicalRootYAML(hierarchy)
+	// Generate aggregate expressions for enum fields in root schema.
+	aggregates := migrate.GenerateAggregates(hierarchy.Root.Schema, nil)
+	aggNames := make([]string, 0, len(aggregates))
+	for k := range aggregates {
+		aggNames = append(aggNames, k)
+	}
+	sort.Strings(aggNames)
+
+	// Root .stem: common fields + first level's sequence + aggregates.
+	rootYAML := generateHierarchicalRootYAML(hierarchy, aggregates)
 	files = append(files, stemFile{
 		path:    filepath.Join(absTarget, ".stem"),
 		content: rootYAML,
@@ -178,12 +193,12 @@ func buildHierarchicalStems(absTarget string, hierarchy *infer.HierarchyResult) 
 		}
 	}
 
-	return files
+	return files, aggNames
 }
 
 // generateHierarchicalRootYAML generates the root .stem with common fields
 // and the first level's sequence id.
-func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult) string {
+func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates map[string]string) string {
 	var b strings.Builder
 	b.WriteString("version: 1\nscope:\n  match: \"*.md\"\nschema:\n")
 
@@ -221,6 +236,23 @@ func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult) string {
 		}
 		if len(field.Values) > 0 {
 			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(field.Values, ", "))
+		}
+	}
+
+	// Emit aggregate section for auto-generated expressions.
+	if len(aggregates) > 0 {
+		aggKeys := make([]string, 0, len(aggregates))
+		for k := range aggregates {
+			aggKeys = append(aggKeys, k)
+		}
+		sort.Strings(aggKeys)
+
+		b.WriteString("aggregate:\n")
+		for _, name := range aggKeys {
+			fmt.Fprintf(&b, "  %s: |\n", name)
+			for _, line := range strings.Split(aggregates[name], "\n") {
+				fmt.Fprintf(&b, "    %s\n", line)
+			}
 		}
 	}
 
