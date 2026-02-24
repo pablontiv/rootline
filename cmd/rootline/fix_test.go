@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pablontiv/rootline/internal/fix"
 	"github.com/pablontiv/rootline/internal/proposal"
 	"gopkg.in/yaml.v3"
 )
@@ -104,30 +105,11 @@ func TestFixPreservesBody(t *testing.T) {
 	}
 }
 
-func TestLevenshtein(t *testing.T) {
-	tests := []struct {
-		a, b string
-		want int
-	}{
-		{"", "", 0},
-		{"abc", "", 3},
-		{"", "abc", 3},
-		{"kitten", "sitting", 3},
-		{"Completed", "Completd", 1},
-	}
-	for _, tt := range tests {
-		got := levenshtein(tt.a, tt.b)
-		if got != tt.want {
-			t.Errorf("levenshtein(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
-		}
-	}
-}
-
 func TestClosestMatch(t *testing.T) {
 	candidates := []string{"Pending", "Completed"}
-	got := closestMatch("Completd", candidates)
+	got := fix.ClosestMatch("Completd", candidates)
 	if got != "Completed" {
-		t.Errorf("closestMatch('Completd') = %q, want 'Completed'", got)
+		t.Errorf("ClosestMatch('Completd') = %q, want 'Completed'", got)
 	}
 }
 
@@ -282,7 +264,7 @@ func TestRewriteFrontmatterNoPrior(t *testing.T) {
 	// File with no frontmatter — should prepend it
 	original := "# Just a heading\nSome body.\n"
 	fm := map[string]any{"estado": "Pending"}
-	result := rewriteFrontmatter(original, fm)
+	result := fix.RewriteFrontmatter(original, fm)
 	if !strings.HasPrefix(result, "---\n") {
 		t.Error("expected frontmatter prepended")
 	}
@@ -298,7 +280,7 @@ func TestRewriteFrontmatterMalformed(t *testing.T) {
 	// Frontmatter starts but never closes — should return original
 	original := "---\nestado: test\n# No closing\n"
 	fm := map[string]any{"estado": "Pending"}
-	result := rewriteFrontmatter(original, fm)
+	result := fix.RewriteFrontmatter(original, fm)
 	if result != original {
 		t.Errorf("expected original returned for malformed frontmatter, got: %s", result)
 	}
@@ -352,7 +334,7 @@ func TestFixAllWithEnumCorrection(t *testing.T) {
 func TestInsertWikiLinksBeforeHeading(t *testing.T) {
 	content := "---\nestado: Pending\n---\n# Title\n\n## Context\n\nSome text\n"
 	links := []string{"[[blocks:T001]]", "[[blocks:T002]]"}
-	result := insertWikiLinksBeforeHeading(content, links)
+	result := fix.InsertWikiLinksBeforeHeading(content, links)
 	if !strings.Contains(result, "[[blocks:T001]]\n[[blocks:T002]]") {
 		t.Errorf("expected wiki-links inserted, got: %s", result)
 	}
@@ -364,7 +346,7 @@ func TestInsertWikiLinksBeforeHeading(t *testing.T) {
 func TestInsertWikiLinksNoHeading(t *testing.T) {
 	content := "---\nestado: Pending\n---\n# Title\n\nNo sub-headings here.\n"
 	links := []string{"[[blocks:T001]]"}
-	result := insertWikiLinksBeforeHeading(content, links)
+	result := fix.InsertWikiLinksBeforeHeading(content, links)
 	if !strings.Contains(result, "[[blocks:T001]]") {
 		t.Errorf("expected wiki-link appended, got: %s", result)
 	}
@@ -790,7 +772,7 @@ func TestWriteFrontmatterFields_YAMLQuoting(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var b strings.Builder
-			writeFrontmatterFields(&b, tt.fm)
+			fix.WriteFrontmatterFields(&b, tt.fm)
 			out := b.String()
 			if !strings.Contains(out, tt.want) {
 				t.Errorf("output = %q\nwant fragment %q", out, tt.want)
@@ -807,7 +789,7 @@ func TestWriteFrontmatterFields_YAMLQuoting(t *testing.T) {
 func TestWriteFrontmatterFields_SliceValue(t *testing.T) {
 	fm := map[string]any{"tags": []any{"alpha", "beta"}}
 	var b strings.Builder
-	writeFrontmatterFields(&b, fm)
+	fix.WriteFrontmatterFields(&b, fm)
 	out := b.String()
 
 	// Must round-trip as valid YAML.
