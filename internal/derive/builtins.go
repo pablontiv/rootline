@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
@@ -26,31 +27,51 @@ func BuiltinOptions() []expr.Option {
 	return []expr.Option{
 		expr.Function("slugify",
 			func(params ...any) (any, error) {
-				return slugify(params[0].(string)), nil
+				s, ok := params[0].(string)
+				if !ok {
+					return nil, fmt.Errorf("slugify: expected string, got %T", params[0])
+				}
+				return slugify(s), nil
 			},
 			new(func(string) string),
 		),
 		expr.Function("lower",
 			func(params ...any) (any, error) {
-				return strings.ToLower(params[0].(string)), nil
+				s, ok := params[0].(string)
+				if !ok {
+					return nil, fmt.Errorf("lower: expected string, got %T", params[0])
+				}
+				return strings.ToLower(s), nil
 			},
 			new(func(string) string),
 		),
 		expr.Function("upper",
 			func(params ...any) (any, error) {
-				return strings.ToUpper(params[0].(string)), nil
+				s, ok := params[0].(string)
+				if !ok {
+					return nil, fmt.Errorf("upper: expected string, got %T", params[0])
+				}
+				return strings.ToUpper(s), nil
 			},
 			new(func(string) string),
 		),
 		expr.Function("trim",
 			func(params ...any) (any, error) {
-				return strings.TrimFunc(params[0].(string), unicode.IsSpace), nil
+				s, ok := params[0].(string)
+				if !ok {
+					return nil, fmt.Errorf("trim: expected string, got %T", params[0])
+				}
+				return strings.TrimFunc(s, unicode.IsSpace), nil
 			},
 			new(func(string) string),
 		),
 		expr.Function("strlen",
 			func(params ...any) (any, error) {
-				return len(params[0].(string)), nil
+				s, ok := params[0].(string)
+				if !ok {
+					return nil, fmt.Errorf("strlen: expected string, got %T", params[0])
+				}
+				return len(s), nil
 			},
 			new(func(string) int),
 		),

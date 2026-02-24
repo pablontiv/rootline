@@ -138,6 +138,24 @@ func TestConcat(t *testing.T) {
 	}
 }
 
+func TestBuiltinRejectsNonStringAtCompileTime(t *testing.T) {
+	ev := newTestEval()
+	// expr-lang enforces the type overload at compile time.
+	// Passing an int to a func(string) builtin must fail compilation.
+	badExprs := []string{
+		"slugify(42)",
+		"lower(true)",
+		"upper(3.14)",
+		"strlen(99)",
+	}
+	for _, expression := range badExprs {
+		_, err := ev.Compile(expression)
+		if err == nil {
+			t.Errorf("Compile(%q): expected type error, got nil", expression)
+		}
+	}
+}
+
 func TestNewEvaluatorWithBuiltins(t *testing.T) {
 	ev := NewEvaluatorWithBuiltins()
 	compiled, err := ev.Compile(`slugify("Hello World")`)

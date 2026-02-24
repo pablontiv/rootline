@@ -713,6 +713,19 @@ func writeFrontmatterFields(b *strings.Builder, fm map[string]any) {
 		}
 	}
 	for _, k := range keys {
-		fmt.Fprintf(b, "%s: %v\n", k, fm[k])
+		valBytes, err := yaml.Marshal(fm[k])
+		if err != nil {
+			fmt.Fprintf(b, "%s: %q\n", k, fmt.Sprintf("%v", fm[k]))
+			continue
+		}
+		val := strings.TrimSuffix(string(valBytes), "\n")
+		if strings.Contains(val, "\n") {
+			fmt.Fprintf(b, "%s:\n", k)
+			for _, line := range strings.Split(val, "\n") {
+				fmt.Fprintf(b, "  %s\n", line)
+			}
+		} else {
+			fmt.Fprintf(b, "%s: %s\n", k, val)
+		}
 	}
 }
