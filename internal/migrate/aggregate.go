@@ -92,7 +92,7 @@ func GenerateAggregateExpr(fieldName string, sf rules.SchemaField) string {
 	if len(filteredLines) > 0 {
 		b.WriteString(" :\n")
 	}
-	b.WriteString(fmt.Sprintf("%q", defaultVal))
+	fmt.Fprintf(&b, "%q", defaultVal)
 
 	return b.String()
 }
