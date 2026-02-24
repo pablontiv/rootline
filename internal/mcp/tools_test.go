@@ -76,11 +76,14 @@ func TestToolsRegistration_ListTools(t *testing.T) {
 		names[tool.Name] = true
 	}
 
-	expected := []string{"query", "validate", "describe", "tree", "stats"}
+	expected := []string{"query", "validate", "describe", "tree", "stats", "explain", "fix", "graph"}
 	for _, name := range expected {
 		if !names[name] {
 			t.Errorf("expected tool %q not found in list", name)
 		}
+	}
+	if len(result.Tools) != 8 {
+		t.Errorf("tool count = %d, want 8", len(result.Tools))
 	}
 }
 
@@ -260,5 +263,123 @@ func TestTool_Stats(t *testing.T) {
 	}
 	if byEstado["Completed"].(float64) != 1 {
 		t.Errorf("Completed count = %v, want 1", byEstado["Completed"])
+	}
+}
+
+func TestTool_Explain(t *testing.T) {
+	root := setupTestProject(t)
+
+	s := NewServer("test", "v0.1.0")
+	RegisterTools(s)
+	cs := connectTestSession(t, s)
+
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "explain",
+		Arguments: map[string]any{"path": filepath.Join(root, "a.md")},
+	})
+	if err != nil {
+		t.Fatalf("call tool: %v", err)
+	}
+	if result.IsError {
+		t.Fatal("unexpected error in result")
+	}
+
+	text := result.Content[0].(*mcp.TextContent)
+	var er map[string]any
+	if err := json.Unmarshal([]byte(text.Text), &er); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if er["kind"] != "rootline/explain" {
+		t.Errorf("kind = %v, want rootline/explain", er["kind"])
+	}
+
+	fields := er["fields"].([]any)
+	found := false
+	for _, f := range fields {
+		fm := f.(map[string]any)
+		if fm["name"] == "estado" && fm["origin"] == "frontmatter" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected estado field with origin frontmatter")
+	}
+}
+
+func TestTool_Fix(t *testing.T) {
+	root := setupTestProject(t)
+
+	// Add a file with invalid estado to trigger proposals.
+	if err := os.WriteFile(filepath.Join(root, "c.md"), []byte("---\nestado: Invalid\ntipo: task\n---\n# C\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer("test", "v0.1.0")
+	RegisterTools(s)
+	cs := connectTestSession(t, s)
+
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "fix",
+		Arguments: map[string]any{"path": root, "dry_run": true},
+	})
+	if err != nil {
+		t.Fatalf("call tool: %v", err)
+	}
+	if result.IsError {
+		t.Fatal("unexpected error in result")
+	}
+
+	text := result.Content[0].(*mcp.TextContent)
+	var fr map[string]any
+	if err := json.Unmarshal([]byte(text.Text), &fr); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if fr["kind"] != "rootline/proposals" {
+		t.Errorf("kind = %v, want rootline/proposals", fr["kind"])
+	}
+
+	// Verify the report has a summary with total count.
+	summary := fr["summary"].(map[string]any)
+	if summary["total"] == nil {
+		t.Error("expected summary.total in fix report")
+	}
+}
+
+func TestTool_Graph(t *testing.T) {
+	root := setupTestProject(t)
+
+	// Add wiki-link to a.md pointing at b.md.
+	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("---\nestado: Pending\ntipo: task\n---\n# A\n[[blocks:b]]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewServer("test", "v0.1.0")
+	RegisterTools(s)
+	cs := connectTestSession(t, s)
+
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "graph",
+		Arguments: map[string]any{"path": root, "check": true},
+	})
+	if err != nil {
+		t.Fatalf("call tool: %v", err)
+	}
+	if result.IsError {
+		t.Fatal("unexpected error in result")
+	}
+
+	text := result.Content[0].(*mcp.TextContent)
+	var gr map[string]any
+	if err := json.Unmarshal([]byte(text.Text), &gr); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if gr["kind"] != "rootline/graph" {
+		t.Errorf("kind = %v, want rootline/graph", gr["kind"])
+	}
+
+	edges := gr["edges"].([]any)
+	if len(edges) == 0 {
+		t.Error("expected at least one edge from wiki-link")
 	}
 }
