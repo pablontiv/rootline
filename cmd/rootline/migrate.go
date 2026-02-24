@@ -14,6 +14,7 @@ import (
 	"github.com/pablontiv/rootline/internal/migrate"
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -550,13 +551,22 @@ func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.Sc
 	if len(existing.Validate) > 0 {
 		b.WriteString("\nvalidate:\n")
 		for _, v := range existing.Validate {
-			fmt.Fprintf(&b, "  - rule: %s\n", v.Rule)
+			entry := map[string]any{"rule": v.Rule}
 			if v.Field != "" {
-				fmt.Fprintf(&b, "    field: %s\n", v.Field)
+				entry["field"] = v.Field
 			}
 			if v.Severity != "" {
-				fmt.Fprintf(&b, "    severity: %s\n", v.Severity)
+				entry["severity"] = v.Severity
 			}
+			if len(v.If) > 0 {
+				entry["if"] = v.If
+			}
+			if len(v.Then) > 0 {
+				entry["then"] = v.Then
+			}
+			bytes, _ := yaml.Marshal([]any{entry})
+			indented := "  " + strings.ReplaceAll(strings.TrimSpace(string(bytes)), "\n", "\n  ")
+			b.WriteString(indented + "\n")
 		}
 	}
 

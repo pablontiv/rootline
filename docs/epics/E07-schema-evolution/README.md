@@ -29,8 +29,8 @@ Cuando un .stem cambia, documentos existentes pueden quedar invalidos. Hoy `root
 |-------|----------|-------|
 | 2026-02-22 | git-based comparison como primary, --from como fallback | .stem no tiene versionado propio; git es la fuente de verdad |
 | 2026-02-22 | Migration log como JSON Lines append-only | Simple, git-friendly, parseable |
+| 2026-02-23 | `migrate --split` para flat→hierarchical .stem | Complementa `init` hierarchical; preserva derive/aggregate/links en root |
 
 ## Gaps Activos
 
-- Multi-level .stem diffs (cambio en parent .stem afecta todos los children)
 - Migraciones interactivas (seleccionar que cambios aplicar)

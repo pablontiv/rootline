@@ -309,6 +309,9 @@ func distributeFields(levelSchemas []LevelSchema) *InferredSchema {
 }
 
 // fieldsCompatible checks if a field has the same type across all levels.
+// For enum fields, it additionally checks that value sets overlap — disjoint
+// value sets indicate genuinely different fields (e.g. tipo=[feature,historia]
+// at one level vs tipo=[software-module,ci-cd] at another).
 func fieldsCompatible(name string, levelSchemas []LevelSchema) bool {
 	var baseType string
 	for _, ls := range levelSchemas {
@@ -322,7 +325,40 @@ func fieldsCompatible(name string, levelSchemas []LevelSchema) bool {
 			return false
 		}
 	}
+
+	// For enums, check that all pairs of levels share at least one value.
+	// Disjoint value sets → incompatible (genuinely different fields).
+	// Overlapping sets → compatible (same field, different samples).
+	if baseType == "enum" {
+		for i := 0; i < len(levelSchemas); i++ {
+			for j := i + 1; j < len(levelSchemas); j++ {
+				sfI, okI := levelSchemas[i].Schema.Schema[name]
+				sfJ, okJ := levelSchemas[j].Schema.Schema[name]
+				if !okI || !okJ {
+					continue
+				}
+				if len(sfI.Values) > 0 && len(sfJ.Values) > 0 && !enumValuesOverlap(sfI.Values, sfJ.Values) {
+					return false
+				}
+			}
+		}
+	}
+
 	return true
+}
+
+// enumValuesOverlap returns true if two string slices share at least one element.
+func enumValuesOverlap(a, b []string) bool {
+	set := make(map[string]bool, len(a))
+	for _, v := range a {
+		set[v] = true
+	}
+	for _, v := range b {
+		if set[v] {
+			return true
+		}
+	}
+	return false
 }
 
 // computeStemPaths sets the relative StemPath for each level.

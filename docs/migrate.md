@@ -14,6 +14,8 @@ rootline migrate                          # Diff current .stem vs git HEAD
 rootline migrate --dry-run                # Report changes without modifying files
 rootline migrate --from old.stem          # Compare against specific .stem file
 rootline migrate --rename old_field=new   # Rename field across all documents + .stem files
+rootline migrate --split                  # Split flat .stem into hierarchical per-level files
+rootline migrate --split --dry-run        # Preview split without writing files
 ```
 
 ### Flags
@@ -23,6 +25,7 @@ rootline migrate --rename old_field=new   # Rename field across all documents + 
 | `--dry-run` | Report changes without modifying files |
 | `--from` | Compare against specified `.stem` file instead of git HEAD |
 | `--rename old=new` | Rename a field across all documents and `.stem` files |
+| `--split` | Split a flat `.stem` into hierarchical `.stem` files per level |
 
 ## Change Detection
 
@@ -72,3 +75,33 @@ rootline migrate --rename status=estado
 ```
 
 Updates frontmatter in all affected markdown files and schema definitions in `.stem` files. Operations are logged to `.migration-log.json` (JSON Lines, append-only).
+
+## Split Mode
+
+`--split` converts a flat `.stem` into hierarchical per-level `.stem` files. It detects directory naming patterns (e.g., `E##-*`, `F##-*`, `S###-*`, `T###-*`) and distributes schema fields by real presence at each level.
+
+```bash
+rootline migrate --split docs/epics/       # Split into per-level .stem files
+rootline migrate --split --dry-run docs/   # Preview without writing
+```
+
+### How it works
+
+1. Scans records and detects hierarchy levels from directory naming patterns
+2. Analyzes which fields have values at which levels
+3. Fields present at **all levels** stay in the root `.stem`
+4. Fields present at **some levels** go to per-level `.stem` files
+5. Each level gets a `sequence` id field matching its prefix/digits
+6. `derive`, `aggregate`, `links`, `structural`, and `validate` rules are preserved at root
+
+### Example
+
+Given a flat `.stem` with fields used across `E##/F##/S###/T###` directories:
+
+```
+docs/epics/.stem              → root fields + E-level sequence + derive/aggregate/links
+docs/epics/E03-name/.stem     → F-level sequence + F-only fields
+docs/epics/E03-name/F01-x/.stem → S-level sequence + S-only fields
+```
+
+Requires at least 2 hierarchy levels to be detected. Use `--dry-run` to preview the split before applying.

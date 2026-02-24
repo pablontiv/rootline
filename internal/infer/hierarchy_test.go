@@ -227,6 +227,64 @@ func TestAnalyzeHierarchy_Detected(t *testing.T) {
 	}
 }
 
+func TestAnalyzeHierarchy_EnumValuesDiffer(t *testing.T) {
+	root := "/tmp/epics"
+	// tipo has disjoint enum values at E-level vs F-level (zero overlap).
+	records := makeHierarchyRecords(root, []string{
+		"E01-a/README.md",
+		"E02-b/README.md",
+		"E01-a/F01-x/README.md",
+		"E01-a/F02-y/README.md",
+	}, []map[string]any{
+		{"tipo": "feature"},
+		{"tipo": "historia"},
+		{"tipo": "software-module"},
+		{"tipo": "ci-cd"},
+	})
+
+	result := AnalyzeHierarchy(records, root)
+	if !result.Detected {
+		t.Fatal("expected hierarchy to be detected")
+	}
+
+	// tipo has disjoint enum values at E-level vs F-level → should NOT be in root.
+	if _, ok := result.Root.Schema["tipo"]; ok {
+		t.Error("expected 'tipo' NOT in root when enum values are disjoint between levels")
+	}
+
+	// Each level should have tipo in OnlyHere with its own values.
+	for _, ls := range result.Levels {
+		if _, ok := ls.OnlyHere["tipo"]; !ok {
+			t.Errorf("expected 'tipo' in OnlyHere for level %s", ls.Level.Prefix)
+		}
+	}
+}
+
+func TestAnalyzeHierarchy_EnumValuesSame(t *testing.T) {
+	root := "/tmp/epics"
+	records := makeHierarchyRecords(root, []string{
+		"E01-a/README.md",
+		"E02-b/README.md",
+		"E01-a/F01-x/README.md",
+		"E01-a/F02-y/README.md",
+	}, []map[string]any{
+		{"estado": "Pending"},
+		{"estado": "Completed"},
+		{"estado": "Pending"},
+		{"estado": "Completed"},
+	})
+
+	result := AnalyzeHierarchy(records, root)
+	if !result.Detected {
+		t.Fatal("expected hierarchy to be detected")
+	}
+
+	// estado has same enum values at both levels → should be in root.
+	if _, ok := result.Root.Schema["estado"]; !ok {
+		t.Error("expected 'estado' in root when enum values are the same across levels")
+	}
+}
+
 func TestAnalyzeHierarchy_NotDetected(t *testing.T) {
 	root := "/tmp/flat"
 	records := makeHierarchyRecords(root, []string{

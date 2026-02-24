@@ -583,3 +583,63 @@ func TestMigrateSplitPreservesCustom(t *testing.T) {
 		}
 	}
 }
+
+func TestMigrateSplitPreservesValidateRules(t *testing.T) {
+	stem := `version: 1
+scope:
+  match: "*.md"
+schema:
+  id:
+    type: sequence
+    prefix: E
+    digits: 2
+  estado:
+    type: enum
+    values: [Pending, Completed]
+    required: true
+  tipo:
+    type: enum
+    values: [feature, historia]
+  ejecutable_en:
+    type: string
+validate:
+  - field: estado
+    rule: non_empty
+  - rule: requires
+    if:
+      tipo: ci-cd
+    then:
+      fields: [ejecutable_en]
+`
+	files := map[string]string{
+		"E01-infra/README.md":           "---\nestado: Pending\n---\n# E01\n",
+		"E02-platform/README.md":        "---\nestado: Completed\n---\n# E02\n",
+		"E01-infra/F01-net/README.md":   "---\nestado: Pending\ntipo: feature\n---\n# F01\n",
+		"E01-infra/F02-store/README.md": "---\nestado: Completed\ntipo: historia\n---\n# F02\n",
+	}
+	dir := setupMigrateDir(t, stem, files)
+
+	out, err := runCmd(t, "migrate", dir, "--split")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	rootContent, err := os.ReadFile(filepath.Join(dir, ".stem"))
+	if err != nil {
+		t.Fatalf("expected root .stem: %v", err)
+	}
+	rootStr := string(rootContent)
+
+	if !strings.Contains(rootStr, "validate:") {
+		t.Fatalf("expected validate section in root .stem, got: %s", rootStr)
+	}
+	if !strings.Contains(rootStr, "if:") {
+		t.Errorf("expected 'if:' in validate rules, got: %s", rootStr)
+	}
+	if !strings.Contains(rootStr, "then:") {
+		t.Errorf("expected 'then:' in validate rules, got: %s", rootStr)
+	}
+	if !strings.Contains(rootStr, "ejecutable_en") {
+		t.Errorf("expected 'ejecutable_en' in validate then clause, got: %s", rootStr)
+	}
+}

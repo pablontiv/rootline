@@ -150,8 +150,8 @@ Después de la aprobación, informar al usuario que puede ejecutar `/roadmap pla
 Vista jerárquica filtrada: solo Features con trabajo pendiente.
 
 **Procedimiento**:
-1. Ejecutar `rootline tree docs/epics/ --where "tipo not in ['feature', 'historia']" --where "estado != 'Completed'" --output table`
-2. Ejecutar `rootline stats docs/epics/ --where "tipo not in ['feature', 'historia']" --where "estado != 'Completed'" --output table`
+1. Ejecutar `rootline tree docs/epics/ --where 'tipo not in ["feature", "historia"] && not (estado == "Completed")' --output table`
+2. Ejecutar `rootline stats docs/epics/ --where 'tipo not in ["feature", "historia"] && not (estado == "Completed")' --output table`
 
 Presenta ambos outputs al usuario.
 

@@ -168,11 +168,11 @@ rootline graph [path] [--where 'expr']    # Dependency graph (DOT, Mermaid, --ch
 rootline explain <file>                   # Trace field origins, derivations, and errors
 
 # Document lifecycle
-rootline init [path] [--force]            # Infer .stem from existing documents
+rootline init [path] [--force]            # Infer .stem (auto-detects hierarchy)
 rootline new <file> [--force] [--dry-run] # Scaffold document from effective schema
 rootline fix [file|--all]                 # Auto-repair: add fields, fix enums, propose changes
 rootline validate --all --where 'expr'   # Validate only records matching filter
-rootline migrate [path]                   # Detect schema changes, rename fields
+rootline migrate [path]                   # Detect schema changes, rename, split
 
 # Tooling
 rootline doctor [path]                    # Check .stem configuration health

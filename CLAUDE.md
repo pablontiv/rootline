@@ -31,8 +31,8 @@ Pre-commit hooks run `golangci-lint` + `gofmt` automatically (`.pre-commit-confi
 - `internal/query/` — Query engine with declarative operators: `eq`, `ne`, `in`, `contains`, `exists`, `and`. Field shortcut resolution. Uses `expr-lang/expr` for expression evaluation.
 - `internal/derive/` — Derivation engine using `expr-lang/expr`. Per-record derived fields, hierarchical aggregation (bottom-up from children to index files), builtin functions (slugify, lower, upper, trim, strlen, concat).
 - `internal/graph/` — Dependency graph from `[[wiki-links]]` in document bodies. Cycle detection, broken link analysis, target resolution with basename fallback. DOT and Mermaid output.
-- `internal/infer/` — Schema inference from existing documents. Analyzes frontmatter to detect field types, enum values, and required fields.
-- `internal/migrate/` — Schema migration: diff detection (field added/removed, type changed, enum changed), breaking change classification, bulk field rename with migration log.
+- `internal/infer/` — Schema inference from existing documents. Analyzes frontmatter to detect field types, enum values, and required fields. `hierarchy.go` detects directory naming patterns (E##, F##, S###, T###) for hierarchical `.stem` generation with per-level field distribution.
+- `internal/migrate/` — Schema migration: diff detection (field added/removed, type changed, enum changed), breaking change classification, bulk field rename with migration log. `migrate --split` converts flat `.stem` to hierarchical per-level files.
 - `internal/e2e/` — End-to-end pipeline integration tests.
 - `internal/mcp/` — MCP server via JSON-RPC 2.0 (planned, stub only: `modelcontextprotocol/go-sdk`).
 
