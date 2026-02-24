@@ -67,6 +67,36 @@ Leer TODA la documentación disponible del proyecto mencionado:
 
 Esto es fundamental — sin entender el proyecto completo, la descomposición será artificial.
 
+### Paso 2.5: Formalizar Contratos
+
+**ANTES de descomponer**, para cada Epic identificado, definir:
+
+1. **Postcondiciones** (2-3 constraints observables): Condiciones que serán verdad cuando el Epic se complete. Deben ser verificables con comandos o inspección directa.
+2. **Invariantes**: Reglas que ningún Feature/Story/Task puede violar durante su ejecución. Ejemplo: *"Los workflows existentes siguen funcionando sin regresión"*.
+3. **Out of scope**: Límites explícitos que previenen scope creep.
+
+**Formato en plan file — Constraint Map:**
+
+```markdown
+## Constraint Map
+
+| Postcondición | Features que la satisfacen | Descripción |
+|---------------|---------------------------|-------------|
+| P1: ...       | F01, F03                  | ...         |
+| P2: ...       | F02                       | ...         |
+
+## Invariantes
+
+- INV1: ...
+- INV2: ...
+```
+
+**Validación bidireccional** (obligatoria):
+- Toda postcondición tiene al menos un Feature que la satisface
+- Todo Feature satisface al menos una postcondición
+- Si algún Feature no satisface ninguna postcondición → eliminar o reubicar
+- Si alguna postcondición no tiene Feature → crear Feature faltante
+
 ### Paso 3: Aplicar Framework Autónomamente
 
 **CRÍTICO**: El agente DEBE tomar decisiones usando los criterios del framework. NO preguntar al usuario cosas que el framework ya define.
