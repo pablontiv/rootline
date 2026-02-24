@@ -296,6 +296,10 @@ Para cada task en orden:
    - Ejecutar CADA verificación documentada (comandos, checks, observables)
    - Reportar resultado por AC: ✅ PASS / ❌ FAIL
    - Si algún AC falla → reportar y **parar** (bug encontrado)
+   - Leer sección "Preserva" del Task .md (si existe)
+   - Para cada invariante listado en Preserva: ejecutar su comando/procedimiento de verificación
+   - Reportar resultado: INV1 HOLDS / INV2 VIOLATED
+   - Si algún invariante se viola → **parar** (igual que AC fail)
 
 6. **Security Review** (selectivo, post-ACs, pre-commit):
    - Aplica si: archivos modificados incluyen patterns sensibles (`**/secret*`, `**/*credentials*`, `**/.env*`, `**/auth*`, `**/crypto*`) O si el tipo de task lo requiere
@@ -352,6 +356,8 @@ Al terminar todas las tasks o al parar:
 ├─ Tasks completadas: N/TOTAL
 ├─ Tasks saltadas: M
 ├─ ACs: total passed / total
+├─ Security reviews: N ejecutados, M findings (H: X, M: Y)
+├─ Quality checkpoints: N ejecutados, M findings
 ├─ Commits: lista de hashes
 └─ Tasks restantes: lista (si las hay)
 ```
