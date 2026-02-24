@@ -22,7 +22,7 @@ Rootline treats the filesystem as a database: directories are tables, files are 
 - [CLI](#cli)
 - [AI-Native](#ai-native)
 - [Documentation](#documentation)
-- [Contributing](#contributing)
+- [Development](#development)
 - [License](#license)
 
 ---
@@ -282,9 +282,16 @@ A **Model Context Protocol (MCP)** server is planned (`rootline serve`) to expos
 
 ---
 
-## Contributing
+## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+```bash
+go build ./cmd/rootline/          # Build
+go test ./... -race               # Tests with race detector
+go vet ./...                      # Static analysis
+golangci-lint run ./...           # Full lint
+```
+
+Pre-commit hooks run `golangci-lint` and `gofmt` automatically. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): description`), enforced by a commit-msg hook.
 
 ---
 
