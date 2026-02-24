@@ -123,6 +123,19 @@ tipo: feature
 
 [Párrafo describiendo el objetivo sistémico. Qué problema resuelve a nivel estratégico.]
 
+## Postcondiciones
+
+- P1: [constraint observable y verificable]
+- P2: [constraint observable y verificable]
+
+## Invariantes
+
+- INV1: [regla que ningún Feature puede violar]
+
+## Out of Scope
+
+- [límite explícito]
+
 ## Features
 
 | ID | Nombre | Descripcion |
@@ -156,6 +169,7 @@ tipo: feature
 # FXX: [Nombre del Feature]
 
 **Epic**: [EXX](../README.md)
+**Satisface**: P1, P2
 **Objetivo**: [Qué capacidad nueva tiene el sistema cuando esto está completo]
 **Beneficio**: [Qué problema resuelve o qué habilita para el sistema/usuario]
 **Milestone**: [Condición medible de "done" — estado observable, no entregable]
@@ -169,6 +183,11 @@ tipo: feature
 
 | ID | Nombre | Capacidad |
 |----|--------|-----------|
+
+## Invariantes
+
+- INV1 (heredado): [del Epic]
+- INV2: [propio del Feature]
 
 ## Dependencias
 
