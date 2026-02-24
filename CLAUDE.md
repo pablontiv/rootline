@@ -24,7 +24,7 @@ Pre-commit hooks run `golangci-lint` + `gofmt` automatically (`.pre-commit-confi
 
 ### Package Layout
 
-- `cmd/rootline/` — CLI entry point. Each subcommand is a separate file (validate.go, query.go, describe.go, init.go, new.go, fix.go, tree.go, stats.go, doctor.go, hooks.go, completion.go, migrate.go, graph.go, explain.go, serve.go). Helper: table.go (output formatting). Uses cobra with global flags `--output json|table` and `--field` (dot-path extraction).
+- `cmd/rootline/` — CLI entry point. Each subcommand is a separate file (validate.go, query.go, describe.go, init.go, new.go, fix.go, tree.go, stats.go, hooks.go, completion.go, migrate.go, graph.go, explain.go, serve.go). Helper: table.go (output formatting). Uses cobra with global flags `--output json|table` and `--field` (dot-path extraction).
 - `internal/extract/` — Metadata extraction from files (YAML frontmatter from Markdown, wiki-link extraction from body). Extractor interface + registry pattern.
 - `internal/rules/` — `.stem` file loading, walk-up discovery (target → `.git` root), top-down merge (parent → child). Merge is type-driven: maps merge at key level, arrays/scalars replace, null removes. Also contains: validation engine (required, enum, non_empty, exists, requires rules), link schema validation, structural directory rules (require_index, min/max_children), describe output formatting, sequence auto-numbering, validation result types (single + batch).
 - `internal/index/` — Directory scanner (respects `.stemignore`), file indexing, scope matching.

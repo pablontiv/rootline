@@ -339,3 +339,90 @@ func TestValidateCmd_EnumError(t *testing.T) {
 		t.Error("expected enum validation error for estado")
 	}
 }
+
+func TestValidateAll_StemHealthChecks(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":      "version: 1\nschema:\n  estado:\n    type: string\n",
+		"sub/.stem":  "version: 1\nschema:\n  estado:\n    type: enum\n    values: [A, B]\n",
+		"sub/doc.md": "---\nestado: A\n---\n",
+	})
+
+	mustChdir(t, root)
+
+	stdout, err := executeValidate(t, "--all")
+	// type-consistency failure should cause validation failed
+	if err != ErrValidationFailed {
+		t.Fatalf("expected ErrValidationFailed, got: %v\noutput: %s", err, stdout)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	// Check that stem health errors appear in results
+	results := result["results"].([]any)
+	foundStemHealth := false
+	for _, r := range results {
+		rm := r.(map[string]any)
+		errs, ok := rm["errors"].([]any)
+		if !ok {
+			continue
+		}
+		for _, e := range errs {
+			em := e.(map[string]any)
+			if em["source"] == "stem-health" && em["rule"] == "type-consistency" {
+				foundStemHealth = true
+			}
+		}
+	}
+	if !foundStemHealth {
+		t.Errorf("expected stem-health type-consistency error in results, got: %s", stdout)
+	}
+}
+
+func TestValidateAll_StemHealthWarnings(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":  "version: 1\nscope:\n  match: \"*.xyz\"\nschema:\n  estado:\n    type: enum\n    values: [OnlyOne]\n",
+		"doc.md": "---\nestado: OnlyOne\n---\n",
+	})
+
+	mustChdir(t, root)
+
+	stdout, err := executeValidate(t, "--all")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, stdout)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	// Check that warnings appear
+	results := result["results"].([]any)
+	foundScopeWarn := false
+	foundEnumWarn := false
+	for _, r := range results {
+		rm := r.(map[string]any)
+		warns, ok := rm["warnings"].([]any)
+		if !ok {
+			continue
+		}
+		for _, w := range warns {
+			wm := w.(map[string]any)
+			if wm["rule"] == "scope-match" {
+				foundScopeWarn = true
+			}
+			if wm["rule"] == "enum-values" {
+				foundEnumWarn = true
+			}
+		}
+	}
+	if !foundScopeWarn {
+		t.Errorf("expected scope-match warning in results, got: %s", stdout)
+	}
+	if !foundEnumWarn {
+		t.Errorf("expected enum-values warning in results, got: %s", stdout)
+	}
+}

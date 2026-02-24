@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/derive"
+	"github.com/pablontiv/rootline/internal/doctor"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -125,6 +126,33 @@ func runValidateAll(cmd *cobra.Command) error {
 		return err
 	}
 
+	// Phase 1: Stem health checks.
+	var results []*rules.ValidationResult
+	doctorResult, doctorErr := doctor.RunChecks(ctx, root)
+	if doctorErr == nil {
+		for _, c := range doctorResult.Checks {
+			if c.Status == "pass" {
+				continue
+			}
+			severity := "warn"
+			if c.Status == "fail" {
+				severity = "error"
+			}
+			path := c.Path
+			if path == "" {
+				path = ".stem"
+			}
+			errs := []rules.ValidationError{{
+				Rule:     c.Name,
+				Message:  c.Message,
+				Source:   "stem-health",
+				Severity: severity,
+			}}
+			results = append(results, rules.NewValidationResult(path, errs))
+		}
+	}
+
+	// Phase 2: Document validation.
 	reg := extract.NewRegistry()
 	resolver := func(dir string) *rules.StemFile {
 		entries, err := rules.WalkUp(dir)
@@ -149,7 +177,6 @@ func runValidateAll(cmd *cobra.Command) error {
 		return fmt.Errorf("filtering records: %w", err)
 	}
 
-	var results []*rules.ValidationResult
 	visitedDirs := make(map[string]bool)
 
 	for _, rec := range records {
