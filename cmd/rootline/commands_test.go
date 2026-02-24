@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +13,11 @@ import (
 func setupTestDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
+
+	// Create .git marker (WalkUp requires a git boundary).
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	// .stem file with schema
 	stemContent := `version: 1

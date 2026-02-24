@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/proposal"
+	"gopkg.in/yaml.v3"
 )
 
 func TestFixMissingRequired(t *testing.T) {
@@ -631,6 +632,9 @@ func TestFixAllDryRunWithProposals(t *testing.T) {
 // losing enum definitions like estado/tipo when multiple stems coexist.
 func TestFixAllSelectsRichestStem(t *testing.T) {
 	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	// Rich stem at root: has estado enum with known values.
 	richStem := `version: 1
@@ -695,6 +699,9 @@ schema:
 // from the repo root and from a subdirectory produces the same proposal types.
 func TestFixAllDryRunConsistentFromRootAndSubdir(t *testing.T) {
 	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	stemContent := `version: 1
 scope:
@@ -749,5 +756,70 @@ schema:
 	}
 	if reportRoot.Summary.ExtendEnum != reportSub.Summary.ExtendEnum {
 		t.Errorf("extend_enum mismatch: root=%d subdir=%d", reportRoot.Summary.ExtendEnum, reportSub.Summary.ExtendEnum)
+	}
+}
+
+func TestWriteFrontmatterFields_YAMLQuoting(t *testing.T) {
+	tests := []struct {
+		name string
+		fm   map[string]any
+		want string // fragment that must appear in output
+	}{
+		{
+			name: "plain string",
+			fm:   map[string]any{"title": "Hello"},
+			want: "title: Hello\n",
+		},
+		{
+			name: "string with colon is quoted",
+			fm:   map[string]any{"title": "Hello: World"},
+			want: "'Hello: World'",
+		},
+		{
+			name: "integer value",
+			fm:   map[string]any{"count": 42},
+			want: "count: 42\n",
+		},
+		{
+			name: "boolean value",
+			fm:   map[string]any{"draft": true},
+			want: "draft: true\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var b strings.Builder
+			writeFrontmatterFields(&b, tt.fm)
+			out := b.String()
+			if !strings.Contains(out, tt.want) {
+				t.Errorf("output = %q\nwant fragment %q", out, tt.want)
+			}
+			// Must round-trip as valid YAML.
+			var parsed map[string]any
+			if err := yaml.Unmarshal([]byte(out), &parsed); err != nil {
+				t.Errorf("output is not valid YAML: %v\noutput: %q", err, out)
+			}
+		})
+	}
+}
+
+func TestWriteFrontmatterFields_SliceValue(t *testing.T) {
+	fm := map[string]any{"tags": []any{"alpha", "beta"}}
+	var b strings.Builder
+	writeFrontmatterFields(&b, fm)
+	out := b.String()
+
+	// Must round-trip as valid YAML.
+	var parsed map[string]any
+	if err := yaml.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("output is not valid YAML: %v\noutput: %q", err, out)
+	}
+	tags, ok := parsed["tags"].([]any)
+	if !ok {
+		t.Fatalf("expected tags to be a list, got %T: %v", parsed["tags"], parsed["tags"])
+	}
+	if len(tags) != 2 {
+		t.Errorf("expected 2 tags, got %d", len(tags))
 	}
 }

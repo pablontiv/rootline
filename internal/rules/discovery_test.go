@@ -118,22 +118,18 @@ func TestWalkUp_NoStemFiles(t *testing.T) {
 	}
 }
 
-func TestWalkUp_NoGitStopsAtFsRoot(t *testing.T) {
-	// No .git anywhere — should walk up until filesystem root.
+func TestWalkUp_NoGitReturnsError(t *testing.T) {
+	// No .git anywhere — WalkUp must return an error.
 	root := t.TempDir()
 	sub := filepath.Join(root, "a", "b")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	// This should not error, just return empty (no .stem files found).
-	entries, err := WalkUp(sub)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := WalkUp(sub)
+	if err == nil {
+		t.Fatal("expected error when no .git is found, got nil")
 	}
-
-	// We don't know what's above TempDir, so just verify no error.
-	_ = entries
 }
 
 func TestWalkUp_TargetIsFile(t *testing.T) {

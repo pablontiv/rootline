@@ -39,6 +39,11 @@ func loadFromGit(stemPath string) (*rules.StemFile, error) {
 		return nil, fmt.Errorf("computing relative path: %w", err)
 	}
 
+	// Guard: relPath must not escape the git root.
+	if strings.HasPrefix(relPath, "..") {
+		return nil, fmt.Errorf("path %q is outside the git root %q", absPath, gitRoot)
+	}
+
 	// Use git show to read the HEAD version.
 	cmd := exec.Command("git", "-C", gitRoot, "show", "HEAD:"+relPath) //nolint:gosec // relPath is derived from filesystem paths, not user input
 	out, err := cmd.Output()

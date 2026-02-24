@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -219,6 +220,9 @@ func TestGraphWhere_InvalidExpr(t *testing.T) {
 
 func TestGraphCheck_SchemaFiltersReferenceLinks(t *testing.T) {
 	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	// .stem with links schema that only has rules for "blocks"
 	stem := "version: 1\nlinks:\n  allowed: [blocks, reference]\n  blocks:\n    target: \"*.md\"\n"
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stem), 0644)

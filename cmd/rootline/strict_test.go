@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +11,11 @@ import (
 func setupStrictTestDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
+
+	// Create .git marker (WalkUp requires a git boundary).
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	// .stem with estado as warn severity, tipo as error severity
 	stemContent := `version: 1

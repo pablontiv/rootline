@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -58,7 +59,7 @@ func WalkUp(targetPath string) ([]StemEntry, error) {
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			// Reached filesystem root without finding .git.
-			break
+			return nil, fmt.Errorf("no .git directory found — rootline must be run inside a git repository")
 		}
 		dir = parent
 	}
