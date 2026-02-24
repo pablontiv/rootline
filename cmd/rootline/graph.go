@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -46,6 +45,8 @@ type GraphResult struct {
 }
 
 func runGraph(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
 	scanRoot := "."
 	if len(args) > 0 {
 		scanRoot = args[0]
@@ -57,13 +58,13 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	}
 
 	reg := extract.NewRegistry()
-	records, err := index.Scan(context.TODO(), absRoot, reg)
+	records, err := index.Scan(ctx, absRoot, reg)
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
 	// Apply --where filter.
-	records, err = filterRecords(records, graphWhere)
+	records, err = filterRecords(ctx, records, graphWhere)
 	if err != nil {
 		return fmt.Errorf("filtering records: %w", err)
 	}
@@ -77,7 +78,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	g := graph.Build(context.TODO(), records)
+	g := graph.Build(ctx, records)
 	cycles := g.DetectCycles()
 	broken := g.BrokenLinks()
 

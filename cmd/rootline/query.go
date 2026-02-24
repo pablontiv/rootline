@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -45,6 +44,8 @@ func init() {
 }
 
 func runQuery(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
 	// Determine scan root
 	scanRoot := queryFrom
 	if len(args) > 0 {
@@ -58,14 +59,14 @@ func runQuery(cmd *cobra.Command, args []string) error {
 
 	// Scan records
 	reg := extract.NewRegistry()
-	records, err := index.Scan(context.TODO(), absRoot, reg)
+	records, err := index.Scan(ctx, absRoot, reg)
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
 	// Run derivation and aggregation (best-effort, errors silently skipped).
-	derive.DeriveAllSimple(context.TODO(), records, absRoot)
-	derive.AggregateAllSimple(context.TODO(), records, absRoot)
+	derive.DeriveAllSimple(ctx, records, absRoot)
+	derive.AggregateAllSimple(ctx, records, absRoot)
 
 	q := &query.Query{
 		Count: queryCount,
@@ -73,13 +74,13 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	}
 
 	// Filter records using shared helper.
-	filtered, err := filterRecords(records, queryWhere)
+	filtered, err := filterRecords(ctx, records, queryWhere)
 	if err != nil {
 		return fmt.Errorf("filtering records: %w", err)
 	}
 
 	// Execute query (count/limit) on filtered records.
-	result, err := query.ExecuteExpr(context.TODO(), filtered, "", q)
+	result, err := query.ExecuteExpr(ctx, filtered, "", q)
 	if err != nil {
 		return fmt.Errorf("executing query: %w", err)
 	}

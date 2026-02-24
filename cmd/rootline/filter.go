@@ -10,7 +10,7 @@ import (
 
 // filterRecords applies where expressions to records, returning only those that match.
 // Multiple wheres are combined with AND. Empty wheres returns all records (passthrough).
-func filterRecords(records []*extract.Record, wheres []string) ([]*extract.Record, error) {
+func filterRecords(ctx context.Context, records []*extract.Record, wheres []string) ([]*extract.Record, error) {
 	// Filter empty strings — StringArrayVar may produce [""] on cobra re-execution.
 	var cleaned []string
 	for _, w := range wheres {
@@ -30,7 +30,7 @@ func filterRecords(records []*extract.Record, wheres []string) ([]*extract.Recor
 
 	var filtered []*extract.Record
 	for _, rec := range records {
-		match, err := query.MatchRecord(context.TODO(), program, rec)
+		match, err := query.MatchRecord(ctx, program, rec)
 		if err != nil {
 			return nil, err
 		}

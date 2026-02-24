@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,6 +33,8 @@ func init() {
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
 	target := "."
 	if len(args) > 0 {
 		target = args[0]
@@ -46,7 +47,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Scan for records
 	reg := extract.NewRegistry()
-	records, err := index.Scan(context.TODO(), absTarget, reg)
+	records, err := index.Scan(ctx, absTarget, reg)
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", target, err)
 	}

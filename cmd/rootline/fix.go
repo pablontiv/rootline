@@ -67,8 +67,10 @@ func init() {
 }
 
 func runFix(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
 	if fixAll {
-		return runFixAll(cmd)
+		return runFixAll(ctx, cmd)
 	}
 
 	reg := extract.NewRegistry()
@@ -105,14 +107,14 @@ func runFix(cmd *cobra.Command, args []string) error {
 		effective := rules.MergeStemFiles(entries)
 
 		// Validate
-		errs := rules.Validate(context.TODO(), record, effective)
+		errs := rules.Validate(ctx, record, effective)
 		if len(errs) == 0 {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: no errors to fix\n", file)
 			continue
 		}
 
 		// Apply fixes to frontmatter
-		added, corrected := fix.ApplyFixes(context.TODO(), record, effective, errs)
+		added, corrected := fix.ApplyFixes(ctx, record, effective, errs)
 
 		if fixDryRun {
 			for _, a := range added {
@@ -147,7 +149,7 @@ func runFix(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runFixAll(cmd *cobra.Command) error {
+func runFixAll(ctx context.Context, cmd *cobra.Command) error {
 	root, err := filepath.Abs(".")
 	if err != nil {
 		return err
@@ -162,7 +164,7 @@ func runFixAll(cmd *cobra.Command) error {
 		return rules.MergeStemFiles(entries)
 	}
 
-	records, err := index.Scan(context.TODO(), root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
 	}
@@ -181,7 +183,7 @@ func runFixAll(cmd *cobra.Command) error {
 		effective := rules.MergeStemFiles(entries)
 		effectiveStems[rec.Path] = effective
 
-		errs := rules.Validate(context.TODO(), rec, effective)
+		errs := rules.Validate(ctx, rec, effective)
 		if len(errs) > 0 {
 			allErrs[rec.Path] = errs
 		}
@@ -217,7 +219,7 @@ func runFixAll(cmd *cobra.Command) error {
 
 	// Apply proposals if any.
 	if len(report.Proposals) > 0 {
-		if err := fix.ApplyProposals(context.TODO(), report, root, records); err != nil {
+		if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
 			return err
 		}
 	}

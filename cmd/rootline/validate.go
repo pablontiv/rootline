@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,6 +56,8 @@ func runValidate(cmd *cobra.Command, args []string) error {
 }
 
 func runValidateFiles(cmd *cobra.Command, files []string) error {
+	ctx := cmd.Context()
+
 	reg := extract.NewRegistry()
 	var results []*rules.ValidationResult
 
@@ -97,7 +98,7 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 		effective := rules.MergeStemFiles(entries)
 
 		// Validate
-		errs := rules.Validate(context.TODO(), record, effective)
+		errs := rules.Validate(ctx, record, effective)
 		results = append(results, rules.NewValidationResult(file, errs))
 	}
 
@@ -117,6 +118,8 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 }
 
 func runValidateAll(cmd *cobra.Command) error {
+	ctx := cmd.Context()
+
 	root, err := filepath.Abs(".")
 	if err != nil {
 		return err
@@ -131,17 +134,17 @@ func runValidateAll(cmd *cobra.Command) error {
 		return rules.MergeStemFiles(entries)
 	}
 
-	records, err := index.Scan(context.TODO(), root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
 	}
 
 	// Run derivation for --where filtering on derived fields.
-	derive.DeriveAllSimple(context.TODO(), records, root)
-	derive.AggregateAllSimple(context.TODO(), records, root)
+	derive.DeriveAllSimple(ctx, records, root)
+	derive.AggregateAllSimple(ctx, records, root)
 
 	// Apply --where filter.
-	records, err = filterRecords(records, validateWhere)
+	records, err = filterRecords(ctx, records, validateWhere)
 	if err != nil {
 		return fmt.Errorf("filtering records: %w", err)
 	}
@@ -157,7 +160,7 @@ func runValidateAll(cmd *cobra.Command) error {
 			continue
 		}
 		effective := rules.MergeStemFiles(entries)
-		errs := rules.Validate(context.TODO(), rec, effective)
+		errs := rules.Validate(ctx, rec, effective)
 		results = append(results, rules.NewValidationResult(rec.Path, errs))
 
 		// Track directories for structural validation.
@@ -177,7 +180,7 @@ func runValidateAll(cmd *cobra.Command) error {
 			continue
 		}
 
-		structErrs := rules.ValidateDirectory(context.TODO(), dir, effective)
+		structErrs := rules.ValidateDirectory(ctx, dir, effective)
 		relDir, _ := filepath.Rel(root, dir)
 		if relDir == "" || relDir == "." {
 			relDir = ""
