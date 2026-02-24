@@ -1,8 +1,7 @@
 ---
-estado: Specified
+estado: Completed
 tipo: software-module
 ejecutable_en: 1 sesion
-hold: Pendiente aprobación de usuario
 ---
 # T002: Registrar MCP tools: query, validate, describe, tree, stats
 

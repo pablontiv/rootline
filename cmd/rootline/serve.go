@@ -11,6 +11,7 @@ var serveCmd = &cobra.Command{
 	Long:  "Launch the Rootline MCP server exposing the core engine\nvia JSON-RPC 2.0 over stdio transport.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s := mcpserver.NewServer("rootline", version)
+		mcpserver.RegisterTools(s)
 		return s.RunStdio(cmd.Context())
 	},
 }
