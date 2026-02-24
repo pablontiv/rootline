@@ -1,10 +1,9 @@
 ---
-estado: Specified
+estado: Completed
 tipo: ci-cd
 ejecutable_en: 1 sesion
-hold: Pendiente aprobación de usuario
 ---
-# T002: Crear Homebrew tap y formula
+# T002: Script de instalacion curl|bash
 
 **Story**: [S002 Release Pipeline](README.md)
 
@@ -12,51 +11,30 @@ hold: Pendiente aprobación de usuario
 
 ## Contexto
 
-Homebrew es el package manager dominante en macOS y popular en Linux. Un tap dedicado permite `brew install org/tap/rootline`. goreleaser puede generar la formula automaticamente en cada release.
+Se evaluo Homebrew tap (requiere repo adicional + PAT) vs script de instalacion curl|bash (zero dependencias, funciona en cualquier Linux/macOS). Se eligio el script por simplicidad y menor mantenimiento.
 
-## Especificacion Tecnica
+## Implementacion
 
-```yaml
-tipo: ci-cd
-plataforma: github-actions
-triggers:
-  - tag (via goreleaser)
-jobs:
-  - nombre: homebrew-update
-    pasos:
-      - goreleaser genera formula
-      - Push a tap repository
-artefactos:
-  - Formula/rootline.rb en tap repo
+Script `install.sh` en la raiz del repo. Instalacion:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pablontiv/rootline/master/install.sh | bash
 ```
 
-## Dependencias
-
-- T001 completado (goreleaser funcional)
-- D11 resuelto (GitHub org/user para tap repo)
-
-## Alcance
-
-**In**:
-1. Crear repositorio `homebrew-tap` (o agregar a goreleaser brews config)
-2. goreleaser brews section que genera formula automaticamente
-3. Formula con desc, homepage, url (release asset), sha256
-4. Test: `brew install org/tap/rootline && rootline --version`
-
-**Out**: Homebrew core formula (requiere popularidad), Linux package managers
-
-## Estado inicial esperado
-
-- goreleaser funcional (T001)
-- GitHub repository para tap
+El script:
+- Detecta OS (linux/darwin) y arquitectura (amd64/arm64)
+- Obtiene la ultima version desde GitHub API
+- Descarga el binario correcto desde GitHub Releases
+- Instala en `~/.local/bin` o `/usr/local/bin`
+- Soporta curl y wget
+- Variable `ROOTLINE_INSTALL_DIR` para directorio custom
 
 ## Criterios de Aceptacion
 
-- `.goreleaser.yaml` tiene seccion `brews` configurada
-- Tap repository existe con Formula/ directory
-- `goreleaser --snapshot` genera formula .rb
-- Formula incluye desc, homepage, install section correctos
-- `brew install --build-from-source Formula/rootline.rb` instala correctamente (test local)
+- `shellcheck install.sh` pasa sin errores
+- Script detecta OS y arquitectura correctamente
+- Descarga e instala el binario de la ultima release
+- `rootline --version` funciona post-instalacion
 
 ## Fuente de verdad
 
