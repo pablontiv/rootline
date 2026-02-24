@@ -37,6 +37,21 @@ No se asume UX ni usuario final.
 > **El agente AI no "recuerda", solo "observa estado actual".**
 > Por lo tanto, **toda intención debe estar explícita en la unidad que ejecuta**.
 
+### 2.3 Contratos por nivel
+
+Cada nivel de la jerarquía define un **contrato formal** con cuatro componentes:
+
+| Componente | Pregunta | Dirección |
+|------------|----------|-----------|
+| **Precondiciones** | ¿Qué debe ser verdad antes de empezar? | Hacia abajo (padre → hijo) |
+| **Postcondiciones** | ¿Qué será verdad cuando termine? | Hacia arriba (hijo → padre) |
+| **Invariantes** | ¿Qué nunca debe romperse durante la ejecución? | Lateral (se preserva siempre) |
+| **Trazabilidad** | ¿A qué objetivo superior contribuye? | Hacia arriba (hijo → padre) |
+
+**Principio**: Especificar contratos antes de descomponer. Los contratos del nivel actual son las restricciones del nivel inferior.
+
+**Propagación de invariantes**: Los invariantes se heredan hacia abajo. Un invariante de Epic aplica a todos sus Features, Stories y Tasks. Un invariante de Story aplica a todos sus Tasks.
+
 ---
 
 ## 3. Jerarquía de trabajo (canónica)
@@ -75,6 +90,12 @@ y probablemente agrupa trabajo no relacionado.
 
 **NO contiene:** tareas, pasos, comandos
 
+**Restricciones formales:**
+
+* **Postcondiciones** (2-3 constraints observables): Condiciones que serán verdad cuando el Epic se complete. Ejemplo: *"Todo task tiene trazabilidad bidireccional a un criterio de story"*.
+* **Invariantes**: Reglas que ningún Feature puede violar durante su ejecución. Ejemplo: *"Los workflows existentes siguen funcionando sin regresión"*.
+* **Out of scope**: Límites explícitos que previenen scope creep.
+
 ### 4.2 Feature
 
 **Rol:** Milestone técnico o fase coherente
@@ -89,6 +110,12 @@ y probablemente agrupa trabajo no relacionado.
 
 **NO es Feature si**: tiene 1 sola Story (absorber en Feature vecino) o si no tiene objetivo propio distinto del Epic.
 
+**Restricciones formales:**
+
+* **Satisface** (→ Epic postcondiciones): Qué postcondiciones del Epic avanza este Feature. Ejemplo: *"Satisface: P1, P2"*.
+* **Postcondición** (milestone medible): Condición observable de "done" del Feature.
+* **Invariantes** (heredados del Epic + propios): Reglas que las Stories del Feature deben preservar.
+
 ### 4.3 Story
 
 **Rol:** Unidad de valor para el cliente (humano)
@@ -100,6 +127,11 @@ Una story **DEBE**:
 * ser testeable
 * tener un "antes / después" claro
 * poder fallar de forma significativa
+
+**Restricciones formales:**
+
+* **Cubre** (→ Feature milestone): Qué aspecto del milestone del Feature cubre esta Story. Ejemplo: *"Cubre: templates tienen campos de contratos"*.
+* **Invariantes** (propios, con comandos de verificación): Propiedades que los Tasks de la Story deben preservar. Cada invariante incluye un comando o procedimiento para verificar que se mantiene.
 
 **Importante:**
 Una story **NO está pensada para ser ejecutada en una sola sesión de AI**.
@@ -118,6 +150,11 @@ La story es:
 La **task es el átomo del sistema**.
 
 La task es auto-contenida: toda la informacion necesaria para ejecutarla vive en un solo archivo.
+
+**Restricciones formales:**
+
+* **Contribuye a** (→ Story criterio): Qué criterio de aceptación de la Story avanza este Task. Ejemplo: *"Contribuye a: framework-reference.md tiene seccion 2.3"*.
+* **Preserva** (→ Story invariantes): Invariantes de la Story que este Task debe mantener intactos. Se verifican al completar el Task.
 
 ---
 
@@ -258,3 +295,21 @@ Dividir hasta que:
 * La ejecución ocurre en **tasks**
 * El agente vive en la **task**
 * El humano vive en la **story**
+
+### 12.1 Cadena de trazabilidad bidireccional
+
+```text
+Epic.Postcondiciones
+  ↑ satisface
+Feature.Satisface ──→ Feature.Postcondición (milestone)
+  ↑ cubre
+Story.Cubre ──→ Story.Invariantes (con verificación)
+  ↑ contribuye a          ↓ preserva
+Task.Contribuye_a    Task.Preserva
+```
+
+**Descendente** (descomposición): Postcondiciones del Epic → se distribuyen en Features (Satisface) → se descomponen en Stories (Cubre) → se implementan en Tasks (Contribuye a).
+
+**Ascendente** (validación): Task completado → verifica que su "Contribuye a" avanza el criterio de la Story → Story completada verifica que su "Cubre" avanza el milestone del Feature → Feature completado verifica que su "Satisface" cumple postcondiciones del Epic.
+
+**Lateral** (preservación): Invariantes se heredan hacia abajo y se verifican en cada Task via "Preserva". Si un invariante se viola → el Task falla independientemente de sus ACs.
