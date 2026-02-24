@@ -29,18 +29,22 @@ Rootline treats the filesystem as a database: directories are tables, files are 
 
 ## Installation
 
+### Linux / macOS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pablontiv/rootline/master/install.sh | bash
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/pablontiv/rootline/master/install.ps1 | iex
+```
+
 ### From source
 
 ```bash
 go install github.com/pablontiv/rootline/cmd/rootline@latest
-```
-
-### Build locally
-
-```bash
-git clone https://github.com/pablontiv/rootline.git
-cd rootline
-go build ./cmd/rootline/
 ```
 
 ---
