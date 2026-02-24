@@ -106,7 +106,7 @@ Leer [framework-reference.md](framework-reference.md) y aplicar estos criterios 
 | Nivel | Pregunta de corte | Criterio |
 |-------|-------------------|----------|
 | Epic | ¿Cuántos objetivos sistémicos distintos tiene? | Múltiples dominios → múltiples Epics |
-| Feature | ¿Qué bloques pueden cerrarse independientemente? | Milestone técnico real (anti-inflación: 3-5 Features, no 10) |
+| Feature | ¿Qué bloques pueden cerrarse independientemente? Satisface >= 1 postcondición del Epic | Milestone técnico real (anti-inflación: 3-5 Features, no 10) |
 | Story | ¿Qué capacidades nuevas existen? | Antes/después claro, testeable, no ejecutable en 1 sesión |
 | Task | ¿Qué puede hacer un agente en 1 sesión? | 6 condiciones de task-guide.md |
 
@@ -134,6 +134,17 @@ E02: [Objetivo sistémico 2]
 
 Para cada Task incluir: nombre, tipo, descripción de 1 línea.
 
+**Constraint Map** (obligatorio en plan file):
+
+```markdown
+## Constraint Map
+
+| Postcondición Epic | Features | Descripción |
+|----|----------|-------------|
+| P1: ... | F01, F03 | ... |
+| P2: ... | F02 | ... |
+```
+
 ### Paso 4.5: Validación de Completitud
 
 **OBLIGATORIO** antes de presentar. Verificar:
@@ -143,8 +154,7 @@ Para cada Task incluir: nombre, tipo, descripción de 1 línea.
    → cada Feature → avanza la Intención del Epic.
    Si un Task no traza a ningún objetivo superior → eliminar o reubicar.
 
-2. **Completeness descendente**: ¿Completar TODOS los Features logra la Intención del Epic?
-   Si hay aspectos de la Intención NO cubiertos → crear Feature faltante.
+2. **Completeness por contratos**: Cada postcondición del Epic tiene >= 1 Feature que la satisface. Cada milestone de Feature tiene >= 1 Story que lo cubre. Cada criterio de Story tiene >= 1 Task AC que lo implementa. Si algún nivel no tiene cobertura → crear artefacto faltante.
 
 3. **No-overlap**: ¿Dos Features o Stories cubren lo mismo? → fusionar.
 
@@ -152,6 +162,8 @@ Para cada Task incluir: nombre, tipo, descripción de 1 línea.
    → Documentar orden de ejecución en el plan.
 
 5. **Sanity check numérico**: Verificar contra criterios de escala (Paso 3).
+
+6. **Invariant propagation check**: Invariantes del Epic aparecen en sus Features (heredados). Invariantes de Features fluyen a sus Stories. Tasks los preservan via sección "Preserva". Si un invariante no se propaga → agregarlo al nivel faltante.
 
 ### Paso 5: Presentar para Aprobación (NO para definición)
 
