@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -23,7 +24,7 @@ type ValidationError struct {
 // It runs schema-level auto-checks (required, enum) and explicit
 // validation rules (non_empty, enum, requires, exists).
 // Returns an empty slice for a valid document.
-func Validate(record *extract.Record, effective *StemFile) []ValidationError {
+func Validate(_ context.Context, record *extract.Record, effective *StemFile) []ValidationError {
 	if effective == nil {
 		return nil
 	}

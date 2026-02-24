@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -21,7 +22,7 @@ func TestAggregateAll_BasicEstado(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
-	AggregateAll(records, "/root", resolver)
+	AggregateAll(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived["estado"] != "Completed" {
 		t.Errorf("README estado = %v, want Completed", records[0].Derived["estado"])
@@ -46,7 +47,7 @@ func TestAggregateAll_NotAllCompleted(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
-	AggregateAll(records, "/root", resolver)
+	AggregateAll(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived["estado"] != "Blocked" {
 		t.Errorf("README estado = %v, want Blocked", records[0].Derived["estado"])
@@ -72,7 +73,7 @@ func TestAggregateAll_MultiLevel(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
-	AggregateAll(records, "/root", resolver)
+	AggregateAll(context.Background(), records, "/root", resolver)
 
 	// Story README: descendants = [T001, T002] → all Completed
 	if records[1].Derived["estado"] != "Completed" {
@@ -100,7 +101,7 @@ func TestAggregateAll_ChildrenVariable(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
-	AggregateAll(records, "/root", resolver)
+	AggregateAll(context.Background(), records, "/root", resolver)
 
 	// E01 README has 1 child index (F01/README.md)
 	if records[0].Derived["child_count"] != 1 {
@@ -122,7 +123,7 @@ func TestAggregateAll_NoConfig(t *testing.T) {
 	stem := &rules.StemFile{} // no aggregate
 	resolver := func(dir string) *rules.StemFile { return stem }
 
-	AggregateAll(records, "/root", resolver)
+	AggregateAll(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived != nil {
 		t.Errorf("Derived = %v, want nil", records[0].Derived)
@@ -140,7 +141,7 @@ func TestAggregateAll_NoIndexFiles(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
-	AggregateAll(records, "/root", resolver)
+	AggregateAll(context.Background(), records, "/root", resolver)
 
 	// No index files → no aggregation
 	for _, rec := range records {
@@ -155,7 +156,7 @@ func TestAggregateAll_NilResolver(t *testing.T) {
 		{Path: "dir/README.md", Type: "markdown", Frontmatter: map[string]any{}},
 	}
 	// Should not panic.
-	AggregateAll(records, "/root", nil)
+	AggregateAll(context.Background(), records, "/root", nil)
 	if records[0].Derived != nil {
 		t.Error("expected nil Derived with nil resolver")
 	}
@@ -174,7 +175,7 @@ func TestAggregateAll_EmptyDescendants(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
-	AggregateAll(records, "/root", resolver)
+	AggregateAll(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived["estado"] != "Pending" {
 		t.Errorf("estado = %v, want Pending (fallback)", records[0].Derived["estado"])
@@ -199,7 +200,7 @@ func TestAggregateAll_RootReadme(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
-	AggregateAll(records, "/root", resolver)
+	AggregateAll(context.Background(), records, "/root", resolver)
 
 	// Root README should see all descendants including F02/T001 which is Pending.
 	if records[0].Derived["estado"] != "In Progress" {

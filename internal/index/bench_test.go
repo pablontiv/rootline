@@ -1,6 +1,7 @@
 package index
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,7 +32,7 @@ func BenchmarkScan(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, err := Scan(root, reg)
+		_, err := Scan(context.Background(), root, reg)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -56,7 +57,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	}
 
 	reg := extract.NewRegistry()
-	records, err := index.Scan(absRoot, reg)
+	records, err := index.Scan(context.TODO(), absRoot, reg)
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
@@ -76,7 +77,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	g := graph.Build(records)
+	g := graph.Build(context.TODO(), records)
 	cycles := g.DetectCycles()
 	broken := g.BrokenLinks()
 

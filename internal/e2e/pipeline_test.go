@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -84,7 +85,7 @@ func TestPipeline_ScanExtractWithStemScope(t *testing.T) {
 	reg := extract.NewRegistry()
 	resolver := buildScopeResolver()
 
-	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.Background(), root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("Scan error: %v", err)
 	}
@@ -127,7 +128,7 @@ func TestPipeline_ScopeNarrowsInSubdirectory(t *testing.T) {
 	reg := extract.NewRegistry()
 	resolver := buildScopeResolver()
 
-	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.Background(), root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("Scan error: %v", err)
 	}
@@ -166,7 +167,7 @@ func TestPipeline_StemignoreAndScopeCombined(t *testing.T) {
 	reg := extract.NewRegistry()
 	resolver := buildScopeResolver()
 
-	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.Background(), root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("Scan error: %v", err)
 	}
@@ -229,7 +230,7 @@ func TestPipeline_StemMergeInheritance(t *testing.T) {
 	reg := extract.NewRegistry()
 	resolver := buildScopeResolver()
 
-	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.Background(), root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("Scan error: %v", err)
 	}
@@ -257,7 +258,7 @@ func TestPipeline_NoStemMatchesEverything(t *testing.T) {
 	reg := extract.NewRegistry()
 	resolver := buildScopeResolver()
 
-	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.Background(), root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("Scan error: %v", err)
 	}
@@ -296,7 +297,7 @@ func TestPipeline_DeepNesting(t *testing.T) {
 	reg := extract.NewRegistry()
 	resolver := buildScopeResolver()
 
-	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.Background(), root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("Scan error: %v", err)
 	}
@@ -339,7 +340,7 @@ func TestPipeline_FrontmatterExtractionIntegrity(t *testing.T) {
 	reg := extract.NewRegistry()
 	resolver := buildScopeResolver()
 
-	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.Background(), root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("Scan error: %v", err)
 	}
@@ -434,7 +435,7 @@ validate:
 	reg := extract.NewRegistry()
 	resolver := buildScopeResolver()
 
-	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.Background(), root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("Scan error: %v", err)
 	}
@@ -449,7 +450,7 @@ validate:
 	// Validate each record
 	results := make(map[string][]rules.ValidationError)
 	for _, rec := range records {
-		errs := rules.Validate(rec, effective)
+		errs := rules.Validate(context.Background(), rec, effective)
 		results[rec.Path] = errs
 	}
 
@@ -533,7 +534,7 @@ schema:
 	reg := extract.NewRegistry()
 	resolver := buildScopeResolver()
 
-	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.Background(), root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("Scan error: %v", err)
 	}
@@ -547,7 +548,7 @@ schema:
 	// Build ValidationResults and batch
 	var validationResults []*rules.ValidationResult
 	for _, rec := range records {
-		errs := rules.Validate(rec, effective)
+		errs := rules.Validate(context.Background(), rec, effective)
 		validationResults = append(validationResults, rules.NewValidationResult(rec.Path, errs))
 	}
 
@@ -701,7 +702,7 @@ func TestPipeline_QueryAfterScanExtract(t *testing.T) {
 	reg := extract.NewRegistry()
 	resolver := buildScopeResolver()
 
-	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.Background(), root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("Scan error: %v", err)
 	}

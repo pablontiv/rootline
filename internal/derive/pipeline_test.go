@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -23,7 +24,7 @@ func TestDeriveAllWithResolver(t *testing.T) {
 		return stem
 	}
 
-	DeriveAll(records, "/root", resolver)
+	DeriveAll(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived["slug"] != "alpha" {
 		t.Errorf("record[0].Derived[slug] = %v, want %q", records[0].Derived["slug"], "alpha")
@@ -38,7 +39,7 @@ func TestDeriveAllNilResolver(t *testing.T) {
 		{Path: "a.md", Frontmatter: map[string]any{}},
 	}
 	// Should not panic.
-	DeriveAll(records, "/root", nil)
+	DeriveAll(context.Background(), records, "/root", nil)
 	if records[0].Derived != nil {
 		t.Error("expected nil Derived with nil resolver")
 	}
@@ -51,7 +52,7 @@ func TestDeriveAllNoDerive(t *testing.T) {
 	stem := &rules.StemFile{} // no derive
 	resolver := func(dir string) *rules.StemFile { return stem }
 
-	DeriveAll(records, "/root", resolver)
+	DeriveAll(context.Background(), records, "/root", resolver)
 	if records[0].Derived != nil {
 		t.Error("expected nil Derived when .stem has no derive")
 	}
@@ -71,7 +72,7 @@ func TestDeriveAllWithChildren(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
-	DeriveAll(records, "/root", resolver)
+	DeriveAll(context.Background(), records, "/root", resolver)
 
 	// Each record should see 2 siblings (the other records in the same dir).
 	if records[0].Derived["sibling_count"] != 2 {
@@ -85,7 +86,7 @@ func TestDeriveAllResolverReturnsNil(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return nil }
 
-	DeriveAll(records, "/root", resolver)
+	DeriveAll(context.Background(), records, "/root", resolver)
 	if records[0].Derived != nil {
 		t.Error("expected nil Derived when resolver returns nil")
 	}

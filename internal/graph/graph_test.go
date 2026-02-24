@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -22,7 +23,7 @@ func TestBuild_ThreeRecordsWithLinks(t *testing.T) {
 		makeRecord("c.md", nil),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	if len(g.Nodes) != 3 {
 		t.Errorf("nodes = %d, want 3", len(g.Nodes))
 	}
@@ -38,7 +39,7 @@ func TestDetectCycles_NoCycles(t *testing.T) {
 		makeRecord("c.md", nil),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	cycles := g.DetectCycles()
 	if len(cycles) != 0 {
 		t.Errorf("got %d cycles, want 0: %v", len(cycles), cycles)
@@ -52,7 +53,7 @@ func TestDetectCycles_ABC_Cycle(t *testing.T) {
 		makeRecord("c.md", []extract.Link{{Target: "a.md", Type: "reference", Line: 1}}),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	cycles := g.DetectCycles()
 	if len(cycles) != 1 {
 		t.Fatalf("got %d cycles, want 1: %v", len(cycles), cycles)
@@ -80,7 +81,7 @@ func TestDetectCycles_SelfReference(t *testing.T) {
 		makeRecord("a.md", []extract.Link{{Target: "a.md", Type: "reference", Line: 1}}),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	cycles := g.DetectCycles()
 	if len(cycles) != 1 {
 		t.Fatalf("got %d cycles, want 1: %v", len(cycles), cycles)
@@ -95,7 +96,7 @@ func TestBrokenLinks_NonexistentTarget(t *testing.T) {
 		makeRecord("a.md", []extract.Link{{Target: "nonexistent.md", Type: "reference", Line: 5}}),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	broken := g.BrokenLinks()
 	if len(broken) != 1 {
 		t.Fatalf("got %d broken links, want 1", len(broken))
@@ -111,7 +112,7 @@ func TestBrokenLinks_AllValid(t *testing.T) {
 		makeRecord("b.md", nil),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	broken := g.BrokenLinks()
 	if len(broken) != 0 {
 		t.Errorf("got %d broken links, want 0: %v", len(broken), broken)
@@ -126,7 +127,7 @@ func TestResolveTarget_BasenameFallback(t *testing.T) {
 		}),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	broken := g.BrokenLinks()
 	if len(broken) != 0 {
 		t.Errorf("got %d broken links, want 0: %v", len(broken), broken)
@@ -145,7 +146,7 @@ func TestResolveTarget_BasenameFallback_WithExtension(t *testing.T) {
 		}),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	broken := g.BrokenLinks()
 	if len(broken) != 0 {
 		t.Errorf("got %d broken links, want 0: %v", len(broken), broken)
@@ -165,7 +166,7 @@ func TestResolveTarget_BasenameFallback_Ambiguous(t *testing.T) {
 		}),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	broken := g.BrokenLinks()
 	if len(broken) != 1 {
 		t.Errorf("got %d broken links, want 1 (ambiguous): %v", len(broken), broken)
@@ -180,7 +181,7 @@ func TestResolveTarget_BasenameFallback_NoMatch(t *testing.T) {
 		}),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	broken := g.BrokenLinks()
 	if len(broken) != 1 {
 		t.Errorf("got %d broken links, want 1: %v", len(broken), broken)
@@ -195,7 +196,7 @@ func TestDetectCycles_FourNodeCycle(t *testing.T) {
 		makeRecord("d.md", []extract.Link{{Target: "a.md", Type: "reference", Line: 1}}),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	cycles := g.DetectCycles()
 	if len(cycles) != 1 {
 		t.Fatalf("got %d cycles, want 1: %v", len(cycles), cycles)
@@ -222,7 +223,7 @@ func TestDetectCycles_MultipleDisjoint(t *testing.T) {
 		makeRecord("d.md", []extract.Link{{Target: "c.md", Type: "reference", Line: 1}}),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	cycles := g.DetectCycles()
 	if len(cycles) != 2 {
 		t.Fatalf("got %d cycles, want 2: %v", len(cycles), cycles)
@@ -239,7 +240,7 @@ func TestBrokenLinks_MultipleFromSameSource(t *testing.T) {
 		makeRecord("z.md", nil), // z exists, x and y don't
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	broken := g.BrokenLinks()
 	if len(broken) != 2 {
 		t.Fatalf("got %d broken links, want 2: %v", len(broken), broken)
@@ -252,7 +253,7 @@ func TestBrokenLinks_MultipleFromSameSource(t *testing.T) {
 }
 
 func TestBuild_EmptyGraph(t *testing.T) {
-	g := Build([]*extract.Record{})
+	g := Build(context.Background(), []*extract.Record{})
 	if len(g.Nodes) != 0 {
 		t.Errorf("nodes = %d, want 0", len(g.Nodes))
 	}
@@ -275,7 +276,7 @@ func TestBuild_NoLinks(t *testing.T) {
 		makeRecord("b.md", nil),
 	}
 
-	g := Build(records)
+	g := Build(context.Background(), records)
 	if len(g.Nodes) != 2 {
 		t.Errorf("nodes = %d, want 2", len(g.Nodes))
 	}

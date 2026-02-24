@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,7 +38,7 @@ func TestValidateDirectory_RequireIndex(t *testing.T) {
 		},
 	}
 
-	errs := ValidateDirectory(dir, stem)
+	errs := ValidateDirectory(context.Background(), dir, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1: %v", len(errs), errs)
 	}
@@ -60,7 +61,7 @@ func TestValidateDirectory_MinChildren(t *testing.T) {
 		},
 	}
 
-	errs := ValidateDirectory(dir, stem)
+	errs := ValidateDirectory(context.Background(), dir, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1: %v", len(errs), errs)
 	}
@@ -82,7 +83,7 @@ func TestValidateDirectory_MaxChildren(t *testing.T) {
 		},
 	}
 
-	errs := ValidateDirectory(dir, stem)
+	errs := ValidateDirectory(context.Background(), dir, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1: %v", len(errs), errs)
 	}
@@ -95,7 +96,7 @@ func TestValidateDirectory_NoStructural(t *testing.T) {
 	dir := t.TempDir()
 	stem := &StemFile{Path: "test/.stem"}
 
-	errs := ValidateDirectory(dir, stem)
+	errs := ValidateDirectory(context.Background(), dir, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0 (no structural rules)", len(errs))
 	}
@@ -103,7 +104,7 @@ func TestValidateDirectory_NoStructural(t *testing.T) {
 
 func TestValidateDirectory_NilStem(t *testing.T) {
 	dir := t.TempDir()
-	errs := ValidateDirectory(dir, nil)
+	errs := ValidateDirectory(context.Background(), dir, nil)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0 (nil stem)", len(errs))
 	}
@@ -120,7 +121,7 @@ func TestValidateDirectory_DefaultSeverity(t *testing.T) {
 		},
 	}
 
-	errs := ValidateDirectory(dir, stem)
+	errs := ValidateDirectory(context.Background(), dir, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1", len(errs))
 	}

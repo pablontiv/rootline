@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -228,7 +229,7 @@ func TestDeriveRecord_WithResolver(t *testing.T) {
 	}
 	resolver := NewMapResolver([]*extract.Record{source, target})
 
-	derived, err := DeriveRecord(source, stem, nil, WithResolver(resolver))
+	derived, err := DeriveRecord(context.Background(), source, stem, nil, WithResolver(resolver))
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
@@ -309,7 +310,7 @@ func TestLinkedValues_AllPattern(t *testing.T) {
 	}
 	resolver := NewMapResolver([]*extract.Record{source, targetB, targetC})
 
-	derived, err := DeriveRecord(source, stem, nil, WithResolver(resolver))
+	derived, err := DeriveRecord(context.Background(), source, stem, nil, WithResolver(resolver))
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
@@ -329,7 +330,7 @@ func TestLinkedValues_AllPattern(t *testing.T) {
 		},
 	}
 	resolver2 := NewMapResolver([]*extract.Record{source2, targetB, targetC})
-	derived2, err := DeriveRecord(source2, stem, nil, WithResolver(resolver2))
+	derived2, err := DeriveRecord(context.Background(), source2, stem, nil, WithResolver(resolver2))
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
@@ -371,7 +372,7 @@ func TestLinkedValues_AnyPattern(t *testing.T) {
 	}
 	resolver := NewMapResolver([]*extract.Record{source, targetB, targetC})
 
-	derived, err := DeriveRecord(source, stem, nil, WithResolver(resolver))
+	derived, err := DeriveRecord(context.Background(), source, stem, nil, WithResolver(resolver))
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
@@ -391,7 +392,7 @@ func TestLinkedValues_AnyPattern(t *testing.T) {
 		},
 	}
 	resolver2 := NewMapResolver([]*extract.Record{source2, targetB, targetC})
-	derived2, err := DeriveRecord(source2, stem, nil, WithResolver(resolver2))
+	derived2, err := DeriveRecord(context.Background(), source2, stem, nil, WithResolver(resolver2))
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
@@ -419,7 +420,7 @@ func TestLinkedValues_NilCheck(t *testing.T) {
 	}
 	resolver := NewMapResolver([]*extract.Record{source})
 
-	derived, err := DeriveRecord(source, stem, nil, WithResolver(resolver))
+	derived, err := DeriveRecord(context.Background(), source, stem, nil, WithResolver(resolver))
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
@@ -440,7 +441,7 @@ func TestLinkedValues_NilCheck(t *testing.T) {
 		Links:       []extract.Link{{Type: "blocks", Target: "B.md", Line: 1}},
 	}
 	resolver2 := NewMapResolver([]*extract.Record{sourceWithLinks, target})
-	derived2, err := DeriveRecord(sourceWithLinks, stem, nil, WithResolver(resolver2))
+	derived2, err := DeriveRecord(context.Background(), sourceWithLinks, stem, nil, WithResolver(resolver2))
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
@@ -488,7 +489,7 @@ func TestLinkedValues_LenPattern(t *testing.T) {
 	}
 	resolver := NewMapResolver([]*extract.Record{source, targetB, targetC, targetD})
 
-	derived, err := DeriveRecord(source, stem, nil, WithResolver(resolver))
+	derived, err := DeriveRecord(context.Background(), source, stem, nil, WithResolver(resolver))
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}

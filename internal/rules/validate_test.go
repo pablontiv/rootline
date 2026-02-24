@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -22,7 +23,7 @@ func TestValidate_RequiredFieldMissing(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1", len(errs))
 	}
@@ -45,7 +46,7 @@ func TestValidate_RequiredFieldPresent(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{"title": "Hello"})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0", len(errs))
 	}
@@ -63,7 +64,7 @@ func TestValidate_EnumValidValue(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{"estado": "Pending"})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0", len(errs))
 	}
@@ -82,7 +83,7 @@ func TestValidate_EnumInvalidValue(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{"estado": "invalido"})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1", len(errs))
 	}
@@ -102,7 +103,7 @@ func TestValidate_NonEmpty_EmptyString(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{"title": ""})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1", len(errs))
 	}
@@ -119,7 +120,7 @@ func TestValidate_NonEmpty_MissingField(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1", len(errs))
 	}
@@ -136,7 +137,7 @@ func TestValidate_NonEmpty_Present(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{"title": "Hello"})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0", len(errs))
 	}
@@ -150,7 +151,7 @@ func TestValidate_Exists_Present(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{"status": ""})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0 (exists allows empty)", len(errs))
 	}
@@ -164,7 +165,7 @@ func TestValidate_Exists_Absent(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1", len(errs))
 	}
@@ -186,7 +187,7 @@ func TestValidate_Requires_ConditionTrue_FieldMissing(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{"Estado": "Completed"})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1", len(errs))
 	}
@@ -211,7 +212,7 @@ func TestValidate_Requires_ConditionFalse_NoCheck(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{"Estado": "Pending"})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0 (condition not met)", len(errs))
 	}
@@ -233,7 +234,7 @@ func TestValidate_Requires_ConditionTrue_FieldPresent(t *testing.T) {
 		"Fecha":  "2026-01-15",
 	})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0", len(errs))
 	}
@@ -254,7 +255,7 @@ func TestValidate_ValidDocument_NoErrors(t *testing.T) {
 		"estado": "Pending",
 	})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0 for valid doc", len(errs))
 	}
@@ -262,7 +263,7 @@ func TestValidate_ValidDocument_NoErrors(t *testing.T) {
 
 func TestValidate_NilStem(t *testing.T) {
 	record := makeRecord(map[string]any{"title": "Hello"})
-	errs := Validate(record, nil)
+	errs := Validate(context.Background(), record, nil)
 	if errs != nil {
 		t.Errorf("got %v, want nil for nil stem", errs)
 	}
@@ -282,7 +283,7 @@ func TestValidate_MultipleErrors(t *testing.T) {
 		"tipo":   "unknown",
 	})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 3 {
 		t.Fatalf("got %d errors, want 3: %v", len(errs), errs)
 	}
@@ -299,7 +300,7 @@ func TestValidate_ExplicitEnumRule(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{"priority": "medium"})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	// Both schema auto-check and explicit rule fire — but they produce the same error.
 	// We expect at least 1 enum error.
 	hasEnum := false
@@ -326,7 +327,7 @@ func TestValidate_RequiresMultipleFields(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{"Estado": "Completed"})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 2 {
 		t.Fatalf("got %d errors, want 2 (Fecha + Autor)", len(errs))
 	}
@@ -341,7 +342,7 @@ func TestValidate_SourceTracking(t *testing.T) {
 	}
 	record := makeRecord(map[string]any{})
 
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	sources := map[string]bool{}
 	for _, e := range errs {
 		sources[e.Source] = true
@@ -368,7 +369,7 @@ func TestValidate_RequiredAggregateOnIndexFile_Skipped(t *testing.T) {
 		Type:        "markdown",
 		Frontmatter: map[string]any{},
 	}
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0 (aggregate field on index file)", len(errs))
 	}
@@ -388,7 +389,7 @@ func TestValidate_RequiredAggregateOnNonIndexFile_Error(t *testing.T) {
 		Type:        "markdown",
 		Frontmatter: map[string]any{},
 	}
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1 (non-index file)", len(errs))
 	}
@@ -408,7 +409,7 @@ func TestValidate_RequiredNoAggregateOnIndexFile_Error(t *testing.T) {
 		Type:        "markdown",
 		Frontmatter: map[string]any{},
 	}
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1 (no aggregate)", len(errs))
 	}
@@ -435,7 +436,7 @@ func TestValidate_RequiredAggregateCustomIndexName(t *testing.T) {
 		Type:        "markdown",
 		Frontmatter: map[string]any{},
 	}
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0 (custom index name match)", len(errs))
 	}
@@ -446,7 +447,7 @@ func TestValidate_RequiredAggregateCustomIndexName(t *testing.T) {
 		Type:        "markdown",
 		Frontmatter: map[string]any{},
 	}
-	errs2 := Validate(record2, stem)
+	errs2 := Validate(context.Background(), record2, stem)
 	if len(errs2) != 1 {
 		t.Errorf("got %d errors, want 1 (README.md is not the custom index)", len(errs2))
 	}
@@ -469,7 +470,7 @@ func TestValidate_ExcludesMatchSkipsRequired(t *testing.T) {
 		Type:        "markdown",
 		Frontmatter: map[string]any{},
 	}
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0 (excludes match)", len(errs))
 	}
@@ -492,7 +493,7 @@ func TestValidate_ExcludesNoMatchKeepsRequired(t *testing.T) {
 		Type:        "markdown",
 		Frontmatter: map[string]any{},
 	}
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1 (excludes no match)", len(errs))
 	}
@@ -517,7 +518,7 @@ func TestValidate_ExcludesNilNoEffect(t *testing.T) {
 		Type:        "markdown",
 		Frontmatter: map[string]any{},
 	}
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 1 {
 		t.Fatalf("got %d errors, want 1 (nil excludes)", len(errs))
 	}
@@ -533,7 +534,7 @@ func TestValidateLinks_AllowedType(t *testing.T) {
 		Frontmatter: map[string]any{},
 		Links:       []extract.Link{{Target: "T003", Type: "blocks", Line: 1}},
 	}
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0: %v", len(errs), errs)
 	}
@@ -549,7 +550,7 @@ func TestValidateLinks_DisallowedType(t *testing.T) {
 		Frontmatter: map[string]any{},
 		Links:       []extract.Link{{Target: "X", Type: "unknown", Line: 1}},
 	}
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 1 || errs[0].Rule != "link_type" {
 		t.Errorf("got %v, want 1 link_type error", errs)
 	}
@@ -568,7 +569,7 @@ func TestValidateLinks_TargetMatchesRegexp(t *testing.T) {
 		Frontmatter: map[string]any{},
 		Links:       []extract.Link{{Target: "T001-task-name", Type: "blocks", Line: 1}},
 	}
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0: %v", len(errs), errs)
 	}
@@ -588,7 +589,7 @@ func TestValidateLinks_TargetMismatchRegexp(t *testing.T) {
 			Frontmatter: map[string]any{},
 			Links:       []extract.Link{{Target: target, Type: "blocks", Line: 1}},
 		}
-		errs := Validate(record, stem)
+		errs := Validate(context.Background(), record, stem)
 		if len(errs) != 1 || errs[0].Rule != "link_target" {
 			t.Errorf("target %q: got %v, want 1 link_target error", target, errs)
 		}
@@ -608,7 +609,7 @@ func TestValidateLinks_InvalidRegexp(t *testing.T) {
 		Frontmatter: map[string]any{},
 		Links:       []extract.Link{{Target: "anything", Type: "blocks", Line: 1}},
 	}
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 1 || errs[0].Rule != "link_target" {
 		t.Errorf("got %v, want 1 link_target error for invalid regexp", errs)
 	}
@@ -621,7 +622,7 @@ func TestValidateLinks_NoSchema_Permissive(t *testing.T) {
 		Frontmatter: map[string]any{},
 		Links:       []extract.Link{{Target: "anything", Type: "whatever", Line: 1}},
 	}
-	errs := Validate(record, stem)
+	errs := Validate(context.Background(), record, stem)
 	if len(errs) != 0 {
 		t.Errorf("got %d errors, want 0 (no schema = permissive): %v", len(errs), errs)
 	}

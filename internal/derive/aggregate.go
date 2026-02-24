@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"context"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -20,7 +21,7 @@ import (
 // index files read them via the "children" variable.
 //
 // Results are stored in record.Derived alongside any derive results.
-func AggregateAll(records []*extract.Record, root string, resolver StemResolver) {
+func AggregateAll(ctx context.Context, records []*extract.Record, root string, resolver StemResolver) {
 	if resolver == nil {
 		return
 	}
@@ -50,6 +51,11 @@ func AggregateAll(records []*extract.Record, root string, resolver StemResolver)
 	stemCache := make(map[string]*rules.StemFile)
 
 	for _, idx := range indexRecords {
+		// Check for context cancellation between records.
+		if ctx.Err() != nil {
+			return
+		}
+
 		absPath := filepath.Join(root, idx.Path)
 		dir := filepath.Dir(absPath)
 
@@ -152,8 +158,8 @@ func aggregateRecord(record *extract.Record, effective *rules.StemFile, descenda
 }
 
 // AggregateAllSimple runs aggregation using the default resolver.
-func AggregateAllSimple(records []*extract.Record, root string) {
-	AggregateAll(records, root, DefaultResolver())
+func AggregateAllSimple(ctx context.Context, records []*extract.Record, root string) {
+	AggregateAll(ctx, records, root, DefaultResolver())
 }
 
 // isIndexFile reports whether a record path is a directory index file.

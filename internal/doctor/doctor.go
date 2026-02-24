@@ -2,6 +2,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,7 +35,7 @@ type Summary struct {
 }
 
 // RunChecks executes all 7 diagnostic checks against .stem files under absRoot.
-func RunChecks(absRoot string) (*Result, error) {
+func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
 	var checks []Check
 
 	// Find all .stem files
@@ -88,6 +89,11 @@ func RunChecks(absRoot string) (*Result, error) {
 		}
 	}
 
+	// Check for context cancellation between checks.
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Check 2: Orphan scopes (scope.match doesn't match any file in directory)
 	for sf, stem := range parsedStems {
 		if stem.Scope.Match == "" {
@@ -120,6 +126,10 @@ func RunChecks(absRoot string) (*Result, error) {
 		}
 	}
 
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Check 3: Inheritance consistency (child doesn't change type of inherited field)
 	for sf, stem := range parsedStems {
 		relPath, _ := filepath.Rel(absRoot, sf)
@@ -147,6 +157,10 @@ func RunChecks(absRoot string) (*Result, error) {
 		}
 	}
 
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Check 4: Enum fields have at least 2 values
 	for sf, stem := range parsedStems {
 		relPath, _ := filepath.Rel(absRoot, sf)
@@ -160,6 +174,10 @@ func RunChecks(absRoot string) (*Result, error) {
 				})
 			}
 		}
+	}
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	// Check 5: Validate rules reference existing schema fields
@@ -189,6 +207,10 @@ func RunChecks(absRoot string) (*Result, error) {
 		}
 	}
 
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Check 6: Child redefines parent field (informative warning)
 	for sf, stem := range parsedStems {
 		relPath, _ := filepath.Rel(absRoot, sf)
@@ -211,6 +233,10 @@ func RunChecks(absRoot string) (*Result, error) {
 				})
 			}
 		}
+	}
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	// Check 7: Aggregated required fields (required + aggregate on same field)

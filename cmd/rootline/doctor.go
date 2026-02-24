@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -41,7 +42,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving path: %w", err)
 	}
 
-	result, err := doctor.RunChecks(absRoot)
+	result, err := doctor.RunChecks(context.TODO(), absRoot)
 	if err != nil {
 		return err
 	}

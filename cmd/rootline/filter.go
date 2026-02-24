@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -29,7 +30,7 @@ func filterRecords(records []*extract.Record, wheres []string) ([]*extract.Recor
 
 	var filtered []*extract.Record
 	for _, rec := range records {
-		match, err := query.MatchRecord(program, rec)
+		match, err := query.MatchRecord(context.TODO(), program, rec)
 		if err != nil {
 			return nil, err
 		}

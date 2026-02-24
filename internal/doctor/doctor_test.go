@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,7 +32,7 @@ schema:
 `))
 	mustWriteFile(t, filepath.Join(dir, "test.md"), []byte("---\nestado: draft\n---\n# Test\n"))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestRunChecks_InvalidYAML(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("{{invalid yaml"))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -73,7 +74,7 @@ scope:
   match: "*.xyz"
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -97,7 +98,7 @@ scope:
 `))
 	mustWriteFile(t, filepath.Join(dir, "readme.md"), []byte("# Hello"))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,7 +118,7 @@ schema:
     values: [OnlyOne]
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -142,7 +143,7 @@ schema:
     values: [A, B]
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -171,7 +172,7 @@ schema:
     values: [A, B]
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -202,7 +203,7 @@ validate:
     severity: error
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -236,7 +237,7 @@ schema:
     required: true
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -264,7 +265,7 @@ aggregate:
   estado: "len(filter(descendants, {.estado == 'Completado'})) == len(descendants) ? 'Completado' : 'Pending'"
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -290,7 +291,7 @@ schema:
     values: [Pending, Completado]
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -312,7 +313,7 @@ aggregate:
   estado: "some_expr"
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -326,7 +327,7 @@ aggregate:
 func TestRunChecks_NoStems(t *testing.T) {
 	dir := t.TempDir()
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -350,7 +351,7 @@ schema:
     type: string
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -375,7 +376,7 @@ schema:
     type: string
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -399,7 +400,7 @@ schema:
     type: enum
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -432,7 +433,7 @@ schema:
     type: string
 `))
 
-	result, err := RunChecks(dir)
+	result, err := RunChecks(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

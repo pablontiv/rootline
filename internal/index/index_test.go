@@ -1,6 +1,7 @@
 package index
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,7 +33,7 @@ func TestScan_FindsMarkdownRecursively(t *testing.T) {
 	})
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg)
+	records, err := Scan(context.Background(), root, reg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestScan_ExcludesStemignore(t *testing.T) {
 	})
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg)
+	records, err := Scan(context.Background(), root, reg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -72,7 +73,7 @@ func TestScan_StemignoreGlobPattern(t *testing.T) {
 	})
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg)
+	records, err := Scan(context.Background(), root, reg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestScan_StemignoreInSubdirectory(t *testing.T) {
 	})
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg)
+	records, err := Scan(context.Background(), root, reg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -122,7 +123,7 @@ func TestScan_StemignoreComments(t *testing.T) {
 	})
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg)
+	records, err := Scan(context.Background(), root, reg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -140,7 +141,7 @@ func TestScan_ExcludesGitDir(t *testing.T) {
 	})
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg)
+	records, err := Scan(context.Background(), root, reg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -157,7 +158,7 @@ func TestScan_EmptyDirectory(t *testing.T) {
 	root := t.TempDir()
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg)
+	records, err := Scan(context.Background(), root, reg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -176,7 +177,7 @@ func TestScan_IgnoresUnknownExtensions(t *testing.T) {
 	})
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg)
+	records, err := Scan(context.Background(), root, reg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -193,7 +194,7 @@ func TestScan_DelegatesExtractionCorrectly(t *testing.T) {
 	})
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg)
+	records, err := Scan(context.Background(), root, reg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -229,7 +230,7 @@ func TestScan_StemignoreDoesNotApplyToSiblingPrefix(t *testing.T) {
 	})
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg)
+	records, err := Scan(context.Background(), root, reg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -65,14 +66,14 @@ func runTree(cmd *cobra.Command, args []string) error {
 		}
 		return rules.MergeStemFiles(entries)
 	}
-	records, err := index.Scan(absRoot, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.TODO(), absRoot, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
 	// Run derivation and aggregation (best-effort, errors silently skipped).
-	derive.DeriveAllSimple(records, absRoot)
-	derive.AggregateAllSimple(records, absRoot)
+	derive.DeriveAllSimple(context.TODO(), records, absRoot)
+	derive.AggregateAllSimple(context.TODO(), records, absRoot)
 
 	// Apply --where filter.
 	records, err = filterRecords(records, treeWhere)

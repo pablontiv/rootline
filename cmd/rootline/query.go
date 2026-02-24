@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -57,14 +58,14 @@ func runQuery(cmd *cobra.Command, args []string) error {
 
 	// Scan records
 	reg := extract.NewRegistry()
-	records, err := index.Scan(absRoot, reg)
+	records, err := index.Scan(context.TODO(), absRoot, reg)
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
 	// Run derivation and aggregation (best-effort, errors silently skipped).
-	derive.DeriveAllSimple(records, absRoot)
-	derive.AggregateAllSimple(records, absRoot)
+	derive.DeriveAllSimple(context.TODO(), records, absRoot)
+	derive.AggregateAllSimple(context.TODO(), records, absRoot)
 
 	q := &query.Query{
 		Count: queryCount,
@@ -78,7 +79,7 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	}
 
 	// Execute query (count/limit) on filtered records.
-	result, err := query.ExecuteExpr(filtered, "", q)
+	result, err := query.ExecuteExpr(context.TODO(), filtered, "", q)
 	if err != nil {
 		return fmt.Errorf("executing query: %w", err)
 	}

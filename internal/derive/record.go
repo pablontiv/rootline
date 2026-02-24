@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
@@ -45,7 +46,7 @@ func (e *DeriveError) Error() string {
 //
 // A single field failure does not block other fields — errors are collected
 // and returned together.
-func DeriveRecord(record *extract.Record, effective *rules.StemFile, children []*extract.Record, opts ...DeriveOption) (map[string]any, error) {
+func DeriveRecord(_ context.Context, record *extract.Record, effective *rules.StemFile, children []*extract.Record, opts ...DeriveOption) (map[string]any, error) {
 	if effective == nil || len(effective.Derive) == 0 {
 		return map[string]any{}, nil
 	}

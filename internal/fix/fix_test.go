@@ -1,6 +1,7 @@
 package fix
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -245,7 +246,7 @@ func TestApplyFixes_MissingRequired(t *testing.T) {
 		{Rule: "required", Field: "estado", Message: "field estado is required"},
 	}
 
-	added, corrected := ApplyFixes(record, effective, errs)
+	added, corrected := ApplyFixes(context.Background(), record, effective, errs)
 	if len(added) != 1 {
 		t.Errorf("expected 1 field added, got %d", len(added))
 	}
@@ -271,7 +272,7 @@ func TestApplyFixes_InvalidEnum(t *testing.T) {
 		{Rule: "enum", Field: "estado", Message: `value "Completd" not in allowed values`},
 	}
 
-	added, corrected := ApplyFixes(record, effective, errs)
+	added, corrected := ApplyFixes(context.Background(), record, effective, errs)
 	if len(added) != 0 {
 		t.Errorf("expected 0 added, got %d", len(added))
 	}
@@ -291,7 +292,7 @@ func TestApplyFixes_NilEffective(t *testing.T) {
 	errs := []rules.ValidationError{
 		{Rule: "required", Field: "estado"},
 	}
-	added, corrected := ApplyFixes(record, nil, errs)
+	added, corrected := ApplyFixes(context.Background(), record, nil, errs)
 	if len(added) != 0 || len(corrected) != 0 {
 		t.Error("expected no changes with nil effective")
 	}
@@ -308,7 +309,7 @@ func TestApplyFixes_UnknownField(t *testing.T) {
 	errs := []rules.ValidationError{
 		{Rule: "required", Field: "unknown_field"},
 	}
-	added, corrected := ApplyFixes(record, effective, errs)
+	added, corrected := ApplyFixes(context.Background(), record, effective, errs)
 	if len(added) != 0 || len(corrected) != 0 {
 		t.Error("expected no changes for unknown field")
 	}
@@ -327,7 +328,7 @@ func TestApplyFixes_RequiredWithDefault(t *testing.T) {
 	errs := []rules.ValidationError{
 		{Rule: "required", Field: "estado"},
 	}
-	added, _ := ApplyFixes(record, effective, errs)
+	added, _ := ApplyFixes(context.Background(), record, effective, errs)
 	if len(added) != 1 {
 		t.Fatalf("expected 1 added, got %d", len(added))
 	}
@@ -756,7 +757,7 @@ func TestApplyProposals_ExtendEnum(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(report, dir, records)
+	err := ApplyProposals(context.Background(), report, dir, records)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -797,7 +798,7 @@ func TestApplyProposals_CorrectValue(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(report, dir, records)
+	err := ApplyProposals(context.Background(), report, dir, records)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -838,7 +839,7 @@ func TestApplyProposals_SkipCorrectValueAfterExtendEnum(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(report, dir, records)
+	err := ApplyProposals(context.Background(), report, dir, records)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -881,7 +882,7 @@ func TestApplyProposals_AddField(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(report, dir, records)
+	err := ApplyProposals(context.Background(), report, dir, records)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -917,7 +918,7 @@ func TestApplyProposals_MigrateValue(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(report, dir, records)
+	err := ApplyProposals(context.Background(), report, dir, records)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -956,7 +957,7 @@ func TestApplyProposals_CorrectLink(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(report, dir, records)
+	err := ApplyProposals(context.Background(), report, dir, records)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -976,7 +977,7 @@ func TestApplyProposals_EmptyReport(t *testing.T) {
 		Proposals: nil,
 	}
 
-	err := ApplyProposals(report, dir, records)
+	err := ApplyProposals(context.Background(), report, dir, records)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1005,7 +1006,7 @@ func TestApplyProposals_ExtractBody(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(report, dir, records)
+	err := ApplyProposals(context.Background(), report, dir, records)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

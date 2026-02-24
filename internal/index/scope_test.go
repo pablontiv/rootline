@@ -1,6 +1,7 @@
 package index
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -71,7 +72,7 @@ func TestScan_WithScopeResolver_FiltersFiles(t *testing.T) {
 	resolver := func(dir string) *rules.StemFile { return stem }
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg, WithScopeResolver(resolver))
+	records, err := Scan(context.Background(), root, reg, WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -106,7 +107,7 @@ func TestScan_WithScopeResolver_PerDirectory(t *testing.T) {
 	}
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg, WithScopeResolver(resolver))
+	records, err := Scan(context.Background(), root, reg, WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestScan_WithoutScopeResolver_NoFiltering(t *testing.T) {
 	})
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg) // no scope resolver
+	records, err := Scan(context.Background(), root, reg) // no scope resolver
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -152,7 +153,7 @@ func TestScan_ScopeResolverCachesPerDirectory(t *testing.T) {
 	}
 
 	reg := extract.NewRegistry()
-	_, err := Scan(root, reg, WithScopeResolver(resolver))
+	_, err := Scan(context.Background(), root, reg, WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -176,7 +177,7 @@ func TestScan_ScopeAndStemignoreCombined(t *testing.T) {
 	resolver := func(dir string) *rules.StemFile { return stem }
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg, WithScopeResolver(resolver))
+	records, err := Scan(context.Background(), root, reg, WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -204,7 +205,7 @@ func TestScan_ScopeExcludesBeforeExtraction(t *testing.T) {
 	resolver := func(dir string) *rules.StemFile { return stem }
 
 	reg := extract.NewRegistry()
-	records, err := Scan(root, reg, WithScopeResolver(resolver))
+	records, err := Scan(context.Background(), root, reg, WithScopeResolver(resolver))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

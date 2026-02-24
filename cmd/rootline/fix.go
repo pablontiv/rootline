@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -104,14 +105,14 @@ func runFix(cmd *cobra.Command, args []string) error {
 		effective := rules.MergeStemFiles(entries)
 
 		// Validate
-		errs := rules.Validate(record, effective)
+		errs := rules.Validate(context.TODO(), record, effective)
 		if len(errs) == 0 {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: no errors to fix\n", file)
 			continue
 		}
 
 		// Apply fixes to frontmatter
-		added, corrected := fix.ApplyFixes(record, effective, errs)
+		added, corrected := fix.ApplyFixes(context.TODO(), record, effective, errs)
 
 		if fixDryRun {
 			for _, a := range added {
@@ -161,7 +162,7 @@ func runFixAll(cmd *cobra.Command) error {
 		return rules.MergeStemFiles(entries)
 	}
 
-	records, err := index.Scan(root, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.TODO(), root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
 	}
@@ -180,7 +181,7 @@ func runFixAll(cmd *cobra.Command) error {
 		effective := rules.MergeStemFiles(entries)
 		effectiveStems[rec.Path] = effective
 
-		errs := rules.Validate(rec, effective)
+		errs := rules.Validate(context.TODO(), rec, effective)
 		if len(errs) > 0 {
 			allErrs[rec.Path] = errs
 		}
@@ -216,7 +217,7 @@ func runFixAll(cmd *cobra.Command) error {
 
 	// Apply proposals if any.
 	if len(report.Proposals) > 0 {
-		if err := fix.ApplyProposals(report, root, records); err != nil {
+		if err := fix.ApplyProposals(context.TODO(), report, root, records); err != nil {
 			return err
 		}
 	}

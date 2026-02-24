@@ -3,6 +3,7 @@
 package graph
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 
@@ -36,7 +37,7 @@ type BrokenLink struct {
 // Build constructs a Graph from a slice of records.
 // Link targets are resolved relative to the source record's directory.
 // Unresolved targets get a basename fallback lookup across all nodes.
-func Build(records []*extract.Record) *Graph {
+func Build(_ context.Context, records []*extract.Record) *Graph {
 	g := &Graph{
 		Nodes: make(map[string]*extract.Record, len(records)),
 		Edges: make(map[string][]Edge),

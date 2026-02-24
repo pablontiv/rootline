@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -19,7 +20,7 @@ func TestDeriveRecordSlugify(t *testing.T) {
 		},
 	}
 
-	derived, err := DeriveRecord(record, stem, nil)
+	derived, err := DeriveRecord(context.Background(), record, stem, nil)
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
@@ -49,7 +50,7 @@ func TestDeriveRecordWithChildren(t *testing.T) {
 		},
 	}
 
-	derived, err := DeriveRecord(record, stem, children)
+	derived, err := DeriveRecord(context.Background(), record, stem, children)
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
@@ -75,7 +76,7 @@ func TestDeriveRecordCountChildren(t *testing.T) {
 		},
 	}
 
-	derived, err := DeriveRecord(record, stem, children)
+	derived, err := DeriveRecord(context.Background(), record, stem, children)
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
@@ -91,7 +92,7 @@ func TestDeriveRecordNoDerive(t *testing.T) {
 	}
 	stem := &rules.StemFile{} // no derive
 
-	derived, err := DeriveRecord(record, stem, nil)
+	derived, err := DeriveRecord(context.Background(), record, stem, nil)
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
@@ -106,7 +107,7 @@ func TestDeriveRecordNilStem(t *testing.T) {
 		Frontmatter: map[string]any{},
 	}
 
-	derived, err := DeriveRecord(record, nil, nil)
+	derived, err := DeriveRecord(context.Background(), record, nil, nil)
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}
@@ -126,7 +127,7 @@ func TestDeriveRecordInvalidExpression(t *testing.T) {
 		},
 	}
 
-	derived, err := DeriveRecord(record, stem, nil)
+	derived, err := DeriveRecord(context.Background(), record, stem, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid expression")
 	}
@@ -147,7 +148,7 @@ func TestDeriveRecordNonStringExpression(t *testing.T) {
 		},
 	}
 
-	_, err := DeriveRecord(record, stem, nil)
+	_, err := DeriveRecord(context.Background(), record, stem, nil)
 	if err == nil {
 		t.Fatal("expected error for non-string expression")
 	}
@@ -166,7 +167,7 @@ func TestDeriveRecordMultipleFields(t *testing.T) {
 		},
 	}
 
-	derived, err := DeriveRecord(record, stem, nil)
+	derived, err := DeriveRecord(context.Background(), record, stem, nil)
 	if err != nil {
 		t.Fatalf("DeriveRecord: %v", err)
 	}

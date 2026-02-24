@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -91,17 +92,17 @@ func runExplain(cmd *cobra.Command, args []string) error {
 
 	// Run derivation.
 	if effective != nil && len(effective.Derive) > 0 {
-		_, _ = derive.DeriveRecord(record, effective, nil)
+		_, _ = derive.DeriveRecord(context.TODO(), record, effective, nil)
 	}
 
 	// Run aggregation for index files.
 	if effective != nil && len(effective.Aggregate) > 0 && isExplainIndexFile(absPath) {
 		scanDir := filepath.Dir(absPath)
 		reg2 := extract.NewRegistry()
-		siblings, scanErr := index.Scan(scanDir, reg2)
+		siblings, scanErr := index.Scan(context.TODO(), scanDir, reg2)
 		if scanErr == nil && len(siblings) > 0 {
-			derive.DeriveAllSimple(siblings, scanDir)
-			derive.AggregateAllSimple(siblings, scanDir)
+			derive.DeriveAllSimple(context.TODO(), siblings, scanDir)
+			derive.AggregateAllSimple(context.TODO(), siblings, scanDir)
 			// Copy derived values from the scanned version of this record.
 			for _, s := range siblings {
 				sAbs := filepath.Join(scanDir, s.Path)
@@ -116,7 +117,7 @@ func runExplain(cmd *cobra.Command, args []string) error {
 	// Run validation.
 	var valErrs []rules.ValidationError
 	if effective != nil {
-		valErrs = rules.Validate(record, effective)
+		valErrs = rules.Validate(context.TODO(), record, effective)
 	}
 
 	// Build explain result.

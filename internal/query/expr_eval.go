@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -39,7 +40,7 @@ func BuildEnv(rec *extract.Record) map[string]any {
 
 // MatchRecord evaluates a compiled where expression against a record.
 // Returns true if the record matches the expression.
-func MatchRecord(program *vm.Program, rec *extract.Record) (bool, error) {
+func MatchRecord(_ context.Context, program *vm.Program, rec *extract.Record) (bool, error) {
 	env := BuildEnv(rec)
 	output, err := expr.Run(program, env)
 	if err != nil {
@@ -58,7 +59,7 @@ func MatchRecord(program *vm.Program, rec *extract.Record) (bool, error) {
 
 // ExecuteExpr filters records using an expr-based where expression.
 // This is the expr-based alternative to Execute with Condition trees.
-func ExecuteExpr(records []*extract.Record, whereExpr string, q *Query) (any, error) {
+func ExecuteExpr(ctx context.Context, records []*extract.Record, whereExpr string, q *Query) (any, error) {
 	var program *vm.Program
 	if whereExpr != "" {
 		var err error
@@ -74,7 +75,7 @@ func ExecuteExpr(records []*extract.Record, whereExpr string, q *Query) (any, er
 			filtered = append(filtered, rec)
 			continue
 		}
-		match, err := MatchRecord(program, rec)
+		match, err := MatchRecord(ctx, program, rec)
 		if err != nil {
 			return nil, err
 		}

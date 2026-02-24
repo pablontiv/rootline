@@ -5,6 +5,7 @@
 package migrate
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,7 +77,7 @@ func (op *RenameOperation) Execute() (*RenameResult, error) {
 		return rules.MergeStemFiles(entries)
 	}
 
-	records, err := index.Scan(absRoot, reg, index.WithScopeResolver(resolver))
+	records, err := index.Scan(context.Background(), absRoot, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		return nil, fmt.Errorf("scanning: %w", err)
 	}

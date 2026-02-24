@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -37,7 +38,7 @@ func TestMatchRecord_Eq(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +53,7 @@ func TestMatchRecord_Ne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +68,7 @@ func TestMatchRecord_In(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +83,7 @@ func TestMatchRecord_And(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +98,7 @@ func TestMatchRecord_Or(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +113,7 @@ func TestMatchRecord_Contains(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +128,7 @@ func TestMatchRecord_NoMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +143,7 @@ func TestMatchRecord_UndefinedField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -157,7 +158,7 @@ func TestMatchRecord_NilCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +176,7 @@ func TestMatchRecord_TypeMismatch_NumericFieldStringCompare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatalf("expected no error on type mismatch, got: %v", err)
 	}
@@ -193,7 +194,7 @@ func TestMatchRecord_BooleanLiteral_True(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +212,7 @@ func TestMatchRecord_BooleanLiteral_False(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +230,7 @@ func TestMatchRecord_FieldAbsent_NilCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -247,7 +248,7 @@ func TestMatchRecord_FieldAbsent_EqCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -265,7 +266,7 @@ func TestCompileWhere_InvalidExpr(t *testing.T) {
 
 func TestExecuteExpr_FiltersPending(t *testing.T) {
 	records := makeExprRecords()
-	result, err := ExecuteExpr(records, "estado == 'Pending'", &Query{})
+	result, err := ExecuteExpr(context.Background(), records, "estado == 'Pending'", &Query{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +278,7 @@ func TestExecuteExpr_FiltersPending(t *testing.T) {
 
 func TestExecuteExpr_InOperator(t *testing.T) {
 	records := makeExprRecords()
-	result, err := ExecuteExpr(records, "estado in ['Pending', 'Especificado']", &Query{})
+	result, err := ExecuteExpr(context.Background(), records, "estado in ['Pending', 'Especificado']", &Query{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +290,7 @@ func TestExecuteExpr_InOperator(t *testing.T) {
 
 func TestExecuteExpr_Count(t *testing.T) {
 	records := makeExprRecords()
-	result, err := ExecuteExpr(records, "estado == 'Pending'", &Query{Count: true})
+	result, err := ExecuteExpr(context.Background(), records, "estado == 'Pending'", &Query{Count: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +302,7 @@ func TestExecuteExpr_Count(t *testing.T) {
 
 func TestExecuteExpr_Limit(t *testing.T) {
 	records := makeExprRecords()
-	result, err := ExecuteExpr(records, "", &Query{Limit: 2})
+	result, err := ExecuteExpr(context.Background(), records, "", &Query{Limit: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +314,7 @@ func TestExecuteExpr_Limit(t *testing.T) {
 
 func TestExecuteExpr_NoWhere(t *testing.T) {
 	records := makeExprRecords()
-	result, err := ExecuteExpr(records, "", &Query{})
+	result, err := ExecuteExpr(context.Background(), records, "", &Query{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +326,7 @@ func TestExecuteExpr_NoWhere(t *testing.T) {
 
 func TestExecuteExpr_ComplexAnd(t *testing.T) {
 	records := makeExprRecords()
-	result, err := ExecuteExpr(records, "estado == 'Pending' && tipo == 'lxc'", &Query{})
+	result, err := ExecuteExpr(context.Background(), records, "estado == 'Pending' && tipo == 'lxc'", &Query{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +341,7 @@ func TestExecuteExpr_ComplexAnd(t *testing.T) {
 
 func TestExecuteExpr_PathContains(t *testing.T) {
 	records := makeExprRecords()
-	result, err := ExecuteExpr(records, "path contains 'T001'", &Query{})
+	result, err := ExecuteExpr(context.Background(), records, "path contains 'T001'", &Query{})
 	if err != nil {
 		t.Fatal(err)
 	}

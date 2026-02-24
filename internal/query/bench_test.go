@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -29,7 +30,7 @@ func BenchmarkExecuteExpr(b *testing.B) {
 
 	b.Run("eq", func(b *testing.B) {
 		for b.Loop() {
-			_, err := ExecuteExpr(records, `estado == "Completed"`, q)
+			_, err := ExecuteExpr(context.Background(), records, `estado == "Completed"`, q)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -38,7 +39,7 @@ func BenchmarkExecuteExpr(b *testing.B) {
 
 	b.Run("contains", func(b *testing.B) {
 		for b.Loop() {
-			_, err := ExecuteExpr(records, `tipo contains "type1"`, q)
+			_, err := ExecuteExpr(context.Background(), records, `tipo contains "type1"`, q)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -47,7 +48,7 @@ func BenchmarkExecuteExpr(b *testing.B) {
 
 	b.Run("and_compound", func(b *testing.B) {
 		for b.Loop() {
-			_, err := ExecuteExpr(records, `estado == "Pending" and tipo contains "type"`, q)
+			_, err := ExecuteExpr(context.Background(), records, `estado == "Pending" and tipo contains "type"`, q)
 			if err != nil {
 				b.Fatal(err)
 			}

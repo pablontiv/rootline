@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -51,14 +52,14 @@ func runStats(cmd *cobra.Command, args []string) error {
 	}
 
 	reg := extract.NewRegistry()
-	records, err := index.Scan(absRoot, reg)
+	records, err := index.Scan(context.TODO(), absRoot, reg)
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
 	// Run derivation and aggregation (best-effort, errors silently skipped).
-	derive.DeriveAllSimple(records, absRoot)
-	derive.AggregateAllSimple(records, absRoot)
+	derive.DeriveAllSimple(context.TODO(), records, absRoot)
+	derive.AggregateAllSimple(context.TODO(), records, absRoot)
 
 	// Apply --where filter.
 	records, err = filterRecords(records, statsWhere)

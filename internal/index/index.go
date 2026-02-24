@@ -5,6 +5,7 @@
 package index
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,7 +33,7 @@ func WithScopeResolver(fn func(dir string) *rules.StemFile) ScanOption {
 // matched by the registry. It respects .stemignore files and always
 // excludes .git/ directories. Pass WithScopeResolver to filter files
 // by their directory's effective scope.match before extraction.
-func Scan(rootPath string, registry *extract.Registry, opts ...ScanOption) ([]*extract.Record, error) {
+func Scan(ctx context.Context, rootPath string, registry *extract.Registry, opts ...ScanOption) ([]*extract.Record, error) {
 	var cfg scanConfig
 	for _, opt := range opts {
 		opt(&cfg)
@@ -57,6 +58,13 @@ func Scan(rootPath string, registry *extract.Registry, opts ...ScanOption) ([]*e
 	err = filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+
+		// Check for context cancellation on each directory.
+		if d.IsDir() {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 		}
 
 		rel, _ := filepath.Rel(absRoot, path)

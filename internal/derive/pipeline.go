@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"context"
 	"path/filepath"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -14,7 +15,7 @@ type StemResolver func(dir string) *rules.StemFile
 // directory. For each record it resolves the effective .stem, collects
 // sibling records as children (for aggregation builtins), and evaluates
 // derive expressions. Errors are silently skipped (derivation is best-effort).
-func DeriveAll(records []*extract.Record, root string, resolver StemResolver) {
+func DeriveAll(ctx context.Context, records []*extract.Record, root string, resolver StemResolver) {
 	if resolver == nil {
 		return
 	}
@@ -33,6 +34,11 @@ func DeriveAll(records []*extract.Record, root string, resolver StemResolver) {
 	stemCache := make(map[string]*rules.StemFile)
 
 	for _, rec := range records {
+		// Check for context cancellation between records.
+		if ctx.Err() != nil {
+			return
+		}
+
 		absPath := filepath.Join(root, rec.Path)
 		dir := filepath.Dir(absPath)
 
@@ -57,7 +63,7 @@ func DeriveAll(records []*extract.Record, root string, resolver StemResolver) {
 		}
 
 		// Best-effort: ignore derivation errors.
-		_, _ = DeriveRecord(rec, eff, children, WithResolver(recResolver))
+		_, _ = DeriveRecord(ctx, rec, eff, children, WithResolver(recResolver))
 	}
 }
 
@@ -74,8 +80,8 @@ func DefaultResolver() StemResolver {
 
 // DeriveAllSimple runs derivation using the default resolver. This is the
 // convenience function for CLI commands.
-func DeriveAllSimple(records []*extract.Record, root string) {
-	DeriveAll(records, root, DefaultResolver())
+func DeriveAllSimple(ctx context.Context, records []*extract.Record, root string) {
+	DeriveAll(ctx, records, root, DefaultResolver())
 }
 
 // HasDeriveFields reports whether any .stem in the record tree has derive

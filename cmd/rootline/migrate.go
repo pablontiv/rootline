@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -342,7 +343,7 @@ func runMigrateSplit(cmd *cobra.Command, args []string) error {
 
 	// Scan records.
 	reg := extract.NewRegistry()
-	records, err := index.Scan(absTarget, reg)
+	records, err := index.Scan(context.TODO(), absTarget, reg)
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", targetPath, err)
 	}

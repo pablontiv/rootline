@@ -6,6 +6,7 @@
 package fix
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,7 +22,7 @@ import (
 // It modifies .stem files for extend_enum proposals and record files for
 // data-level proposals. The report's Proposals slice is updated to reflect
 // only the proposals that were actually applied.
-func ApplyProposals(report *proposal.Report, root string, records []*extract.Record) error {
+func ApplyProposals(_ context.Context, report *proposal.Report, root string, records []*extract.Record) error {
 	// Build record map for quick lookup.
 	recordMap := make(map[string]*extract.Record)
 	for _, rec := range records {
@@ -97,7 +98,7 @@ func ApplyProposals(report *proposal.Report, root string, records []*extract.Rec
 }
 
 // ApplyFixes modifies the record's frontmatter in-place based on validation errors.
-func ApplyFixes(record *extract.Record, effective *rules.StemFile, errs []rules.ValidationError) (added []string, corrected []string) {
+func ApplyFixes(_ context.Context, record *extract.Record, effective *rules.StemFile, errs []rules.ValidationError) (added []string, corrected []string) {
 	if effective == nil {
 		return
 	}

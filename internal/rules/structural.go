@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,7 +9,7 @@ import (
 
 // ValidateDirectory checks structural rules for the given directory against
 // the effective .stem file. It validates directory structure (not file contents).
-func ValidateDirectory(dir string, stem *StemFile) []ValidationError {
+func ValidateDirectory(_ context.Context, dir string, stem *StemFile) []ValidationError {
 	if stem == nil || stem.Structural.IsEmpty() {
 		return nil
 	}
