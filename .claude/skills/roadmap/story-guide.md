@@ -59,6 +59,7 @@ Agregar fila en la tabla "Stories" del Feature README padre:
 
 **Feature**: [FXX Feature Name](../README.md)
 **Capacidad**: [una línea describiendo qué capacidad nueva existe]
+**Cubre**: [aspecto del milestone del Feature que esta Story cubre]
 
 ## Antes / Despues
 
@@ -68,8 +69,17 @@ Agregar fila en la tabla "Stories" del Feature README padre:
 
 ## Criterios de Aceptacion (semanticos)
 
+> Los ACs deben ser verificables y cada uno debe ser cubierto por al menos un Task (via 'Contribuye a')
+
 - [ ] [Capacidad observable 1 — usuario verifica]
 - [ ] [Capacidad observable 2 — usuario verifica]
+
+## Invariantes
+
+- INV1: [propiedad a preservar]
+  - Verificar: [comando o procedimiento]
+- INV2: [propiedad a preservar]
+  - Verificar: [comando o procedimiento]
 
 ## Tasks
 
