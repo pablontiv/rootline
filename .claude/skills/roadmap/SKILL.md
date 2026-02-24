@@ -241,6 +241,8 @@ Ejecutar Tasks pendientes en loop con confirmación entre cada uno.
 **Opciones**:
 - `--filter PATTERN`: Filtrar por path (ej: `E02/F04`, `E01`)
 - `--max N`: Limitar a N tasks
+- `--checkpoint-interval N`: Intervalo de tasks entre checkpoints de calidad (default 5)
+- `--skip-reviews`: Desactivar quality gates (security review y checkpoint review)
 
 **Procedimiento**:
 
@@ -322,12 +324,24 @@ Para cada task en orden:
    └─ Siguiente: TXXX+1 - título
    ```
 
-10. **Confirmar**: `AskUserQuestion` con opciones:
+10. **Checkpoint Detection** (post-resumen, pre-confirmación):
+   - Incrementar `checkpoint_task_count`
+   - Triggers (OR — cualquiera activa el checkpoint):
+     a) **Story context change**: siguiente task pertenece a otra Story (`current_story_path` diferente)
+     b) **Safety net**: `checkpoint_task_count >= checkpoint_interval` (default 5)
+     c) **Loop interrumpido**: usuario elige "Parar" en la confirmación
+   - Al activar checkpoint:
+     1. Calcular diff acumulado: `git diff <checkpoint_commit>..HEAD`
+     2. Ejecutar `/review` sobre el diff acumulado
+     3. Reportar findings (informativos, **no bloquean** el loop)
+     4. Registrar nuevo checkpoint: `checkpoint_commit = HEAD`, `checkpoint_task_count = 0`
+
+11. **Confirmar**: `AskUserQuestion` con opciones:
    - Sí, continuar (Recommended)
    - Saltar siguiente y continuar
    - Parar aquí
 
-11. **Reintentar bloqueados**: Al terminar la cola, si quedan tasks que fueron skipped por dependencias bloqueadas y ahora sus dependencias están Completadas → reintentar. Si ningún task progresó en la pasada → parar (deadlock de dependencias).
+12. **Reintentar bloqueados**: Al terminar la cola, si quedan tasks que fueron skipped por dependencias bloqueadas y ahora sus dependencias están Completadas → reintentar. Si ningún task progresó en la pasada → parar (deadlock de dependencias).
 
 #### Fase 4: Resumen Final
 
