@@ -5,44 +5,6 @@ schema:
     type: sequence
     prefix: E
     digits: 2
-  estado:
-    type: enum
-    values:
-      - Pending
-      - Specified
-      - In Progress
-      - Completed
-      - Blocked
-      - On Hold
-    required: true
-  tipo:
-    type: enum
-    values:
-      # IaC
-      - servicio-docker
-      - modulo-sistema
-      - operacion-sistema
-      - lxc
-      - vm
-      - modulo-infraestructura
-      - host-script
-      - instance-script
-      # Software
-      - software-module
-      - software-test
-      - ci-cd
-      # General
-      - documentation
-      # Framework
-      - feature
-      - historia
-    severity: warn
-  cliente:
-    type: string
-  ejecutable_en:
-    type: string
-  hold:
-    type: string
 
 structural:
   subdirs:
@@ -60,14 +22,6 @@ derive:
   estado: |
     hold != nil ? "On Hold" : blocked_by != nil && len(blocked_by) > 0 && !all(blocked_by, {# == "Completed"}) ? "Blocked" : estado
 
-validate:
-  - rule: requires
-    if: { tipo: "software-module" }
-    then: { fields: [ejecutable_en] }
-  - rule: requires
-    if: { tipo: "ci-cd" }
-    then: { fields: [ejecutable_en] }
-
 aggregate:
   estado: |
     all(descendants, {.estado == "Completed"}) ? "Completed" :
@@ -76,3 +30,19 @@ aggregate:
     any(descendants, {.estado == "In Progress"}) ? "In Progress" :
     any(descendants, {.estado == "Specified"}) ? "Specified" :
     "Pending"
+
+validate:
+  - if:
+      tipo: software-module
+    rule: requires
+    severity: error
+    then:
+      fields:
+          - ejecutable_en
+  - if:
+      tipo: ci-cd
+    rule: requires
+    severity: error
+    then:
+      fields:
+          - ejecutable_en

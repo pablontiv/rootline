@@ -3,3 +3,7 @@ schema:
     type: sequence
     prefix: F
     digits: 2
+  tipo:
+    type: enum
+    values: [servicio-docker, modulo-sistema, operacion-sistema, lxc, vm, modulo-infraestructura, host-script, instance-script, software-module, software-test, ci-cd, documentation, feature, historia]
+    severity: warn
