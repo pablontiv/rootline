@@ -69,6 +69,7 @@ func resetFlags() {
 	migrateDryRun = false
 	migrateFrom = ""
 	migrateRename = ""
+	migrateSplit = false
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
 	if f := treeCmd.Flags().Lookup("where"); f != nil {

@@ -436,3 +436,150 @@ schema:
 		t.Errorf("expected stems_checked=2, got: %s", out)
 	}
 }
+
+// --- migrate --split tests ---
+
+func setupSplitDir(t *testing.T) string {
+	t.Helper()
+	stem := `version: 1
+scope:
+  match: "*.md"
+schema:
+  id:
+    type: sequence
+    prefix: E
+    digits: 2
+  estado:
+    type: enum
+    values: [Pending, Completed, In Progress]
+    required: true
+  tipo:
+    type: enum
+    values: [feature, historia]
+    severity: warn
+structural:
+  subdirs:
+    require_index: README.md
+    min_children: 2
+    severity: warn
+links:
+  allowed: [blocks, reference]
+  blocks:
+    target: "^T\\d{3}-"
+    field: blocked_by
+derive:
+  estado: "hold != nil ? \"On Hold\" : estado"
+aggregate:
+  estado: "all(descendants, {.estado == \"Completed\"}) ? \"Completed\" : \"Pending\""
+`
+	files := map[string]string{
+		"E01-infra/README.md":             "---\nestado: Pending\n---\n# E01\n",
+		"E02-platform/README.md":          "---\nestado: Completed\n---\n# E02\n",
+		"E01-infra/F01-net/README.md":     "---\nestado: Pending\ntipo: feature\n---\n# F01\n",
+		"E01-infra/F02-store/README.md":   "---\nestado: Completed\ntipo: historia\n---\n# F02\n",
+		"E02-platform/F01-auth/README.md": "---\nestado: Pending\ntipo: feature\n---\n# F01\n",
+		"E02-platform/F02-api/README.md":  "---\nestado: Completed\ntipo: feature\n---\n# F02\n",
+	}
+	return setupMigrateDir(t, stem, files)
+}
+
+func TestMigrateSplit(t *testing.T) {
+	dir := setupSplitDir(t)
+
+	out, err := runCmd(t, "migrate", dir, "--split")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "Split .stem into") {
+		t.Errorf("expected split message, got: %s", out)
+	}
+
+	// Root .stem should still exist with common fields.
+	rootContent, err := os.ReadFile(filepath.Join(dir, ".stem"))
+	if err != nil {
+		t.Fatalf("expected root .stem: %v", err)
+	}
+	rootStr := string(rootContent)
+	if !strings.Contains(rootStr, "prefix: E") {
+		t.Errorf("expected prefix: E in root .stem, got: %s", rootStr)
+	}
+	if !strings.Contains(rootStr, "estado") {
+		t.Errorf("expected estado in root .stem, got: %s", rootStr)
+	}
+
+	// Child .stem should exist.
+	childContent, err := os.ReadFile(filepath.Join(dir, "E01-infra", ".stem"))
+	if err != nil {
+		t.Fatalf("expected child .stem: %v", err)
+	}
+	childStr := string(childContent)
+	if !strings.Contains(childStr, "prefix: F") {
+		t.Errorf("expected prefix: F in child .stem, got: %s", childStr)
+	}
+}
+
+func TestMigrateSplitDryRun(t *testing.T) {
+	dir := setupSplitDir(t)
+
+	out, err := runCmd(t, "migrate", dir, "--split", "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "# --- ") {
+		t.Errorf("expected file separators, got: %s", out)
+	}
+	if !strings.Contains(out, "prefix: E") {
+		t.Errorf("expected prefix: E in dry-run output, got: %s", out)
+	}
+	if !strings.Contains(out, "prefix: F") {
+		t.Errorf("expected prefix: F in dry-run output, got: %s", out)
+	}
+
+	// No child .stem files should be written.
+	if _, err := os.Stat(filepath.Join(dir, "E01-infra", ".stem")); err == nil {
+		t.Error("expected no child .stem in dry-run mode")
+	}
+}
+
+func TestMigrateSplitNoHierarchy(t *testing.T) {
+	stem := `version: 1
+schema:
+  estado:
+    type: string
+`
+	files := map[string]string{
+		"a.md": "---\nestado: draft\n---\n# A\n",
+		"b.md": "---\nestado: done\n---\n# B\n",
+	}
+	dir := setupMigrateDir(t, stem, files)
+
+	_, err := runCmd(t, "migrate", dir, "--split")
+	if err == nil {
+		t.Fatal("expected error for non-hierarchical directory")
+	}
+	if !strings.Contains(err.Error(), "no hierarchy") {
+		t.Errorf("expected 'no hierarchy' error, got: %v", err)
+	}
+}
+
+func TestMigrateSplitPreservesCustom(t *testing.T) {
+	dir := setupSplitDir(t)
+
+	out, err := runCmd(t, "migrate", dir, "--split")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	// Verify derive/aggregate/links/structural preserved in root .stem.
+	rootContent, err := os.ReadFile(filepath.Join(dir, ".stem"))
+	if err != nil {
+		t.Fatalf("expected root .stem: %v", err)
+	}
+	rootStr := string(rootContent)
+
+	for _, section := range []string{"derive:", "aggregate:", "links:", "structural:"} {
+		if !strings.Contains(rootStr, section) {
+			t.Errorf("expected %q preserved in root .stem, got: %s", section, rootStr)
+		}
+	}
+}
