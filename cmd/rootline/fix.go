@@ -200,6 +200,7 @@ func runFixAll(ctx context.Context, cmd *cobra.Command) error {
 		}
 
 		report := proposal.Analyze(records, effective, allErrs)
+		appendAggregateProposals(report, root, records, effective)
 
 		if outputFormat == "table" {
 			return renderProposalTable(cmd, report)
@@ -216,6 +217,7 @@ func runFixAll(ctx context.Context, cmd *cobra.Command) error {
 	}
 
 	report := proposal.Analyze(records, effective, allErrs)
+	appendAggregateProposals(report, root, records, effective)
 
 	// Apply proposals if any.
 	if len(report.Proposals) > 0 {
@@ -232,6 +234,16 @@ func runFixAll(ctx context.Context, cmd *cobra.Command) error {
 		return renderFixTable(cmd, batch)
 	}
 	return outputJSON(cmd, batch, false)
+}
+
+// appendAggregateProposals detects missing aggregate expressions and appends proposals to the report.
+func appendAggregateProposals(report *proposal.Report, root string, records []*extract.Record, effective *rules.StemFile) {
+	aggProposals := proposal.DetectMissingAggregates(root, records, effective)
+	if len(aggProposals) > 0 {
+		report.Proposals = append(report.Proposals, aggProposals...)
+		report.Summary.AddAggregate += len(aggProposals)
+		report.Summary.Total += len(aggProposals)
+	}
 }
 
 func proposalsToFixResults(report *proposal.Report, records []*extract.Record) []*FixResult {

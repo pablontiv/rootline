@@ -805,3 +805,121 @@ func TestWriteFrontmatterFields_SliceValue(t *testing.T) {
 		t.Errorf("expected 2 tags, got %d", len(tags))
 	}
 }
+
+func TestFix_AddAggregate_DryRun(t *testing.T) {
+	root := t.TempDir()
+	_ = os.Mkdir(filepath.Join(root, ".git"), 0o755)
+
+	// .stem with enum estado but no aggregate section.
+	stem := `version: 1
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, In Progress, Blocked, Completed]
+`
+	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(stem), 0644)
+
+	// Hierarchical structure with overlapping enum values.
+	for _, epic := range []string{"E01-a", "E02-b"} {
+		epicDir := filepath.Join(root, epic)
+		_ = os.MkdirAll(epicDir, 0755)
+		mustWriteFile(t, filepath.Join(epicDir, "README.md"),
+			[]byte("---\nestado: Pending\n---\n# "+epic+"\n"), 0644)
+
+		for _, feat := range []string{"F01-x", "F02-y"} {
+			featDir := filepath.Join(epicDir, feat)
+			_ = os.MkdirAll(featDir, 0755)
+			mustWriteFile(t, filepath.Join(featDir, "README.md"),
+				[]byte("---\nestado: Pending\n---\n# "+feat+"\n"), 0644)
+		}
+	}
+
+	mustChdir(t, root)
+
+	out, err := runCmd(t, "fix", "--all", "--dry-run", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	var report proposal.Report
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", err, out)
+	}
+
+	if report.Summary.AddAggregate == 0 {
+		t.Errorf("expected add_aggregate > 0, got 0.\nFull output: %s", out)
+	}
+
+	// Check the proposal description.
+	found := false
+	for _, p := range report.Proposals {
+		if p.Type == proposal.AddAggregate && p.Field == "estado" {
+			found = true
+			if !strings.Contains(p.Description, "would add aggregate for 'estado'") {
+				t.Errorf("expected description with 'would add aggregate for estado', got: %s", p.Description)
+			}
+			if p.AggregateExpr == "" {
+				t.Errorf("expected non-empty AggregateExpr")
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected add_aggregate proposal for 'estado', got proposals: %+v", report.Proposals)
+	}
+}
+
+func TestFix_AddAggregate_Apply(t *testing.T) {
+	root := t.TempDir()
+	_ = os.Mkdir(filepath.Join(root, ".git"), 0o755)
+
+	// .stem with enum estado but no aggregate section.
+	stem := `version: 1
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, In Progress, Blocked, Completed]
+`
+	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(stem), 0644)
+
+	// Hierarchical structure.
+	for _, epic := range []string{"E01-a", "E02-b"} {
+		epicDir := filepath.Join(root, epic)
+		_ = os.MkdirAll(epicDir, 0755)
+		mustWriteFile(t, filepath.Join(epicDir, "README.md"),
+			[]byte("---\nestado: Pending\n---\n# "+epic+"\n"), 0644)
+
+		for _, feat := range []string{"F01-x", "F02-y"} {
+			featDir := filepath.Join(epicDir, feat)
+			_ = os.MkdirAll(featDir, 0755)
+			mustWriteFile(t, filepath.Join(featDir, "README.md"),
+				[]byte("---\nestado: Pending\n---\n# "+feat+"\n"), 0644)
+		}
+	}
+
+	mustChdir(t, root)
+
+	_, err := runCmd(t, "fix", "--all", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify .stem now has aggregate section.
+	content, readErr := os.ReadFile(filepath.Join(root, ".stem"))
+	if readErr != nil {
+		t.Fatalf("failed to read .stem: %v", readErr)
+	}
+	stemStr := string(content)
+
+	if !strings.Contains(stemStr, "aggregate") {
+		t.Errorf("expected aggregate section in .stem, got:\n%s", stemStr)
+	}
+	if !strings.Contains(stemStr, "estado") {
+		t.Errorf("expected estado in aggregate section, got:\n%s", stemStr)
+	}
+}

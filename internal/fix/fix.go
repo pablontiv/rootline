@@ -89,6 +89,13 @@ func ApplyProposals(_ context.Context, report *proposal.Report, root string, rec
 				return fmt.Errorf("correct_link %s: %w", p.Paths[0], err)
 			}
 			applied = append(applied, p)
+		case proposal.AddAggregate:
+			if len(p.Paths) > 0 {
+				if err := addAggregateToStem(p.Paths[0], p.Field, p.AggregateExpr); err != nil {
+					return fmt.Errorf("add_aggregate %s: %w", p.Field, err)
+				}
+			}
+			applied = append(applied, p)
 		}
 	}
 
@@ -425,4 +432,53 @@ func applyCorrectLink(p proposal.Proposal, root string) error {
 		}
 	}
 	return nil
+}
+
+// addAggregateToStem adds an aggregate expression to a .stem file using YAML AST.
+func addAggregateToStem(stemPath, fieldName, expr string) error {
+	content, err := os.ReadFile(stemPath)
+	if err != nil {
+		return err
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(content, &doc); err != nil {
+		return fmt.Errorf("parsing %s: %w", stemPath, err)
+	}
+
+	if len(doc.Content) == 0 {
+		return fmt.Errorf("empty .stem document")
+	}
+
+	rootNode := doc.Content[0]
+	if rootNode.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected mapping node in .stem")
+	}
+
+	// Find existing "aggregate" key.
+	var aggNode *yaml.Node
+	for i := 0; i+1 < len(rootNode.Content); i += 2 {
+		if rootNode.Content[i].Value == "aggregate" {
+			aggNode = rootNode.Content[i+1]
+			break
+		}
+	}
+
+	if aggNode == nil {
+		// Create new aggregate section.
+		keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "aggregate"}
+		aggNode = &yaml.Node{Kind: yaml.MappingNode}
+		rootNode.Content = append(rootNode.Content, keyNode, aggNode)
+	}
+
+	// Add field to aggregate mapping.
+	fieldKeyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: fieldName}
+	fieldValNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: expr, Style: yaml.LiteralStyle}
+	aggNode.Content = append(aggNode.Content, fieldKeyNode, fieldValNode)
+
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(stemPath, out, 0644)
 }
