@@ -102,8 +102,14 @@ ejecutable_en: 1 sesion
 # TXXX: [Descripción accionable del task]
 
 **Story**: [SXXX Story Name](README.md)
+**Contribuye a**: [criterio específico de la Story]
 
 [[blocks:TXXX-prerequisite-task]]
+
+## Preserva
+
+- INV1: [invariante de la Story a mantener]
+  - Verificar: [comando o procedimiento]
 
 ## Contexto
 
@@ -273,7 +279,7 @@ artefactos:
 
 ---
 
-## Checklist de Validación (6 Condiciones)
+## Checklist de Validación (7 Condiciones)
 
 Antes de finalizar el Task, verificar mentalmente:
 
@@ -285,6 +291,7 @@ Antes de finalizar el Task, verificar mentalmente:
 | 4 | Verificable | ¿Los criterios referencian comandos/checks reales? |
 | 5 | Idempotente | ¿Se puede re-ejecutar sin daño? |
 | 6 | I/O explícitos | ¿Estado inicial, resultado y fuentes están declarados? |
+| 7 | Contribuye a | ¿Tiene campo "Contribuye a" que traza a un criterio de la Story padre? |
 
 **Nota**: Estas condiciones se validan manualmente al revisar el Task. No hay hooks automáticos configurados actualmente.
 
