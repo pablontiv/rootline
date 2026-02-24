@@ -11,32 +11,15 @@ De `$ARGUMENTS`, extraer:
 
 ### Paso 2: Determinar Tipo de Task
 
-Evaluar qué tipo de Task se necesita según la descripción:
+Descubrir los tipos válidos dinámicamente desde el schema del proyecto:
 
-| Tipo | Cuándo |
-|------|--------|
-| **IaC Types** | |
-| `servicio-docker` | Nuevo servicio Docker o actualización mayor |
-| `modulo-sistema` | Configuración OS gestionada por IaC |
-| `operacion-sistema` | Remoción, migración, actualización |
-| `lxc` | Nueva instancia LXC en Proxmox |
-| `vm` | Nueva VM en Proxmox |
-| `modulo-infraestructura` | Módulo IaC de capa Proxmox |
-| `host-script` | Script para ejecutar en Host Proxmox |
-| `instance-script` | Script para ejecutar dentro de LXC/VM |
-| **Software Types** | |
-| `software-module` | Implementar módulo/paquete de código en un proyecto de software |
-| `software-test` | Escribir tests para funcionalidad existente |
-| `ci-cd` | Configurar pipeline CI/CD, releases, distribución |
-| **General Types** | |
-| `documentation` | Documentación, knowledge capture, o refactoring simple |
+```bash
+rootline describe <story-dir> --field schema.tipo
+```
 
-**Cuándo usar cada categoría:**
-- **IaC Types**: Tasks que producen infraestructura materializada (contenedores, módulos, scripts).
-- **Software Types**: Tasks que producen código fuente (módulos Go/Python/etc., tests, pipelines).
-- **General Types**: Tasks de documentación, knowledge capture, o refactoring simple.
+Esto retorna los valores de enum válidos para el campo `tipo` en el directorio de la Story. Seleccionar el tipo que mejor describe el trabajo del Task.
 
-Todos los tipos pueden incluir `## Especificacion Tecnica` cuando se beneficien de una spec estructurada. Usar el bloque YAML del tipo correspondiente, o un bloque libre si no hay template.
+Todos los tipos pueden incluir `## Especificacion Tecnica` cuando se beneficien de una spec estructurada. Ver [type-specs.md](type-specs.md) para templates de especificación por tipo, o usar un bloque libre si no hay template predefinido.
 
 ### Paso 3: Verificar Story Padre
 
@@ -96,7 +79,7 @@ Agregar fila en la tabla "Tasks" del Story README padre:
 ```markdown
 ---
 estado: Pending
-tipo: servicio-docker | modulo-sistema | operacion-sistema | lxc | vm | modulo-infraestructura | host-script | instance-script | software-module | software-test | ci-cd | documentation
+tipo: # descubrir via rootline describe <story-dir> --field schema.tipo
 ejecutable_en: 1 sesion
 ---
 # TXXX: [Descripción accionable del task]
@@ -117,120 +100,7 @@ ejecutable_en: 1 sesion
 
 ## Especificacion Tecnica
 
-Usar el bloque YAML correspondiente al tipo:
-
-### servicio-docker
-
-```yaml
-tipo: servicio-docker
-nombre: $TASK_NAME
-imagen: # imagen:tag
-puertos:
-  - interno: 80
-    externo: 8080
-volumenes:
-  - host: /opt/homeserver/data/$TASK_NAME
-    container: /data
-variables_entorno:
-  TZ: America/New_York
-red: homelab-network
-recursos:
-  memoria: # MB o null
-  cpu: # cores o null
-```
-
-### modulo-sistema
-
-```yaml
-tipo: modulo-sistema
-nombre: $TASK_NAME
-archivos_gestionados:
-  - path: /etc/example.conf
-    contenido: # template o literal
-    permisos: "0644"
-comandos_sistema:
-  - "systemctl mask example"
-directorios:
-  - path: /opt/homeserver/data
-    owner: root
-    mode: "0755"
-providers_requeridos:
-  - hashicorp/local
-  - hashicorp/null
-```
-
-### operacion-sistema
-
-```yaml
-tipo: operacion-sistema
-nombre: $TASK_NAME
-accion: remocion | migracion | actualizacion
-componentes_afectados:
-  - nombre: nombre-componente
-    tipo: paquete-apt | systemd-service | archivo | directorio
-verificaciones_pre:
-  - comando: "comando a ejecutar"
-    resultado_esperado: "descripción del resultado OK"
-pasos:
-  - orden: 1
-    descripcion: "Descripción del paso"
-    comando: "comando a ejecutar"
-    reversible: true | false
-verificaciones_post:
-  - comando: "comando a ejecutar"
-    resultado_esperado: "descripción del resultado OK"
-rollback:
-  comandos:
-    - "comando para revertir"
-  tiempo_estimado: "X minutos"
-```
-
-### software-module
-
-```yaml
-tipo: software-module
-proyecto: # nombre del proyecto (ej: rootline)
-lenguaje: # go | python | typescript | rust
-paquete: # path del paquete (ej: internal/extract)
-interfaces:
-  - nombre: # nombre de interfaz/tipo a implementar
-    metodos:
-      - nombre: # nombre del método
-        input: # parámetros
-        output: # retorno
-dependencias_externas:
-  - # librería externa (ej: gopkg.in/yaml.v3)
-tests:
-  - # descripción del test case principal
-```
-
-### software-test
-
-```yaml
-tipo: software-test
-proyecto: # nombre del proyecto
-paquete: # path del paquete a testear
-cobertura_objetivo: # porcentaje target (ej: 80%)
-tipos_test:
-  - unit | integration | e2e
-fixtures:
-  - # archivos de test data necesarios
-```
-
-### ci-cd
-
-```yaml
-tipo: ci-cd
-plataforma: # github-actions | forgejo | gitlab
-triggers:
-  - push | pr | tag | schedule
-jobs:
-  - nombre: # nombre del job
-    pasos:
-      - # descripción del paso
-artefactos:
-  - # binarios, imágenes, paquetes producidos
-```
+Ver [type-specs.md](type-specs.md) para templates de especificación por tipo. Usar el bloque YAML correspondiente al tipo seleccionado, o un bloque libre si no hay template predefinido.
 
 ## Dependencias
 
