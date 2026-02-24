@@ -1,8 +1,7 @@
 ---
-estado: Specified
+estado: Completed
 tipo: software-module
 ejecutable_en: 1 sesion
-hold: Pendiente aprobación de usuario
 ---
 # T001: Implementar JSON-RPC 2.0 server con transporte stdio
 
