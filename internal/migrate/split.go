@@ -17,9 +17,16 @@ type StemOutput struct {
 	Content string
 }
 
+// SplitResult holds the generated stems and any auto-generated aggregate field names.
+type SplitResult struct {
+	Stems         []StemOutput
+	GeneratedAggs []string // sorted field names with newly generated aggregates
+}
+
 // BuildSplitStems distributes fields from existing .stem across hierarchy levels.
 // Derive, aggregate, links, structural, and validate stay at root.
-func BuildSplitStems(absTarget string, existing *rules.StemFile, hierarchy *infer.HierarchyResult) []StemOutput {
+// Auto-generates aggregate expressions for root enum fields not already in existing.Aggregate.
+func BuildSplitStems(absTarget string, existing *rules.StemFile, hierarchy *infer.HierarchyResult) SplitResult {
 	var files []StemOutput
 
 	// Determine which fields from existing schema belong at root vs per-level.
@@ -48,8 +55,16 @@ func BuildSplitStems(absTarget string, existing *rules.StemFile, hierarchy *infe
 		}
 	}
 
+	// Generate aggregate expressions for root enum fields without existing aggregate.
+	generatedAgg := GenerateAggregates(rootFields, existing.Aggregate)
+	aggNames := make([]string, 0, len(generatedAgg))
+	for k := range generatedAgg {
+		aggNames = append(aggNames, k)
+	}
+	sort.Strings(aggNames)
+
 	// Build root .stem YAML preserving derive/aggregate/links/structural.
-	rootYAML := buildSplitRootYAML(existing, rootFields, hierarchy)
+	rootYAML := buildSplitRootYAML(existing, rootFields, hierarchy, generatedAgg)
 	files = append(files, StemOutput{
 		Path:    filepath.Join(absTarget, ".stem"),
 		Content: rootYAML,
@@ -70,11 +85,11 @@ func BuildSplitStems(absTarget string, existing *rules.StemFile, hierarchy *infe
 		}
 	}
 
-	return files
+	return SplitResult{Stems: files, GeneratedAggs: aggNames}
 }
 
 // buildSplitRootYAML generates the root .stem preserving non-schema sections.
-func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.SchemaField, hierarchy *infer.HierarchyResult) string {
+func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.SchemaField, hierarchy *infer.HierarchyResult, generatedAgg map[string]string) string {
 	var b strings.Builder
 
 	b.WriteString("version: 1\n")
@@ -161,8 +176,8 @@ func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.Sc
 		}
 	}
 
-	// Preserve aggregate.
-	if len(existing.Aggregate) > 0 {
+	// Preserve existing aggregate + emit generated ones.
+	if len(existing.Aggregate) > 0 || len(generatedAgg) > 0 {
 		b.WriteString("\naggregate:\n")
 		for name, expr := range existing.Aggregate {
 			exprStr := fmt.Sprintf("%v", expr)
@@ -170,6 +185,18 @@ func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.Sc
 				fmt.Fprintf(&b, "  %s: |\n    %s\n", name, strings.ReplaceAll(strings.TrimSpace(exprStr), "\n", "\n    "))
 			} else {
 				fmt.Fprintf(&b, "  %s: %q\n", name, exprStr)
+			}
+		}
+		// Emit auto-generated aggregates (already excludes existing ones).
+		aggKeys := make([]string, 0, len(generatedAgg))
+		for k := range generatedAgg {
+			aggKeys = append(aggKeys, k)
+		}
+		sort.Strings(aggKeys)
+		for _, name := range aggKeys {
+			fmt.Fprintf(&b, "  %s: |\n", name)
+			for _, line := range strings.Split(generatedAgg[name], "\n") {
+				fmt.Fprintf(&b, "    %s\n", line)
 			}
 		}
 	}

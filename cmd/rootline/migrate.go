@@ -360,10 +360,15 @@ func runMigrateSplit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build split stems using field distribution from existing .stem.
-	stemFiles := migrate.BuildSplitStems(absTarget, existing, hierarchy)
+	result := migrate.BuildSplitStems(absTarget, existing, hierarchy)
+
+	// Emit notes for auto-generated aggregates.
+	for _, name := range result.GeneratedAggs {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Note: auto-generated aggregate for '%s'\n", name)
+	}
 
 	if migrateDryRun {
-		for i, sf := range stemFiles {
+		for i, sf := range result.Stems {
 			if i > 0 {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout())
 			}
@@ -378,7 +383,7 @@ func runMigrateSplit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write all .stem files.
-	for _, sf := range stemFiles {
+	for _, sf := range result.Stems {
 		if writeErr := os.WriteFile(sf.Path, []byte(sf.Content), 0644); writeErr != nil {
 			return fmt.Errorf("writing %s: %w", sf.Path, writeErr)
 		}
@@ -386,6 +391,6 @@ func runMigrateSplit(cmd *cobra.Command, args []string) error {
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(),
 		"Split .stem into %d files across %d levels (derive/aggregate/links preserved at root)\n",
-		len(stemFiles), len(hierarchy.Levels))
+		len(result.Stems), len(hierarchy.Levels))
 	return nil
 }

@@ -58,14 +58,14 @@ func TestBuildSplitStems_BasicTwoLevels(t *testing.T) {
 		},
 	)
 
-	files := BuildSplitStems("/tmp/test", existing, hierarchy)
+	result := BuildSplitStems("/tmp/test", existing, hierarchy)
 
-	if len(files) == 0 {
+	if len(result.Stems) == 0 {
 		t.Fatal("expected at least one stem file")
 	}
 
 	// First file should be the root .stem.
-	root := files[0]
+	root := result.Stems[0]
 	if root.Path != "/tmp/test/.stem" {
 		t.Errorf("root path = %s, want /tmp/test/.stem", root.Path)
 	}
@@ -84,7 +84,7 @@ func TestBuildSplitStems_BasicTwoLevels(t *testing.T) {
 
 	// Child stems should be placed in E01-infra and E02-platform.
 	childPaths := make(map[string]string)
-	for _, f := range files[1:] {
+	for _, f := range result.Stems[1:] {
 		childPaths[f.Path] = f.Content
 	}
 	for _, dir := range []string{"E01-infra", "E02-platform"} {
@@ -131,8 +131,8 @@ func TestBuildSplitStems_PreservesStructural(t *testing.T) {
 		},
 	)
 
-	files := BuildSplitStems("/tmp/test", existing, hierarchy)
-	root := files[0].Content
+	result := BuildSplitStems("/tmp/test", existing, hierarchy)
+	root := result.Stems[0].Content
 
 	if !strings.Contains(root, "structural:") {
 		t.Errorf("root should preserve structural section, got:\n%s", root)
@@ -173,8 +173,8 @@ func TestBuildSplitStems_PreservesLinks(t *testing.T) {
 		},
 	)
 
-	files := BuildSplitStems("/tmp/test", existing, hierarchy)
-	root := files[0].Content
+	result := BuildSplitStems("/tmp/test", existing, hierarchy)
+	root := result.Stems[0].Content
 
 	if !strings.Contains(root, "links:") {
 		t.Errorf("root should preserve links section, got:\n%s", root)
@@ -209,8 +209,8 @@ func TestBuildSplitStems_PreservesDeriveAndAggregate(t *testing.T) {
 		},
 	)
 
-	files := BuildSplitStems("/tmp/test", existing, hierarchy)
-	root := files[0].Content
+	result := BuildSplitStems("/tmp/test", existing, hierarchy)
+	root := result.Stems[0].Content
 
 	if !strings.Contains(root, "derive:") {
 		t.Errorf("root should preserve derive section, got:\n%s", root)
@@ -243,8 +243,8 @@ func TestBuildSplitStems_PreservesValidate(t *testing.T) {
 		},
 	)
 
-	files := BuildSplitStems("/tmp/test", existing, hierarchy)
-	root := files[0].Content
+	result := BuildSplitStems("/tmp/test", existing, hierarchy)
+	root := result.Stems[0].Content
 
 	if !strings.Contains(root, "validate:") {
 		t.Errorf("root should preserve validate section, got:\n%s", root)
@@ -281,11 +281,11 @@ func TestBuildSplitStems_ChildYAMLHasOnlyLevelFields(t *testing.T) {
 		},
 	)
 
-	files := BuildSplitStems("/tmp/test", existing, hierarchy)
+	result := BuildSplitStems("/tmp/test", existing, hierarchy)
 
 	// Find child stem.
 	var childContent string
-	for _, f := range files {
+	for _, f := range result.Stems {
 		if strings.HasSuffix(f.Path, "E01/.stem") {
 			childContent = f.Content
 			break
@@ -332,8 +332,8 @@ func TestBuildSplitStems_NoScopeOmitted(t *testing.T) {
 		},
 	)
 
-	files := BuildSplitStems("/tmp/test", existing, hierarchy)
-	root := files[0].Content
+	result := BuildSplitStems("/tmp/test", existing, hierarchy)
+	root := result.Stems[0].Content
 
 	if strings.Contains(root, "scope:") {
 		t.Errorf("root should not have scope when match is empty, got:\n%s", root)

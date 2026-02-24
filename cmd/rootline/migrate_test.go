@@ -643,3 +643,79 @@ validate:
 		t.Errorf("expected 'ejecutable_en' in validate then clause, got: %s", rootStr)
 	}
 }
+
+func TestMigrateSplit_GeneratesAggregate(t *testing.T) {
+	// .stem with enum estado but no aggregate section.
+	stem := `version: 1
+scope:
+  match: "*.md"
+schema:
+  id:
+    type: sequence
+    prefix: E
+    digits: 2
+  estado:
+    type: enum
+    values: [Pending, In Progress, Blocked, Completed]
+    required: true
+`
+	files := map[string]string{
+		"E01-infra/README.md":           "---\nestado: Pending\n---\n# E01\n",
+		"E02-platform/README.md":        "---\nestado: Completed\n---\n# E02\n",
+		"E01-infra/F01-net/README.md":   "---\nestado: Pending\n---\n# F01\n",
+		"E01-infra/F02-store/README.md": "---\nestado: In Progress\n---\n# F02\n",
+	}
+	dir := setupMigrateDir(t, stem, files)
+
+	out, err := runCmd(t, "migrate", dir, "--split")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	// Should contain note about auto-generated aggregate.
+	if !strings.Contains(out, "Note: auto-generated aggregate for 'estado'") {
+		t.Errorf("expected aggregate note in output, got: %s", out)
+	}
+
+	rootContent, err := os.ReadFile(filepath.Join(dir, ".stem"))
+	if err != nil {
+		t.Fatalf("expected root .stem: %v", err)
+	}
+	rootStr := string(rootContent)
+
+	if !strings.Contains(rootStr, "aggregate:") {
+		t.Errorf("expected aggregate section in root .stem, got:\n%s", rootStr)
+	}
+	if !strings.Contains(rootStr, "descendants") {
+		t.Errorf("expected descendants-based expression, got:\n%s", rootStr)
+	}
+}
+
+func TestMigrateSplit_PreservesExistingAggregate(t *testing.T) {
+	// .stem with existing aggregate — should not be replaced.
+	dir := setupSplitDir(t) // has aggregate: estado already
+
+	out, err := runCmd(t, "migrate", dir, "--split")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	// Should NOT contain note about auto-generated aggregate (it already exists).
+	if strings.Contains(out, "Note: auto-generated aggregate for 'estado'") {
+		t.Errorf("expected no aggregate note when existing aggregate present, got: %s", out)
+	}
+
+	rootContent, err := os.ReadFile(filepath.Join(dir, ".stem"))
+	if err != nil {
+		t.Fatalf("expected root .stem: %v", err)
+	}
+	rootStr := string(rootContent)
+
+	// Should preserve the original aggregate expression.
+	if !strings.Contains(rootStr, "aggregate:") {
+		t.Errorf("expected aggregate section preserved, got:\n%s", rootStr)
+	}
+	if !strings.Contains(rootStr, `estado:`) || !strings.Contains(rootStr, `Completed`) {
+		t.Errorf("expected original aggregate expression preserved, got:\n%s", rootStr)
+	}
+}
