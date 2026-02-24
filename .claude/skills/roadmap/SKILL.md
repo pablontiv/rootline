@@ -265,6 +265,12 @@ Mostrar TodoList con `TaskList`.
 
 #### Fase 3: Loop de Ejecución
 
+**Variables de estado del loop:**
+- `checkpoint_commit`: SHA del último checkpoint (inicializar con HEAD al inicio)
+- `checkpoint_task_count`: Contador de tasks desde último checkpoint (inicializar en 0)
+- `current_story_path`: Path de la Story actual (para detectar cambio de contexto)
+- `checkpoint_interval`: Intervalo entre checkpoints (default 5, configurable con --checkpoint-interval)
+
 Para cada task en orden:
 
 1. **Verificar dependencias**: Leer el archivo .md del task y buscar `[[blocks:TXXX-name]]` en el body.
@@ -283,7 +289,20 @@ Para cada task en orden:
    - Si no tiene skill asociado, implementar directamente siguiendo
      las instrucciones del Task
 
-5. **Commit+Push** (centralizado, NO delegado a skills hijos):
+5. **Verificar ACs**:
+   - Leer sección "Criterios de Aceptación" del Task .md
+   - Ejecutar CADA verificación documentada (comandos, checks, observables)
+   - Reportar resultado por AC: ✅ PASS / ❌ FAIL
+   - Si algún AC falla → reportar y **parar** (bug encontrado)
+
+6. **Security Review** (selectivo, post-ACs, pre-commit):
+   - Aplica si: archivos modificados incluyen patterns sensibles (`**/secret*`, `**/*credentials*`, `**/.env*`, `**/auth*`, `**/crypto*`) O si el tipo de task lo requiere
+   - Si aplica: ejecutar `/security-review` sobre archivos modificados
+   - Si findings HIGH → **parar** (vulnerabilidad pre-push). Reportar findings y detener loop
+   - Si findings MEDIUM → warning informativo, continuar
+   - Si nada o no aplica → continuar silenciosamente
+
+7. **Commit+Push** (centralizado, NO delegado a skills hijos):
    - Identificar archivos modificados/creados por la implementación
    - `git add` archivos relevantes (específicos, no `git add .`)
    - `git commit` con mensaje en formato **conventional commits**: `type(scope): description`
@@ -291,15 +310,9 @@ Para cada task en orden:
      - El hook `.githooks/commit-msg` rechazará mensajes que no sigan el formato
    - `git push`
 
-6. **Verificar ACs**:
-   - Leer sección "Criterios de Aceptación" del Task .md
-   - Ejecutar CADA verificación documentada (comandos, checks, observables)
-   - Reportar resultado por AC: ✅ PASS / ❌ FAIL
-   - Si algún AC falla → reportar y **parar** (bug encontrado)
+8. **Marcar completado**: `TaskUpdate` → status: `completed`
 
-7. **Marcar completado**: `TaskUpdate` → status: `completed`
-
-8. **Resumen de iteración**:
+9. **Resumen de iteración**:
    ```
    📊 ITERACIÓN N/TOTAL
    ├─ Task: TXXX - título
@@ -309,12 +322,12 @@ Para cada task en orden:
    └─ Siguiente: TXXX+1 - título
    ```
 
-9. **Confirmar**: `AskUserQuestion` con opciones:
+10. **Confirmar**: `AskUserQuestion` con opciones:
    - Sí, continuar (Recommended)
    - Saltar siguiente y continuar
    - Parar aquí
 
-10. **Reintentar bloqueados**: Al terminar la cola, si quedan tasks que fueron skipped por dependencias bloqueadas y ahora sus dependencias están Completadas → reintentar. Si ningún task progresó en la pasada → parar (deadlock de dependencias).
+11. **Reintentar bloqueados**: Al terminar la cola, si quedan tasks que fueron skipped por dependencias bloqueadas y ahora sus dependencias están Completadas → reintentar. Si ningún task progresó en la pasada → parar (deadlock de dependencias).
 
 #### Fase 4: Resumen Final
 
