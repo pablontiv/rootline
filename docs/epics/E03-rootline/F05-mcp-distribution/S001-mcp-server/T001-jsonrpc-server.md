@@ -66,4 +66,5 @@ tests:
 
 ## Fuente de verdad
 
-- `src/rootline/README.md` seccion "JSON-RPC protocol"
+- `internal/mcp/mcp.go` (server wrapper, stdio transport)
+- `cmd/rootline/serve.go` (CLI entry point)

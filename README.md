@@ -175,12 +175,9 @@ rootline validate --all --where 'expr'   # Validate only records matching filter
 rootline migrate [path]                   # Detect schema changes, rename, split
 
 # Tooling
-rootline doctor [path]                    # Check .stem configuration health
 rootline hooks install|uninstall|status   # Git pre-commit hook management
 rootline completion bash|zsh|fish         # Shell completion scripts
-
-# Planned
-rootline serve                            # MCP server (stub)
+rootline serve                            # MCP server (JSON-RPC 2.0 over stdio)
 ```
 
 All commands support `--output json|table` and `--field` for dot-path extraction:

@@ -65,4 +65,4 @@ tests:
 
 ## Fuente de verdad
 
-- `src/rootline/README.md` seccion "AI-native" y "JSON-RPC protocol"
+- `internal/mcp/tools.go` (tool registration and handlers)

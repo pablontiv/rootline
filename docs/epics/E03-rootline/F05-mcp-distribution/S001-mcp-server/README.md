@@ -29,3 +29,6 @@ cliente: Platform Owner
 
 ## Fuente de verdad
 
+- `internal/mcp/mcp.go` — Server wrapper, stdio transport
+- `internal/mcp/tools.go` — 8 MCP tool registrations and handlers
+- `cmd/rootline/serve.go` — CLI entry point
