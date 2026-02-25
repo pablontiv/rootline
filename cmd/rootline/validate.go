@@ -89,13 +89,12 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 			return fmt.Errorf("extracting %s: %w", file, err)
 		}
 
-		// Resolve effective stem
+		// Resolve effective stem (with levels expansion for hierarchical schemas)
 		dir := filepath.Dir(absPath)
-		entries, err := rules.WalkUp(dir)
+		effective, err := rules.ResolveForRecord(dir, file)
 		if err != nil {
 			return fmt.Errorf("resolving .stem for %s: %w", file, err)
 		}
-		effective := rules.MergeStemFiles(entries)
 
 		// Validate
 		errs := rules.Validate(ctx, record, effective)
@@ -174,11 +173,10 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 	for _, rec := range records {
 		absPath := filepath.Join(root, rec.Path)
 		dir := filepath.Dir(absPath)
-		entries, walkErr := rules.WalkUp(dir)
-		if walkErr != nil {
+		effective, resolveErr := rules.ResolveForRecord(dir, rec.Path)
+		if resolveErr != nil {
 			continue
 		}
-		effective := rules.MergeStemFiles(entries)
 		errs := rules.Validate(ctx, rec, effective)
 
 		// Nesting check (when levels are defined)
