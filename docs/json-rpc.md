@@ -1,48 +1,175 @@
+# MCP Server
+
+Rootline exposes its engine via the **Model Context Protocol (MCP)** over JSON-RPC 2.0 stdio transport.
+
+```bash
+rootline serve
+```
+
+AI assistants call the same contracts as the CLI — no separate API layer.
+
 ---
-estado: Planned
----
-# JSON-RPC Protocol (Planned)
 
-Rootline will use **JSON-RPC 2.0** as its interaction protocol via the MCP server.
+## Setup
 
-All core capabilities will be exposed as methods:
+### Claude Desktop
 
-- `query`
-- `describe`
-- `explain`
-- `validate`
-- `tree`
-- `stats`
-
-The query contract maps directly to JSON-RPC `params`.
-
-## Example Request
+Add to your Claude Desktop configuration (`~/.claude/mcp.json` or project `.mcp.json`):
 
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": "q1",
-  "method": "query",
-  "params": {
-    "from": "docs/",
-    "where": {
-      "eq": ["state.visibility", "public"]
+  "mcpServers": {
+    "rootline": {
+      "command": "rootline",
+      "args": ["serve"]
     }
   }
 }
 ```
 
-## Example Response
+### Any MCP Client
+
+The server communicates over **stdio** using JSON-RPC 2.0. Connect to `rootline serve` as a subprocess.
+
+---
+
+## Tool Catalog
+
+### query
+
+Search and filter records by frontmatter fields using expr-lang expressions.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Directory to scan (absolute path) |
+| `where` | string[] | no | Filter expressions (expr-lang syntax) |
+| `count` | bool | no | Return count instead of records |
+| `limit` | int | no | Limit number of results (0 = unlimited) |
+
+**Returns**: `rootline/query` — rows with frontmatter, derived, and aggregated fields.
+
+### validate
+
+Check documents against `.stem` schema rules.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Directory to validate (absolute path) |
+| `where` | string[] | no | Filter expressions for validation scope |
+
+**Returns**: `rootline/validate-batch` — per-file validation results with errors and warnings.
+
+### describe
+
+Show the effective `.stem` schema for a directory.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Directory to describe (absolute path) |
+
+**Returns**: `rootline/describe` — merged schema with field types, sources, and inheritance chain.
+
+### tree
+
+Show hierarchical tree of records with completion counts.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Directory to scan (absolute path) |
+| `where` | string[] | no | Filter expressions |
+
+**Returns**: `rootline/tree` — nested tree with completed/total counts per node.
+
+### stats
+
+Show aggregate statistics (by estado, by tipo) for records.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Directory to scan (absolute path) |
+| `where` | string[] | no | Filter expressions |
+
+**Returns**: `rootline/stats` — counts grouped by `estado` and `tipo`.
+
+### explain
+
+Trace why a document has a given state: field origins, derivation chain, and validation errors.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | File to explain (absolute path) |
+
+**Returns**: `rootline/explain` — per-field origin (frontmatter, schema, derived, aggregate), `.stem` chain, and validation errors.
+
+### fix
+
+Analyze validation errors and return fix proposals. Always read-only — never modifies files.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Directory to scan (absolute path) |
+| `dry_run` | bool | no | Always true for MCP (proposals only) |
+| `all` | bool | no | Fix all files in scope |
+
+**Returns**: `rootline/proposals` — typed proposals (extend_enum, correct_value, add_field, migrate_value, etc.).
+
+### graph
+
+Build dependency graph from `[[wiki-links]]` with cycle detection and broken link analysis.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Directory to scan (absolute path) |
+| `check` | bool | no | Validate only (cycles + broken links) |
+| `format` | string | no | Output format: `dot` or `mermaid` (default: JSON) |
+
+**Returns**: `rootline/graph` — nodes, edges, cycles, and broken links. Or DOT/Mermaid text if `format` is set.
+
+---
+
+## Example
+
+### Request
 
 ```json
 {
   "jsonrpc": "2.0",
-  "id": "q1",
-  "result": {
-    "version": 1,
-    "kind": "rootline/query",
-    "meta": { "count": 1 },
-    "rows": []
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "query",
+    "arguments": {
+      "path": "/home/user/project/docs",
+      "where": ["estado == 'Pending'"],
+      "count": true
+    }
   }
 }
 ```
+
+### Response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"version\":1,\"kind\":\"rootline/query\",\"meta\":{\"count\":3},\"rows\":[]}"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Protocol Details
+
+- **Transport**: stdio (stdin/stdout)
+- **Protocol**: JSON-RPC 2.0 via MCP SDK
+- **All results** are JSON with `"version": 1` for contract stability
+- **No authentication** — the server runs as a local subprocess
+- **Source**: `internal/mcp/mcp.go` (server), `internal/mcp/tools.go` (tool handlers)

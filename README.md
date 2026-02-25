@@ -8,8 +8,7 @@ A **file-based database and constraint engine** for structured documentation.
 
 Rootline treats the filesystem as a database: directories are tables, files are records, metadata comes from YAML frontmatter, and structure is inherited via `.stem` files.
 
-> **Status**: Engine complete — validation, query, derivation, dependency graph, explain, fix, and migrate all functional.
-> Only `serve` (MCP server) remains as a stub.
+> **Status**: Engine and MCP server complete — all CLI commands and 8 MCP tools functional.
 
 ---
 
@@ -260,7 +259,24 @@ Shows each field's origin (frontmatter, schema default, derived, or aggregated) 
 
 Rootline is designed as a **structured knowledge source for AI assistants**. All commands output stable JSON with `"version": 1` contracts, making them suitable for tool use and automation.
 
-A **Model Context Protocol (MCP)** server is planned (`rootline serve`) to expose the engine over JSON-RPC 2.0, enabling AI assistants to query Rootline directly using the same contracts as the CLI.
+### MCP Server
+
+`rootline serve` starts a **Model Context Protocol (MCP)** server over stdio, exposing 8 tools via JSON-RPC 2.0. AI assistants query Rootline using the same contracts as the CLI.
+
+Configure in Claude Desktop or any MCP client:
+
+```json
+{
+  "mcpServers": {
+    "rootline": {
+      "command": "rootline",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+Available tools: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`. See [MCP Server docs](docs/json-rpc.md) for full tool catalog.
 
 ---
 
@@ -273,7 +289,7 @@ A **Model Context Protocol (MCP)** server is planned (`rootline serve`) to expos
 | [Derivation Engine](docs/derivation.md) | Derive and aggregate expressions, builtins, linked fields |
 | [Dependency Graph](docs/graph.md) | Wiki-links, link schema, cycle detection, DOT/Mermaid |
 | [Schema Migration](docs/migrate.md) | Breaking change detection, field rename, migration log |
-| [JSON-RPC Protocol](docs/json-rpc.md) | MCP server protocol (planned) |
+| [MCP Server](docs/json-rpc.md) | Tool catalog, setup, JSON-RPC protocol |
 | [Extensibility](docs/extensibility.md) | Extractor architecture, future formats |
 | [Visual Identity](docs/identity.md) | Logo, colors, usage guidelines |
 
