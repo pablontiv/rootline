@@ -1,110 +1,58 @@
-# Templates de Especificacion Tecnica por Tipo
+# Templates de Especificación Técnica por Tipo
 
-Templates de referencia del proyecto actual — adaptar segun .stem del proyecto.
+## Descubrimiento de tipos
 
-### servicio-docker
+Los tipos válidos se descubren dinámicamente desde el schema del proyecto:
 
-```yaml
-tipo: servicio-docker
-nombre: $TASK_NAME
-imagen: # imagen:tag
-puertos:
-  - interno: 80
-    externo: 8080
-volumenes:
-  - host: /opt/homeserver/data/$TASK_NAME
-    container: /data
-variables_entorno:
-  TZ: America/New_York
-red: homelab-network
-recursos:
-  memoria: # MB o null
-  cpu: # cores o null
+```bash
+rootline describe <story-dir> --field schema.tipo
 ```
 
-### modulo-sistema
+## Templates por proyecto
+
+Buscar templates específicos del proyecto en `.claude/roadmap.local.md`. Si existe, usar esos templates. Si no existe, usar los templates genéricos de abajo como fallback.
+
+## Templates genéricos (fallback)
+
+Usar cuando no hay `.claude/roadmap.local.md` o cuando el tipo no tiene template en el archivo local.
+
+### Software (módulos, librerías, servicios)
 
 ```yaml
-tipo: modulo-sistema
-nombre: $TASK_NAME
-archivos_gestionados:
-  - path: /etc/example.conf
-    contenido: # template o literal
-    permisos: "0644"
-comandos_sistema:
-  - "systemctl mask example"
-directorios:
-  - path: /opt/homeserver/data
-    owner: root
-    mode: "0755"
-providers_requeridos:
-  - hashicorp/local
-  - hashicorp/null
-```
-
-### operacion-sistema
-
-```yaml
-tipo: operacion-sistema
-nombre: $TASK_NAME
-accion: remocion | migracion | actualizacion
-componentes_afectados:
-  - nombre: nombre-componente
-    tipo: paquete-apt | systemd-service | archivo | directorio
-verificaciones_pre:
-  - comando: "comando a ejecutar"
-    resultado_esperado: "descripción del resultado OK"
-pasos:
-  - orden: 1
-    descripcion: "Descripción del paso"
-    comando: "comando a ejecutar"
-    reversible: true | false
-verificaciones_post:
-  - comando: "comando a ejecutar"
-    resultado_esperado: "descripción del resultado OK"
-rollback:
-  comandos:
-    - "comando para revertir"
-  tiempo_estimado: "X minutos"
-```
-
-### software-module
-
-```yaml
-tipo: software-module
-proyecto: # nombre del proyecto (ej: rootline)
+tipo: # software-module, servicio-docker, etc.
+proyecto: # nombre del proyecto
 lenguaje: # go | python | typescript | rust
-paquete: # path del paquete (ej: internal/extract)
+paquete: # path del paquete/módulo
 interfaces:
-  - nombre: # nombre de interfaz/tipo a implementar
+  - nombre: # interfaz/tipo a implementar
     metodos:
       - nombre: # nombre del método
         input: # parámetros
         output: # retorno
 dependencias_externas:
-  - # librería externa (ej: gopkg.in/yaml.v3)
+  - # librería externa
 tests:
   - # descripción del test case principal
 ```
 
-### software-test
+### Tests
 
 ```yaml
-tipo: software-test
+tipo: # software-test
 proyecto: # nombre del proyecto
 paquete: # path del paquete a testear
-cobertura_objetivo: # porcentaje target (ej: 80%)
+cobertura_objetivo: # porcentaje target
 tipos_test:
   - unit | integration | e2e
 fixtures:
   - # archivos de test data necesarios
 ```
 
-### ci-cd
+### CI/CD
 
 ```yaml
-tipo: ci-cd
-plataforma: # github-actions | forgejo | gitlab
+tipo: # ci-cd
+plataforma: # github-actions | gitlab | forgejo | etc.
 triggers:
   - push | pr | tag | schedule
 jobs:
@@ -114,3 +62,27 @@ jobs:
 artefactos:
   - # binarios, imágenes, paquetes producidos
 ```
+
+### Infraestructura (IaC, sistema, contenedores)
+
+```yaml
+tipo: # modulo-sistema, modulo-infraestructura, lxc, vm, host-script, instance-script, etc.
+nombre: # nombre del componente
+archivos_gestionados:
+  - path: # path del archivo
+    contenido: # template o literal
+    permisos: # "0644"
+comandos:
+  - # comandos a ejecutar
+verificaciones:
+  - comando: # comando de verificación
+    resultado_esperado: # descripción del resultado OK
+```
+
+### Documentación
+
+No requiere bloque YAML de especificación técnica. Describir contenido y estructura esperada en prosa dentro de la sección Alcance del task.
+
+### Agrupación (feature, historia)
+
+Estos tipos se usan en READMEs de agrupación. No llevan Especificación Técnica — su contenido se define por los templates de [epic-guide.md](epic-guide.md) y [story-guide.md](story-guide.md).

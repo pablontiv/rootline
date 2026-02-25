@@ -19,7 +19,7 @@ rootline describe <story-dir> --field schema.tipo
 
 Esto retorna los valores de enum válidos para el campo `tipo` en el directorio de la Story. Seleccionar el tipo que mejor describe el trabajo del Task.
 
-Todos los tipos pueden incluir `## Especificacion Tecnica` cuando se beneficien de una spec estructurada. Ver [type-specs.md](type-specs.md) para templates de especificación por tipo, o usar un bloque libre si no hay template predefinido.
+Todos los tipos pueden incluir `## Especificacion Tecnica` cuando se beneficien de una spec estructurada. Buscar templates del proyecto en `.claude/roadmap.local.md` primero; si no existe, usar los genéricos de [type-specs.md](type-specs.md). Si no hay template para el tipo, usar un bloque libre.
 
 ### Paso 3: Verificar Story Padre
 
@@ -100,7 +100,7 @@ ejecutable_en: 1 sesion
 
 ## Especificacion Tecnica
 
-Ver [type-specs.md](type-specs.md) para templates de especificación por tipo. Usar el bloque YAML correspondiente al tipo seleccionado, o un bloque libre si no hay template predefinido.
+Buscar templates del proyecto en `.claude/roadmap.local.md` primero; si no existe, usar los genéricos de [type-specs.md](type-specs.md). Usar el bloque YAML correspondiente al tipo seleccionado, o un bloque libre si no hay template predefinido.
 
 ## Dependencias
 

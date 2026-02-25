@@ -201,27 +201,63 @@ Presenta ambos outputs al usuario.
 
 ### `/roadmap plan`
 
-Materializar el plan aprobado más reciente como archivos de roadmap.
+Tomar el plan de la conversación actual y descomponerlo en estructura de roadmap.
 
-**Cuándo usar**: Después de aprobar un plan en plan mode que contiene una descomposición de roadmap (estructura epic/feature/story/task).
+**Cuándo usar**: Después de que una sesión produce un plan técnico (investigación, análisis,
+fix propuesto, etc.) y se quiere estructurar como roadmap.
+
+**Fuente del plan** (orden de prioridad):
+1. Contexto de la conversación actual (preferido)
+2. Fallback: plan file de `~/.claude/plans/${CLAUDE_SESSION_ID}.md`
+   (plan files son globales — usar `${CLAUDE_SESSION_ID}` para garantizar que sea de esta sesión)
 
 **Procedimiento**:
-1. Buscar el plan file más reciente en `~/.claude/plans/` (ordenar por fecha de modificación, tomar el más reciente)
-2. Leer el contenido del plan file
-3. Parsear la estructura jerárquica del plan (epics, features, stories, tasks)
-4. Para cada artefacto, crear archivos .md usando los templates de:
+
+#### Fase 1: Descomposición
+
+1. Identificar el plan más reciente:
+   a. Buscar en el contexto de conversación actual (plan técnico, análisis, propuesta, etc.)
+   b. Si la conversación fue compactada o no tiene plan visible → leer plan file de
+      `~/.claude/plans/${CLAUDE_SESSION_ID}.md`
+   c. Si no hay plan en ninguna fuente → informar: "No hay plan en esta conversación.
+      Primero investigar/planificar, luego ejecutar `/roadmap plan`." → STOP
+3. Absorber contexto: leer documentación existente del área afectada en `docs/epics/`
+4. Aplicar framework de descomposición (mismos criterios que Modo Autónomo):
+   - Leer [framework-reference.md](framework-reference.md)
+   - Criterios de escala: 3-5 Features/Epic, 1-4 Stories/Feature, 1-5 Tasks/Story
+   - Constraint Map (postcondiciones + invariantes)
+   - Validación de completitud (Paso 4.5 del Modo Autónomo)
+5. **OBLIGATORIO**: Descomposición DEBE llegar hasta nivel Task para TODOS los Stories.
+   Cada Task con: nombre, tipo, descripción de 1 línea.
+
+#### Fase 2: Presentación para aprobación
+
+6. Presentar árbol jerárquico completo + Constraint Map
+7. Pedir aprobación con `AskUserQuestion` (NO usar `ExitPlanMode` — ese es para plan mode
+   del sistema, no para aprobaciones internas de un skill)
+8. **STOP y esperar aprobación. NO crear archivos sin aprobación.**
+
+#### Fase 3: Materialización (post-aprobación)
+
+9. Para cada artefacto, crear archivos .md usando los templates de:
    - [epic-guide.md](epic-guide.md) para READMEs de Epic y Feature
    - [story-guide.md](story-guide.md) para READMEs de Story
    - [task-guide.md](task-guide.md) para archivos de Task
-5. Después de cada Write, ejecutar `rootline validate <path>`
-6. Si falla, `rootline fix <path>` como fallback
-7. Actualizar tablas en READMEs padre (cascading links)
-8. **Validación batch final**: Ejecutar `rootline validate --all docs/epics/`
-   - Si hay errores → `rootline fix --all docs/epics/` (corrige tanto documentos como .stem redundantes)
+10. Después de cada Write, ejecutar `rootline validate <path>`
+11. Si falla, `rootline fix <path>` como fallback
+12. Actualizar tablas en READMEs padre (cascading links)
+13. **Validación batch final**: Ejecutar `rootline validate --all docs/epics/`
+   - Si hay errores → `rootline fix --all docs/epics/`
    - Reportar resultado final al usuario
-9. Confirmar creación exitosa
+14. **Commit+Push** archivos de planificación creados:
+   - `git add` todos los archivos .md creados (específicos, no `git add .`)
+   - `git commit` con mensaje: `chore(roadmap): create {descripción breve} planning docs`
+   - `git push`
 
-**IMPORTANTE**: Solo crear archivos .md de planificación. NO implementar el trabajo descrito en los tasks — eso lo hace `/roadmap loop`.
+**STOP OBLIGATORIO**: Después de commit+push, DETENERSE COMPLETAMENTE.
+Informar: "Archivos de planificación creados. Ejecutar `/roadmap loop` cuando esté listo
+para implementar."
+NO continuar. NO invocar `/roadmap loop`. NO leer tasks para implementar.
 
 ---
 
@@ -364,9 +400,11 @@ Para cada task en orden:
 
 4. **Implementar**:
    - Si el Task tiene `tipo:` en frontmatter que corresponde a un skill
-     conocido del proyecto, invocarlo via `Skill` tool (ej: tipo `servicio-docker` → `/service TXXX`)
+     conocido del proyecto, invocarlo via `Skill` tool
    - Si no tiene skill asociado, implementar directamente siguiendo
      las instrucciones del Task
+   - Consultar `.claude/roadmap.local.md` (si existe) para templates de
+     especificación técnica del proyecto, o [type-specs.md](type-specs.md) como fallback
 
 5. **Verificar ACs**:
    - Leer sección "Criterios de Aceptación" del Task .md
