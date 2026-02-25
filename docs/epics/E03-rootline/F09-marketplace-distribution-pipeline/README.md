@@ -10,8 +10,8 @@ tipo: feature
 
 ## Scope
 
-**In**: Repo agent-marketplace con dual format (skills.sh + Claude plugin), sync workflow CI/CD, binary bundling opcional
-**Out**: MCP server distribution (F05), Homebrew tap (F05), skill authoring tools
+**In**: Repo agent-marketplace con dual format (skills.sh + Claude plugin), sync workflow CI/CD, install script para rootline
+**Out**: MCP server distribution (F05), Homebrew tap (F05), skill authoring tools, binarios bundled en repo
 
 ## Arquitectura
 
@@ -29,7 +29,7 @@ agent-marketplace/
 │   │   └── SKILL.md
 │   └── rootline-new-doc/
 │       └── SKILL.md
-├── bin/                       ← binarios pre-compilados (opcional, S003)
+├── install.sh                 ← descarga rootline desde GitHub Releases (S003)
 └── README.md
 ```
 
@@ -41,7 +41,7 @@ agent-marketplace/
 |----|--------|-----------|
 | S001 | [Marketplace Repository Scaffold](S001-marketplace-repository-scaffold/) | Repo agent-marketplace existe con manifest válido, 4 skills, e instrucciones |
 | S002 | [Cross-Repo Sync Pipeline](S002-cross-repo-sync-pipeline/) | Push a master sincroniza skills automáticamente al marketplace |
-| S003 | [Binary Bundling](S003-binary-bundling/) | Marketplace incluye binarios pre-compilados e install script |
+| S003 | [Rootline Installer](S003-rootline-installer/) | Install script descarga rootline desde GitHub Releases |
 
 ## Dependencias
 
