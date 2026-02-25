@@ -164,32 +164,41 @@ func TestInitAutoHierarchy(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should create multiple .stem files.
-	if !strings.Contains(out, "levels detected") {
+	// Should create single .stem with levels.
+	if !strings.Contains(out, "levels") {
 		t.Errorf("expected hierarchical output message, got: %s", out)
 	}
 
-	// Root .stem should exist.
+	// Root .stem should exist with levels section.
 	rootStem := filepath.Join(dir, ".stem")
 	content, err := os.ReadFile(rootStem)
 	if err != nil {
 		t.Fatalf("expected root .stem: %v", err)
 	}
-	if !strings.Contains(string(content), "version: 1") {
+	s := string(content)
+	if !strings.Contains(s, "version: 1") {
 		t.Errorf("expected version: 1 in root .stem")
 	}
-	if !strings.Contains(string(content), "prefix: E") {
-		t.Errorf("expected prefix: E in root .stem, got: %s", string(content))
+	if !strings.Contains(s, "levels:") {
+		t.Errorf("expected levels: section in root .stem, got: %s", s)
+	}
+	if !strings.Contains(s, "epic:") {
+		t.Errorf("expected epic level in root .stem, got: %s", s)
+	}
+	if !strings.Contains(s, "feature:") {
+		t.Errorf("expected feature level in root .stem, got: %s", s)
+	}
+	if !strings.Contains(s, "prefix: E") {
+		t.Errorf("expected prefix: E in root .stem, got: %s", s)
+	}
+	if !strings.Contains(s, "prefix: F") {
+		t.Errorf("expected prefix: F in root .stem, got: %s", s)
 	}
 
-	// Child .stem in E01-infra/ should exist with F prefix.
+	// No child .stem files should be created.
 	childStem := filepath.Join(dir, "E01-infra", ".stem")
-	childContent, err := os.ReadFile(childStem)
-	if err != nil {
-		t.Fatalf("expected child .stem in E01-infra/: %v", err)
-	}
-	if !strings.Contains(string(childContent), "prefix: F") {
-		t.Errorf("expected prefix: F in child .stem, got: %s", string(childContent))
+	if _, err := os.Stat(childStem); err == nil {
+		t.Error("expected no child .stem in E01-infra/ (levels are in root .stem)")
 	}
 }
 
@@ -215,9 +224,12 @@ func TestInitAutoHierarchyDryRun(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should show separators for each .stem file.
+	// Should show single .stem with levels section.
 	if !strings.Contains(out, "# --- ") {
-		t.Errorf("expected file separators in dry-run output, got: %s", out)
+		t.Errorf("expected file separator in dry-run output, got: %s", out)
+	}
+	if !strings.Contains(out, "levels:") {
+		t.Errorf("expected levels: section in dry-run output, got: %s", out)
 	}
 	if !strings.Contains(out, "prefix: E") {
 		t.Errorf("expected prefix: E in dry-run output, got: %s", out)

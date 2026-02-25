@@ -147,8 +147,8 @@ func runInitHierarchical(cmd *cobra.Command, absTarget, target string, hierarchy
 		}
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created %d .stem files (%d levels detected from %d files)\n",
-		len(stemFiles), len(hierarchy.Levels), len(records))
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created .stem with %d levels (detected from %d files)\n",
+		len(hierarchy.Levels), len(records))
 	return nil
 }
 
@@ -157,7 +157,7 @@ type stemFile struct {
 	content string
 }
 
-// buildHierarchicalStems generates the root and per-level .stem file contents.
+// buildHierarchicalStems generates a single root .stem file with a levels: section.
 // Returns the stem files and a sorted list of field names for which aggregates were generated.
 func buildHierarchicalStems(absTarget string, hierarchy *infer.HierarchyResult) ([]stemFile, []string) {
 	var files []stemFile
@@ -170,59 +170,25 @@ func buildHierarchicalStems(absTarget string, hierarchy *infer.HierarchyResult) 
 	}
 	sort.Strings(aggNames)
 
-	// Root .stem: common fields + first level's sequence + aggregates.
+	// Single root .stem: common fields + levels section + aggregates.
 	rootYAML := generateHierarchicalRootYAML(hierarchy, aggregates)
 	files = append(files, stemFile{
 		path:    filepath.Join(absTarget, ".stem"),
 		content: rootYAML,
 	})
 
-	// Per-level .stems: each level's overrides go into parent dirs.
-	for i := 1; i < len(hierarchy.Levels); i++ {
-		ls := hierarchy.Levels[i]
-		prevLevel := hierarchy.Levels[i-1]
-		yaml := generateLevelStemYAML(&ls)
-
-		// Write into each parent directory (previous level's dirs).
-		for _, parentDir := range prevLevel.Level.DirPaths {
-			stemPath := filepath.Join(absTarget, parentDir, ".stem")
-			files = append(files, stemFile{
-				path:    stemPath,
-				content: yaml,
-			})
-		}
-	}
-
 	return files, aggNames
 }
 
-// generateHierarchicalRootYAML generates the root .stem with common fields
-// and the first level's sequence id.
+// generateHierarchicalRootYAML generates the root .stem with common fields,
+// a levels: section for per-level schemas, and aggregates.
 func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates map[string]string) string {
 	var b strings.Builder
 	b.WriteString("version: 1\nscope:\n  match: \"*.md\"\nschema:\n")
 
-	// Add the first level's sequence id.
-	if len(hierarchy.Levels) > 0 {
-		ls := hierarchy.Levels[0]
-		if idField, ok := ls.OnlyHere["id"]; ok {
-			b.WriteString("  id:\n")
-			fmt.Fprintf(&b, "    type: %s\n", idField.Type)
-			if idField.Prefix != "" {
-				fmt.Fprintf(&b, "    prefix: %s\n", idField.Prefix)
-			}
-			if idField.Digits > 0 {
-				fmt.Fprintf(&b, "    digits: %d\n", idField.Digits)
-			}
-		}
-	}
-
 	// Add common fields from root schema.
 	keys := make([]string, 0, len(hierarchy.Root.Schema))
 	for k := range hierarchy.Root.Schema {
-		if k == "id" {
-			continue // already handled above
-		}
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -236,6 +202,52 @@ func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates m
 		}
 		if len(field.Values) > 0 {
 			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(field.Values, ", "))
+		}
+	}
+
+	// Emit levels section from hierarchy analysis.
+	levelsMap := hierarchy.ToLevelsMap()
+	if len(levelsMap) > 0 {
+		b.WriteString("levels:\n")
+		// Sort level names for deterministic output.
+		levelNames := make([]string, 0, len(levelsMap))
+		for name := range levelsMap {
+			levelNames = append(levelNames, name)
+		}
+		sort.Strings(levelNames)
+
+		for _, name := range levelNames {
+			level := levelsMap[name]
+			fmt.Fprintf(&b, "  %s:\n", name)
+			fmt.Fprintf(&b, "    match: \"%s\"\n", level.Match)
+			if len(level.Children) > 0 {
+				fmt.Fprintf(&b, "    children: [%s]\n", strings.Join(level.Children, ", "))
+			}
+			if len(level.Schema) > 0 {
+				b.WriteString("    schema:\n")
+				schemaKeys := make([]string, 0, len(level.Schema))
+				for k := range level.Schema {
+					schemaKeys = append(schemaKeys, k)
+				}
+				sort.Strings(schemaKeys)
+				for _, fieldName := range schemaKeys {
+					field := level.Schema[fieldName]
+					fmt.Fprintf(&b, "      %s:\n", fieldName)
+					fmt.Fprintf(&b, "        type: %s\n", field.Type)
+					if field.Required {
+						b.WriteString("        required: true\n")
+					}
+					if field.Prefix != "" {
+						fmt.Fprintf(&b, "        prefix: %s\n", field.Prefix)
+					}
+					if field.Digits > 0 {
+						fmt.Fprintf(&b, "        digits: %d\n", field.Digits)
+					}
+					if len(field.Values) > 0 {
+						fmt.Fprintf(&b, "        values: [%s]\n", strings.Join(field.Values, ", "))
+					}
+				}
+			}
 		}
 	}
 
