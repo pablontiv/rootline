@@ -15,11 +15,11 @@ cliente: Platform Owner
 
 ## Criterios de Aceptacion (semanticos)
 
-- [ ] Workflow publish-marketplace.yml funcional en CI
-- [ ] Sync automático en push a master cuando .claude/ cambia
-- [ ] No-op cuando skills no han cambiado (idempotencia)
-- [ ] Validación pre-push de estructura del marketplace
-- [ ] Documentación de setup de PAT secret
+- [x] Workflow publish-marketplace.yml funcional en CI
+- [x] Sync automático en push a master cuando .claude/ cambia
+- [x] No-op cuando skills no han cambiado (idempotencia)
+- [x] Validación pre-push de estructura del marketplace
+- [x] Documentación de setup de PAT secret
 
 ## Tasks
 
