@@ -48,6 +48,61 @@ func CheckNesting(levels map[string]*HierarchyLevel, recordRelPath string) []Val
 	return errs
 }
 
+// ExpandLevels generates virtual StemEntries from a StemFile's Levels map
+// for a given record's relative path. Each path component is matched against
+// level patterns; matching levels produce a StemEntry with that level's
+// schema and validate fields. Entries are returned in path order (shallowest
+// first) for correct merge ordering.
+func ExpandLevels(stem *StemFile, recordRelPath string) []StemEntry {
+	if stem == nil || len(stem.Levels) == 0 {
+		return nil
+	}
+
+	parts := strings.Split(filepath.ToSlash(recordRelPath), "/")
+	var entries []StemEntry
+
+	for _, part := range parts {
+		levelName := matchLevel(stem.Levels, part)
+		if levelName == "" {
+			continue
+		}
+
+		level := stem.Levels[levelName]
+		virtual := &StemFile{
+			Path:   fmt.Sprintf("<levels:%s>", levelName),
+			Schema: level.Schema,
+		}
+		if level.Validate != nil {
+			virtual.Validate = level.Validate
+		}
+
+		entries = append(entries, StemEntry{
+			Path: virtual.Path,
+			Stem: virtual,
+		})
+	}
+
+	return entries
+}
+
+// ResolveForRecord resolves the effective StemFile for a specific record
+// by walking up the directory tree, merging .stem files, and expanding
+// levels if present. Virtual level entries are appended after real entries
+// so they override the base schema with per-level specifics.
+func ResolveForRecord(dir string, recordPath string) (*StemFile, error) {
+	entries, err := WalkUp(dir)
+	if err != nil {
+		return nil, err
+	}
+	merged := MergeStemFiles(entries)
+	if merged.Levels != nil {
+		virtualEntries := ExpandLevels(merged, recordPath)
+		entries = append(entries, virtualEntries...)
+		merged = MergeStemFiles(entries)
+	}
+	return merged, nil
+}
+
 // matchLevel returns the level name whose Match pattern matches the given
 // path component, or "" if no level matches.
 func matchLevel(levels map[string]*HierarchyLevel, component string) string {

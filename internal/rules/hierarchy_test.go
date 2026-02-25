@@ -1,6 +1,8 @@
 package rules
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -112,6 +114,194 @@ schema:
 
 	if stem.Levels != nil {
 		t.Errorf("expected Levels to be nil, got %v", stem.Levels)
+	}
+}
+
+// --- ExpandLevels tests ---
+
+func TestExpandLevels(t *testing.T) {
+	stem := &StemFile{
+		Levels: map[string]*HierarchyLevel{
+			"epic": {Match: "E*", Children: []string{"feature"},
+				Schema: map[string]SchemaField{"id": {Type: "sequence", Prefix: "E", Digits: 2}}},
+			"feature": {Match: "F*", Children: []string{"story"},
+				Schema: map[string]SchemaField{"id": {Type: "sequence", Prefix: "F", Digits: 2}}},
+			"story": {Match: "S*", Children: []string{"task"},
+				Schema: map[string]SchemaField{"id": {Type: "sequence", Prefix: "S", Digits: 3}}},
+			"task": {Match: "T*", Children: []string{},
+				Schema:   map[string]SchemaField{"id": {Type: "sequence", Prefix: "T", Digits: 3}},
+				Validate: []ValidationRule{{Field: "estado", Rule: "required"}}},
+		},
+	}
+
+	entries := ExpandLevels(stem, "E01/F02/S001/T001.md")
+	if len(entries) != 4 {
+		t.Fatalf("expected 4 virtual entries, got %d", len(entries))
+	}
+
+	// Verify order: epic, feature, story, task (shallowest first)
+	wantPrefixes := []string{"E", "F", "S", "T"}
+	for i, entry := range entries {
+		idField := entry.Stem.Schema["id"]
+		if idField.Prefix != wantPrefixes[i] {
+			t.Errorf("entry[%d] prefix = %q, want %q", i, idField.Prefix, wantPrefixes[i])
+		}
+	}
+
+	// Last entry (task) should have validate rules
+	if len(entries[3].Stem.Validate) != 1 {
+		t.Errorf("task entry should have 1 validate rule, got %d", len(entries[3].Stem.Validate))
+	}
+}
+
+func TestExpandLevelsNoMatch(t *testing.T) {
+	stem := &StemFile{
+		Levels: map[string]*HierarchyLevel{
+			"epic": {Match: "E*", Schema: map[string]SchemaField{"id": {Type: "string"}}},
+		},
+	}
+
+	entries := ExpandLevels(stem, "unknown/path/file.md")
+	if len(entries) != 0 {
+		t.Errorf("expected 0 entries for non-matching path, got %d", len(entries))
+	}
+}
+
+func TestExpandLevelsPartialMatch(t *testing.T) {
+	stem := &StemFile{
+		Levels: map[string]*HierarchyLevel{
+			"epic":    {Match: "E*", Schema: map[string]SchemaField{"tipo": {Type: "string"}}},
+			"feature": {Match: "F*", Schema: map[string]SchemaField{"estado": {Type: "string"}}},
+		},
+	}
+
+	// Only E01 and F02 match; "unknown" doesn't
+	entries := ExpandLevels(stem, "E01/unknown/F02/file.md")
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+}
+
+func TestExpandLevelsNilStem(t *testing.T) {
+	entries := ExpandLevels(nil, "E01/F02/file.md")
+	if entries != nil {
+		t.Errorf("expected nil for nil stem, got %v", entries)
+	}
+}
+
+func TestExpandLevelsNoLevels(t *testing.T) {
+	stem := &StemFile{Version: 1}
+	entries := ExpandLevels(stem, "E01/F02/file.md")
+	if entries != nil {
+		t.Errorf("expected nil for stem without levels, got %v", entries)
+	}
+}
+
+func TestExpandLevelsWithRealChildMergeOrder(t *testing.T) {
+	// Simulate: real child .stem + virtual level — real wins because it comes
+	// first in the merge chain, then virtual overrides.
+	// Actually per the design: real entries come first, virtual entries are appended.
+	// So virtual entries override the real ones in the final merge.
+	// But a real child .stem at a deeper level should still be able to override.
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"base": {Type: "string", Required: true},
+		},
+		Levels: map[string]*HierarchyLevel{
+			"epic": {Match: "E*",
+				Schema: map[string]SchemaField{"epic_field": {Type: "string"}}},
+		},
+	}
+
+	entries := ExpandLevels(stem, "E01/file.md")
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].Stem.Schema["epic_field"].Type != "string" {
+		t.Error("virtual entry should contain epic_field")
+	}
+	// Base schema is NOT in the virtual entry — it's on the parent stem
+	if _, hasBase := entries[0].Stem.Schema["base"]; hasBase {
+		t.Error("virtual entry should not contain base field")
+	}
+}
+
+func TestResolveForRecordNoLevels(t *testing.T) {
+	// Create a temp dir with a .stem and .git
+	dir := t.TempDir()
+	// Create .git marker
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a simple .stem
+	stemContent := []byte("version: 1\nschema:\n  estado:\n    type: string\n")
+	if err := os.WriteFile(filepath.Join(dir, ".stem"), stemContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ResolveForRecord(dir, "file.md")
+	if err != nil {
+		t.Fatalf("ResolveForRecord failed: %v", err)
+	}
+	if result.Schema["estado"].Type != "string" {
+		t.Error("expected estado field from .stem")
+	}
+	if result.Levels != nil {
+		t.Error("expected nil Levels")
+	}
+}
+
+func TestResolveForRecordWithLevels(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stemContent := []byte(`
+version: 1
+scope:
+  match: "*.md"
+schema:
+  base:
+    type: string
+    required: true
+levels:
+  epic:
+    match: "E*"
+    schema:
+      epic_id:
+        type: sequence
+        prefix: E
+        digits: 2
+  task:
+    match: "T*"
+    schema:
+      task_id:
+        type: sequence
+        prefix: T
+        digits: 3
+`)
+	if err := os.WriteFile(filepath.Join(dir, ".stem"), stemContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ResolveForRecord(dir, "E01/T001.md")
+	if err != nil {
+		t.Fatalf("ResolveForRecord failed: %v", err)
+	}
+
+	// Should have base (from root schema) + task_id (from task level, last match)
+	if result.Schema["base"].Type != "string" {
+		t.Error("expected base field from root schema")
+	}
+	// task_id should be present from the task level virtual entry
+	if result.Schema["task_id"].Type != "sequence" {
+		t.Errorf("expected task_id from task level, got %+v", result.Schema["task_id"])
+	}
+	// epic_id should be present from the epic level virtual entry
+	if result.Schema["epic_id"].Type != "sequence" {
+		t.Errorf("expected epic_id from epic level, got %+v", result.Schema["epic_id"])
 	}
 }
 
