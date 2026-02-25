@@ -121,7 +121,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      workflows: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -182,12 +181,17 @@ jobs:
             fi
 
             NEXT="v${MAJOR}.${MINOR}.${PATCH}"
-            echo "Tagging $COMMIT (${MSG%%:*}) as $NEXT"
-            git tag "$NEXT" "$COMMIT"
-            git push origin "$NEXT"
+            echo "Bump: $COMMIT (${MSG%%:*}) -> $NEXT"
             LAST_TAG="$NEXT"
             LATEST_TAG="$NEXT"
           done
+
+          # Tag HEAD (avoids workflow-file permission issue on older commits)
+          if [ -n "$LATEST_TAG" ]; then
+            echo "Tagging HEAD as $LATEST_TAG"
+            git tag "$LATEST_TAG" HEAD
+            git push origin "$LATEST_TAG"
+          fi
 
           echo "latest=${LATEST_TAG}" >> "$GITHUB_OUTPUT"
 
