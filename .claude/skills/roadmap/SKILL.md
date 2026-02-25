@@ -3,7 +3,7 @@ name: roadmap
 description: |
   AI-native planning framework for autonomous project decomposition.
   Accepts free text to decompose into epics, features, stories, and tasks.
-  Subcommands: pending, loop, plan.
+  Subcommands: pending, loop, plan. Without arguments shows decision tree.
   Tasks are self-contained units with technical specs and binary acceptance criteria.
   This skill should be used when the user says "descomponer en features",
   "crear roadmap de X", "estructura de X",
@@ -224,13 +224,87 @@ Materializar el plan aprobado más reciente como archivos de roadmap.
 
 ### `/roadmap` (sin argumentos)
 
-Mostrar árbol jerárquico y resumen estadístico del estado actual (read-only).
+Generar **árbol de decisión** que muestre ramas ejecutables, cadenas de dependencia, y bloqueos para decidir qué loop implementar.
 
 **Procedimiento**:
-1. Ejecutar `rootline tree docs/epics/ --where "tipo not in ['feature', 'historia']" --output table`
-2. Ejecutar `rootline stats docs/epics/ --where "tipo not in ['feature', 'historia']" --output table`
 
-Presenta ambos outputs al usuario sin modificaciones.
+#### Paso 1: Recopilar datos
+
+Ejecutar en paralelo:
+1. `rootline stats docs/epics/ --where "tipo not in ['feature', 'historia']" --output table` — totales por estado
+2. `rootline query docs/epics/ --where "tipo not in ['feature', 'historia'] && not (estado in ['Completed', 'Obsolete'])" --output table` — tasks no completadas
+3. `rootline graph docs/epics/ --check` — validar dependencias (ciclos, broken links)
+
+#### Paso 2: Agrupar en ramas
+
+Para cada task pendiente/specified/bloqueada:
+1. Extraer el **Feature path** (ej: `E04/F09`) como agrupador de rama
+2. Dentro de cada rama, buscar `[[blocks:TXXX-name]]` en los archivos .md para construir la cadena de dependencia intra-story
+3. Identificar el **tipo dominante** de la rama (software-module, ci-cd, etc.)
+4. Leer el Feature README para obtener el **objetivo** de la rama (1 línea)
+
+#### Paso 3: Clasificar ramas
+
+Separar en dos categorías:
+- **Ejecutables**: todas las tasks tienen estado Pending/Specified, sin dependencias externas insatisfechas
+- **Bloqueadas**: al menos una task tiene estado Blocked o dependencia cross-feature no Completed
+
+Dentro de ejecutables, identificar **quick wins** (ramas con 1 solo task).
+
+#### Paso 4: Renderizar árbol de decisión
+
+Formato de salida:
+
+```
+ROADMAP DECISION TREE — N/M completados (X%)
+══════════════════════════════════════════════
+
+¿Qué objetivo priorizar?
+│
+├─► RAMA: Feature Name (Epic) — N tasks, tipo dominante
+│   │
+│   T001: nombre                    [estado, tipo]
+│   │   ↓ desbloquea
+│   T002: nombre                    [estado, tipo]
+│       ↓ CIERRA [qué capacidad]
+│
+├─► RAMA: ...
+│
+└─► QUICK WIN — task aislado
+    T001: nombre                    [estado, tipo]
+
+BLOQUEADAS SIN CAMINO DIRECTO
+│
+├── TXXX: nombre    [blocker: descripción]
+└── TXXX: nombre    [blocker: descripción]
+```
+
+Reglas de renderizado:
+- Usar `├─►` para ramas ejecutables, `├──` para bloqueadas
+- `↓ desbloquea` entre tasks con dependencia `[[blocks:]]`
+- `↓ CIERRA [capacidad]` en el último task de la rama (leer del Feature README)
+- Marcar tasks cuya dependencia ya está Completed pero siguen en Blocked como `[stale?]`
+- Ordenar ramas ejecutables por proximidad al último commit (consultar `git log -1 --format=%s`)
+
+#### Paso 5: Renderizar criterios de decisión
+
+Al final del árbol, agregar flowchart de decisión:
+
+```
+CRITERIOS DE DECISION
+│
+├─ ¿Hay rama en progreso (último commit)?
+│  ├─ SI → Cerrar esa rama primero
+│  └─ NO ↓
+├─ ¿Hay deuda técnica que bloquea futuro trabajo?
+│  ├─ SI → Rama que desbloquea más dependientes
+│  └─ NO ↓
+├─ ¿Quiero progreso rápido?
+│  ├─ SI → Quick win o rama más corta
+│  └─ NO → Rama con mayor impacto arquitectural
+```
+
+Adaptar el flowchart al estado real (referenciar ramas concretas en cada hoja).
 
 ---
 
