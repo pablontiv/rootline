@@ -30,9 +30,39 @@ jobs:
           token: ${{ secrets.MARKETPLACE_TOKEN }}
           path: marketplace
 
-      - name: Sync skills
+      - name: Compute source hash
+        id: source_hash
         run: |
-          # Sync each skill with rootline- prefix
+          HASH=$(find .claude/skills/ -type f -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "Source skills hash: $HASH"
+
+      - name: Compute destination hash
+        id: dest_hash
+        run: |
+          HASH=$(find marketplace/skills/ -type f -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "Destination skills hash: $HASH"
+
+      - name: Check for changes
+        id: diff
+        run: |
+          FORCE="${{ github.event_name == 'workflow_dispatch' }}"
+          if [ "${{ steps.source_hash.outputs.hash }}" = "${{ steps.dest_hash.outputs.hash }}" ] && [ "$FORCE" != "true" ]; then
+            echo "No changes detected between source and destination skills, skipping push"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            if [ "$FORCE" = "true" ]; then
+              echo "Force sync via workflow_dispatch"
+            else
+              echo "Changes detected, proceeding with sync"
+            fi
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync skills
+        if: steps.diff.outputs.changed == 'true'
+        run: |
           for skill_dir in .claude/skills/*/; do
             skill_name=$(basename "$skill_dir")
             target="marketplace/skills/rootline-${skill_name}"
@@ -42,6 +72,7 @@ jobs:
           done
 
       - name: Update marketplace version
+        if: steps.diff.outputs.changed == 'true'
         run: |
           cd marketplace
           python3 -c "
@@ -56,14 +87,16 @@ jobs:
           "
 
       - name: Commit and push
+        if: steps.diff.outputs.changed == 'true'
         run: |
           cd marketplace
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then
-            echo "No changes to commit"
+            echo "No changes to commit (files identical after sync)"
             exit 0
           fi
           git commit -m "chore: sync skills from rootline@${GITHUB_SHA::7}"
           git push
+          echo "Successfully pushed to agent-marketplace"
