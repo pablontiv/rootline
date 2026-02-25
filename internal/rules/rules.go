@@ -11,17 +11,28 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// HierarchyLevel defines a single level in a hierarchical schema declaration.
+// Each level has a glob pattern for matching directory/file names, allowed
+// child level names, and optional per-level schema and validation overrides.
+type HierarchyLevel struct {
+	Match    string                 `yaml:"match" json:"match"`
+	Children []string               `yaml:"children" json:"children,omitempty"`
+	Schema   map[string]SchemaField `yaml:"schema" json:"schema,omitempty"`
+	Validate []ValidationRule       `yaml:"validate" json:"validate,omitempty"`
+}
+
 // StemFile represents a parsed .stem YAML file.
 type StemFile struct {
-	Path       string                 `yaml:"-"`
-	Version    int                    `yaml:"version"`
-	Scope      Scope                  `yaml:"scope"`
-	Schema     map[string]SchemaField `yaml:"schema"`
-	Validate   []ValidationRule       `yaml:"validate"`
-	Derive     map[string]any         `yaml:"derive"`
-	Aggregate  map[string]any         `yaml:"aggregate"`
-	Links      LinkSchema             `yaml:"links"`
-	Structural StructuralRules        `yaml:"structural"`
+	Path       string                     `yaml:"-"`
+	Version    int                        `yaml:"version"`
+	Scope      Scope                      `yaml:"scope"`
+	Schema     map[string]SchemaField     `yaml:"schema"`
+	Validate   []ValidationRule           `yaml:"validate"`
+	Derive     map[string]any             `yaml:"derive"`
+	Aggregate  map[string]any             `yaml:"aggregate"`
+	Links      LinkSchema                 `yaml:"links"`
+	Structural StructuralRules            `yaml:"structural"`
+	Levels     map[string]*HierarchyLevel `yaml:"levels" json:"levels,omitempty"`
 }
 
 // StructuralRules defines directory-level validation constraints.
