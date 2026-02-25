@@ -114,3 +114,70 @@ schema:
 		t.Errorf("expected Levels to be nil, got %v", stem.Levels)
 	}
 }
+
+// --- CheckNesting tests ---
+
+func testLevels() map[string]*HierarchyLevel {
+	return map[string]*HierarchyLevel{
+		"epic":    {Match: "E*", Children: []string{"feature"}},
+		"feature": {Match: "F*", Children: []string{"story"}},
+		"story":   {Match: "S*", Children: []string{"task"}},
+		"task":    {Match: "T*", Children: []string{}},
+	}
+}
+
+func TestCheckNesting(t *testing.T) {
+	errs := CheckNesting(testLevels(), "E01/F02/S001/T001.md")
+	if len(errs) != 0 {
+		t.Errorf("expected no errors for valid chain, got %v", errs)
+	}
+}
+
+func TestCheckNestingInvalid(t *testing.T) {
+	errs := CheckNesting(testLevels(), "E01/T001.md")
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Rule != "nesting" {
+		t.Errorf("error rule = %q, want %q", errs[0].Rule, "nesting")
+	}
+}
+
+func TestCheckNestingLeaf(t *testing.T) {
+	// Subdir under leaf (task has children: [])
+	errs := CheckNesting(testLevels(), "E01/F02/S001/T001/sub.md")
+	// T001 matches task, sub.md doesn't match any level — no error
+	// because unknown components are skipped
+	if len(errs) != 0 {
+		t.Errorf("expected no errors for unknown component under leaf, got %v", errs)
+	}
+
+	// Test a clear case: leaf level with no allowed children
+	levels2 := map[string]*HierarchyLevel{
+		"parent": {Match: "P*", Children: []string{"child"}},
+		"child":  {Match: "C*", Children: []string{}},
+		"leaf":   {Match: "L*", Children: []string{}},
+	}
+	errs = CheckNesting(levels2, "P01/C01/L01.md")
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for leaf under child (children:[]), got %d: %v", len(errs), errs)
+	}
+}
+
+func TestCheckNestingNoLevels(t *testing.T) {
+	errs := CheckNesting(nil, "E01/F02/S001/T001.md")
+	if len(errs) != 0 {
+		t.Errorf("expected no errors for nil levels, got %v", errs)
+	}
+}
+
+func TestCheckNestingUnknownComponent(t *testing.T) {
+	// Path with component not matching any level is skipped
+	errs := CheckNesting(testLevels(), "E01/unknown/F02/S001/T001.md")
+	// "unknown" doesn't match any level, parentLevel resets to ""
+	// F02 matches feature but has no parent context → OK
+	// S001 under feature → OK, T001 under story → OK
+	if len(errs) != 0 {
+		t.Errorf("expected no errors with unknown component, got %v", errs)
+	}
+}
