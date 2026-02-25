@@ -8,10 +8,29 @@ on:
   workflow_dispatch:
 
 jobs:
+  check-token:
+    name: Check Token
+    runs-on: ubuntu-latest
+    outputs:
+      has_token: ${{ steps.check.outputs.has_token }}
+    steps:
+      - name: Check for marketplace token
+        id: check
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            echo "MARKETPLACE_TOKEN not configured, skipping marketplace sync"
+          fi
+        env:
+          TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
+
   publish:
     name: Sync Skills to Marketplace
+    needs: check-token
+    if: needs.check-token.outputs.has_token == 'true'
     runs-on: ubuntu-latest
-    if: ${{ secrets.MARKETPLACE_TOKEN != '' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
