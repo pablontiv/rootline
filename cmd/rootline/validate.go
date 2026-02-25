@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/derive"
-	"github.com/pablontiv/rootline/internal/doctor"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -48,7 +47,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		return runValidateStaged(cmd)
 	}
 	if validateAll {
-		return runValidateAll(cmd)
+		return runValidateAll(cmd, args)
 	}
 	if len(args) == 0 {
 		return fmt.Errorf("specify file(s) to validate or use --all")
@@ -118,38 +117,23 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 	return outputJSON(cmd, batch, validateHasFailure(batch))
 }
 
-func runValidateAll(cmd *cobra.Command) error {
+func runValidateAll(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
-	root, err := filepath.Abs(".")
+	scanRoot := "."
+	if len(args) > 0 {
+		scanRoot = args[0]
+	}
+	root, err := filepath.Abs(scanRoot)
 	if err != nil {
 		return err
 	}
 
 	// Phase 1: Stem health checks.
 	var results []*rules.ValidationResult
-	doctorResult, doctorErr := doctor.RunChecks(ctx, root)
-	if doctorErr == nil {
-		for _, c := range doctorResult.Checks {
-			if c.Status == "pass" {
-				continue
-			}
-			severity := "warn"
-			if c.Status == "fail" {
-				severity = "error"
-			}
-			path := c.Path
-			if path == "" {
-				path = ".stem"
-			}
-			errs := []rules.ValidationError{{
-				Rule:     c.Name,
-				Message:  c.Message,
-				Source:   "stem-health",
-				Severity: severity,
-			}}
-			results = append(results, rules.NewValidationResult(path, errs))
-		}
+	stemHealth, stemErr := rules.ValidateStemHealth(ctx, root)
+	if stemErr == nil {
+		results = append(results, stemHealthToResults(stemHealth)...)
 	}
 
 	// Phase 2: Document validation.
@@ -266,6 +250,33 @@ func validateHasFailure(batch *rules.BatchValidationResult) bool {
 		return true
 	}
 	return false
+}
+
+// stemHealthToResults converts stem-health checks into ValidationResults.
+func stemHealthToResults(result *rules.StemHealthResult) []*rules.ValidationResult {
+	var results []*rules.ValidationResult
+	for _, c := range result.Checks {
+		if c.Status == "pass" {
+			continue
+		}
+		severity := "warn"
+		if c.Status == "fail" {
+			severity = "error"
+		}
+		path := c.Path
+		if path == "" {
+			path = ".stem"
+		}
+		errs := []rules.ValidationError{{
+			Rule:     c.Name,
+			Field:    c.Field,
+			Message:  c.Message,
+			Source:   "stem-health",
+			Severity: severity,
+		}}
+		results = append(results, rules.NewValidationResult(path, errs))
+	}
+	return results
 }
 
 func renderValidateTable(cmd *cobra.Command, batch *rules.BatchValidationResult) error {

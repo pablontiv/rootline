@@ -29,6 +29,7 @@ const (
 	AddField          Type = "add_field"
 	CorrectLink       Type = "correct_link"
 	AddAggregate      Type = "add_aggregate"
+	RemoveStemField   Type = "remove_stem_field"
 )
 
 // Proposal represents a suggested fix for one or more validation errors.
@@ -63,6 +64,7 @@ type Summary struct {
 	AddField          int `json:"add_field"`
 	CorrectLink       int `json:"correct_link"`
 	AddAggregate      int `json:"add_aggregate"`
+	RemoveStemField   int `json:"remove_stem_field"`
 }
 
 // Analyze runs all detectors against validation errors and returns a Report.
@@ -164,6 +166,8 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 			summary.CorrectLink++
 		case AddAggregate:
 			summary.AddAggregate++
+		case RemoveStemField:
+			summary.RemoveStemField++
 		}
 	}
 

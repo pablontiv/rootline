@@ -96,6 +96,14 @@ func ApplyProposals(_ context.Context, report *proposal.Report, root string, rec
 				}
 			}
 			applied = append(applied, p)
+		case proposal.RemoveStemField:
+			if len(p.Paths) > 0 {
+				stemPath := filepath.Join(root, p.Paths[0])
+				if err := removeStemSchemaField(stemPath, p.Field); err != nil {
+					return fmt.Errorf("remove_stem_field %s in %s: %w", p.Field, p.Paths[0], err)
+				}
+			}
+			applied = append(applied, p)
 		}
 	}
 
@@ -432,6 +440,63 @@ func applyCorrectLink(p proposal.Proposal, root string) error {
 		}
 	}
 	return nil
+}
+
+// removeStemSchemaField removes a field from the schema section of a .stem file.
+// If the schema section becomes empty after removal, it is also removed.
+func removeStemSchemaField(stemPath, fieldName string) error {
+	content, err := os.ReadFile(stemPath)
+	if err != nil {
+		return err
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(content, &doc); err != nil {
+		return fmt.Errorf("parsing %s: %w", stemPath, err)
+	}
+
+	if len(doc.Content) == 0 {
+		return fmt.Errorf("empty .stem document")
+	}
+
+	rootNode := doc.Content[0]
+	if rootNode.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected mapping node in .stem")
+	}
+
+	// Find "schema" key in root mapping.
+	for i := 0; i+1 < len(rootNode.Content); i += 2 {
+		if rootNode.Content[i].Value != "schema" {
+			continue
+		}
+		schemaNode := rootNode.Content[i+1]
+		if schemaNode.Kind != yaml.MappingNode {
+			continue
+		}
+
+		// Find and remove the field from schema.
+		for j := 0; j+1 < len(schemaNode.Content); j += 2 {
+			if schemaNode.Content[j].Value == fieldName {
+				// Remove key-value pair (2 nodes).
+				schemaNode.Content = append(schemaNode.Content[:j], schemaNode.Content[j+2:]...)
+
+				// If schema is now empty, remove it from root.
+				if len(schemaNode.Content) == 0 {
+					rootNode.Content = append(rootNode.Content[:i], rootNode.Content[i+2:]...)
+				}
+
+				out, marshalErr := yaml.Marshal(&doc)
+				if marshalErr != nil {
+					return marshalErr
+				}
+				return os.WriteFile(stemPath, out, 0644)
+			}
+		}
+
+		return fmt.Errorf("field %q not found in schema of %s", fieldName, stemPath)
+	}
+
+	return fmt.Errorf("no schema section in %s", stemPath)
 }
 
 // addAggregateToStem adds an aggregate expression to a .stem file using YAML AST.

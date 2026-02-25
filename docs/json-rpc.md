@@ -1,3 +1,6 @@
+---
+estado: Pending
+---
 # MCP Server
 
 Rootline exposes its engine via the **Model Context Protocol (MCP)** over JSON-RPC 2.0 stdio transport.

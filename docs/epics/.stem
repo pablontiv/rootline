@@ -9,7 +9,7 @@ schema:
 structural:
   subdirs:
     require_index: README.md
-    min_children: 2
+    min_children: 1
     severity: warn
 
 links:

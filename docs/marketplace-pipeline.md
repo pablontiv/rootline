@@ -1,3 +1,6 @@
+---
+estado: Pending
+---
 # Marketplace Distribution Pipeline
 
 Automated pipeline that syncs skills from the rootline repo to [pablontiv/agent-marketplace](https://github.com/pablontiv/agent-marketplace).

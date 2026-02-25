@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Validate docs/epics/ before pushing if any doc files changed in the push range.
+# Mirrors the docs-validate CI job to catch errors locally.
+
+remote="$1"
+
+while read local_ref local_sha remote_ref remote_sha; do
+  # Skip delete pushes
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    range="$local_sha"
+  else
+    range="$remote_sha..$local_sha"
+  fi
+
+  # Check if any docs/epics files changed in the push range
+  if git diff --name-only "$range" -- docs/epics/ 2>/dev/null | grep -q .; then
+    echo "Validating docs/epics/ before push..."
+    if ! rootline validate --all docs/epics/ > /dev/null 2>&1; then
+      echo "rootline validate --all docs/epics/ failed. Fix errors before pushing."
+      echo "Run: rootline validate --all docs/epics/"
+      echo "Or:  rootline fix --all docs/epics/"
+      exit 1
+    fi
+    echo "docs/epics/ validation passed"
+  fi
+done

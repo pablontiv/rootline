@@ -1,4 +1,4 @@
-package doctor
+package rules
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func mustWriteFile(t *testing.T, path string, data []byte) {
+func mustWriteStemTestFile(t *testing.T, path string, data []byte) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		t.Fatal(err)
@@ -17,9 +17,9 @@ func mustWriteFile(t *testing.T, path string, data []byte) {
 	}
 }
 
-func TestRunChecks_ValidStems(t *testing.T) {
+func TestValidateStemHealth_ValidStems(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 scope:
   match: "*.md"
 schema:
@@ -30,28 +30,24 @@ schema:
     type: enum
     values: [a, b]
 `))
-	mustWriteFile(t, filepath.Join(dir, "test.md"), []byte("---\nestado: draft\n---\n# Test\n"))
+	mustWriteStemTestFile(t, filepath.Join(dir, "test.md"), []byte("---\nestado: draft\n---\n# Test\n"))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Summary.Failed > 0 {
-		t.Errorf("expected no failures, got %d", result.Summary.Failed)
-	}
-	if result.Version != 1 {
-		t.Errorf("expected version 1, got %d", result.Version)
-	}
-	if result.Kind != "rootline/doctor" {
-		t.Errorf("expected kind rootline/doctor, got %s", result.Kind)
+	for _, c := range result.Checks {
+		if c.Status == "fail" {
+			t.Errorf("unexpected failure: %s - %s", c.Name, c.Message)
+		}
 	}
 }
 
-func TestRunChecks_InvalidYAML(t *testing.T) {
+func TestValidateStemHealth_InvalidYAML(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("{{invalid yaml"))
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte("{{invalid yaml"))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -67,14 +63,14 @@ func TestRunChecks_InvalidYAML(t *testing.T) {
 	}
 }
 
-func TestRunChecks_OrphanScope(t *testing.T) {
+func TestValidateStemHealth_OrphanScope(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 scope:
   match: "*.xyz"
 `))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -90,15 +86,15 @@ scope:
 	}
 }
 
-func TestRunChecks_ScopeMatchWithMatchingFile(t *testing.T) {
+func TestValidateStemHealth_ScopeMatchWithMatchingFile(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 scope:
   match: "*.md"
 `))
-	mustWriteFile(t, filepath.Join(dir, "readme.md"), []byte("# Hello"))
+	mustWriteStemTestFile(t, filepath.Join(dir, "readme.md"), []byte("# Hello"))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -109,16 +105,16 @@ scope:
 	}
 }
 
-func TestRunChecks_EnumValues(t *testing.T) {
+func TestValidateStemHealth_EnumValues(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 schema:
   estado:
     type: enum
     values: [OnlyOne]
 `))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -134,16 +130,16 @@ schema:
 	}
 }
 
-func TestRunChecks_EnumWithTwoValues_NoWarning(t *testing.T) {
+func TestValidateStemHealth_EnumWithTwoValues_NoWarning(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 schema:
   estado:
     type: enum
     values: [A, B]
 `))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -154,25 +150,25 @@ schema:
 	}
 }
 
-func TestRunChecks_TypeConsistency(t *testing.T) {
+func TestValidateStemHealth_TypeConsistency(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 schema:
   estado:
     type: string
 `))
 	sub := filepath.Join(dir, "sub")
-	mustWriteFile(t, filepath.Join(sub, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 1
 schema:
   estado:
     type: enum
     values: [A, B]
 `))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -180,6 +176,9 @@ schema:
 	for _, c := range result.Checks {
 		if c.Name == "type-consistency" && c.Status == "fail" {
 			found = true
+			if c.Field != "estado" {
+				t.Errorf("expected field 'estado', got %q", c.Field)
+			}
 			break
 		}
 	}
@@ -188,12 +187,12 @@ schema:
 	}
 }
 
-func TestRunChecks_RuleFieldExists(t *testing.T) {
+func TestValidateStemHealth_RuleFieldExists(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 schema:
   estado:
     type: string
@@ -203,7 +202,7 @@ validate:
     severity: error
 `))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -219,25 +218,25 @@ validate:
 	}
 }
 
-func TestRunChecks_FieldOverride(t *testing.T) {
+func TestValidateStemHealth_FieldOverride(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 schema:
   estado:
     type: string
 `))
 	sub := filepath.Join(dir, "sub")
-	mustWriteFile(t, filepath.Join(sub, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 1
 schema:
   estado:
     type: string
     required: true
 `))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -245,6 +244,9 @@ schema:
 	for _, c := range result.Checks {
 		if c.Name == "field-override" && c.Status == "warn" {
 			found = true
+			if c.Field != "estado" {
+				t.Errorf("expected field 'estado', got %q", c.Field)
+			}
 			break
 		}
 	}
@@ -253,9 +255,9 @@ schema:
 	}
 }
 
-func TestRunChecks_AggregatedRequired(t *testing.T) {
+func TestValidateStemHealth_AggregatedRequired(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 schema:
   estado:
     type: enum
@@ -265,7 +267,7 @@ aggregate:
   estado: "len(filter(descendants, {.estado == 'Completado'})) == len(descendants) ? 'Completado' : 'Pending'"
 `))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -281,9 +283,9 @@ aggregate:
 	}
 }
 
-func TestRunChecks_RequiredWithoutAggregate_NoWarning(t *testing.T) {
+func TestValidateStemHealth_RequiredWithoutAggregate_NoWarning(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 schema:
   estado:
     type: enum
@@ -291,7 +293,7 @@ schema:
     values: [Pending, Completado]
 `))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -302,9 +304,9 @@ schema:
 	}
 }
 
-func TestRunChecks_AggregateWithoutRequired_NoWarning(t *testing.T) {
+func TestValidateStemHealth_AggregateWithoutRequired_NoWarning(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 schema:
   estado:
     type: enum
@@ -313,7 +315,7 @@ aggregate:
   estado: "some_expr"
 `))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -324,10 +326,10 @@ aggregate:
 	}
 }
 
-func TestRunChecks_NoStems(t *testing.T) {
+func TestValidateStemHealth_NoStems(t *testing.T) {
 	dir := t.TempDir()
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -343,44 +345,20 @@ func TestRunChecks_NoStems(t *testing.T) {
 	}
 }
 
-func TestRunChecks_SummaryCount(t *testing.T) {
+func TestValidateStemHealth_SkipsGitDir(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
-schema:
-  estado:
-    type: string
-`))
-
-	result, err := RunChecks(context.Background(), dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Summary.Total != len(result.Checks) {
-		t.Errorf("summary total %d != len(checks) %d", result.Summary.Total, len(result.Checks))
-	}
-	sum := result.Summary.Passed + result.Summary.Warnings + result.Summary.Failed
-	if sum != result.Summary.Total {
-		t.Errorf("summary counts don't add up: %d+%d+%d != %d",
-			result.Summary.Passed, result.Summary.Warnings, result.Summary.Failed, result.Summary.Total)
-	}
-}
-
-func TestRunChecks_SkipsGitDir(t *testing.T) {
-	dir := t.TempDir()
-	// Put a .stem inside .git — it should be skipped
 	gitDir := filepath.Join(dir, ".git")
-	mustWriteFile(t, filepath.Join(gitDir, ".stem"), []byte(`version: 1`))
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(gitDir, ".stem"), []byte(`version: 1`))
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 schema:
   x:
     type: string
 `))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Should only find the root .stem, not .git/.stem
 	stemCount := 0
 	for _, c := range result.Checks {
 		if c.Name == "yaml-valid" {
@@ -392,15 +370,15 @@ schema:
 	}
 }
 
-func TestRunChecks_EnumZeroValues(t *testing.T) {
+func TestValidateStemHealth_EnumZeroValues(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 schema:
   estado:
     type: enum
 `))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -416,24 +394,24 @@ schema:
 	}
 }
 
-func TestRunChecks_MultipleStems(t *testing.T) {
+func TestValidateStemHealth_MultipleStems(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 schema:
   titulo:
     type: string
 `))
 	sub := filepath.Join(dir, "sub")
-	mustWriteFile(t, filepath.Join(sub, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 1
 schema:
   prioridad:
     type: string
 `))
 
-	result, err := RunChecks(context.Background(), dir)
+	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

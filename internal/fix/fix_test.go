@@ -1017,6 +1017,127 @@ func TestApplyProposals_ExtractBody(t *testing.T) {
 	}
 }
 
+// --- removeStemSchemaField ---
+
+func TestRemoveStemSchemaField_RemovesField(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte(`schema:
+  id:
+    type: sequence
+    prefix: T
+    digits: 3
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completed]
+  tipo:
+    type: enum
+    values: [a, b]
+`))
+
+	err := removeStemSchemaField(stemPath, "estado")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	content, _ := os.ReadFile(stemPath)
+	if strings.Contains(string(content), "estado") {
+		t.Errorf("expected estado to be removed, got:\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "id") {
+		t.Error("expected id to remain")
+	}
+	if !strings.Contains(string(content), "tipo") {
+		t.Error("expected tipo to remain")
+	}
+}
+
+func TestRemoveStemSchemaField_RemovesSchemaWhenEmpty(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte(`schema:
+  estado:
+    type: string
+validate:
+  - rule: non_empty
+    field: estado
+`))
+
+	err := removeStemSchemaField(stemPath, "estado")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	content, _ := os.ReadFile(stemPath)
+	if strings.Contains(string(content), "schema") {
+		t.Errorf("expected schema section to be removed, got:\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "validate") {
+		t.Error("expected validate section to remain")
+	}
+}
+
+func TestRemoveStemSchemaField_ErrorOnMissingField(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte(`schema:
+  id:
+    type: string
+`))
+
+	err := removeStemSchemaField(stemPath, "nonexistent")
+	if err == nil {
+		t.Error("expected error for missing field")
+	}
+}
+
+func TestApplyProposals_RemoveStemField(t *testing.T) {
+	dir := setupStemDir(t)
+
+	// Add a child .stem that overrides estado
+	childDir := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(childDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	childStem := filepath.Join(childDir, ".stem")
+	mustWriteFile(t, childStem, []byte(`schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completed]
+  ejecutable_en:
+    type: string
+`))
+
+	records := []*extract.Record{}
+	report := &proposal.Report{
+		Version: 1,
+		Kind:    "rootline/proposals",
+		Proposals: []proposal.Proposal{
+			{
+				Type:        proposal.RemoveStemField,
+				Field:       "estado",
+				Description: "remove redundant field",
+				Paths:       []string{"sub/.stem"},
+			},
+		},
+	}
+
+	err := ApplyProposals(context.Background(), report, dir, records)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	content, _ := os.ReadFile(childStem)
+	if strings.Contains(string(content), "estado") {
+		t.Errorf("expected estado removed from child .stem, got:\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "ejecutable_en") {
+		t.Error("expected ejecutable_en to remain")
+	}
+}
+
 // --- helper ---
 
 func mustWriteFile(t *testing.T, path string, content []byte) {

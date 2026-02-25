@@ -70,7 +70,7 @@ func runFix(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
 	if fixAll {
-		return runFixAll(ctx, cmd)
+		return runFixAll(ctx, cmd, args)
 	}
 
 	reg := extract.NewRegistry()
@@ -149,8 +149,12 @@ func runFix(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runFixAll(ctx context.Context, cmd *cobra.Command) error {
-	root, err := filepath.Abs(".")
+func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
+	scanRoot := "."
+	if len(args) > 0 {
+		scanRoot = args[0]
+	}
+	root, err := filepath.Abs(scanRoot)
 	if err != nil {
 		return err
 	}
@@ -189,26 +193,7 @@ func runFixAll(ctx context.Context, cmd *cobra.Command) error {
 		}
 	}
 
-	// In dry-run mode, use proposal engine for richer output.
-	if fixDryRun {
-		// Use the effective stem with the richest schema (most fields defined).
-		var effective *rules.StemFile
-		for _, s := range effectiveStems {
-			if effective == nil || len(s.Schema) > len(effective.Schema) {
-				effective = s
-			}
-		}
-
-		report := proposal.Analyze(records, effective, allErrs)
-		appendAggregateProposals(report, root, records, effective)
-
-		if outputFormat == "table" {
-			return renderProposalTable(cmd, report)
-		}
-		return outputJSON(cmd, report, false)
-	}
-
-	// Apply mode: use proposal engine internally, output BatchFixResult for compatibility.
+	// Use the effective stem with the richest schema (most fields defined).
 	var effective *rules.StemFile
 	for _, s := range effectiveStems {
 		if effective == nil || len(s.Schema) > len(effective.Schema) {
@@ -218,6 +203,15 @@ func runFixAll(ctx context.Context, cmd *cobra.Command) error {
 
 	report := proposal.Analyze(records, effective, allErrs)
 	appendAggregateProposals(report, root, records, effective)
+	appendStemHealthProposals(report, ctx, root)
+
+	// In dry-run mode, use proposal engine for richer output.
+	if fixDryRun {
+		if outputFormat == "table" {
+			return renderProposalTable(cmd, report)
+		}
+		return outputJSON(cmd, report, false)
+	}
 
 	// Apply proposals if any.
 	if len(report.Proposals) > 0 {
@@ -234,6 +228,20 @@ func runFixAll(ctx context.Context, cmd *cobra.Command) error {
 		return renderFixTable(cmd, batch)
 	}
 	return outputJSON(cmd, batch, false)
+}
+
+// appendStemHealthProposals runs stem-health checks and appends remove_stem_field proposals.
+func appendStemHealthProposals(report *proposal.Report, ctx context.Context, root string) {
+	stemHealth, err := rules.ValidateStemHealth(ctx, root)
+	if err != nil {
+		return
+	}
+	stemProposals := proposal.DetectRemoveStemField(stemHealth.Checks)
+	if len(stemProposals) > 0 {
+		report.Proposals = append(report.Proposals, stemProposals...)
+		report.Summary.RemoveStemField += len(stemProposals)
+		report.Summary.Total += len(stemProposals)
+	}
 }
 
 // appendAggregateProposals detects missing aggregate expressions and appends proposals to the report.
@@ -278,6 +286,9 @@ func proposalsToFixResults(report *proposal.Report, records []*extract.Record) [
 				changes = append(changes, fmt.Sprintf("correct %s: %q -> %q", p.Field, p.From, p.To))
 			case proposal.ExtendEnum:
 				changes = append(changes, fmt.Sprintf("extend enum %s += %q", p.Field, p.Value))
+			case proposal.RemoveStemField:
+				valuesCorrected++
+				changes = append(changes, fmt.Sprintf("remove %s from .stem schema", p.Field))
 			}
 		}
 
@@ -289,6 +300,27 @@ func proposalsToFixResults(report *proposal.Report, records []*extract.Record) [
 			Changes:         changes,
 		})
 	}
+
+	// Add results for .stem file proposals not covered by record paths.
+	stemResults := make(map[string]*FixResult)
+	for _, p := range report.Proposals {
+		if p.Type != proposal.RemoveStemField {
+			continue
+		}
+		for _, path := range p.Paths {
+			sr, ok := stemResults[path]
+			if !ok {
+				sr = &FixResult{Path: path, Fixed: true, Changes: []string{}}
+				stemResults[path] = sr
+			}
+			sr.ValuesCorrected++
+			sr.Changes = append(sr.Changes, fmt.Sprintf("remove %s from .stem schema", p.Field))
+		}
+	}
+	for _, sr := range stemResults {
+		results = append(results, sr)
+	}
+
 	return results
 }
 

@@ -216,7 +216,10 @@ Materializar el plan aprobado más reciente como archivos de roadmap.
 5. Después de cada Write, ejecutar `rootline validate <path>`
 6. Si falla, `rootline fix <path>` como fallback
 7. Actualizar tablas en READMEs padre (cascading links)
-8. Confirmar creación exitosa
+8. **Validación batch final**: Ejecutar `rootline validate --all docs/epics/`
+   - Si hay errores → `rootline fix --all docs/epics/` (corrige tanto documentos como .stem redundantes)
+   - Reportar resultado final al usuario
+9. Confirmar creación exitosa
 
 **IMPORTANTE**: Solo crear archivos .md de planificación. NO implementar el trabajo descrito en los tasks — eso lo hace `/roadmap loop`.
 

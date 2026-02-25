@@ -1,20 +1,11 @@
 schema:
-  id:
-    type: sequence
-    prefix: T
-    digits: 3
-  ejecutable_en:
-    type: string
-    severity: error
-  estado:
-    type: enum
-    required: true
-    values: [Pending, Specified, In Progress, Completed, Blocked, On Hold]
-    severity: error
-  hold:
-    type: string
-    severity: error
-  tipo:
-    type: enum
-    values: [servicio-docker, modulo-sistema, operacion-sistema, lxc, vm, modulo-infraestructura, host-script, instance-script, software-module, software-test, ci-cd, documentation, feature, historia]
-    severity: warn
+    id:
+        type: sequence
+        prefix: T
+        digits: 3
+    ejecutable_en:
+        type: string
+        severity: error
+    hold:
+        type: string
+        severity: error

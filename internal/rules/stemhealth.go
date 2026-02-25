@@ -1,42 +1,30 @@
-// Package doctor provides diagnostic checks for .stem configuration health.
-package doctor
+package rules
 
 import (
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/pablontiv/rootline/internal/rules"
 )
 
-// Result is the versioned output for doctor.
-type Result struct {
-	Version int     `json:"version"`
-	Kind    string  `json:"kind"`
-	Checks  []Check `json:"checks"`
-	Summary Summary `json:"summary"`
-}
-
-// Check represents a single diagnostic check result.
-type Check struct {
+// StemHealthCheck represents a single stem-health diagnostic result.
+type StemHealthCheck struct {
 	Name    string `json:"name"`
 	Status  string `json:"status"` // "pass", "fail", "warn"
 	Message string `json:"message,omitempty"`
-	Path    string `json:"path,omitempty"`
+	Path    string `json:"path,omitempty"` // relative to absRoot
+	Field   string `json:"field,omitempty"`
 }
 
-// Summary holds aggregate counts.
-type Summary struct {
-	Total    int `json:"total"`
-	Passed   int `json:"passed"`
-	Warnings int `json:"warnings"`
-	Failed   int `json:"failed"`
+// StemHealthResult holds all stem-health diagnostic checks.
+type StemHealthResult struct {
+	Checks []StemHealthCheck
 }
 
-// RunChecks executes all 7 diagnostic checks against .stem files under absRoot.
-func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
-	var checks []Check
+// ValidateStemHealth runs all stem-health diagnostic checks against .stem files
+// under absRoot and returns the results.
+func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult, error) {
+	var checks []StemHealthCheck
 
 	// Find all .stem files
 	var stemFiles []string
@@ -50,7 +38,7 @@ func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
 			}
 			return nil
 		}
-		if info.Name() == ".stem" {
+		if info.Name() == stemFileName {
 			stemFiles = append(stemFiles, path)
 		}
 		return nil
@@ -60,7 +48,7 @@ func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
 	}
 
 	if len(stemFiles) == 0 {
-		checks = append(checks, Check{
+		checks = append(checks, StemHealthCheck{
 			Name:    "stem-files-exist",
 			Status:  "warn",
 			Message: "no .stem files found",
@@ -68,19 +56,19 @@ func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
 	}
 
 	// Check 1: Parse validity
-	parsedStems := make(map[string]*rules.StemFile)
+	parsedStems := make(map[string]*StemFile)
 	for _, sf := range stemFiles {
 		relPath, _ := filepath.Rel(absRoot, sf)
-		stem, parseErr := rules.ParseStemFile(sf)
+		stem, parseErr := ParseStemFile(sf)
 		if parseErr != nil {
-			checks = append(checks, Check{
+			checks = append(checks, StemHealthCheck{
 				Name:    "yaml-valid",
 				Status:  "fail",
 				Message: fmt.Sprintf("invalid YAML: %v", parseErr),
 				Path:    relPath,
 			})
 		} else {
-			checks = append(checks, Check{
+			checks = append(checks, StemHealthCheck{
 				Name:   "yaml-valid",
 				Status: "pass",
 				Path:   relPath,
@@ -89,7 +77,6 @@ func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
 		}
 	}
 
-	// Check for context cancellation between checks.
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -107,7 +94,7 @@ func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
 		}
 		hasMatch := false
 		for _, e := range entries {
-			if e.IsDir() || e.Name() == ".stem" {
+			if e.IsDir() || e.Name() == stemFileName {
 				continue
 			}
 			matched, _ := filepath.Match(stem.Scope.Match, e.Name())
@@ -117,7 +104,7 @@ func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
 			}
 		}
 		if !hasMatch {
-			checks = append(checks, Check{
+			checks = append(checks, StemHealthCheck{
 				Name:    "scope-match",
 				Status:  "warn",
 				Message: fmt.Sprintf("scope.match %q matches no files in directory", stem.Scope.Match),
@@ -134,23 +121,23 @@ func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
 	for sf, stem := range parsedStems {
 		relPath, _ := filepath.Rel(absRoot, sf)
 		dir := filepath.Dir(sf)
-		parentEntries, walkErr := rules.WalkUp(dir)
+		parentEntries, walkErr := WalkUp(dir)
 		if walkErr != nil || len(parentEntries) < 2 {
 			continue
 		}
-		// Merge parent entries (excluding last = self)
-		parentMerged := rules.MergeStemFiles(parentEntries[:len(parentEntries)-1])
+		parentMerged := MergeStemFiles(parentEntries[:len(parentEntries)-1])
 		if parentMerged == nil {
 			continue
 		}
 		for fieldName, childField := range stem.Schema {
 			if parentField, exists := parentMerged.Schema[fieldName]; exists {
 				if childField.Type != "" && parentField.Type != "" && childField.Type != parentField.Type {
-					checks = append(checks, Check{
+					checks = append(checks, StemHealthCheck{
 						Name:    "type-consistency",
 						Status:  "fail",
 						Message: fmt.Sprintf("field %q changes type from %q to %q (inherited from parent)", fieldName, parentField.Type, childField.Type),
 						Path:    relPath,
+						Field:   fieldName,
 					})
 				}
 			}
@@ -166,11 +153,12 @@ func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
 		relPath, _ := filepath.Rel(absRoot, sf)
 		for fieldName, field := range stem.Schema {
 			if field.Type == "enum" && len(field.Values) < 2 {
-				checks = append(checks, Check{
+				checks = append(checks, StemHealthCheck{
 					Name:    "enum-values",
 					Status:  "warn",
 					Message: fmt.Sprintf("enum field %q has %d value(s), expected at least 2", fieldName, len(field.Values)),
 					Path:    relPath,
+					Field:   fieldName,
 				})
 			}
 		}
@@ -183,24 +171,24 @@ func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
 	// Check 5: Validate rules reference existing schema fields
 	for sf, stem := range parsedStems {
 		relPath, _ := filepath.Rel(absRoot, sf)
-		// Get effective schema (merged with parents)
 		dir := filepath.Dir(sf)
-		entries, walkErr := rules.WalkUp(dir)
+		entries, walkErr := WalkUp(dir)
 		if walkErr != nil {
 			continue
 		}
-		effective := rules.MergeStemFiles(entries)
+		effective := MergeStemFiles(entries)
 		if effective == nil {
 			continue
 		}
 		for _, rule := range stem.Validate {
 			if rule.Field != "" {
 				if _, exists := effective.Schema[rule.Field]; !exists {
-					checks = append(checks, Check{
+					checks = append(checks, StemHealthCheck{
 						Name:    "rule-field-exists",
 						Status:  "warn",
 						Message: fmt.Sprintf("validation rule references field %q not in schema", rule.Field),
 						Path:    relPath,
+						Field:   rule.Field,
 					})
 				}
 			}
@@ -215,21 +203,22 @@ func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
 	for sf, stem := range parsedStems {
 		relPath, _ := filepath.Rel(absRoot, sf)
 		dir := filepath.Dir(sf)
-		parentEntries, walkErr := rules.WalkUp(dir)
+		parentEntries, walkErr := WalkUp(dir)
 		if walkErr != nil || len(parentEntries) < 2 {
 			continue
 		}
-		parentMerged := rules.MergeStemFiles(parentEntries[:len(parentEntries)-1])
+		parentMerged := MergeStemFiles(parentEntries[:len(parentEntries)-1])
 		if parentMerged == nil {
 			continue
 		}
 		for fieldName := range stem.Schema {
 			if _, exists := parentMerged.Schema[fieldName]; exists {
-				checks = append(checks, Check{
+				checks = append(checks, StemHealthCheck{
 					Name:    "field-override",
 					Status:  "warn",
 					Message: fmt.Sprintf("field %q overrides parent definition", fieldName),
 					Path:    relPath,
+					Field:   fieldName,
 				})
 			}
 		}
@@ -247,38 +236,19 @@ func RunChecks(ctx context.Context, absRoot string) (*Result, error) {
 				continue
 			}
 			if _, hasAggregate := stem.Aggregate[fieldName]; hasAggregate {
-				checks = append(checks, Check{
+				checks = append(checks, StemHealthCheck{
 					Name:   "aggregated-required",
 					Status: "warn",
 					Message: fmt.Sprintf(
 						"field %q is required but also has an aggregate expression; required is auto-skipped on index files — consider removing required or using excludes",
 						fieldName,
 					),
-					Path: relPath,
+					Path:  relPath,
+					Field: fieldName,
 				})
 			}
 		}
 	}
 
-	// Build summary
-	summary := Summary{Total: len(checks)}
-	for _, c := range checks {
-		switch c.Status {
-		case "pass":
-			summary.Passed++
-		case "warn":
-			summary.Warnings++
-		case "fail":
-			summary.Failed++
-		}
-	}
-
-	result := &Result{
-		Version: 1,
-		Kind:    "rootline/doctor",
-		Checks:  checks,
-		Summary: summary,
-	}
-
-	return result, nil
+	return &StemHealthResult{Checks: checks}, nil
 }
