@@ -29,6 +29,7 @@ cliente: Platform Owner
 | [T002](T002-idempotency-diff-guard.md) | Agregar idempotencia y diff-guard al workflow |
 | [T003](T003-sync-validation.md) | Agregar validación pre-push del marketplace |
 | [T004](T004-document-pat-setup.md) | Documentar setup de PAT secret y arquitectura |
+| [T005](T005-configure-marketplace-token.md) | Configurar MARKETPLACE_TOKEN secret y verificar pipeline |
 
 ## Fuente de verdad
 
