@@ -1,0 +1,69 @@
+name: Publish Marketplace
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - ".claude/**"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Sync Skills to Marketplace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Get current version
+        id: version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+          echo "Current version: ${VERSION#v}"
+
+      - name: Checkout marketplace
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: pablontiv/agent-marketplace
+          token: ${{ secrets.MARKETPLACE_TOKEN }}
+          path: marketplace
+
+      - name: Sync skills
+        run: |
+          # Sync each skill with rootline- prefix
+          for skill_dir in .claude/skills/*/; do
+            skill_name=$(basename "$skill_dir")
+            target="marketplace/skills/rootline-${skill_name}"
+            mkdir -p "$target"
+            rsync -av --delete "$skill_dir" "$target/"
+            echo "Synced: $skill_name -> rootline-${skill_name}"
+          done
+
+      - name: Update marketplace version
+        run: |
+          cd marketplace
+          python3 -c "
+          import json
+          with open('.claude-plugin/marketplace.json', 'r') as f:
+              data = json.load(f)
+          data['metadata']['version'] = '${{ steps.version.outputs.version }}'
+          with open('.claude-plugin/marketplace.json', 'w') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          print(f\"Updated version to: {data['metadata']['version']}\")
+          "
+
+      - name: Commit and push
+        run: |
+          cd marketplace
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "chore: sync skills from rootline@${GITHUB_SHA::7}"
+          git push
