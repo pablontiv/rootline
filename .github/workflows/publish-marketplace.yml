@@ -86,6 +86,77 @@ jobs:
           print(f\"Updated version to: {data['metadata']['version']}\")
           "
 
+      - name: Validate marketplace structure
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          cd marketplace
+          ERRORS=0
+
+          # Validate marketplace.json is valid JSON
+          if ! python3 -c "import json; json.load(open('.claude-plugin/marketplace.json'))"; then
+            echo "::error::marketplace.json is not valid JSON"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "marketplace.json: valid JSON"
+          fi
+
+          # Extract skill paths from marketplace.json
+          SKILL_PATHS=$(python3 -c "
+          import json
+          data = json.load(open('.claude-plugin/marketplace.json'))
+          for plugin in data.get('plugins', []):
+              for skill in plugin.get('skills', []):
+                  print(skill.lstrip('./'))
+          ")
+
+          # Validate each referenced skill
+          for skill_path in $SKILL_PATHS; do
+            skill_md="${skill_path}/SKILL.md"
+            if [ ! -f "$skill_md" ]; then
+              echo "::error::Missing SKILL.md in ${skill_path}"
+              ERRORS=$((ERRORS + 1))
+              continue
+            fi
+            echo "${skill_path}: SKILL.md exists"
+
+            # Check frontmatter has name and description
+            HAS_NAME=$(python3 -c "
+          import re
+          content = open('${skill_md}').read()
+          m = re.match(r'^---\n(.*?)\n---', content, re.DOTALL)
+          if m and 'name:' in m.group(1):
+              print('yes')
+          else:
+              print('no')
+          ")
+            HAS_DESC=$(python3 -c "
+          import re
+          content = open('${skill_md}').read()
+          m = re.match(r'^---\n(.*?)\n---', content, re.DOTALL)
+          if m and 'description:' in m.group(1):
+              print('yes')
+          else:
+              print('no')
+          ")
+            if [ "$HAS_NAME" != "yes" ]; then
+              echo "::error::${skill_md} missing 'name' in frontmatter"
+              ERRORS=$((ERRORS + 1))
+            fi
+            if [ "$HAS_DESC" != "yes" ]; then
+              echo "::error::${skill_md} missing 'description' in frontmatter"
+              ERRORS=$((ERRORS + 1))
+            fi
+            if [ "$HAS_NAME" = "yes" ] && [ "$HAS_DESC" = "yes" ]; then
+              echo "${skill_md}: frontmatter valid (name + description)"
+            fi
+          done
+
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "::error::Marketplace validation failed with ${ERRORS} error(s)"
+            exit 1
+          fi
+          echo "Marketplace validation passed"
+
       - name: Commit and push
         if: steps.diff.outputs.changed == 'true'
         run: |
