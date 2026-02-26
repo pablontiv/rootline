@@ -1,4 +1,4 @@
-# KEDB — Research
+# Kedral — Research
 
 **Fecha**: 2026-02-25
 **Tipo**: Research
@@ -120,7 +120,7 @@ Del analisis de MEMORY.md real, se identificaron campos que ningun ITSM/KEDB cap
 
 ### 2.8 Error Matching Sin LLM — Estado del Arte
 
-**Nota arquitectural**: En la arquitectura refinada, FTS5/BM25 es responsabilidad de Backscroll (Tier 2 search). kedb no mantiene index FTS5 propio — orquesta consultas a Rootline (Tier 1, structured) y Backscroll (Tier 2, full-text).
+**Nota arquitectural**: En la arquitectura refinada, FTS5/BM25 es responsabilidad de Backscroll (Tier 2 search). Kedral no mantiene index FTS5 propio — orquesta consultas a Rootline (Tier 1, structured) y Backscroll (Tier 2, full-text).
 
 #### Sentry: fingerprinting determinístico
 
@@ -161,7 +161,7 @@ Tier 1: KB article match → respuesta directa (confianza alta)
 Tier 2: Ticket history match → "otros reportaron algo similar" (confianza media)
 ```
 
-Este patron de dos tiers con niveles de confianza distintos es el modelo para `kedb search`: Tier 1 = KEDB (Rootline), Tier 2 = Backscroll (sesiones).
+Este patron de dos tiers con niveles de confianza distintos es el modelo para `kedral search`: Tier 1 = KEDB (Rootline), Tier 2 = Backscroll (sesiones).
 
 #### Latencia de inyeccion pre-respuesta
 
@@ -197,7 +197,7 @@ De la investigacion cross-dominio (6 dominios), el registro KE se mapea a patron
 | KCS | Support case | Article (created from + linked to case) | Same article (after validation) |
 | Incident pipelines | Slack messages, alerts | Postmortem (auto-generated) | Action items, knowledge articles |
 | AI Agent Memory (Zep/Graphiti) | Conversation messages | Entity-edge with temporal validity | Structured knowledge graph |
-| **Este ecosistema** | **Backscroll (sessions + plans)** | **KE record (kedb)** | **Rootline (filesystem DB)** |
+| **Este ecosistema** | **Backscroll (sessions + plans)** | **KE record (Kedral)** | **Rootline (filesystem DB)** |
 
 Tres patrones arquitecturales:
 
@@ -226,7 +226,7 @@ PagerDuty construyo independientemente su SRE Agent con 3 tipos de memoria:
 
 Clientes reportaron que la memoria era "make or break". Resultado: 50% faster incident resolution.
 
-El mapeo al ecosistema kedb es directo:
+El mapeo al ecosistema Kedral es directo:
 - Observations → Backscroll sessions (raw event stream)
 - Recollections → KE records (bridge entity, signal curado)
 - Playbooks → Rootline docs (conocimiento promovido y estructurado)
@@ -302,7 +302,7 @@ Para ~50 KEs + Backscroll DB de ~45MB:
 
 El desarrollador sabe que resolvio algo similar hace semanas, pero no recuerda en que sesion ni en que proyecto. Buscar manualmente en Backscroll o MEMORY.md toma 30+ minutos y frecuentemente falla.
 
-Con KEDB, el hook intercepta el prompt, ejecuta `kedb search` en <10ms, y surfacea el KE con workaround validado antes de que Claude empiece a responder.
+Con KEDB, el hook intercepta el prompt, ejecuta `kedral search` en <10ms, y surfacea el KE con workaround validado antes de que Claude empiece a responder.
 
 ```
 You: "tofu apply is showing encryption_key_fingerprint unknown after apply again"
@@ -380,7 +380,7 @@ Claude: "This is a well-documented issue. You need both virtio AND cicustom..."
 
 68% de docs tecnicos no se actualiza en 6+ meses. Un workaround que funcionaba con la version anterior del provider/tool puede dejar de funcionar despues de un upgrade, y nadie actualiza la documentacion.
 
-Con KEDB, `kedb retire` detecta KEs sin nueva recurrencia en 6+ meses y los marca para revision. Ademas, el campo `ultima_revision` se actualiza automaticamente cada vez que el KE matchea en una sesion, manteniendo la confianza temporal.
+Con KEDB, `kedral retire` detecta KEs sin nueva recurrencia en 6+ meses y los marca para revision. Ademas, el campo `ultima_revision` se actualiza automaticamente cada vez que el KE matchea en una sesion, manteniendo la confianza temporal.
 
 ```
 You: "the tofu untaint workaround for encryption_key_fingerprint isn't working anymore after provider upgrade to 0.68"

@@ -1,8 +1,8 @@
-# KEDB — Diseno y Arquitectura
+# Kedral — Diseno y Arquitectura
 
 **Fecha**: 2026-02-25
 **Tipo**: Design
-**Contexto**: Arquitectura de kedb como CLI de orquestacion ligero. kedb no mantiene index propio — delega Tier 1 (structured query) a Rootline y Tier 2 (full-text search) a Backscroll. Claude Code es el LLM; kedb es infraestructura de lifecycle.
+**Contexto**: Arquitectura de Kedral como CLI de orquestacion ligero. kedral no mantiene index propio — delega Tier 1 (structured query) a Rootline y Tier 2 (full-text search) a Backscroll. Claude Code es el LLM; kedral es infraestructura de lifecycle.
 
 ---
 
@@ -14,9 +14,9 @@
 Ocurrencia 1              Ocurrencia 2                    KEDB
 ──────────────            ──────────────                  ──────
 Error X aparece           Error X aparece otra vez
-Usuario lo resuelve       Hook: kedb search "$PROMPT"
+Usuario lo resuelve       Hook: kedral search "$PROMPT"
 Session guardada            │
-Backscroll indexa           ├── Tier 1: rootline query /opt/kedb → no match
+Backscroll indexa           ├── Tier 1: rootline query /opt/kedral → no match
                             └── Tier 2: backscroll search → match!
                                   Inyecta snippet de sesion 1
 
@@ -26,14 +26,14 @@ Backscroll indexa           ├── Tier 1: rootline query /opt/kedb → no ma
                           Hook Stop: ¿error resuelto +
                           match previo sin KE?
                             → Si: Claude Code escribe ────▶ KE-XXXX creado
-                              KE en /opt/kedb/               estado: active
+                              KE en /opt/kedral/               estado: active
                               (tiene todo el contexto)        recurrencia: 2
 
 
 Ocurrencia 3+
 ──────────────
 Error X aparece
-Hook: kedb search "$PROMPT"
+Hook: kedral search "$PROMPT"
   └── Tier 1: rootline query → KE-XXXX match!
       Inyecta workaround directo
       + intentos que NO funcionan
@@ -48,7 +48,7 @@ Hook Stop: actualiza KE-XXXX
 Tres dominios participan en el ciclo:
 
 1. **Claude Code** — el LLM en sesion. Resuelve errores, crea KEs (tiene todo el contexto), actualiza KEs existentes.
-2. **kedb CLI** — orquestador. Ejecuta search (Tier 1 + Tier 2), gestiona lifecycle (reconcile, retire).
+2. **kedral CLI** — orquestador. Ejecuta search (Tier 1 + Tier 2), gestiona lifecycle (reconcile, retire).
 3. **Backscroll + Rootline** — backends de datos. Backscroll indexa sessions (ya lo hace). Rootline estructura y valida KEs (ya lo hace).
 
 ### 1.2 Quien hace que
@@ -56,16 +56,16 @@ Tres dominios participan en el ciclo:
 | Accion | Quien | Cuando |
 |--------|-------|--------|
 | Indexar sessions + plans | Backscroll | Ya lo hace (existente) |
-| Buscar KEs estructurados (Tier 1) | kedb CLI → rootline query | Hook UserPromptSubmit |
-| Buscar en sessions (Tier 2) | kedb CLI → backscroll search | Hook UserPromptSubmit, si Tier 1 < 1 resultado |
+| Buscar KEs estructurados (Tier 1) | kedral CLI → rootline query | Hook UserPromptSubmit |
+| Buscar en sessions (Tier 2) | kedral CLI → backscroll search | Hook UserPromptSubmit, si Tier 1 < 1 resultado |
 | Inyectar contexto | Hook Claude Code | Pre-respuesta, <12ms |
 | Resolver el error | Claude Code (el LLM) | Durante la sesion |
 | Crear KE nuevo | Claude Code (escribe .md) | Hook Stop, si recurrencia confirmada |
-| Actualizar recurrencia KEs | kedb reconcile | On-demand o cron |
-| Detectar staleness | kedb retire | On-demand o cron |
+| Actualizar recurrencia KEs | kedral reconcile | On-demand o cron |
+| Detectar staleness | kedral retire | On-demand o cron |
 | Validar schema | Rootline | Post-escritura, CI |
 
-**Insight clave**: Claude Code ya es un LLM de alta calidad ejecutandose en contexto. kedb es infraestructura de orquestacion y lifecycle — la inteligencia es Claude Code.
+**Insight clave**: Claude Code ya es un LLM de alta calidad ejecutandose en contexto. kedral es infraestructura de orquestacion y lifecycle — la inteligencia es Claude Code.
 
 ## 2. Arquitectura
 
@@ -75,7 +75,7 @@ Tres dominios participan en el ciclo:
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Claude Code                               │
 │                                                                  │
-│  Hook UserPromptSubmit ──▶ kedb search "$PROMPT"                │
+│  Hook UserPromptSubmit ──▶ kedral search "$PROMPT"                │
 │                              ├── Tier 1: rootline query         │
 │                              └── Tier 2: backscroll search      │
 │                                                                  │
@@ -84,10 +84,10 @@ Tres dominios participan en el ciclo:
 └──────────┬──────────────────┬──────────────────┬────────────────┘
            │                  │                  │
 ┌──────────▼─────────┐ ┌─────▼──────────┐ ┌────▼───────────────┐
-│ kedb CLI (Go)      │ │ Rootline       │ │ Backscroll         │
+│ kedral CLI (Go)      │ │ Rootline       │ │ Backscroll         │
 │ ~5MB, pure Go      │ │ (ya existe)    │ │ (ya existe)        │
 │ lifecycle manager  │ │                │ │                    │
-│                    │ │ /opt/kedb/     │ │ Sessions JSONL     │
+│                    │ │ /opt/kedral/     │ │ Sessions JSONL     │
 │ search (orquesta)  │ │ .stem schema   │ │ Plans .md          │
 │ reconcile          │ │ KE-XXXX.md     │ │ SQLite FTS5        │
 │ retire             │ │ rootline query │ │ backscroll search  │
@@ -95,7 +95,7 @@ Tres dominios participan en el ciclo:
 │ init               │ │                │ │                    │
 │                    │ │                │ │                    │
 │ State file (JSON)  │ │                │ │                    │
-│ ~/.kedb/state.json │ │                │ │                    │
+│ ~/.kedral/state.json │ │                │ │                    │
 └────────────────────┘ └────────────────┘ └────────────────────┘
 ```
 
@@ -107,9 +107,9 @@ Plans .md ─────▶ Backscroll (indexa) ──▶       │
                                                 │
                                                 │ (read-only, Tier 2)
                                                 ▼
-kedb search "$QUERY" ──────────────────────────┘
+kedral search "$QUERY" ──────────────────────────┘
          │
-         ├── Tier 1: rootline query /opt/kedb
+         ├── Tier 1: rootline query /opt/kedral
          │   --where "estado != 'resolved'"
          │   + field matching contra keywords del prompt
          │   → Si match: return KE con workaround
@@ -123,13 +123,13 @@ kedb search "$QUERY" ───────────────────�
 
 | Modo | Comando | Descripcion | Latencia |
 |------|---------|-------------|----------|
-| Search | `kedb search QUERY` | Orquesta rootline query (Tier 1) + backscroll search (Tier 2) | <12ms |
-| Reconcile | `kedb reconcile` | Lee Backscroll DB → actualiza KEs → git commit | <3s |
-| Retire | `kedb retire` | Detecta KEs stale desde Backscroll DB | <3s |
-| Report | `kedb report` | Dashboard: rootline query + backscroll stats | <1s |
-| Init | `kedb init` | Crea /opt/kedb/ con .stem, git init | <1s |
+| Search | `kedral search QUERY` | Orquesta rootline query (Tier 1) + backscroll search (Tier 2) | <12ms |
+| Reconcile | `kedral reconcile` | Lee Backscroll DB → actualiza KEs → git commit | <3s |
+| Retire | `kedral retire` | Detecta KEs stale desde Backscroll DB | <3s |
+| Report | `kedral report` | Dashboard: rootline query + backscroll stats | <1s |
+| Init | `kedral init` | Crea /opt/kedral/ con .stem, git init | <1s |
 
-**Nota**: No hay `kedb sync`. kedb no mantiene index propio — lee directamente del filesystem (via rootline) y de Backscroll DB (read-only).
+**Nota**: No hay `kedral sync`. kedral no mantiene index propio — lee directamente del filesystem (via rootline) y de Backscroll DB (read-only).
 
 ## 3. Decisiones Tecnicas
 
@@ -141,17 +141,17 @@ kedb search "$QUERY" ───────────────────�
 | Tier 1 matching | rootline query (Go library import) | Query estructurado sobre frontmatter, ya existe |
 | Tier 2 matching | backscroll search (CLI o Go library) | FTS5/BM25 sobre sessions + plans, ya existe |
 | Normalizacion | Regex (patron Sentry) | Deterministico, <1ms |
-| Storage KE | Rootline filesystem (/opt/kedb/) | .stem schema, validacion, rootline query |
-| State | JSON file (~/.kedb/state.json) | Recurrence counters, timestamps |
+| Storage KE | Rootline filesystem (/opt/kedral/) | .stem schema, validacion, rootline query |
+| State | JSON file (~/.kedral/state.json) | Recurrence counters, timestamps |
 | Creacion KE | Claude Code (el LLM en sesion) | Mejor calidad que cualquier modelo local |
 | Validacion | Rootline CLI | Ya existe |
 | Distribucion | `go build` → binario estatico | ~5MB, zero deps externas |
 
-**Cambio clave vs diseno original**: kedb no mantiene SQLite/FTS5 propio. Rootline query resuelve Tier 1 (structured). Backscroll FTS5 resuelve Tier 2 (full-text). kedb orquesta ambos.
+**Cambio clave vs diseno original**: kedral no mantiene SQLite/FTS5 propio. Rootline query resuelve Tier 1 (structured). Backscroll FTS5 resuelve Tier 2 (full-text). kedral orquesta ambos.
 
 ### 3.2 FTS5 como motor de matching (Backscroll)
 
-FTS5 es responsabilidad de Backscroll, no de kedb. Se documenta aqui porque la eleccion impacta la efectividad del Tier 2 search.
+FTS5 es responsabilidad de Backscroll, no de kedral. Se documenta aqui porque la eleccion impacta la efectividad del Tier 2 search.
 
 | | FTS5/BM25 | Embeddings (MiniLM) |
 |--|-----------|---------------------|
@@ -171,7 +171,7 @@ FTS5 es responsabilidad de Backscroll, no de kedb. Se documenta aqui porque la e
 
 ### 3.3 Normalizacion pre-search (patron Sentry)
 
-kedb normaliza el query antes de pasarlo a backscroll search y antes de comparar contra campos de rootline query.
+kedral normaliza el query antes de pasarlo a backscroll search y antes de comparar contra campos de rootline query.
 
 Antes de buscar, normalizar query y documentos:
 
@@ -201,7 +201,7 @@ Esto mejora matching: `"error at 192.168.1.1:5432"` y `"error at 10.0.0.5:5432"`
 ### 3.4 State file
 
 ```json
-// ~/.kedb/state.json
+// ~/.kedral/state.json
 {
   "version": 1,
   "last_reconcile": "2026-02-25T14:30:00Z",
@@ -248,7 +248,7 @@ Compacto, optimizado para consumo por Claude Code:
 
 ## 4. Schema KEDB (.stem)
 
-### 4.1 Rootline .stem para /opt/kedb/
+### 4.1 Rootline .stem para /opt/kedral/
 
 ```yaml
 fields:
@@ -383,26 +383,26 @@ que un "known after apply" indica un problema real.
 
 ## 5. Operaciones Detalladas
 
-### 5.1 `kedb init`
+### 5.1 `kedral init`
 
 ```
-1. Crear /opt/kedb/ si no existe
+1. Crear /opt/kedral/ si no existe
 2. git init
 3. Escribir .stem (schema KEDB, seccion 4.1)
 4. Escribir .stemignore (README.md, LICENSE)
-5. Crear ~/.kedb/state.json (state file vacio)
+5. Crear ~/.kedral/state.json (state file vacio)
 6. git add . && git commit -m "feat: initialize KEDB"
 ```
 
-No SQLite. No kedb.db. Just filesystem + state file.
+No SQLite. No kedral.db. Just filesystem + state file.
 
-### 5.2 `kedb search QUERY`
+### 5.2 `kedral search QUERY`
 
 ```
 1. Normalizar query (regex, seccion 3.3)
 
-2. Tier 1 — rootline query /opt/kedb:
-   rootline query /opt/kedb --where "estado != 'resolved'" --output json
+2. Tier 1 — rootline query /opt/kedral:
+   rootline query /opt/kedral --where "estado != 'resolved'" --output json
    Filtrar resultados por match de keywords/componentes contra query normalizado
    Top 3 por relevancia
    → Si hay resultados: formatear output compacto (seccion 3.5)
@@ -420,10 +420,10 @@ No SQLite. No kedb.db. Just filesystem + state file.
 
 Latencia total: <12ms (rootline query ~5ms + backscroll search ~5ms + overhead ~2ms).
 
-### 5.3 `kedb reconcile`
+### 5.3 `kedral reconcile`
 
 ```
-1. Para cada KE en /opt/kedb/ con estado != resolved:
+1. Para cada KE en /opt/kedral/ con estado != resolved:
    a. Extraer componentes y titulo del frontmatter
    b. Buscar en Backscroll DB: FTS5 MATCH componentes + keywords del titulo
    c. Comparar sessions encontradas vs sesiones_origen del KE
@@ -432,16 +432,16 @@ Latencia total: <12ms (rootline query ~5ms + backscroll search ~5ms + overhead ~
       - Incrementar recurrencia
       - Actualizar ultima_revision
 
-2. rootline validate /opt/kedb/ (batch)
+2. rootline validate /opt/kedral/ (batch)
 
-3. Si hubo cambios: git add + git commit en /opt/kedb/
+3. Si hubo cambios: git add + git commit en /opt/kedral/
 
 4. Report:
    - X KEs actualizados con nueva evidencia
    - Y sessions nuevas vinculadas
 ```
 
-### 5.4 `kedb retire`
+### 5.4 `kedral retire`
 
 ```
 1. Para cada KE con estado != resolved:
@@ -456,7 +456,7 @@ Latencia total: <12ms (rootline query ~5ms + backscroll search ~5ms + overhead ~
    - Y KEs con componente posiblemente obsoleto
 ```
 
-### 5.5 `kedb report`
+### 5.5 `kedral report`
 
 ```
 Estado de la KEDB                                    2026-02-25
@@ -478,7 +478,7 @@ Proyectos:
   incubadora:       2 KEs
 
 Fuentes:
-  KE files:        15 archivos en /opt/kedb/
+  KE files:        15 archivos en /opt/kedral/
   Backscroll:      270 sessions (read-only)
   Ultimo reconcile: 2026-02-25 14:30
 ```
@@ -496,7 +496,7 @@ QUERY=$(echo "$CLAUDE_USER_PROMPT" | head -c 500)
 
 # Solo buscar si parece un error/problema (heuristica simple)
 if echo "$QUERY" | grep -qiE 'error|fail|broke|issue|bug|not work|problema|falla'; then
-    RESULTS=$(kedb search "$QUERY" --compact 2>/dev/null)
+    RESULTS=$(kedral search "$QUERY" --compact 2>/dev/null)
     if [ -n "$RESULTS" ]; then
         echo "Known errors relevantes encontrados en KEDB:"
         echo "$RESULTS"
@@ -514,39 +514,39 @@ Hook prompt-based que Claude Code evalua al final de la sesion:
 Analiza esta sesion:
 
 1. ¿Se resolvio un error tecnico? (no una feature, no una pregunta)
-2. Si se resolvio, ejecuta: kedb search "[descripcion del error]"
+2. Si se resolvio, ejecuta: kedral search "[descripcion del error]"
 3. Evalua el resultado:
 
-   a. Si kedb retorno un KE formal (Tier 1 — rootline query match):
-      → Ejecuta: kedb reconcile
+   a. Si kedral retorno un KE formal (Tier 1 — rootline query match):
+      → Ejecuta: kedral reconcile
       → El KE se actualiza automaticamente
 
-   b. Si kedb retorno sesiones previas sin KE (Tier 2 — backscroll search match):
+   b. Si kedral retorno sesiones previas sin KE (Tier 2 — backscroll search match):
       → Este error es recurrente y ahora esta confirmado
-      → Crea un archivo KE-XXXX.md en /opt/kedb/ con:
+      → Crea un archivo KE-XXXX.md en /opt/kedral/ con:
         - Frontmatter completo (.stem schema)
         - Sintomas de ambas ocurrencias
         - Intentos fallidos de ambas ocurrencias
         - Workaround validado (funciono 2+ veces)
         - sesiones_origen con slugs de todas las sesiones
         - estado: workaround_available (si hay workaround) o active (si no)
-      → Ejecuta: rootline validate /opt/kedb/
-      → Ejecuta: cd /opt/kedb && git add . && git commit
+      → Ejecuta: rootline validate /opt/kedral/
+      → Ejecuta: cd /opt/kedral && git add . && git commit
 
-   c. Si kedb no retorno nada:
+   c. Si kedral no retorno nada:
       → Primera ocurrencia. No crear KE. Backscroll lo indexara.
 ```
 
 ### 6.3 Rootline MCP Server
 
-`rootline serve /opt/kedb/` expone 8 tools MCP sobre la KEDB. Cualquier agente Claude Code puede hacer queries estructuradas sobre KEs sin necesidad de un MCP server adicional de kedb:
+`rootline serve /opt/kedral/` expone 8 tools MCP sobre la KEDB. Cualquier agente Claude Code puede hacer queries estructuradas sobre KEs sin necesidad de un MCP server adicional de kedral:
 
 ```
 query: "estado != 'resolved' && componentes contains 'bpg/proxmox'"
 → KE-0001: bpg/proxmox encryption_key_fingerprint...
 ```
 
-kedb no necesita MCP propio — Rootline ya provee acceso MCP a /opt/kedb/.
+kedral no necesita MCP propio — Rootline ya provee acceso MCP a /opt/kedral/.
 
 ## 7. Dependencias
 
@@ -556,7 +556,7 @@ kedb no necesita MCP propio — Rootline ya provee acceso MCP a /opt/kedb/.
 | rootline | latest | Tier 1 query, validation, sequence (Go library import) |
 | backscroll | latest | Tier 2 search (CLI invocation o Go library import) |
 
-**Zero SQLite en kedb. Zero modelos. Zero native libs. Zero servicios externos.**
+**Zero SQLite en kedral. Zero modelos. Zero native libs. Zero servicios externos.**
 
 Binario estatico de ~5MB. `go build` y listo. Mas ligero que el diseno original (~10MB) porque no incluye modernc.org/sqlite.
 
@@ -564,19 +564,19 @@ Binario estatico de ~5MB. `go build` y listo. Mas ligero que el diseno original 
 
 | Operacion | Tiempo |
 |-----------|--------|
-| `kedb search` (Tier 1 + Tier 2) | <12ms |
-| `kedb reconcile` (15 KEs vs Backscroll) | <3s |
-| `kedb retire` (15 KEs, git log check) | <3s |
-| `kedb report` | <1s |
-| `kedb init` | <1s |
+| `kedral search` (Tier 1 + Tier 2) | <12ms |
+| `kedral reconcile` (15 KEs vs Backscroll) | <3s |
+| `kedral retire` (15 KEs, git log check) | <3s |
+| `kedral report` | <1s |
+| `kedral init` | <1s |
 
 Uso de recursos:
 
 | Componente | RAM | Disco |
 |-----------|-----|-------|
-| kedb CLI (ejecucion) | ~10MB | ~5MB (binario) |
+| kedral CLI (ejecucion) | ~10MB | ~5MB (binario) |
 | state.json (50 entries) | — | <1KB |
-| /opt/kedb/ (50 KEs) | — | <500KB |
+| /opt/kedral/ (50 KEs) | — | <500KB |
 
 **RAM cuando no se ejecuta: 0.** CLI on-demand, no daemon.
 
@@ -588,7 +588,7 @@ Uso de recursos:
 | Hook genera ruido (falsos positivos) | Media | Medio | Heuristica pre-filtro (solo si prompt contiene error/fail/bug) |
 | Claude Code escribe KE con formato incorrecto | Baja | Bajo | rootline validate post-escritura; .stem como guardrail |
 | Backscroll no disponible (no instalado) | Media | Medio | Tier 2 se salta gracefully; Tier 1 funciona independiente |
-| Rootline API cambia | Baja | Medio | kedb importa rootline como Go library; breaking changes detectados en compilacion |
+| Rootline API cambia | Baja | Medio | kedral importa rootline como Go library; breaking changes detectados en compilacion |
 | Backscroll CLI/DB schema cambia | Baja | Medio | Parseo defensivo; version check |
-| KEs se acumulan sin curar | Baja | Medio | `kedb retire` detecta staleness; report muestra metricas de salud |
+| KEs se acumulan sin curar | Baja | Medio | `kedral retire` detecta staleness; report muestra metricas de salud |
 | State file se corrompe | Muy baja | Bajo | Atomic write (tmp + rename); state es regenerable desde filesystem |

@@ -3,7 +3,7 @@
 **Fecha**: 2026-02-18
 **Tipo**: Research
 **Contexto**: Investigacion de herramienta CLI para busqueda full-text en sesiones y planes de Claude Code
-**Ecosistema**: Backscroll provee Tier 2 search para [KEDB](kedb/README.md) (Known Error Database). Backscroll = event store + busqueda. KEDB = bridge entity + lifecycle. Rootline = structured store + validacion.
+**Ecosistema**: Backscroll provee Tier 2 search para [Kedral](kedral/README.md) (Known Error Database). Backscroll = event store + busqueda. Kedral = bridge entity + lifecycle. Rootline = structured store + validacion.
 
 ---
 
