@@ -28,6 +28,8 @@ const (
 	InferFromChildren Type = "infer_from_children"
 	AddField          Type = "add_field"
 	CorrectLink       Type = "correct_link"
+	InferFromSiblings Type = "infer_from_siblings"
+	CorrectOutlier    Type = "correct_outlier"
 	AddAggregate      Type = "add_aggregate"
 	RemoveStemField   Type = "remove_stem_field"
 )
