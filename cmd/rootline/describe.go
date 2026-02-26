@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -28,12 +29,30 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving path: %w", err)
 	}
 
-	entries, err := rules.WalkUp(targetPath)
-	if err != nil {
-		return fmt.Errorf("discovering .stem files: %w", err)
-	}
+	var entries []rules.StemEntry
+	var effective *rules.StemFile
 
-	effective := rules.MergeStemFiles(entries)
+	info, statErr := os.Stat(targetPath)
+	if statErr == nil && !info.IsDir() {
+		// File target: resolve with levels expansion so level-specific
+		// schema fields (e.g. tipo at task level) appear in output.
+		dir := filepath.Dir(targetPath)
+		entries, err = rules.WalkUp(dir)
+		if err != nil {
+			return fmt.Errorf("discovering .stem files: %w", err)
+		}
+		effective, err = rules.ResolveForRecord(dir, args[0])
+		if err != nil {
+			return fmt.Errorf("resolving .stem for record: %w", err)
+		}
+	} else {
+		// Directory (or non-existent path): use existing merge without levels.
+		entries, err = rules.WalkUp(targetPath)
+		if err != nil {
+			return fmt.Errorf("discovering .stem files: %w", err)
+		}
+		effective = rules.MergeStemFiles(entries)
+	}
 
 	// Use relative path for display
 	relPath := args[0]

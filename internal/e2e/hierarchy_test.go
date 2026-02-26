@@ -221,6 +221,83 @@ levels:
 	}
 }
 
+// TestHierarchyLevelsDescribeFile tests that ResolveForRecord expands
+// level-specific schema for file targets (used by describe command).
+func TestHierarchyLevelsDescribeFile(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem": `version: 1
+scope:
+  match: "*.md"
+schema:
+  titulo:
+    type: string
+    required: true
+levels:
+  epic:
+    match: "E*"
+    children: [feature]
+  feature:
+    match: "F*"
+    children: [task]
+    schema:
+      tipo:
+        type: enum
+        values: [a, b]
+        severity: warn
+  task:
+    match: "T*"
+    schema:
+      tipo:
+        type: enum
+        values: [a, b]
+        required: true
+      ejecutable_en:
+        type: string
+`,
+		"E01-x/F01-y/T001-z.md": "---\ntitulo: A task\ntipo: a\n---\n",
+	})
+
+	// Resolve for the task file — should include task-level fields
+	taskPath := "E01-x/F01-y/T001-z.md"
+	dir := filepath.Join(root, "E01-x", "F01-y")
+	effective, err := rules.ResolveForRecord(dir, taskPath)
+	if err != nil {
+		t.Fatalf("ResolveForRecord: %v", err)
+	}
+
+	// tipo should be required (from task level, not feature level)
+	tipoField, ok := effective.Schema["tipo"]
+	if !ok {
+		t.Fatal("expected tipo field in effective schema for task file")
+	}
+	if !tipoField.Required {
+		t.Error("expected tipo.Required=true for task-level file")
+	}
+	// Severity should be "error" (task level has no explicit severity → defaults to error,
+	// which is stricter than feature level's "warn").
+	if tipoField.Severity != "error" {
+		t.Errorf("expected tipo.Severity='error', got %q", tipoField.Severity)
+	}
+
+	// ejecutable_en should exist (from task level)
+	if _, ok := effective.Schema["ejecutable_en"]; !ok {
+		t.Error("expected ejecutable_en field in effective schema for task file")
+	}
+
+	// Resolve for the feature directory — should NOT include task-level fields
+	featureDir := filepath.Join(root, "E01-x", "F01-y")
+	entries, err := rules.WalkUp(featureDir)
+	if err != nil {
+		t.Fatalf("WalkUp: %v", err)
+	}
+	dirEffective := rules.MergeStemFiles(entries)
+
+	// Directory-level describe should NOT have ejecutable_en
+	if _, ok := dirEffective.Schema["ejecutable_en"]; ok {
+		t.Error("directory-level describe should NOT include task-level ejecutable_en")
+	}
+}
+
 // TestHierarchyLevelsBackwardCompat tests that a .stem without levels
 // behaves exactly the same as before — ResolveForRecord just returns
 // the merged stem without any levels expansion.
