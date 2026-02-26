@@ -31,6 +31,7 @@ estado: Pending
 |------|-------------|
 | [T001](T001-add-stemhealth-checks-for-levels.md) | Add stemhealth checks for levels validity |
 | [T002](T002-update-infer-hierarchy-to-levels.md) | Update infer --hierarchy to generate levels format |
+| [T003](T003-fix-describe-levels-expansion.md) | Fix describe to expand levels for file targets |
 
 ## Fuente de verdad
 

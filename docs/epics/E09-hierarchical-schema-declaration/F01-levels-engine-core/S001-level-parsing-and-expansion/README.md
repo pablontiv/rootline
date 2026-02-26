@@ -37,6 +37,7 @@ estado: Pending
 | [T001](T001-add-hierarchylevel-struct.md) | Add HierarchyLevel struct and levels parsing to StemFile |
 | [T002](T002-implement-levels-map-merge.md) | Implement levels map merge in MergeStemFiles |
 | [T003](T003-implement-expandlevels-and-resolveforrecord.md) | Implement ExpandLevels and ResolveForRecord functions |
+| [T004](T004-fix-merge-severity-default.md) | Fix mergeFieldSeverity empty severity default |
 
 ## Fuente de verdad
 

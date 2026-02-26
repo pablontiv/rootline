@@ -25,8 +25,8 @@ estado: Pending
 
 - INV1: Todos los tests existentes pasan sin modificacion
   - Verificar: `go test ./... -race`
-- INV4: Callers sin record path no cambian
-  - Verificar: `describe.go` y `tree.go` sin diff
+- INV4: Callers sin record path (tree) no cambian
+  - Verificar: `tree.go` sin diff (describe.go cambiado en S002/T003 para file targets)
 
 ## Tasks
 
