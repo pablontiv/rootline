@@ -25,3 +25,4 @@ Extender rootline con capacidades avanzadas que mejoran la experiencia del desar
 | [F11 Conditional Field Validation](F11-conditional-field-validation/README.md) | Exclusión de required para campos computados por aggregate |
 | [F12 Estado System Standardization](F12-estado-standardization/README.md) | Migración de estados a inglés, hold field, aggregate fallback fix |
 | [F13 Transversal --where Filter](F13-transversal-where-filter/README.md) | --where flag consistente en tree, stats, validate, graph |
+| [F14 Sibling-Based Fix Inference](F14-sibling-fix-inference/README.md) | Inferencia estadistica de valores enum por siblings para fix engine |
