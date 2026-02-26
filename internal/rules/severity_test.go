@@ -118,6 +118,32 @@ func TestMergeSeverityNoLoosen(t *testing.T) {
 	}
 }
 
+func TestMergeSeverityEmptyDefaultsToError(t *testing.T) {
+	// Parent: warn, Child: "" (unspecified) → result: error
+	// Empty severity defaults to "error", which is stricter than "warn".
+	entries := []StemEntry{
+		{Path: "parent/.stem", Stem: &StemFile{
+			Schema: map[string]SchemaField{
+				"tipo": {Type: "enum", Severity: "warn"},
+			},
+		}},
+		{Path: "child/.stem", Stem: &StemFile{
+			Schema: map[string]SchemaField{
+				"tipo": {Type: "enum", Severity: "", Required: true},
+			},
+		}},
+	}
+
+	result := MergeStemFiles(entries)
+	field := result.Schema["tipo"]
+	if field.Severity != "error" {
+		t.Errorf("expected severity 'error' (empty defaults to error), got %q", field.Severity)
+	}
+	if !field.Required {
+		t.Errorf("expected required=true to be preserved after merge")
+	}
+}
+
 func TestMergeSeverityOffToError(t *testing.T) {
 	// Parent: off, Child: error → result: error
 	entries := []StemEntry{

@@ -87,7 +87,12 @@ func mergeSchemaFields(parent, child map[string]SchemaField, source string) map[
 
 // mergeFieldSeverity applies the tighten-only rule for severity:
 // child can tighten (warn -> error) but not loosen (error -> warn).
+// An unspecified severity ("") defaults to "error" — the absence of
+// an explicit severity is not a loosening intent.
 func mergeFieldSeverity(parent, child SchemaField) SchemaField {
+	if child.Severity == "" {
+		child.Severity = "error"
+	}
 	parentSev := severityOrder[parent.Severity]
 	childSev := severityOrder[child.Severity]
 	if childSev < parentSev {
