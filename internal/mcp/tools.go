@@ -175,11 +175,10 @@ func handleValidate(ctx context.Context, _ *mcp.CallToolRequest, input ValidateI
 	for _, rec := range filtered {
 		absPath := filepath.Join(absRoot, rec.Path)
 		dir := filepath.Dir(absPath)
-		entries, walkErr := rules.WalkUp(dir)
-		if walkErr != nil {
+		effective, resolveErr := rules.ResolveForRecord(dir, rec.Path)
+		if resolveErr != nil {
 			continue
 		}
-		effective := rules.MergeStemFiles(entries)
 		errs := rules.Validate(ctx, rec, effective)
 		results = append(results, rules.NewValidationResult(rec.Path, errs))
 	}
@@ -517,11 +516,10 @@ func handleFix(ctx context.Context, _ *mcp.CallToolRequest, input FixInput) (*mc
 	for _, rec := range records {
 		recAbsPath := filepath.Join(absRoot, rec.Path)
 		dir := filepath.Dir(recAbsPath)
-		entries, walkErr := rules.WalkUp(dir)
-		if walkErr != nil {
+		effective, resolveErr := rules.ResolveForRecord(dir, rec.Path)
+		if resolveErr != nil {
 			continue
 		}
-		effective := rules.MergeStemFiles(entries)
 		effectiveStems[rec.Path] = effective
 		errs := rules.Validate(ctx, rec, effective)
 		if len(errs) > 0 {
