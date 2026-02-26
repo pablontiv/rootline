@@ -1,11 +1,5 @@
 schema:
-    id:
-        type: sequence
-        prefix: T
-        digits: 3
-    ejecutable_en:
-        type: string
-        severity: error
-    hold:
-        type: string
-        severity: error
+  id:
+    type: sequence
+    prefix: T
+    digits: 3

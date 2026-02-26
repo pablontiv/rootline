@@ -6,6 +6,36 @@ schema:
     prefix: E
     digits: 2
 
+levels:
+  epic:
+    match: "E*"
+    children: [feature]
+  feature:
+    match: "F*"
+    children: [story]
+    schema:
+      tipo:
+        type: enum
+        values: [servicio-docker, modulo-sistema, operacion-sistema, lxc, vm, modulo-infraestructura, host-script, instance-script, software-module, software-test, ci-cd, documentation, feature, historia]
+        severity: warn
+  story:
+    match: "S*"
+    children: [task]
+    schema:
+      cliente:
+        type: string
+        severity: error
+  task:
+    match: "T*"
+    children: []
+    schema:
+      ejecutable_en:
+        type: string
+        severity: error
+      hold:
+        type: string
+        severity: error
+
 structural:
   subdirs:
     require_index: README.md
