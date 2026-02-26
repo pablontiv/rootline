@@ -291,10 +291,10 @@ func proposalsToFixResults(report *proposal.Report, records []*extract.Record) [
 		valuesCorrected := 0
 		for _, p := range proposals {
 			switch p.Type {
-			case proposal.AddField, proposal.ExtractBody, proposal.InferFromChildren:
+			case proposal.AddField, proposal.ExtractBody, proposal.InferFromChildren, proposal.InferFromSiblings:
 				fieldsAdded++
 				changes = append(changes, fmt.Sprintf("add %s=%q", p.Field, p.Value))
-			case proposal.CorrectValue, proposal.MigrateValue, proposal.CorrectLink:
+			case proposal.CorrectValue, proposal.MigrateValue, proposal.CorrectLink, proposal.CorrectOutlier:
 				valuesCorrected++
 				changes = append(changes, fmt.Sprintf("correct %s: %q -> %q", p.Field, p.From, p.To))
 			case proposal.ExtendEnum:

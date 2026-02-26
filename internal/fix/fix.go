@@ -79,9 +79,14 @@ func ApplyProposals(_ context.Context, report *proposal.Report, root string, rec
 				return fmt.Errorf("correct_value %s: %w", p.Paths[0], err)
 			}
 			applied = append(applied, p)
-		case proposal.ExtractBody, proposal.InferFromChildren, proposal.AddField:
+		case proposal.ExtractBody, proposal.InferFromChildren, proposal.AddField, proposal.InferFromSiblings:
 			if err := applySetField(p, root, recordMap); err != nil {
 				return fmt.Errorf("%s %s: %w", p.Type, p.Paths[0], err)
+			}
+			applied = append(applied, p)
+		case proposal.CorrectOutlier:
+			if err := applyCorrectValue(p, root, recordMap); err != nil {
+				return fmt.Errorf("correct_outlier %s: %w", p.Paths[0], err)
 			}
 			applied = append(applied, p)
 		case proposal.CorrectLink:

@@ -64,6 +64,8 @@ type Summary struct {
 	ExtractBody       int `json:"extract_body"`
 	InferFromChildren int `json:"infer_from_children"`
 	AddField          int `json:"add_field"`
+	InferFromSiblings int `json:"infer_from_siblings"`
+	CorrectOutlier    int `json:"correct_outlier"`
 	CorrectLink       int `json:"correct_link"`
 	AddAggregate      int `json:"add_aggregate"`
 	RemoveStemField   int `json:"remove_stem_field"`
@@ -132,6 +134,16 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 				coveredKeys[path+"\x00"+p.Field] = true
 			}
 		}
+
+		// Phase 3b: sibling inference has priority over add_field
+		siblingProposals := detectInferFromSiblings(records, effective, errs)
+		proposals = append(proposals, siblingProposals...)
+		for _, p := range siblingProposals {
+			for _, path := range p.Paths {
+				coveredKeys[path+"\x00"+p.Field] = true
+			}
+		}
+
 		for _, p := range detectAddField(effective, errs) {
 			skip := false
 			for _, path := range p.Paths {
@@ -147,6 +159,9 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 
 		// Phase 4: link target fixes
 		proposals = append(proposals, detectCorrectLink(records, effective, errs)...)
+
+		// Phase 5: outlier detection (independent — valid-but-wrong values)
+		proposals = append(proposals, detectOutlierValue(records, effective, errs)...)
 	}
 
 	summary := Summary{Total: len(proposals)}
@@ -164,6 +179,10 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 			summary.InferFromChildren++
 		case AddField:
 			summary.AddField++
+		case InferFromSiblings:
+			summary.InferFromSiblings++
+		case CorrectOutlier:
+			summary.CorrectOutlier++
 		case CorrectLink:
 			summary.CorrectLink++
 		case AddAggregate:
