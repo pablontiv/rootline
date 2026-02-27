@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: feature
 ---
 # E10: Intrinsic Hierarchy — Match-Based Schema
