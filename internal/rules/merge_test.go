@@ -81,8 +81,8 @@ func TestMergeStemFiles_MapMerge(t *testing.T) {
 	}
 }
 
-func TestMergeStemFiles_ArrayReplace(t *testing.T) {
-	// I5 §1.3: arrays replace entirely.
+func TestMergeStemFiles_ValidateAccumulates(t *testing.T) {
+	// Validate rules accumulate from parent to child.
 	parent := &StemFile{
 		Version: 1,
 		Validate: []ValidationRule{
@@ -101,11 +101,14 @@ func TestMergeStemFiles_ArrayReplace(t *testing.T) {
 	}
 
 	result := MergeStemFiles(entries)
-	if len(result.Validate) != 1 {
-		t.Fatalf("validate len = %d, want 1", len(result.Validate))
+	if len(result.Validate) != 2 {
+		t.Fatalf("validate len = %d, want 2", len(result.Validate))
 	}
-	if result.Validate[0].Rule != "requires" {
-		t.Errorf("validate[0].rule = %q, want requires", result.Validate[0].Rule)
+	if result.Validate[0].Rule != "non_empty" {
+		t.Errorf("validate[0].rule = %q, want non_empty (from parent)", result.Validate[0].Rule)
+	}
+	if result.Validate[1].Rule != "requires" {
+		t.Errorf("validate[1].rule = %q, want requires (from child)", result.Validate[1].Rule)
 	}
 }
 

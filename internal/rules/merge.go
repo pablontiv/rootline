@@ -3,7 +3,7 @@ package rules
 // MergeStemFiles merges an ordered list of StemEntries (root-to-leaf)
 // into a single effective StemFile. Merge behavior is type-driven:
 //   - map + map → recursive key-level merge
-//   - array + array → child replaces
+//   - array + array → child replaces (except validate, which accumulates)
 //   - scalar + scalar → child replaces
 //   - any + nil → key removed
 func MergeStemFiles(entries []StemEntry) *StemFile {
@@ -29,9 +29,9 @@ func MergeStemFiles(entries []StemEntry) *StemFile {
 		// Schema: map merge with source tracking.
 		result.Schema = mergeSchemaFields(result.Schema, s.Schema, path)
 
-		// Validate: array → child replaces entirely.
+		// Validate: accumulate rules from all levels.
 		if s.Validate != nil {
-			result.Validate = s.Validate
+			result.Validate = append(result.Validate, s.Validate...)
 		}
 
 		// Derive, Aggregate: generic type-driven merge.

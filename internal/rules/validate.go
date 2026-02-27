@@ -133,8 +133,9 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 }
 
 // checkNonEmpty validates that a field exists and is not an empty string.
+// Uses EffectiveField to consider derived values.
 func checkNonEmpty(record *extract.Record, rule ValidationRule) []ValidationError {
-	val, exists := record.Frontmatter[rule.Field]
+	val, exists := record.EffectiveField(rule.Field)
 	if !exists {
 		return []ValidationError{{
 			Rule:    "non_empty",
@@ -154,9 +155,9 @@ func checkNonEmpty(record *extract.Record, rule ValidationRule) []ValidationErro
 	return nil
 }
 
-// checkExists validates that a field is present in frontmatter.
+// checkExists validates that a field is present (in frontmatter or derived).
 func checkExists(record *extract.Record, rule ValidationRule) []ValidationError {
-	if _, exists := record.Frontmatter[rule.Field]; !exists {
+	if _, exists := record.EffectiveField(rule.Field); !exists {
 		return []ValidationError{{
 			Rule:    "exists",
 			Field:   rule.Field,
@@ -169,9 +170,10 @@ func checkExists(record *extract.Record, rule ValidationRule) []ValidationError 
 
 // checkRequires validates that if a condition matches, listed fields exist.
 // Format: { rule: requires, if: { Field: Value }, then: { fields: [f1, f2] } }
+// Uses EffectiveField to consider derived values in both condition and field checks.
 func checkRequires(record *extract.Record, rule ValidationRule) []ValidationError {
-	// Check if condition matches.
-	if !conditionMatches(record.Frontmatter, rule.If) {
+	// Check if condition matches (using effective fields: derived + frontmatter).
+	if !conditionMatchesRecord(record, rule.If) {
 		return nil
 	}
 
@@ -183,7 +185,7 @@ func checkRequires(record *extract.Record, rule ValidationRule) []ValidationErro
 
 	var errs []ValidationError
 	for _, f := range fields {
-		if _, exists := record.Frontmatter[f]; !exists {
+		if _, exists := record.EffectiveField(f); !exists {
 			errs = append(errs, ValidationError{
 				Rule:    "requires",
 				Field:   f,
@@ -216,11 +218,12 @@ func checkEnum(record *extract.Record, rule ValidationRule, effective *StemFile)
 	return nil
 }
 
-// conditionMatches checks if all key-value pairs in the condition
-// match the frontmatter values.
-func conditionMatches(frontmatter map[string]any, condition map[string]any) bool {
+// conditionMatchesRecord checks if all key-value pairs in the condition
+// match the record's effective field values (derived fields take precedence
+// over frontmatter).
+func conditionMatchesRecord(record *extract.Record, condition map[string]any) bool {
 	for key, expected := range condition {
-		actual, exists := frontmatter[key]
+		actual, exists := record.EffectiveField(key)
 		if !exists {
 			return false
 		}

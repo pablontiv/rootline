@@ -699,3 +699,100 @@ func TestValidate_AggregateConsistency_NonIndexFile_Skipped(t *testing.T) {
 		t.Errorf("got %d errors, want 0 (non-index file skipped): %v", len(errs), errs)
 	}
 }
+
+func TestValidate_Requires_DerivedFieldCondition(t *testing.T) {
+	// Bug fix: requires rule with condition on a derived field should fire.
+	stem := &StemFile{
+		Validate: []ValidationRule{
+			{
+				Rule:   "requires",
+				If:     map[string]any{"estado": "Completed"},
+				Then:   map[string]any{"fields": []any{"fecha_fin"}},
+				Source: "root/.stem",
+			},
+		},
+	}
+	// estado is derived (not in frontmatter), condition should still match.
+	record := &extract.Record{
+		Path:        "task.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+		Derived:     map[string]any{"estado": "Completed"},
+	}
+
+	errs := Validate(context.Background(), record, stem)
+	if len(errs) != 1 {
+		t.Fatalf("got %d errors, want 1 (derived condition match)", len(errs))
+	}
+	if errs[0].Rule != "requires" {
+		t.Errorf("rule = %q, want requires", errs[0].Rule)
+	}
+	if errs[0].Field != "fecha_fin" {
+		t.Errorf("field = %q, want fecha_fin", errs[0].Field)
+	}
+}
+
+func TestValidate_Requires_DerivedFieldSatisfies(t *testing.T) {
+	// A derived field should satisfy a "then.fields" requirement.
+	stem := &StemFile{
+		Validate: []ValidationRule{
+			{
+				Rule:   "requires",
+				If:     map[string]any{"tipo": "software-module"},
+				Then:   map[string]any{"fields": []any{"ejecutable_en"}},
+				Source: "root/.stem",
+			},
+		},
+	}
+	record := &extract.Record{
+		Path:        "task.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"tipo": "software-module"},
+		Derived:     map[string]any{"ejecutable_en": "docker"},
+	}
+
+	errs := Validate(context.Background(), record, stem)
+	if len(errs) != 0 {
+		t.Errorf("got %d errors, want 0 (derived field satisfies requires): %v", len(errs), errs)
+	}
+}
+
+func TestValidate_Exists_DerivedField(t *testing.T) {
+	// A derived field should satisfy an "exists" rule.
+	stem := &StemFile{
+		Validate: []ValidationRule{
+			{Field: "estado", Rule: "exists", Source: "root/.stem"},
+		},
+	}
+	record := &extract.Record{
+		Path:        "task.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+		Derived:     map[string]any{"estado": "Pending"},
+	}
+
+	errs := Validate(context.Background(), record, stem)
+	if len(errs) != 0 {
+		t.Errorf("got %d errors, want 0 (derived field satisfies exists): %v", len(errs), errs)
+	}
+}
+
+func TestValidate_NonEmpty_DerivedField(t *testing.T) {
+	// A derived field should satisfy a "non_empty" rule.
+	stem := &StemFile{
+		Validate: []ValidationRule{
+			{Field: "estado", Rule: "non_empty", Source: "root/.stem"},
+		},
+	}
+	record := &extract.Record{
+		Path:        "task.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+		Derived:     map[string]any{"estado": "Pending"},
+	}
+
+	errs := Validate(context.Background(), record, stem)
+	if len(errs) != 0 {
+		t.Errorf("got %d errors, want 0 (derived field satisfies non_empty): %v", len(errs), errs)
+	}
+}
