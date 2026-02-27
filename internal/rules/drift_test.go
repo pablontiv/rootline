@@ -231,3 +231,118 @@ func TestDetectDrift_ValuesMatch(t *testing.T) {
 		t.Errorf("got %d warnings, want 0 (values match)", len(warnings))
 	}
 }
+
+func TestDetectDrift_TableDriven(t *testing.T) {
+	tests := []struct {
+		name         string
+		parent       extract.Record
+		children     []extract.Record
+		schema       map[string]SchemaField
+		wantWarnings int
+		wantFields   []string
+	}{
+		{
+			name: "single child matches parent — no warning",
+			parent: extract.Record{
+				Path:        "project/README.md",
+				Frontmatter: map[string]any{"estado": "Pending"},
+			},
+			children: []extract.Record{
+				{Path: "project/task1.md", Frontmatter: map[string]any{"estado": "Pending"}},
+			},
+			schema:       map[string]SchemaField{"estado": {Type: "enum"}},
+			wantWarnings: 0,
+		},
+		{
+			name: "single child differs from parent — warning",
+			parent: extract.Record{
+				Path:        "project/README.md",
+				Frontmatter: map[string]any{"estado": "In Progress"},
+			},
+			children: []extract.Record{
+				{Path: "project/task1.md", Frontmatter: map[string]any{"estado": "Completed"}},
+			},
+			schema:       map[string]SchemaField{"estado": {Type: "enum"}},
+			wantWarnings: 1,
+			wantFields:   []string{"estado"},
+		},
+		{
+			name: "non-enum string field drift detected",
+			parent: extract.Record{
+				Path:        "project/README.md",
+				Frontmatter: map[string]any{"titulo": "Old Title"},
+			},
+			children: []extract.Record{
+				{Path: "project/doc1.md", Frontmatter: map[string]any{"titulo": "New Title"}},
+				{Path: "project/doc2.md", Frontmatter: map[string]any{"titulo": "New Title"}},
+			},
+			schema:       map[string]SchemaField{"titulo": {Type: "string"}},
+			wantWarnings: 1,
+			wantFields:   []string{"titulo"},
+		},
+		{
+			name: "multiple fields with drift — multiple warnings",
+			parent: extract.Record{
+				Path:        "project/README.md",
+				Frontmatter: map[string]any{"estado": "Pending", "prioridad": "low"},
+			},
+			children: []extract.Record{
+				{Path: "project/t1.md", Frontmatter: map[string]any{"estado": "Completed", "prioridad": "high"}},
+				{Path: "project/t2.md", Frontmatter: map[string]any{"estado": "Completed", "prioridad": "high"}},
+			},
+			schema: map[string]SchemaField{
+				"estado":    {Type: "enum"},
+				"prioridad": {Type: "enum"},
+			},
+			wantWarnings: 2,
+			wantFields:   []string{"estado", "prioridad"},
+		},
+		{
+			name: "some children missing field — only present children count",
+			parent: extract.Record{
+				Path:        "project/README.md",
+				Frontmatter: map[string]any{"estado": "Pending"},
+			},
+			children: []extract.Record{
+				{Path: "project/t1.md", Frontmatter: map[string]any{"estado": "Completed"}},
+				{Path: "project/t2.md", Frontmatter: map[string]any{}},
+			},
+			schema:       map[string]SchemaField{"estado": {Type: "enum"}},
+			wantWarnings: 1,
+			wantFields:   []string{"estado"},
+		},
+		{
+			name: "integer vs string comparison works",
+			parent: extract.Record{
+				Path:        "project/README.md",
+				Frontmatter: map[string]any{"version": 1},
+			},
+			children: []extract.Record{
+				{Path: "project/t1.md", Frontmatter: map[string]any{"version": 2}},
+			},
+			schema:       map[string]SchemaField{"version": {Type: "number"}},
+			wantWarnings: 1,
+			wantFields:   []string{"version"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings := DetectDrift(tt.parent, tt.children, tt.schema)
+			if len(warnings) != tt.wantWarnings {
+				t.Errorf("got %d warnings, want %d: %+v", len(warnings), tt.wantWarnings, warnings)
+			}
+			if tt.wantFields != nil {
+				gotFields := make(map[string]bool)
+				for _, w := range warnings {
+					gotFields[w.Field] = true
+				}
+				for _, f := range tt.wantFields {
+					if !gotFields[f] {
+						t.Errorf("missing expected warning for field %q", f)
+					}
+				}
+			}
+		})
+	}
+}
