@@ -8,33 +8,58 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ConvertLevelsToMatch converts a v1 .stem file with `levels:` to a v2 .stem
-// file with match-based field scoping. The resulting stem has version=2, no
-// Levels field, and per-field Match annotations.
-func ConvertLevelsToMatch(stem *rules.StemFile) (*rules.StemFile, error) {
-	if len(stem.Levels) == 0 {
+// v1Level represents a single level in a v1 .stem levels: map.
+// This is a local type for parsing v1 stems during migration.
+type v1Level struct {
+	Match    string                       `yaml:"match"`
+	Children []string                     `yaml:"children,omitempty"`
+	Schema   map[string]rules.SchemaField `yaml:"schema,omitempty"`
+	Validate []rules.ValidationRule       `yaml:"validate,omitempty"`
+}
+
+// v1StemFile extends parsing to include the levels: field from v1 format.
+type v1StemFile struct {
+	Version    int                          `yaml:"version"`
+	Scope      rules.Scope                  `yaml:"scope"`
+	Schema     map[string]rules.SchemaField `yaml:"schema"`
+	Validate   []rules.ValidationRule       `yaml:"validate"`
+	Derive     map[string]any               `yaml:"derive"`
+	Aggregate  map[string]any               `yaml:"aggregate"`
+	Links      rules.LinkSchema             `yaml:"links"`
+	Structural rules.StructuralRules        `yaml:"structural"`
+	Levels     map[string]*v1Level          `yaml:"levels"`
+}
+
+// ConvertLevelsToMatch reads a v1 .stem file with `levels:` from raw YAML and
+// converts it to a v2 .stem file with match-based field scoping.
+func ConvertLevelsToMatch(content []byte, path string) (*rules.StemFile, error) {
+	var v1 v1StemFile
+	if err := yaml.Unmarshal(content, &v1); err != nil {
+		return nil, fmt.Errorf("parsing v1 stem: %w", err)
+	}
+
+	if len(v1.Levels) == 0 {
 		return nil, fmt.Errorf("stem has no levels to convert")
 	}
 
 	result := &rules.StemFile{
-		Path:       stem.Path,
+		Path:       path,
 		Version:    2,
-		Scope:      stem.Scope,
+		Scope:      v1.Scope,
 		Schema:     make(map[string]rules.SchemaField),
-		Validate:   stem.Validate,
-		Derive:     stem.Derive,
-		Aggregate:  stem.Aggregate,
-		Links:      stem.Links,
-		Structural: stem.Structural,
+		Validate:   v1.Validate,
+		Derive:     v1.Derive,
+		Aggregate:  v1.Aggregate,
+		Links:      v1.Links,
+		Structural: v1.Structural,
 	}
 
 	// Copy root-level schema fields (no match needed).
-	for name, field := range stem.Schema {
+	for name, field := range v1.Schema {
 		result.Schema[name] = field
 	}
 
 	// Track per-level fields to merge across levels.
-	// For non-id fields: collect match patterns.
 	type fieldInfo struct {
 		patterns []string
 		field    rules.SchemaField
@@ -44,12 +69,11 @@ func ConvertLevelsToMatch(stem *rules.StemFile) (*rules.StemFile, error) {
 	// Track sequence id configs per pattern.
 	idConfigs := make(map[string]any)
 
-	for _, level := range stem.Levels {
+	for _, level := range v1.Levels {
 		pattern := normalizeMatchPattern(level.Match)
 
 		for name, field := range level.Schema {
 			if name == "id" && field.Type == "sequence" {
-				// Sequence id: collect into map-form match.
 				idConfigs[pattern] = map[string]any{
 					"prefix": field.Prefix,
 					"digits": field.Digits,
@@ -59,11 +83,9 @@ func ConvertLevelsToMatch(stem *rules.StemFile) (*rules.StemFile, error) {
 
 			if info, ok := perLevel[name]; ok {
 				info.patterns = append(info.patterns, pattern)
-				// Keep the more complete definition.
 				if len(field.Values) > len(info.field.Values) {
 					info.field = field
 				}
-				// If any level requires it, preserve that.
 				if field.Required {
 					info.field.Required = true
 				}
@@ -77,25 +99,21 @@ func ConvertLevelsToMatch(stem *rules.StemFile) (*rules.StemFile, error) {
 	}
 
 	// Check if a per-level field appears at ALL levels — if so, make it root.
-	nLevels := len(stem.Levels)
+	nLevels := len(v1.Levels)
 	for name, info := range perLevel {
 		if _, exists := result.Schema[name]; exists {
-			// Already in root schema — merge match patterns if needed.
 			continue
 		}
 
 		if len(info.patterns) == nLevels {
-			// Present at all levels → root field (no match needed).
 			result.Schema[name] = info.field
 		} else {
-			// Present at some levels → add match restriction.
 			field := info.field
 			field.Match = &rules.FieldMatch{Patterns: info.patterns}
 			result.Schema[name] = field
 		}
 	}
 
-	// Sequence id with map-form match.
 	if len(idConfigs) > 0 {
 		result.Schema["id"] = rules.SchemaField{
 			Type:  "sequence",
@@ -107,12 +125,9 @@ func ConvertLevelsToMatch(stem *rules.StemFile) (*rules.StemFile, error) {
 }
 
 // normalizeMatchPattern converts a v1 match pattern (e.g., "E??-*") to a
-// simpler v2 glob prefix pattern (e.g., "E*"). If the pattern is already
-// simple, returns it as-is.
+// simpler v2 glob prefix pattern (e.g., "E*").
 func normalizeMatchPattern(pattern string) string {
-	// v1 patterns are like "E??-*" or "E*". Normalize to "E*" form.
 	if len(pattern) >= 2 && pattern[0] >= 'A' && pattern[0] <= 'Z' {
-		// Find the prefix letters.
 		i := 0
 		for i < len(pattern) && pattern[i] >= 'A' && pattern[i] <= 'Z' {
 			i++
@@ -126,7 +141,6 @@ func normalizeMatchPattern(pattern string) string {
 
 // MarshalStemV2 serializes a v2 StemFile to YAML bytes.
 func MarshalStemV2(stem *rules.StemFile) ([]byte, error) {
-	// Build an ordered map for clean YAML output.
 	out := make(map[string]any)
 	out["version"] = stem.Version
 
@@ -161,8 +175,7 @@ func MarshalStemV2(stem *rules.StemFile) ([]byte, error) {
 	return yaml.Marshal(out)
 }
 
-// schemaFieldToMap converts a SchemaField to a map for YAML serialization,
-// handling the match field specially.
+// schemaFieldToMap converts a SchemaField to a map for YAML serialization.
 func schemaFieldToMap(f rules.SchemaField) map[string]any {
 	m := make(map[string]any)
 	m["type"] = f.Type

@@ -108,13 +108,6 @@ func runFix(cmd *cobra.Command, args []string) error {
 		// Validate
 		errs := rules.Validate(ctx, record, effective)
 
-		// Nesting check (informational — not auto-fixable)
-		if effective.Levels != nil {
-			relPath, _ := filepath.Rel(filepath.Dir(dir), absPath)
-			nestingErrs := rules.CheckNesting(effective.Levels, relPath)
-			errs = append(errs, nestingErrs...)
-		}
-
 		if len(errs) == 0 {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: no errors to fix\n", file)
 			continue
@@ -194,12 +187,6 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 		effectiveStems[rec.Path] = effective
 
 		errs := rules.Validate(ctx, rec, effective)
-
-		// Nesting check (informational — not auto-fixable)
-		if effective.Levels != nil {
-			nestingErrs := rules.CheckNesting(effective.Levels, rec.Path)
-			errs = append(errs, nestingErrs...)
-		}
 
 		if len(errs) > 0 {
 			allErrs[rec.Path] = errs

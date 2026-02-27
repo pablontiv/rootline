@@ -46,9 +46,6 @@ func MergeStemFiles(entries []StemEntry) *StemFile {
 			result.Structural = s.Structural
 		}
 
-		// Levels: map merge at key level (child overrides specific levels).
-		result.Levels = mergeLevels(result.Levels, s.Levels)
-
 		// Track which .stem files contributed.
 		result.Path = path
 	}
@@ -199,25 +196,4 @@ func mergeLinkSchema(parent, child LinkSchema) LinkSchema {
 	}
 
 	return result
-}
-
-// mergeLevels merges two Levels maps at the key level.
-// Child can add new levels or override existing ones; non-overridden levels
-// are preserved from parent.
-func mergeLevels(parent, child map[string]*HierarchyLevel) map[string]*HierarchyLevel {
-	if len(child) == 0 {
-		return parent
-	}
-	if len(parent) == 0 {
-		return child
-	}
-
-	out := make(map[string]*HierarchyLevel, len(parent)+len(child))
-	for k, v := range parent {
-		out[k] = v
-	}
-	for k, v := range child {
-		out[k] = v
-	}
-	return out
 }

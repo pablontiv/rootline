@@ -181,20 +181,22 @@ func buildHierarchicalStems(absTarget string, hierarchy *infer.HierarchyResult) 
 }
 
 // generateHierarchicalRootYAML generates the root .stem with common fields,
-// a levels: section for per-level schemas, and aggregates.
+// match-based per-level schema, and aggregates.
 func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates map[string]string) string {
 	var b strings.Builder
-	b.WriteString("version: 1\nscope:\n  match: \"*.md\"\nschema:\n")
+	b.WriteString("version: 2\nscope:\n  match: \"*.md\"\nschema:\n")
 
-	// Add common fields from root schema.
-	keys := make([]string, 0, len(hierarchy.Root.Schema))
-	for k := range hierarchy.Root.Schema {
+	// Merge root and per-level fields into a single schema with match annotations.
+	matchSchema := hierarchy.ToMatchSchema()
+
+	keys := make([]string, 0, len(matchSchema))
+	for k := range matchSchema {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
 	for _, name := range keys {
-		field := hierarchy.Root.Schema[name]
+		field := matchSchema[name]
 		fmt.Fprintf(&b, "  %s:\n", name)
 		fmt.Fprintf(&b, "    type: %s\n", field.Type)
 		if field.Required {
@@ -203,50 +205,43 @@ func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates m
 		if len(field.Values) > 0 {
 			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(field.Values, ", "))
 		}
-	}
-
-	// Emit levels section from hierarchy analysis.
-	levelsMap := hierarchy.ToLevelsMap()
-	if len(levelsMap) > 0 {
-		b.WriteString("levels:\n")
-		// Sort level names for deterministic output.
-		levelNames := make([]string, 0, len(levelsMap))
-		for name := range levelsMap {
-			levelNames = append(levelNames, name)
+		if field.Prefix != "" {
+			fmt.Fprintf(&b, "    prefix: %s\n", field.Prefix)
 		}
-		sort.Strings(levelNames)
-
-		for _, name := range levelNames {
-			level := levelsMap[name]
-			fmt.Fprintf(&b, "  %s:\n", name)
-			fmt.Fprintf(&b, "    match: \"%s\"\n", level.Match)
-			if len(level.Children) > 0 {
-				fmt.Fprintf(&b, "    children: [%s]\n", strings.Join(level.Children, ", "))
-			}
-			if len(level.Schema) > 0 {
-				b.WriteString("    schema:\n")
-				schemaKeys := make([]string, 0, len(level.Schema))
-				for k := range level.Schema {
-					schemaKeys = append(schemaKeys, k)
+		if field.Digits > 0 {
+			fmt.Fprintf(&b, "    digits: %d\n", field.Digits)
+		}
+		if field.Match != nil {
+			switch {
+			case len(field.Match.Configs) > 0:
+				b.WriteString("    match:\n")
+				matchKeys := make([]string, 0, len(field.Match.Configs))
+				for k := range field.Match.Configs {
+					matchKeys = append(matchKeys, k)
 				}
-				sort.Strings(schemaKeys)
-				for _, fieldName := range schemaKeys {
-					field := level.Schema[fieldName]
-					fmt.Fprintf(&b, "      %s:\n", fieldName)
-					fmt.Fprintf(&b, "        type: %s\n", field.Type)
-					if field.Required {
-						b.WriteString("        required: true\n")
-					}
-					if field.Prefix != "" {
-						fmt.Fprintf(&b, "        prefix: %s\n", field.Prefix)
-					}
-					if field.Digits > 0 {
-						fmt.Fprintf(&b, "        digits: %d\n", field.Digits)
-					}
-					if len(field.Values) > 0 {
-						fmt.Fprintf(&b, "        values: [%s]\n", strings.Join(field.Values, ", "))
+				sort.Strings(matchKeys)
+				for _, mk := range matchKeys {
+					cfg := field.Match.Configs[mk]
+					if cfgMap, ok := cfg.(map[string]any); ok {
+						fmt.Fprintf(&b, "      \"%s\": {", mk)
+						first := true
+						if p, ok := cfgMap["prefix"]; ok {
+							fmt.Fprintf(&b, "prefix: %s", p)
+							first = false
+						}
+						if d, ok := cfgMap["digits"]; ok {
+							if !first {
+								b.WriteString(", ")
+							}
+							fmt.Fprintf(&b, "digits: %v", d)
+						}
+						b.WriteString("}\n")
 					}
 				}
+			case len(field.Match.Patterns) == 1:
+				fmt.Fprintf(&b, "    match: \"%s\"\n", field.Match.Patterns[0])
+			case len(field.Match.Patterns) > 1:
+				fmt.Fprintf(&b, "    match: [%s]\n", strings.Join(field.Match.Patterns, ", "))
 			}
 		}
 	}

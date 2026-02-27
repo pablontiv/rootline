@@ -379,43 +379,6 @@ func computeStemPaths(levelSchemas []LevelSchema) {
 	}
 }
 
-// ToLevelsMap converts the HierarchyResult into a map[string]*rules.HierarchyLevel
-// suitable for the .stem `levels:` field. Each detected level becomes a named entry
-// with match pattern, children chain, and per-level schema fields.
-func (h *HierarchyResult) ToLevelsMap() map[string]*rules.HierarchyLevel {
-	if !h.Detected || len(h.Levels) == 0 {
-		return nil
-	}
-
-	result := make(map[string]*rules.HierarchyLevel, len(h.Levels))
-	names := make([]string, len(h.Levels))
-
-	for i, ls := range h.Levels {
-		name := levelName(ls.Level.Prefix)
-		names[i] = name
-
-		matchPattern := fmt.Sprintf("%s%s-*", ls.Level.Prefix, strings.Repeat("?", ls.Level.Digits))
-
-		level := &rules.HierarchyLevel{
-			Match:  matchPattern,
-			Schema: make(map[string]rules.SchemaField),
-		}
-
-		for fieldName, field := range ls.OnlyHere {
-			level.Schema[fieldName] = field
-		}
-
-		result[name] = level
-	}
-
-	// Build children chains: each level's children is the next level.
-	for i := 0; i < len(names)-1; i++ {
-		result[names[i]].Children = []string{names[i+1]}
-	}
-
-	return result
-}
-
 // ToMatchSchema converts the HierarchyResult into a flat map of SchemaFields
 // using match-based field scoping (v2 format). Root fields have no Match set,
 // per-level fields get Match patterns, and sequence id gets a map-form Match.
@@ -478,18 +441,4 @@ func (h *HierarchyResult) ToMatchSchema() map[string]rules.SchemaField {
 	}
 
 	return result
-}
-
-// levelName converts a prefix letter to a human-readable level name.
-func levelName(prefix string) string {
-	conventions := map[string]string{
-		"E": "epic",
-		"F": "feature",
-		"S": "story",
-		"T": "task",
-	}
-	if name, ok := conventions[prefix]; ok {
-		return name
-	}
-	return strings.ToLower(prefix)
 }

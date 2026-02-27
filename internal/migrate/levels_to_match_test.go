@@ -7,63 +7,63 @@ import (
 )
 
 func TestConvertLevelsToMatch_Basic(t *testing.T) {
-	// v1 stem with levels (based on research doc example)
-	stem := &rules.StemFile{
-		Path:    "test/.stem",
-		Version: 1,
-		Schema: map[string]rules.SchemaField{
-			"estado": {
-				Type:   "enum",
-				Values: []string{"Pending", "In Progress", "Completado"},
-			},
-		},
-		Levels: map[string]*rules.HierarchyLevel{
-			"epic": {
-				Match:    "E??-*",
-				Children: []string{"feature"},
-				Schema: map[string]rules.SchemaField{
-					"id": {Type: "sequence", Prefix: "E", Digits: 2},
-				},
-			},
-			"feature": {
-				Match:    "F??-*",
-				Children: []string{"story"},
-				Schema: map[string]rules.SchemaField{
-					"id":   {Type: "sequence", Prefix: "F", Digits: 2},
-					"tipo": {Type: "enum", Values: []string{"servicio-docker", "modulo-sistema", "documentation"}},
-				},
-			},
-			"story": {
-				Match:    "S???-*",
-				Children: []string{"task"},
-				Schema: map[string]rules.SchemaField{
-					"id": {Type: "sequence", Prefix: "S", Digits: 3},
-				},
-			},
-			"task": {
-				Match:    "T???-*",
-				Children: nil,
-				Schema: map[string]rules.SchemaField{
-					"id":   {Type: "sequence", Prefix: "T", Digits: 3},
-					"tipo": {Type: "enum", Required: true, Values: []string{"servicio-docker", "modulo-sistema", "documentation"}},
-				},
-			},
-		},
-	}
+	content := []byte(`
+version: 1
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    values: [Pending, In Progress, Completado]
+levels:
+  epic:
+    match: "E??-*"
+    children: [feature]
+    schema:
+      id:
+        type: sequence
+        prefix: E
+        digits: 2
+  feature:
+    match: "F??-*"
+    children: [story]
+    schema:
+      id:
+        type: sequence
+        prefix: F
+        digits: 2
+      tipo:
+        type: enum
+        values: [servicio-docker, modulo-sistema, documentation]
+  story:
+    match: "S???-*"
+    children: [task]
+    schema:
+      id:
+        type: sequence
+        prefix: S
+        digits: 3
+  task:
+    match: "T???-*"
+    children: []
+    schema:
+      id:
+        type: sequence
+        prefix: T
+        digits: 3
+      tipo:
+        type: enum
+        required: true
+        values: [servicio-docker, modulo-sistema, documentation]
+`)
 
-	result, err := ConvertLevelsToMatch(stem)
+	result, err := ConvertLevelsToMatch(content, "test/.stem")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Version should be 2
 	if result.Version != 2 {
 		t.Errorf("version = %d, want 2", result.Version)
-	}
-
-	// Levels should be empty
-	if len(result.Levels) > 0 {
-		t.Error("expected empty Levels in v2 stem")
 	}
 
 	// Root field: estado (no match)
@@ -110,54 +110,57 @@ func TestConvertLevelsToMatch_Basic(t *testing.T) {
 	if !patterns["F*"] || !patterns["T*"] {
 		t.Errorf("tipo.Match.Patterns = %v, want [F* T*]", tipo.Match.Patterns)
 	}
-	// tipo is required at task level → should be required
 	if !tipo.Required {
 		t.Error("tipo.Required should be true (required at task level)")
 	}
 }
 
 func TestConvertLevelsToMatch_NoLevels(t *testing.T) {
-	stem := &rules.StemFile{
-		Path:    "test/.stem",
-		Version: 1,
-	}
-	_, err := ConvertLevelsToMatch(stem)
+	content := []byte(`version: 1
+schema:
+  estado:
+    type: enum
+`)
+	_, err := ConvertLevelsToMatch(content, "test/.stem")
 	if err == nil {
 		t.Fatal("expected error for stem with no levels")
 	}
 }
 
 func TestConvertLevelsToMatch_PreservesRootFields(t *testing.T) {
-	stem := &rules.StemFile{
-		Path:    "test/.stem",
-		Version: 1,
-		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Required: true, Values: []string{"Pending", "Done"}},
-		},
-		Derive:    map[string]any{"slug": "slugify(titulo)"},
-		Aggregate: map[string]any{"estado": "all(descendants, {.estado == \"Done\"}) ? \"Done\" : estado"},
-		Levels: map[string]*rules.HierarchyLevel{
-			"epic": {
-				Match: "E*",
-				Schema: map[string]rules.SchemaField{
-					"id": {Type: "sequence", Prefix: "E", Digits: 2},
-				},
-			},
-			"feature": {
-				Match: "F*",
-				Schema: map[string]rules.SchemaField{
-					"id": {Type: "sequence", Prefix: "F", Digits: 2},
-				},
-			},
-		},
-	}
+	content := []byte(`
+version: 1
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Done]
+derive:
+  slug: "slugify(titulo)"
+aggregate:
+  estado: 'all(descendants, {.estado == "Done"}) ? "Done" : estado'
+levels:
+  epic:
+    match: "E*"
+    schema:
+      id:
+        type: sequence
+        prefix: E
+        digits: 2
+  feature:
+    match: "F*"
+    schema:
+      id:
+        type: sequence
+        prefix: F
+        digits: 2
+`)
 
-	result, err := ConvertLevelsToMatch(stem)
+	result, err := ConvertLevelsToMatch(content, "test/.stem")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Root fields preserved
 	if _, ok := result.Schema["estado"]; !ok {
 		t.Error("expected 'estado' preserved in schema")
 	}
@@ -203,7 +206,6 @@ func TestMarshalStemV2(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should be valid YAML that can be parsed back
 	parsed, err := rules.ParseStem("test/.stem", data)
 	if err != nil {
 		t.Fatalf("round-trip parse error: %v", err)

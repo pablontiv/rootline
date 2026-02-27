@@ -338,16 +338,12 @@ func runMigrateFromLevels(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving path: %w", err)
 	}
 
-	stem, err := rules.ParseStemFile(absPath)
+	content, err := os.ReadFile(absPath)
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", stemPath, err)
 	}
 
-	if len(stem.Levels) == 0 {
-		return fmt.Errorf("%s has no levels: section to convert", stemPath)
-	}
-
-	result, err := migrate.ConvertLevelsToMatch(stem)
+	result, err := migrate.ConvertLevelsToMatch(content, absPath)
 	if err != nil {
 		return fmt.Errorf("converting: %w", err)
 	}

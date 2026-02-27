@@ -14,8 +14,8 @@ func TestInitDryRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "version: 1") {
-		t.Errorf("expected version: 1 in output, got: %s", out)
+	if !strings.Contains(out, "version:") {
+		t.Errorf("expected version: in output, got: %s", out)
 	}
 	if !strings.Contains(out, "schema:") {
 		t.Errorf("expected schema: in output, got: %s", out)
@@ -45,7 +45,7 @@ func TestInitWritesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected .stem file to exist: %v", err)
 	}
-	if !strings.Contains(string(content), "version: 1") {
+	if !strings.Contains(string(content), "version:") {
 		t.Errorf("expected valid .stem content, got: %s", string(content))
 	}
 }
@@ -103,7 +103,7 @@ func TestInitMixedContentWarning(t *testing.T) {
 		t.Errorf("expected '2 of 5' in warning, got: %s", out)
 	}
 	// Schema should still be generated
-	if !strings.Contains(out, "version: 1") {
+	if !strings.Contains(out, "version:") {
 		t.Errorf("expected schema generated despite warning, got: %s", out)
 	}
 }
@@ -169,36 +169,30 @@ func TestInitAutoHierarchy(t *testing.T) {
 		t.Errorf("expected hierarchical output message, got: %s", out)
 	}
 
-	// Root .stem should exist with levels section.
+	// Root .stem should exist with match-based schema (v2 format).
 	rootStem := filepath.Join(dir, ".stem")
 	content, err := os.ReadFile(rootStem)
 	if err != nil {
 		t.Fatalf("expected root .stem: %v", err)
 	}
 	s := string(content)
-	if !strings.Contains(s, "version: 1") {
-		t.Errorf("expected version: 1 in root .stem")
+	if !strings.Contains(s, "version: 2") {
+		t.Errorf("expected version: 2 in root .stem, got: %s", s)
 	}
-	if !strings.Contains(s, "levels:") {
-		t.Errorf("expected levels: section in root .stem, got: %s", s)
+	if !strings.Contains(s, "schema:") {
+		t.Errorf("expected schema: section in root .stem, got: %s", s)
 	}
-	if !strings.Contains(s, "epic:") {
-		t.Errorf("expected epic level in root .stem, got: %s", s)
+	if !strings.Contains(s, "match:") {
+		t.Errorf("expected match: annotations in root .stem, got: %s", s)
 	}
-	if !strings.Contains(s, "feature:") {
-		t.Errorf("expected feature level in root .stem, got: %s", s)
-	}
-	if !strings.Contains(s, "prefix: E") {
-		t.Errorf("expected prefix: E in root .stem, got: %s", s)
-	}
-	if !strings.Contains(s, "prefix: F") {
-		t.Errorf("expected prefix: F in root .stem, got: %s", s)
+	if !strings.Contains(s, "estado:") {
+		t.Errorf("expected estado field in root .stem, got: %s", s)
 	}
 
 	// No child .stem files should be created.
 	childStem := filepath.Join(dir, "E01-infra", ".stem")
 	if _, err := os.Stat(childStem); err == nil {
-		t.Error("expected no child .stem in E01-infra/ (levels are in root .stem)")
+		t.Error("expected no child .stem in E01-infra/ (match-based schema is in root .stem)")
 	}
 }
 
@@ -224,18 +218,18 @@ func TestInitAutoHierarchyDryRun(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should show single .stem with levels section.
+	// Should show single .stem with match-based schema (v2 format).
 	if !strings.Contains(out, "# --- ") {
 		t.Errorf("expected file separator in dry-run output, got: %s", out)
 	}
-	if !strings.Contains(out, "levels:") {
-		t.Errorf("expected levels: section in dry-run output, got: %s", out)
+	if !strings.Contains(out, "version: 2") {
+		t.Errorf("expected version: 2 in dry-run output, got: %s", out)
 	}
-	if !strings.Contains(out, "prefix: E") {
-		t.Errorf("expected prefix: E in dry-run output, got: %s", out)
+	if !strings.Contains(out, "schema:") {
+		t.Errorf("expected schema: section in dry-run output, got: %s", out)
 	}
-	if !strings.Contains(out, "prefix: F") {
-		t.Errorf("expected prefix: F in dry-run output, got: %s", out)
+	if !strings.Contains(out, "match:") {
+		t.Errorf("expected match: annotations in dry-run output, got: %s", out)
 	}
 
 	// No files should be written.
@@ -356,7 +350,7 @@ func TestInitFlatFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected .stem file: %v", err)
 	}
-	if !strings.Contains(string(content), "version: 1") {
-		t.Errorf("expected version: 1, got: %s", string(content))
+	if !strings.Contains(string(content), "version:") {
+		t.Errorf("expected version:, got: %s", string(content))
 	}
 }

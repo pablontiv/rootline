@@ -99,13 +99,6 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 		// Validate
 		errs := rules.Validate(ctx, record, effective)
 
-		// Nesting check (when levels are defined)
-		if effective.Levels != nil {
-			relPath, _ := filepath.Rel(filepath.Dir(dir), absPath)
-			nestingErrs := rules.CheckNesting(effective.Levels, relPath)
-			errs = append(errs, nestingErrs...)
-		}
-
 		results = append(results, rules.NewValidationResult(file, errs))
 	}
 
@@ -178,12 +171,6 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 			continue
 		}
 		errs := rules.Validate(ctx, rec, effective)
-
-		// Nesting check (when levels are defined)
-		if effective.Levels != nil {
-			nestingErrs := rules.CheckNesting(effective.Levels, rec.Path)
-			errs = append(errs, nestingErrs...)
-		}
 
 		results = append(results, rules.NewValidationResult(rec.Path, errs))
 
