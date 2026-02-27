@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 ---
 # S002: Describe, Infer and Stemhealth
 
