@@ -190,6 +190,13 @@ func ParseStem(path string, content []byte) (*StemFile, error) {
 	}
 	stem.Path = path
 
+	// Version-aware validation
+	if stem.Version == 2 {
+		if err := rejectLevelsInV2(path, content); err != nil {
+			return nil, err
+		}
+	}
+
 	// Tag source and default severity on schema fields
 	for name, field := range stem.Schema {
 		field.Source = path
@@ -208,6 +215,18 @@ func ParseStem(path string, content []byte) (*StemFile, error) {
 	}
 
 	return &stem, nil
+}
+
+// rejectLevelsInV2 checks that a v2 stem does not contain a levels: section.
+func rejectLevelsInV2(path string, content []byte) error {
+	var raw map[string]any
+	if err := yaml.Unmarshal(content, &raw); err != nil {
+		return nil // already handled by main parse
+	}
+	if _, hasLevels := raw["levels"]; hasLevels {
+		return fmt.Errorf("parsing %s: v2 stems must not contain a 'levels:' section — use match: on individual fields instead", path)
+	}
+	return nil
 }
 
 // ParseStemFile reads and parses a .stem file from disk.

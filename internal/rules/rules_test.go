@@ -3,6 +3,7 @@ package rules
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -388,6 +389,114 @@ schema:
 	// nil Match means field applies everywhere (no filtering)
 	if !field.Required {
 		t.Error("required should still be true")
+	}
+}
+
+func TestParseStemV2(t *testing.T) {
+	content := []byte(`version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    values: [Pending, "In Progress", Completed]
+  id:
+    type: sequence
+    match:
+      "E*": {prefix: E, digits: 2}
+      "F*": {prefix: F, digits: 2}
+      "S*": {prefix: S, digits: 3}
+      "T*": {prefix: T, digits: 3}
+  tipo:
+    type: enum
+    values: [modulo-sistema, test, documentation]
+    match: ["F*", "T*"]
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stem.Version != 2 {
+		t.Errorf("version = %d, want 2", stem.Version)
+	}
+
+	// estado: no match, applies everywhere
+	estado := stem.Schema["estado"]
+	if estado.Match != nil {
+		t.Error("estado.match should be nil")
+	}
+	if estado.Source != "test/.stem" {
+		t.Errorf("estado.source = %q, want test/.stem", estado.Source)
+	}
+
+	// id: map-form match
+	id := stem.Schema["id"]
+	if id.Match == nil || len(id.Match.Configs) != 4 {
+		t.Errorf("id.match.configs len = %d, want 4", len(id.Match.Configs))
+	}
+
+	// tipo: list-form match
+	tipo := stem.Schema["tipo"]
+	if tipo.Match == nil || len(tipo.Match.Patterns) != 2 {
+		t.Errorf("tipo.match.patterns len = %d, want 2", len(tipo.Match.Patterns))
+	}
+}
+
+func TestParseStemV2_RejectsLevels(t *testing.T) {
+	content := []byte(`version: 2
+levels:
+  epic:
+    match: "E*"
+schema:
+  estado:
+    type: enum
+`)
+	_, err := ParseStem("test/.stem", content)
+	if err == nil {
+		t.Fatal("expected error for v2 stem with levels:, got nil")
+	}
+	if !strings.Contains(err.Error(), "levels") {
+		t.Errorf("error should mention 'levels', got: %v", err)
+	}
+}
+
+func TestParseStemV2_V1BackwardCompat(t *testing.T) {
+	// v1 stems should parse identically as before
+	content := []byte(`version: 1
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    values: [Pending, Completed]
+    required: true
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stem.Version != 1 {
+		t.Errorf("version = %d, want 1", stem.Version)
+	}
+	if !stem.Schema["estado"].Required {
+		t.Error("estado.required should be true")
+	}
+}
+
+func TestParseStemV2_UnsetVersionBackwardCompat(t *testing.T) {
+	// Unset version (0) should behave as v1
+	content := []byte(`scope:
+  match: "*.md"
+schema:
+  title:
+    type: string
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stem.Version != 0 {
+		t.Errorf("version = %d, want 0", stem.Version)
 	}
 }
 
