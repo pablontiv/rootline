@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completed
 ---
 # S001: Validate/Fix/MCP Caller Migration
 

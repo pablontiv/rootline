@@ -1,7 +1,7 @@
 ---
-estado: Completed
-tipo: ci-cd
 ejecutable_en: 1 sesion
+estado: Completed
+tipo: documentation
 ---
 # T002: Reemplazar pre-commit-golang archivado con alternativa mantenida
 

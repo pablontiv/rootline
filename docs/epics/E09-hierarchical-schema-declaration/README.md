@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Specified
 tipo: feature
 ---
 # E09: Hierarchical Schema Declaration

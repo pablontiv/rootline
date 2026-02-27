@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Specified
 ---
 # S002: Describe, Infer and Stemhealth
 

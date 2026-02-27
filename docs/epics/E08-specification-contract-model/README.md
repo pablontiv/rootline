@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: feature
 ---
 # E08: Specification Contract Model

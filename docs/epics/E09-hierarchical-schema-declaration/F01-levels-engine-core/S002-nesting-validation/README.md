@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completed
 ---
 # S002: Nesting Validation
 

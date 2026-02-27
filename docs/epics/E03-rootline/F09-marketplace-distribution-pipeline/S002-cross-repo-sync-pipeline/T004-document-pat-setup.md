@@ -1,7 +1,7 @@
 ---
-estado: Completed
-tipo: documentation
 ejecutable_en: 1 sesion
+estado: Completed
+tipo: ci-cd
 ---
 # T004: Documentar setup de PAT secret y arquitectura
 
