@@ -75,7 +75,7 @@ type Summary struct {
 func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[string][]rules.ValidationError) *Report {
 	var proposals []Proposal
 
-	if effective != nil && len(errs) > 0 {
+	if effective != nil {
 		// Phase 1: detect migrate_value first (needed to filter extend_enum and correct_value)
 		migrateProposals := detectMigrateValue(effective, errs)
 
