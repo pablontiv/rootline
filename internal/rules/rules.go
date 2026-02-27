@@ -150,7 +150,7 @@ func (fm *FieldMatch) UnmarshalYAML(value *yaml.Node) error {
 // SchemaField defines a single field in the schema.
 type SchemaField struct {
 	Type          string       `yaml:"type" json:"type"`
-	Required      bool         `yaml:"required" json:"required"`
+	Required      bool         `yaml:"-" json:"required"`
 	Values        []string     `yaml:"values" json:"values,omitempty"`
 	Default       string       `yaml:"default" json:"default,omitempty"`
 	Severity      string       `yaml:"severity" json:"severity,omitempty"`
@@ -161,6 +161,68 @@ type SchemaField struct {
 	Excludes      *ExcludeRule `yaml:"excludes" json:"excludes,omitempty"`
 	Match         *FieldMatch  `yaml:"match" json:"match,omitempty"`
 	RequiredMatch *FieldMatch  `yaml:"-" json:"required_match,omitempty"`
+}
+
+// schemaFieldRaw is the intermediate type for YAML unmarshaling.
+// It uses yaml.Node for "required" to support both bool and object forms.
+type schemaFieldRaw struct {
+	Type     string       `yaml:"type"`
+	Required yaml.Node    `yaml:"required"`
+	Values   []string     `yaml:"values"`
+	Default  string       `yaml:"default"`
+	Severity string       `yaml:"severity"`
+	Prefix   string       `yaml:"prefix"`
+	Digits   int          `yaml:"digits"`
+	Excludes *ExcludeRule `yaml:"excludes"`
+	Match    *FieldMatch  `yaml:"match"`
+}
+
+// UnmarshalYAML implements custom unmarshaling for SchemaField.
+// The "required" field accepts either a bool (required: true) or an object
+// with a match key (required: {match: ["T*"]}).
+func (sf *SchemaField) UnmarshalYAML(value *yaml.Node) error {
+	var raw schemaFieldRaw
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+
+	sf.Type = raw.Type
+	sf.Values = raw.Values
+	sf.Default = raw.Default
+	sf.Severity = raw.Severity
+	sf.Prefix = raw.Prefix
+	sf.Digits = raw.Digits
+	sf.Excludes = raw.Excludes
+	sf.Match = raw.Match
+
+	// Parse "required" field: bool or {match: [...]}
+	switch raw.Required.Kind {
+	case yaml.ScalarNode:
+		var b bool
+		if err := raw.Required.Decode(&b); err != nil {
+			return fmt.Errorf("required: expected bool or {match: [...]}, got %q", raw.Required.Value)
+		}
+		sf.Required = b
+	case yaml.MappingNode:
+		// Object form: required: {match: ["T*"]}
+		var obj struct {
+			Match *FieldMatch `yaml:"match"`
+		}
+		if err := raw.Required.Decode(&obj); err != nil {
+			return fmt.Errorf("required: %w", err)
+		}
+		if obj.Match == nil {
+			return fmt.Errorf("required: object form requires a 'match' key")
+		}
+		sf.RequiredMatch = obj.Match
+		sf.Required = true // default to true; resolved by FilterSchemaByMatch
+	case 0:
+		// Field not present in YAML — leave defaults (Required=false, RequiredMatch=nil)
+	default:
+		return fmt.Errorf("required: expected bool or {match: [...]}, got YAML kind %v", raw.Required.Kind)
+	}
+
+	return nil
 }
 
 // ValidationRule defines a single validation constraint.

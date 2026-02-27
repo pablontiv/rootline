@@ -115,6 +115,117 @@ levels:
 	}
 }
 
+func TestConvertLevelsToMatch_RequiredMatchPerLevel(t *testing.T) {
+	// tipo is required at task level but not at feature level
+	content := []byte(`
+version: 1
+schema:
+  estado:
+    type: enum
+    values: [Pending, Done]
+levels:
+  feature:
+    match: "F??-*"
+    schema:
+      tipo:
+        type: enum
+        values: [servicio-docker, modulo-sistema]
+  task:
+    match: "T???-*"
+    schema:
+      tipo:
+        type: enum
+        required: true
+        values: [servicio-docker, modulo-sistema, test]
+`)
+
+	result, err := ConvertLevelsToMatch(content, "test/.stem")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tipo := result.Schema["tipo"]
+	if tipo.RequiredMatch == nil {
+		t.Fatal("tipo.RequiredMatch should be non-nil (required only at task level)")
+	}
+	if len(tipo.RequiredMatch.Patterns) != 1 || tipo.RequiredMatch.Patterns[0] != "T*" {
+		t.Errorf("tipo.RequiredMatch.Patterns = %v, want [T*]", tipo.RequiredMatch.Patterns)
+	}
+	if !tipo.Required {
+		t.Error("tipo.Required should be true (has RequiredMatch)")
+	}
+}
+
+func TestConvertLevelsToMatch_RequiredAllLevels(t *testing.T) {
+	// tipo required at all levels → plain bool, no RequiredMatch
+	content := []byte(`
+version: 1
+levels:
+  feature:
+    match: "F??-*"
+    schema:
+      tipo:
+        type: enum
+        required: true
+        values: [a, b]
+  task:
+    match: "T???-*"
+    schema:
+      tipo:
+        type: enum
+        required: true
+        values: [a, b, c]
+`)
+
+	result, err := ConvertLevelsToMatch(content, "test/.stem")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tipo := result.Schema["tipo"]
+	if !tipo.Required {
+		t.Error("tipo.Required should be true")
+	}
+	if tipo.RequiredMatch != nil {
+		t.Error("tipo.RequiredMatch should be nil when required at all levels")
+	}
+}
+
+func TestMarshalStemV2_RequiredMatch(t *testing.T) {
+	stem := &rules.StemFile{
+		Version: 2,
+		Scope:   rules.Scope{Match: "*.md"},
+		Schema: map[string]rules.SchemaField{
+			"tipo": {
+				Type:          "enum",
+				Values:        []string{"a", "b"},
+				Match:         &rules.FieldMatch{Patterns: []string{"F*", "T*"}},
+				RequiredMatch: &rules.FieldMatch{Patterns: []string{"T*"}},
+				Required:      true,
+			},
+		},
+	}
+
+	data, err := MarshalStemV2(stem)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Round-trip: parse the serialized YAML
+	parsed, err := rules.ParseStem("test/.stem", data)
+	if err != nil {
+		t.Fatalf("round-trip parse error: %v", err)
+	}
+
+	tipo := parsed.Schema["tipo"]
+	if tipo.RequiredMatch == nil {
+		t.Fatal("tipo.RequiredMatch should survive round-trip")
+	}
+	if len(tipo.RequiredMatch.Patterns) != 1 || tipo.RequiredMatch.Patterns[0] != "T*" {
+		t.Errorf("RequiredMatch.Patterns = %v, want [T*]", tipo.RequiredMatch.Patterns)
+	}
+}
+
 func TestConvertLevelsToMatch_NoLevels(t *testing.T) {
 	content := []byte(`version: 1
 schema:

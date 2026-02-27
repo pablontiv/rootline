@@ -61,8 +61,9 @@ func ConvertLevelsToMatch(content []byte, path string) (*rules.StemFile, error) 
 
 	// Track per-level fields to merge across levels.
 	type fieldInfo struct {
-		patterns []string
-		field    rules.SchemaField
+		patterns         []string
+		requiredPatterns []string // patterns where field is required
+		field            rules.SchemaField
 	}
 	perLevel := make(map[string]*fieldInfo)
 
@@ -87,12 +88,17 @@ func ConvertLevelsToMatch(content []byte, path string) (*rules.StemFile, error) 
 					info.field = field
 				}
 				if field.Required {
-					info.field.Required = true
+					info.requiredPatterns = append(info.requiredPatterns, pattern)
 				}
 			} else {
+				var reqPatterns []string
+				if field.Required {
+					reqPatterns = []string{pattern}
+				}
 				perLevel[name] = &fieldInfo{
-					patterns: []string{pattern},
-					field:    field,
+					patterns:         []string{pattern},
+					requiredPatterns: reqPatterns,
+					field:            field,
 				}
 			}
 		}
@@ -105,10 +111,25 @@ func ConvertLevelsToMatch(content []byte, path string) (*rules.StemFile, error) 
 			continue
 		}
 
-		if len(info.patterns) == nLevels {
-			result.Schema[name] = info.field
+		field := info.field
+
+		// Resolve required: if required at all levels → bool true;
+		// if required at some levels → RequiredMatch with patterns.
+		nReq := len(info.requiredPatterns)
+		nPat := len(info.patterns)
+		switch nReq {
+		case 0:
+			field.Required = false
+		case nPat:
+			field.Required = true
+		default:
+			field.Required = true
+			field.RequiredMatch = &rules.FieldMatch{Patterns: info.requiredPatterns}
+		}
+
+		if nPat == nLevels {
+			result.Schema[name] = field
 		} else {
-			field := info.field
 			field.Match = &rules.FieldMatch{Patterns: info.patterns}
 			result.Schema[name] = field
 		}
@@ -180,7 +201,17 @@ func schemaFieldToMap(f rules.SchemaField) map[string]any {
 	m := make(map[string]any)
 	m["type"] = f.Type
 
-	if f.Required {
+	if f.RequiredMatch != nil {
+		// Object form: required: {match: ["T*"]}
+		rm := map[string]any{}
+		switch {
+		case len(f.RequiredMatch.Patterns) == 1:
+			rm["match"] = f.RequiredMatch.Patterns[0]
+		case len(f.RequiredMatch.Patterns) > 1:
+			rm["match"] = f.RequiredMatch.Patterns
+		}
+		m["required"] = rm
+	} else if f.Required {
 		m["required"] = true
 	}
 	if len(f.Values) > 0 {

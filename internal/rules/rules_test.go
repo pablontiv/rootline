@@ -500,6 +500,89 @@ schema:
 	}
 }
 
+func TestParseStem_RequiredMatchObjectForm(t *testing.T) {
+	content := []byte(`version: 2
+schema:
+  tipo:
+    type: enum
+    values: [modulo-sistema, test]
+    match: ["F*", "T*"]
+    required:
+      match: ["T*"]
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tipo := stem.Schema["tipo"]
+	if tipo.RequiredMatch == nil {
+		t.Fatal("tipo.RequiredMatch is nil, want non-nil")
+	}
+	if len(tipo.RequiredMatch.Patterns) != 1 || tipo.RequiredMatch.Patterns[0] != "T*" {
+		t.Errorf("tipo.RequiredMatch.Patterns = %v, want [T*]", tipo.RequiredMatch.Patterns)
+	}
+	if !tipo.Required {
+		t.Error("tipo.Required should default to true when RequiredMatch is set")
+	}
+}
+
+func TestParseStem_RequiredMatchMultiplePatterns(t *testing.T) {
+	content := []byte(`version: 2
+schema:
+  tipo:
+    type: enum
+    values: [a, b]
+    required:
+      match: ["F*", "T*"]
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tipo := stem.Schema["tipo"]
+	if tipo.RequiredMatch == nil {
+		t.Fatal("tipo.RequiredMatch is nil")
+	}
+	if len(tipo.RequiredMatch.Patterns) != 2 {
+		t.Errorf("RequiredMatch patterns len = %d, want 2", len(tipo.RequiredMatch.Patterns))
+	}
+}
+
+func TestParseStem_RequiredBoolBackwardCompat(t *testing.T) {
+	content := []byte(`version: 2
+schema:
+  estado:
+    type: enum
+    required: true
+  titulo:
+    type: string
+    required: false
+  desc:
+    type: string
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !stem.Schema["estado"].Required {
+		t.Error("estado.Required should be true")
+	}
+	if stem.Schema["estado"].RequiredMatch != nil {
+		t.Error("estado.RequiredMatch should be nil for bool form")
+	}
+
+	if stem.Schema["titulo"].Required {
+		t.Error("titulo.Required should be false")
+	}
+
+	if stem.Schema["desc"].Required {
+		t.Error("desc.Required should be false when omitted")
+	}
+}
+
 func TestParseStem_NoStructural(t *testing.T) {
 	content := []byte("version: 1\n")
 	dir := t.TempDir()
