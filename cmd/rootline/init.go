@@ -266,48 +266,6 @@ func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates m
 	return b.String()
 }
 
-// generateLevelStemYAML generates a child .stem with only override fields.
-func generateLevelStemYAML(ls *infer.LevelSchema) string {
-	var b strings.Builder
-	b.WriteString("schema:\n")
-
-	// Always include the sequence id first.
-	if idField, ok := ls.OnlyHere["id"]; ok {
-		b.WriteString("  id:\n")
-		fmt.Fprintf(&b, "    type: %s\n", idField.Type)
-		if idField.Prefix != "" {
-			fmt.Fprintf(&b, "    prefix: %s\n", idField.Prefix)
-		}
-		if idField.Digits > 0 {
-			fmt.Fprintf(&b, "    digits: %d\n", idField.Digits)
-		}
-	}
-
-	// Add non-id override fields.
-	keys := make([]string, 0, len(ls.OnlyHere))
-	for k := range ls.OnlyHere {
-		if k == "id" {
-			continue
-		}
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, name := range keys {
-		field := ls.OnlyHere[name]
-		fmt.Fprintf(&b, "  %s:\n", name)
-		fmt.Fprintf(&b, "    type: %s\n", field.Type)
-		if field.Required {
-			b.WriteString("    required: true\n")
-		}
-		if len(field.Values) > 0 {
-			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(field.Values, ", "))
-		}
-	}
-
-	return b.String()
-}
-
 func generateStemYAML(schema *infer.InferredSchema) string {
 	var b strings.Builder
 	b.WriteString("version: 1\nscope:\n  match: \"*.md\"\nschema:\n")
