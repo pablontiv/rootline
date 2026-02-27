@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	migrateDryRun bool
-	migrateFrom   string
-	migrateRename string
-	migrateSplit  bool
+	migrateDryRun   bool
+	migrateFrom     string
+	migrateRename   string
+	migrateSplit    bool
+	migrateFromLvls bool
 )
 
 var migrateCmd = &cobra.Command{
@@ -40,10 +41,14 @@ func init() {
 	migrateCmd.Flags().StringVar(&migrateFrom, "from", "", "compare against specified .stem file instead of git HEAD")
 	migrateCmd.Flags().StringVar(&migrateRename, "rename", "", "rename a field: old_field=new_field")
 	migrateCmd.Flags().BoolVar(&migrateSplit, "split", false, "split a flat .stem into hierarchical .stem files per level")
+	migrateCmd.Flags().BoolVar(&migrateFromLvls, "from-levels", false, "convert v1 .stem with levels: to v2 with match:-based fields")
 	rootCmd.AddCommand(migrateCmd)
 }
 
 func runMigrate(cmd *cobra.Command, args []string) error {
+	if migrateFromLvls {
+		return runMigrateFromLevels(cmd, args)
+	}
 	if migrateSplit {
 		return runMigrateSplit(cmd, args)
 	}
@@ -317,6 +322,51 @@ func renderMigrateBatchTable(cmd *cobra.Command, batch *MigrateBatchResult) erro
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Summary: %d stems checked, %d changes (%d breaking)\n",
 		batch.Summary.StemsChecked, batch.Summary.TotalChanges, batch.Summary.BreakingCount)
+	return nil
+}
+
+// --- From-levels operation ---
+
+func runMigrateFromLevels(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("--from-levels requires a .stem file path argument")
+	}
+
+	stemPath := args[0]
+	absPath, err := filepath.Abs(stemPath)
+	if err != nil {
+		return fmt.Errorf("resolving path: %w", err)
+	}
+
+	stem, err := rules.ParseStemFile(absPath)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", stemPath, err)
+	}
+
+	if len(stem.Levels) == 0 {
+		return fmt.Errorf("%s has no levels: section to convert", stemPath)
+	}
+
+	result, err := migrate.ConvertLevelsToMatch(stem)
+	if err != nil {
+		return fmt.Errorf("converting: %w", err)
+	}
+
+	data, err := migrate.MarshalStemV2(result)
+	if err != nil {
+		return fmt.Errorf("marshaling v2 stem: %w", err)
+	}
+
+	if migrateDryRun {
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), string(data))
+		return nil
+	}
+
+	if err := os.WriteFile(absPath, data, 0644); err != nil {
+		return fmt.Errorf("writing %s: %w", stemPath, err)
+	}
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Converted %s from v1 levels to v2 match-based format\n", stemPath)
 	return nil
 }
 
