@@ -30,6 +30,8 @@
 | [T001](T001-add-match-field-to-schemafield.md) | Add Match field to SchemaField struct with YAML unmarshaling |
 | [T002](T002-implement-match-aware-field-resolution.md) | Implement match-aware field resolution function |
 | [T003](T003-add-v2-stem-parsing.md) | Add v2 stem parsing with match syntax |
+| [T004](T004-required-scopeable-by-match.md) | Implement required scopeable by match pattern |
+| [T005](T005-validate-conditional-match.md) | Implement validate conditional with match pattern |
 
 ## Fuente de verdad
 
