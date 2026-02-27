@@ -416,6 +416,70 @@ func (h *HierarchyResult) ToLevelsMap() map[string]*rules.HierarchyLevel {
 	return result
 }
 
+// ToMatchSchema converts the HierarchyResult into a flat map of SchemaFields
+// using match-based field scoping (v2 format). Root fields have no Match set,
+// per-level fields get Match patterns, and sequence id gets a map-form Match.
+func (h *HierarchyResult) ToMatchSchema() map[string]rules.SchemaField {
+	if !h.Detected || len(h.Levels) == 0 {
+		return nil
+	}
+
+	result := make(map[string]rules.SchemaField)
+
+	// Root fields: no match restriction (applies everywhere).
+	for name, field := range h.Root.Schema {
+		result[name] = field
+	}
+
+	// Per-level fields: set match to the level's glob pattern.
+	// Collect per-level fields, merging across levels when the same field
+	// appears at multiple (but not all) levels.
+	perLevelFields := make(map[string][]string)        // field → patterns
+	perLevelDefs := make(map[string]rules.SchemaField) // field → best definition
+
+	for _, ls := range h.Levels {
+		glob := fmt.Sprintf("%s*", ls.Level.Prefix)
+		for name, field := range ls.OnlyHere {
+			if name == "id" {
+				continue // handled separately
+			}
+			perLevelFields[name] = append(perLevelFields[name], glob)
+			// Keep the definition with the most values (most complete).
+			if existing, ok := perLevelDefs[name]; !ok || len(field.Values) > len(existing.Values) {
+				perLevelDefs[name] = field
+			}
+		}
+	}
+
+	for name, patterns := range perLevelFields {
+		field := perLevelDefs[name]
+		field.Match = &rules.FieldMatch{Patterns: patterns}
+		result[name] = field
+	}
+
+	// Sequence id: map-form match with per-level prefix/digits.
+	idConfigs := make(map[string]any)
+	for _, ls := range h.Levels {
+		idField, ok := ls.OnlyHere["id"]
+		if !ok || idField.Type != "sequence" {
+			continue
+		}
+		glob := fmt.Sprintf("%s*", ls.Level.Prefix)
+		idConfigs[glob] = map[string]any{
+			"prefix": idField.Prefix,
+			"digits": idField.Digits,
+		}
+	}
+	if len(idConfigs) > 0 {
+		result["id"] = rules.SchemaField{
+			Type:  "sequence",
+			Match: &rules.FieldMatch{Configs: idConfigs},
+		}
+	}
+
+	return result
+}
+
 // levelName converts a prefix letter to a human-readable level name.
 func levelName(prefix string) string {
 	conventions := map[string]string{

@@ -485,6 +485,156 @@ func TestHierarchyResult_ToLevelsMap_NotDetected(t *testing.T) {
 	}
 }
 
+func TestToMatchSchema_RootFieldsNoMatch(t *testing.T) {
+	root := "/tmp/epics"
+	records := makeHierarchyRecords(root, []string{
+		"E01-a/README.md",
+		"E02-b/README.md",
+		"E01-a/F01-x/README.md",
+		"E01-a/F02-y/README.md",
+	}, []map[string]any{
+		{"estado": "Pending"},
+		{"estado": "Completed"},
+		{"estado": "Pending"},
+		{"estado": "Completed"},
+	})
+
+	result := AnalyzeHierarchy(records, root)
+	if !result.Detected {
+		t.Fatal("expected hierarchy detected")
+	}
+
+	schema := result.ToMatchSchema()
+	if schema == nil {
+		t.Fatal("expected non-nil schema")
+	}
+
+	// estado is at all levels → root field → no Match
+	estado, ok := schema["estado"]
+	if !ok {
+		t.Fatal("expected 'estado' in schema")
+	}
+	if estado.Match != nil {
+		t.Errorf("expected estado.Match=nil (root field), got %+v", estado.Match)
+	}
+}
+
+func TestToMatchSchema_PerLevelFieldsHaveMatch(t *testing.T) {
+	root := "/tmp/epics"
+	records := makeHierarchyRecords(root, []string{
+		"E01-a/README.md",
+		"E02-b/README.md",
+		"E01-a/F01-x/README.md",
+		"E01-a/F02-y/README.md",
+		"E01-a/F01-x/S001-core/README.md",
+		"E01-a/F01-x/S002-dns/README.md",
+		"E01-a/F01-x/S001-core/T001-setup.md",
+		"E01-a/F01-x/S001-core/T002-config.md",
+	}, []map[string]any{
+		{"estado": "Completed"},
+		{"estado": "Pending"},
+		{"estado": "In Progress"},
+		{"estado": "Pending"},
+		{"estado": "Completed"},
+		{"estado": "Pending"},
+		{"estado": "Completed", "tipo": "software-module"},
+		{"estado": "Pending", "tipo": "ci-cd"},
+	})
+
+	result := AnalyzeHierarchy(records, root)
+	if !result.Detected {
+		t.Fatal("expected hierarchy detected")
+	}
+
+	schema := result.ToMatchSchema()
+
+	// tipo only at T level → should have Match
+	tipo, ok := schema["tipo"]
+	if !ok {
+		t.Fatal("expected 'tipo' in schema")
+	}
+	if tipo.Match == nil {
+		t.Fatal("expected tipo.Match to be non-nil (per-level field)")
+	}
+	if len(tipo.Match.Patterns) == 0 {
+		t.Fatal("expected tipo.Match.Patterns to be non-empty")
+	}
+	found := false
+	for _, p := range tipo.Match.Patterns {
+		if p == "T*" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected T* in tipo.Match.Patterns, got %v", tipo.Match.Patterns)
+	}
+}
+
+func TestToMatchSchema_SequenceIdMapForm(t *testing.T) {
+	root := "/tmp/epics"
+	records := makeHierarchyRecords(root, []string{
+		"E01-a/README.md",
+		"E02-b/README.md",
+		"E01-a/F01-x/README.md",
+		"E01-a/F02-y/README.md",
+	}, []map[string]any{
+		{"estado": "Pending"},
+		{"estado": "Completed"},
+		{"estado": "Pending"},
+		{"estado": "Completed"},
+	})
+
+	result := AnalyzeHierarchy(records, root)
+	if !result.Detected {
+		t.Fatal("expected hierarchy detected")
+	}
+
+	schema := result.ToMatchSchema()
+
+	// id should be a sequence with map-form match
+	id, ok := schema["id"]
+	if !ok {
+		t.Fatal("expected 'id' in schema")
+	}
+	if id.Type != "sequence" {
+		t.Errorf("id.type = %q, want sequence", id.Type)
+	}
+	if id.Match == nil {
+		t.Fatal("expected id.Match non-nil")
+	}
+	if id.Match.Configs == nil {
+		t.Fatal("expected id.Match.Configs non-nil (map form)")
+	}
+
+	// Should have entries for E* and F*
+	for _, pattern := range []string{"E*", "F*"} {
+		cfg, ok := id.Match.Configs[pattern]
+		if !ok {
+			t.Errorf("expected config for pattern %q", pattern)
+			continue
+		}
+		cfgMap, ok := cfg.(map[string]any)
+		if !ok {
+			t.Errorf("expected map for pattern %q config, got %T", pattern, cfg)
+			continue
+		}
+		if _, ok := cfgMap["prefix"]; !ok {
+			t.Errorf("pattern %q: missing 'prefix' in config", pattern)
+		}
+		if _, ok := cfgMap["digits"]; !ok {
+			t.Errorf("pattern %q: missing 'digits' in config", pattern)
+		}
+	}
+}
+
+func TestToMatchSchema_NotDetected(t *testing.T) {
+	result := &HierarchyResult{Detected: false}
+	schema := result.ToMatchSchema()
+	if schema != nil {
+		t.Errorf("expected nil schema for undetected hierarchy, got %v", schema)
+	}
+}
+
 func TestAnalyzeHierarchy_RootFilesIgnored(t *testing.T) {
 	root := "/tmp/epics"
 	// File directly at root (no pattern dir) should not break detection.
