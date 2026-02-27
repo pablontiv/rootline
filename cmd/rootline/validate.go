@@ -200,7 +200,26 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		results = append(results, rules.NewValidationResult(dirPath, structErrs))
 	}
 
-	batch := rules.NewBatchValidationResult(results)
+	// Drift detection: group records by parent directory and detect drift
+	// for each index file against its direct children.
+	var driftWarnings []rules.DriftWarning
+	parentChildren := groupByParentDir(records, root)
+	for dir, group := range parentChildren {
+		if group.parent == nil {
+			continue
+		}
+		entries, walkErr := rules.WalkUp(dir)
+		if walkErr != nil || len(entries) == 0 {
+			continue
+		}
+		effective := rules.MergeStemFiles(entries)
+		if effective == nil {
+			continue
+		}
+		driftWarnings = append(driftWarnings, rules.DetectDrift(*group.parent, group.children, effective.Schema)...)
+	}
+
+	batch := rules.NewBatchValidationResultWithDrift(results, driftWarnings)
 	if outputFormat == "table" {
 		return renderValidateTable(cmd, batch)
 	}
@@ -298,6 +317,24 @@ func renderValidateTable(cmd *cobra.Command, batch *rules.BatchValidationResult)
 		rows = append(rows, []string{r.Path, valid, errStr})
 	}
 	renderTable(cmd.OutOrStdout(), headers, rows)
+
+	// Render drift warnings section if present.
+	if len(batch.DriftWarnings) > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Drift Warnings")
+		driftHeaders := []string{"Field", "Parent", "Parent Value", "Children Value"}
+		var driftRows [][]string
+		for _, dw := range batch.DriftWarnings {
+			driftRows = append(driftRows, []string{
+				dw.Field,
+				dw.ParentPath,
+				fmt.Sprintf("%v", dw.ParentValue),
+				fmt.Sprintf("%v", dw.ChildrenValue),
+			})
+		}
+		renderTable(cmd.OutOrStdout(), driftHeaders, driftRows)
+	}
+
 	if batch.Summary.Invalid > 0 {
 		cmd.SilenceUsage = true
 		cmd.SilenceErrors = true
@@ -355,6 +392,36 @@ func extractField(data []byte, path string) ([]byte, error) {
 	}
 
 	return json.Marshal(current)
+}
+
+// parentChildGroup holds an index file and its direct children for drift detection.
+type parentChildGroup struct {
+	parent   *extract.Record
+	children []extract.Record
+}
+
+// groupByParentDir groups records by their parent directory.
+// For each directory, identifies the index file (README.md) as parent
+// and other files as children.
+func groupByParentDir(records []*extract.Record, root string) map[string]*parentChildGroup {
+	groups := make(map[string]*parentChildGroup)
+
+	for _, rec := range records {
+		absPath := filepath.Join(root, rec.Path)
+		dir := filepath.Dir(absPath)
+
+		if groups[dir] == nil {
+			groups[dir] = &parentChildGroup{}
+		}
+
+		if filepath.Base(rec.Path) == "README.md" {
+			groups[dir].parent = rec
+		} else {
+			groups[dir].children = append(groups[dir].children, *rec)
+		}
+	}
+
+	return groups
 }
 
 // splitDotPath splits a dot-separated path into parts.

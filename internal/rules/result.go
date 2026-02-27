@@ -46,23 +46,30 @@ func (r *ValidationResult) ToJSON() ([]byte, error) {
 
 // BatchValidationResult is the versioned JSON output for multi-file validation.
 type BatchValidationResult struct {
-	Version int                 `json:"version"`
-	Kind    string              `json:"kind"`
-	Results []*ValidationResult `json:"results"`
-	Summary BatchSummary        `json:"summary"`
+	Version       int                 `json:"version"`
+	Kind          string              `json:"kind"`
+	Results       []*ValidationResult `json:"results"`
+	DriftWarnings []DriftWarning      `json:"drift_warnings"`
+	Summary       BatchSummary        `json:"summary"`
 }
 
 // BatchSummary holds aggregate counts for batch validation.
 type BatchSummary struct {
-	Total         int `json:"total"`
-	Valid         int `json:"valid"`
-	Invalid       int `json:"invalid"`
-	ErrorsCount   int `json:"errors_count"`
-	WarningsCount int `json:"warnings_count"`
+	Total              int `json:"total"`
+	Valid              int `json:"valid"`
+	Invalid            int `json:"invalid"`
+	ErrorsCount        int `json:"errors_count"`
+	WarningsCount      int `json:"warnings_count"`
+	DriftWarningsCount int `json:"drift_warnings_count"`
 }
 
 // NewBatchValidationResult creates a BatchValidationResult from individual results.
 func NewBatchValidationResult(results []*ValidationResult) *BatchValidationResult {
+	return NewBatchValidationResultWithDrift(results, nil)
+}
+
+// NewBatchValidationResultWithDrift creates a BatchValidationResult with drift warnings.
+func NewBatchValidationResultWithDrift(results []*ValidationResult, driftWarnings []DriftWarning) *BatchValidationResult {
 	summary := BatchSummary{Total: len(results)}
 	for _, r := range results {
 		if r.Valid {
@@ -73,11 +80,16 @@ func NewBatchValidationResult(results []*ValidationResult) *BatchValidationResul
 		summary.ErrorsCount += len(r.Errors)
 		summary.WarningsCount += len(r.Warnings)
 	}
+	if driftWarnings == nil {
+		driftWarnings = []DriftWarning{}
+	}
+	summary.DriftWarningsCount = len(driftWarnings)
 	return &BatchValidationResult{
-		Version: 1,
-		Kind:    "rootline/validate-batch",
-		Results: results,
-		Summary: summary,
+		Version:       1,
+		Kind:          "rootline/validate-batch",
+		Results:       results,
+		DriftWarnings: driftWarnings,
+		Summary:       summary,
 	}
 }
 

@@ -178,6 +178,90 @@ func TestBatchValidationResult_Empty(t *testing.T) {
 	}
 }
 
+func TestBatchValidationResult_WithDrift(t *testing.T) {
+	results := []*ValidationResult{
+		NewValidationResult("project/README.md", nil),
+		NewValidationResult("project/task1.md", nil),
+	}
+	driftWarnings := []DriftWarning{
+		{
+			Field:         "estado",
+			ParentValue:   "In Progress",
+			ChildrenValue: "Completed",
+			ParentPath:    "project/README.md",
+			ChildPaths:    []string{"project/task1.md"},
+		},
+	}
+
+	batch := NewBatchValidationResultWithDrift(results, driftWarnings)
+
+	if len(batch.DriftWarnings) != 1 {
+		t.Errorf("drift_warnings len = %d, want 1", len(batch.DriftWarnings))
+	}
+	if batch.Summary.DriftWarningsCount != 1 {
+		t.Errorf("drift_warnings_count = %d, want 1", batch.Summary.DriftWarningsCount)
+	}
+	// Drift warnings don't affect validity
+	if batch.Summary.Invalid != 0 {
+		t.Errorf("invalid = %d, want 0 (drift is warning only)", batch.Summary.Invalid)
+	}
+}
+
+func TestBatchValidationResult_DriftInJSON(t *testing.T) {
+	results := []*ValidationResult{
+		NewValidationResult("a.md", nil),
+	}
+	driftWarnings := []DriftWarning{
+		{Field: "estado", ParentValue: "In Progress", ChildrenValue: "Completed", ParentPath: "a.md"},
+	}
+	batch := NewBatchValidationResultWithDrift(results, driftWarnings)
+
+	data, err := batch.ToJSON()
+	if err != nil {
+		t.Fatalf("ToJSON error: %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("JSON parse error: %v", err)
+	}
+
+	dw, ok := parsed["drift_warnings"].([]any)
+	if !ok {
+		t.Fatal("drift_warnings not in JSON output")
+	}
+	if len(dw) != 1 {
+		t.Errorf("drift_warnings len = %d, want 1", len(dw))
+	}
+
+	summary := parsed["summary"].(map[string]any)
+	if summary["drift_warnings_count"].(float64) != 1 {
+		t.Errorf("drift_warnings_count = %v, want 1", summary["drift_warnings_count"])
+	}
+}
+
+func TestBatchValidationResult_NoDriftIsEmptyArray(t *testing.T) {
+	batch := NewBatchValidationResult(nil)
+
+	data, err := batch.ToJSON()
+	if err != nil {
+		t.Fatalf("ToJSON error: %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("JSON parse error: %v", err)
+	}
+
+	dw, ok := parsed["drift_warnings"].([]any)
+	if !ok {
+		t.Fatal("drift_warnings should be empty array, not null")
+	}
+	if len(dw) != 0 {
+		t.Errorf("drift_warnings len = %d, want 0", len(dw))
+	}
+}
+
 func TestBatchValidationResult_ToJSON(t *testing.T) {
 	results := []*ValidationResult{
 		NewValidationResult("a.md", nil),
