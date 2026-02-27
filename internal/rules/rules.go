@@ -120,18 +120,58 @@ type ExcludeRule struct {
 	Match string `yaml:"match" json:"match"`
 }
 
+// FieldMatch specifies which directory/file patterns a schema field applies to.
+// It supports three YAML forms:
+//   - string: match: "T*"          → Patterns=["T*"]
+//   - list:   match: ["F*", "T*"]  → Patterns=["F*","T*"]
+//   - map:    match: {"E*": {prefix: E, digits: 2}} → Configs={"E*": {...}}
+type FieldMatch struct {
+	Patterns []string       `json:"patterns,omitempty"`
+	Configs  map[string]any `json:"configs,omitempty"`
+}
+
+// UnmarshalYAML implements custom unmarshaling for FieldMatch.
+func (fm *FieldMatch) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		// string form: match: "T*"
+		fm.Patterns = []string{value.Value}
+		return nil
+	case yaml.SequenceNode:
+		// list form: match: ["F*", "T*"]
+		var patterns []string
+		if err := value.Decode(&patterns); err != nil {
+			return fmt.Errorf("match: decoding list: %w", err)
+		}
+		fm.Patterns = patterns
+		return nil
+	case yaml.MappingNode:
+		// map form: match: {"E*": {prefix: E, digits: 2}}
+		var configs map[string]any
+		if err := value.Decode(&configs); err != nil {
+			return fmt.Errorf("match: decoding map: %w", err)
+		}
+		fm.Configs = configs
+		return nil
+	default:
+		return fmt.Errorf("match: expected string, list, or map, got YAML kind %v", value.Kind)
+	}
+}
+
 // SchemaField defines a single field in the schema.
 type SchemaField struct {
-	Type     string       `yaml:"type" json:"type"`
-	Required bool         `yaml:"required" json:"required"`
-	Values   []string     `yaml:"values" json:"values,omitempty"`
-	Default  string       `yaml:"default" json:"default,omitempty"`
-	Severity string       `yaml:"severity" json:"severity,omitempty"`
-	Source   string       `yaml:"-" json:"source,omitempty"`
-	Prefix   string       `yaml:"prefix" json:"prefix,omitempty"`
-	Digits   int          `yaml:"digits" json:"digits,omitempty"`
-	Next     string       `yaml:"-" json:"next,omitempty"`
-	Excludes *ExcludeRule `yaml:"excludes" json:"excludes,omitempty"`
+	Type          string       `yaml:"type" json:"type"`
+	Required      bool         `yaml:"required" json:"required"`
+	Values        []string     `yaml:"values" json:"values,omitempty"`
+	Default       string       `yaml:"default" json:"default,omitempty"`
+	Severity      string       `yaml:"severity" json:"severity,omitempty"`
+	Source        string       `yaml:"-" json:"source,omitempty"`
+	Prefix        string       `yaml:"prefix" json:"prefix,omitempty"`
+	Digits        int          `yaml:"digits" json:"digits,omitempty"`
+	Next          string       `yaml:"-" json:"next,omitempty"`
+	Excludes      *ExcludeRule `yaml:"excludes" json:"excludes,omitempty"`
+	Match         *FieldMatch  `yaml:"match" json:"match,omitempty"`
+	RequiredMatch *FieldMatch  `yaml:"-" json:"required_match,omitempty"`
 }
 
 // ValidationRule defines a single validation constraint.

@@ -274,6 +274,123 @@ schema:
 	}
 }
 
+func TestFieldMatch_StringForm(t *testing.T) {
+	content := []byte(`version: 1
+schema:
+  tipo:
+    type: enum
+    values: [a, b]
+    match: "T*"
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	field := stem.Schema["tipo"]
+	if field.Match == nil {
+		t.Fatal("match is nil, want non-nil")
+	}
+	if len(field.Match.Patterns) != 1 || field.Match.Patterns[0] != "T*" {
+		t.Errorf("match.patterns = %v, want [T*]", field.Match.Patterns)
+	}
+	if field.Match.Configs != nil {
+		t.Errorf("match.configs should be nil for string form, got %v", field.Match.Configs)
+	}
+}
+
+func TestFieldMatch_ListForm(t *testing.T) {
+	content := []byte(`version: 1
+schema:
+  tipo:
+    type: enum
+    values: [a, b]
+    match: ["F*", "T*"]
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	field := stem.Schema["tipo"]
+	if field.Match == nil {
+		t.Fatal("match is nil, want non-nil")
+	}
+	if len(field.Match.Patterns) != 2 {
+		t.Fatalf("match.patterns len = %d, want 2", len(field.Match.Patterns))
+	}
+	if field.Match.Patterns[0] != "F*" || field.Match.Patterns[1] != "T*" {
+		t.Errorf("match.patterns = %v, want [F* T*]", field.Match.Patterns)
+	}
+}
+
+func TestFieldMatch_MapForm(t *testing.T) {
+	content := []byte(`version: 1
+schema:
+  id:
+    type: sequence
+    match:
+      "E*": {prefix: E, digits: 2}
+      "T*": {prefix: T, digits: 3}
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	field := stem.Schema["id"]
+	if field.Match == nil {
+		t.Fatal("match is nil, want non-nil")
+	}
+	if field.Match.Patterns != nil {
+		t.Errorf("match.patterns should be nil for map form, got %v", field.Match.Patterns)
+	}
+	if len(field.Match.Configs) != 2 {
+		t.Fatalf("match.configs len = %d, want 2", len(field.Match.Configs))
+	}
+	if _, ok := field.Match.Configs["E*"]; !ok {
+		t.Error("match.configs missing key E*")
+	}
+	if _, ok := field.Match.Configs["T*"]; !ok {
+		t.Error("match.configs missing key T*")
+	}
+}
+
+func TestFieldMatch_Absent(t *testing.T) {
+	content := []byte(`version: 1
+schema:
+  estado:
+    type: enum
+    required: true
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if stem.Schema["estado"].Match != nil {
+		t.Error("match should be nil when not defined")
+	}
+}
+
+func TestFieldMatch_NilBehavesAsNoFilter(t *testing.T) {
+	content := []byte(`version: 1
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completed]
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	field := stem.Schema["estado"]
+	if field.Match != nil {
+		t.Error("match should be nil for field without match")
+	}
+	// nil Match means field applies everywhere (no filtering)
+	if !field.Required {
+		t.Error("required should still be true")
+	}
+}
+
 func TestParseStem_NoStructural(t *testing.T) {
 	content := []byte("version: 1\n")
 	dir := t.TempDir()
