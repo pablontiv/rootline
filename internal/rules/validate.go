@@ -76,6 +76,34 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 		}
 	}
 
+	// Phase 1b: Aggregate consistency — if a field has an aggregate expression
+	// and this is an index file, the frontmatter value must match the derived value.
+	for name := range effective.Aggregate {
+		if !isIndexFile(record.Path, effective) {
+			continue
+		}
+		fmVal, hasFM := record.Frontmatter[name]
+		derivedVal, hasDerived := record.Derived[name]
+		if !hasFM || !hasDerived {
+			continue
+		}
+		fmStr := fmt.Sprintf("%v", fmVal)
+		derivedStr := fmt.Sprintf("%v", derivedVal)
+		if fmStr != derivedStr {
+			severity := "error"
+			if field, ok := effective.Schema[name]; ok && field.Severity != "" {
+				severity = field.Severity
+			}
+			errs = append(errs, ValidationError{
+				Rule:     "aggregate",
+				Field:    name,
+				Message:  fmt.Sprintf("field %q is %q but aggregate computes %q", name, fmStr, derivedStr),
+				Source:   effective.Path,
+				Severity: severity,
+			})
+		}
+	}
+
 	// Phase 2: Link validation against LinkSchema.
 	errs = append(errs, validateLinks(record.Links, effective.Links, effective.Path)...)
 

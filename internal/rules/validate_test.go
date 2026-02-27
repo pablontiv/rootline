@@ -627,3 +627,75 @@ func TestValidateLinks_NoSchema_Permissive(t *testing.T) {
 		t.Errorf("got %d errors, want 0 (no schema = permissive): %v", len(errs), errs)
 	}
 }
+
+func TestValidate_AggregateConsistency_Mismatch(t *testing.T) {
+	stem := &StemFile{
+		Path: "test/.stem",
+		Schema: map[string]SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed", "In Progress"}, Required: true},
+		},
+		Aggregate: map[string]any{
+			"estado": `all(children, {.estado == "Completed"}) ? "Completed" : "In Progress"`,
+		},
+	}
+	record := &extract.Record{
+		Path:        "dir/README.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"estado": "Pending"},
+		Derived:     map[string]any{"estado": "Completed"},
+	}
+	errs := Validate(context.Background(), record, stem)
+	if len(errs) != 1 {
+		t.Fatalf("got %d errors, want 1: %v", len(errs), errs)
+	}
+	if errs[0].Rule != "aggregate" {
+		t.Errorf("rule = %q, want aggregate", errs[0].Rule)
+	}
+	if errs[0].Field != "estado" {
+		t.Errorf("field = %q, want estado", errs[0].Field)
+	}
+}
+
+func TestValidate_AggregateConsistency_Match(t *testing.T) {
+	stem := &StemFile{
+		Path: "test/.stem",
+		Schema: map[string]SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}, Required: true},
+		},
+		Aggregate: map[string]any{
+			"estado": `"Completed"`,
+		},
+	}
+	record := &extract.Record{
+		Path:        "dir/README.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"estado": "Completed"},
+		Derived:     map[string]any{"estado": "Completed"},
+	}
+	errs := Validate(context.Background(), record, stem)
+	if len(errs) != 0 {
+		t.Errorf("got %d errors, want 0 (values match): %v", len(errs), errs)
+	}
+}
+
+func TestValidate_AggregateConsistency_NonIndexFile_Skipped(t *testing.T) {
+	stem := &StemFile{
+		Path: "test/.stem",
+		Schema: map[string]SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}, Required: true},
+		},
+		Aggregate: map[string]any{
+			"estado": `"Completed"`,
+		},
+	}
+	record := &extract.Record{
+		Path:        "dir/task.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"estado": "Pending"},
+		Derived:     map[string]any{"estado": "Completed"},
+	}
+	errs := Validate(context.Background(), record, stem)
+	if len(errs) != 0 {
+		t.Errorf("got %d errors, want 0 (non-index file skipped): %v", len(errs), errs)
+	}
+}
