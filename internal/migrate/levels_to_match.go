@@ -73,6 +73,16 @@ func ConvertLevelsToMatch(content []byte, path string) (*rules.StemFile, error) 
 	for _, level := range v1.Levels {
 		pattern := normalizeMatchPattern(level.Match)
 
+		// Migrate per-level validate rules: inject match into if clause.
+		for _, rule := range level.Validate {
+			migrated := rule
+			if migrated.If == nil {
+				migrated.If = make(map[string]any)
+			}
+			migrated.If["match"] = pattern
+			result.Validate = append(result.Validate, migrated)
+		}
+
 		for name, field := range level.Schema {
 			if name == "id" && field.Type == "sequence" {
 				idConfigs[pattern] = map[string]any{

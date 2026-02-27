@@ -796,3 +796,119 @@ func TestValidate_NonEmpty_DerivedField(t *testing.T) {
 		t.Errorf("got %d errors, want 0 (derived field satisfies non_empty): %v", len(errs), errs)
 	}
 }
+
+func TestValidate_Requires_MatchCondition_Applies(t *testing.T) {
+	// requires rule with match: "T*" should fire for T-level records
+	stem := &StemFile{
+		Validate: []ValidationRule{
+			{
+				Rule:   "requires",
+				If:     map[string]any{"match": "T*", "tipo": "modulo-sistema"},
+				Then:   map[string]any{"fields": []any{"ejecutable_en"}},
+				Source: "test/.stem",
+			},
+		},
+	}
+	record := &extract.Record{
+		Path:        "docs/epics/E01/F01/S001/T001-task.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"tipo": "modulo-sistema"},
+	}
+
+	errs := Validate(context.Background(), record, stem)
+	if len(errs) != 1 {
+		t.Fatalf("got %d errors, want 1", len(errs))
+	}
+	if errs[0].Field != "ejecutable_en" {
+		t.Errorf("field = %q, want ejecutable_en", errs[0].Field)
+	}
+}
+
+func TestValidate_Requires_MatchCondition_NonMatchingDir(t *testing.T) {
+	// Same rule should NOT fire for F-level records
+	stem := &StemFile{
+		Validate: []ValidationRule{
+			{
+				Rule:   "requires",
+				If:     map[string]any{"match": "T*", "tipo": "modulo-sistema"},
+				Then:   map[string]any{"fields": []any{"ejecutable_en"}},
+				Source: "test/.stem",
+			},
+		},
+	}
+	record := &extract.Record{
+		Path:        "docs/epics/E01/F01-feature/README.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"tipo": "modulo-sistema"},
+	}
+
+	errs := Validate(context.Background(), record, stem)
+	if len(errs) != 0 {
+		t.Errorf("got %d errors, want 0 (match T* should not apply to F-level): %v", len(errs), errs)
+	}
+}
+
+func TestValidate_Requires_MatchOnly(t *testing.T) {
+	// match condition without other field conditions
+	stem := &StemFile{
+		Validate: []ValidationRule{
+			{
+				Rule:   "requires",
+				If:     map[string]any{"match": "T*"},
+				Then:   map[string]any{"fields": []any{"ejecutable_en"}},
+				Source: "test/.stem",
+			},
+		},
+	}
+
+	t.Run("T-level fires", func(t *testing.T) {
+		record := &extract.Record{
+			Path:        "docs/epics/E01/F01/S001/T001-task.md",
+			Type:        "markdown",
+			Frontmatter: map[string]any{},
+		}
+		errs := Validate(context.Background(), record, stem)
+		if len(errs) != 1 {
+			t.Errorf("got %d errors, want 1", len(errs))
+		}
+	})
+
+	t.Run("F-level skips", func(t *testing.T) {
+		record := &extract.Record{
+			Path:        "docs/epics/E01/F01-feature/README.md",
+			Type:        "markdown",
+			Frontmatter: map[string]any{},
+		}
+		errs := Validate(context.Background(), record, stem)
+		if len(errs) != 0 {
+			t.Errorf("got %d errors, want 0", len(errs))
+		}
+	})
+}
+
+func TestValidate_Requires_NoMatchBackwardCompat(t *testing.T) {
+	// Rules without match should work exactly as before
+	stem := &StemFile{
+		Validate: []ValidationRule{
+			{
+				Rule:   "requires",
+				If:     map[string]any{"tipo": "modulo-sistema"},
+				Then:   map[string]any{"fields": []any{"ejecutable_en"}},
+				Source: "test/.stem",
+			},
+		},
+	}
+	record := &extract.Record{
+		Path:        "docs/epics/E01/F01-feature/README.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"tipo": "modulo-sistema"},
+	}
+
+	errs := Validate(context.Background(), record, stem)
+	if len(errs) != 1 {
+		t.Fatalf("got %d errors, want 1 (no match key = applies everywhere)", len(errs))
+	}
+	if errs[0].Field != "ejecutable_en" {
+		t.Errorf("field = %q, want ejecutable_en", errs[0].Field)
+	}
+}

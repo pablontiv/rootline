@@ -226,6 +226,49 @@ func TestMarshalStemV2_RequiredMatch(t *testing.T) {
 	}
 }
 
+func TestConvertLevelsToMatch_PerLevelValidateRules(t *testing.T) {
+	content := []byte(`
+version: 1
+levels:
+  task:
+    match: "T???-*"
+    schema:
+      tipo:
+        type: enum
+        values: [a, b]
+    validate:
+      - rule: requires
+        if: {tipo: a}
+        then: {fields: [ejecutable_en]}
+`)
+
+	result, err := ConvertLevelsToMatch(content, "test/.stem")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have the per-level validate rule with match injected
+	found := false
+	for _, rule := range result.Validate {
+		if rule.Rule == "requires" {
+			found = true
+			matchVal, ok := rule.If["match"]
+			if !ok {
+				t.Fatal("expected match key in if clause")
+			}
+			if matchVal != "T*" {
+				t.Errorf("match = %v, want T*", matchVal)
+			}
+			if rule.If["tipo"] != "a" {
+				t.Errorf("tipo = %v, want a", rule.If["tipo"])
+			}
+		}
+	}
+	if !found {
+		t.Error("per-level validate rule not migrated")
+	}
+}
+
 func TestConvertLevelsToMatch_NoLevels(t *testing.T) {
 	content := []byte(`version: 1
 schema:

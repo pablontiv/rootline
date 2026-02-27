@@ -221,8 +221,26 @@ func checkEnum(record *extract.Record, rule ValidationRule, effective *StemFile)
 // conditionMatchesRecord checks if all key-value pairs in the condition
 // match the record's effective field values (derived fields take precedence
 // over frontmatter).
+//
+// The key "match" is treated specially: its value is a glob pattern matched
+// against the directory name of the record (e.g., "T*" matches "T001-name").
 func conditionMatchesRecord(record *extract.Record, condition map[string]any) bool {
 	for key, expected := range condition {
+		if key == "match" {
+			pattern := fmt.Sprintf("%v", expected)
+			components := pathComponents(record.Path)
+			found := false
+			for _, comp := range components {
+				if m, _ := filepath.Match(pattern, comp); m {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+			continue
+		}
 		actual, exists := record.EffectiveField(key)
 		if !exists {
 			return false
