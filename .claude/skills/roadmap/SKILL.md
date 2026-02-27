@@ -267,28 +267,43 @@ Generar **árbol de decisión** que muestre ramas ejecutables, cadenas de depend
 
 **Procedimiento**:
 
-#### Paso 1: Recopilar datos
+#### Paso 1: Recopilar datos (3 comandos en paralelo)
 
 Ejecutar en paralelo:
-1. `rootline stats docs/epics/ --where "tipo not in ['feature', 'historia']" --output table` — totales por estado
-2. `rootline query docs/epics/ --where "tipo not in ['feature', 'historia'] && not (estado in ['Completed', 'Obsolete'])" --output table` — tasks no completadas
-3. `rootline graph docs/epics/ --check` — validar dependencias (ciclos, broken links)
+1. `rootline tree docs/epics/ --where "not (estado in ['Completed', 'Obsolete'])" --output json` — árbol jerárquico con paths, estados y conteos completed/total (~2 KB, reemplaza stats + query)
+2. `rootline graph docs/epics/ --where "not (estado in ['Completed', 'Obsolete'])" --output json` — grafo de dependencias entre pendientes (~3 KB)
+3. `git log -5 --format='%h %s'` — últimos commits para proximidad
 
-#### Paso 2: Agrupar en ramas
+**IMPORTANTE**: Después de Paso 1, NO ejecutar más comandos bash. Los Pasos 2-5 procesan los JSONs obtenidos.
 
-Para cada task pendiente/specified/bloqueada:
-1. Extraer el **Feature path** (ej: `E04/F09`) como agrupador de rama
-2. Dentro de cada rama, buscar `[[blocks:TXXX-name]]` en los archivos .md para construir la cadena de dependencia intra-story
-3. Identificar el **tipo dominante** de la rama (software-module, ci-cd, etc.)
-4. Leer el Feature README para obtener el **objetivo** de la rama (1 línea)
+#### Paso 2: Agrupar en ramas (procesamiento de datos, SIN comandos adicionales)
 
-#### Paso 3: Clasificar ramas
+Usar los outputs JSON de Paso 1 para construir las ramas:
 
-Separar en dos categorías:
-- **Ejecutables**: todas las tasks tienen estado Pending/Specified, sin dependencias externas insatisfechas
-- **Bloqueadas**: al menos una task tiene estado Blocked o dependencia cross-feature no Completed
+1. **Feature path**: Extraer de `root.children[].children[].path` del tree JSON (cmd 1) — la jerarquía ya agrupa por Epic/Feature/Story/Task
+2. **Dependencias intra-story**: Extraer de `edges[]` del graph JSON (cmd 2) — cada edge tiene `source`, `target`, y `type: "blocks"`
+3. **Conteos**: Cada nodo del tree tiene `completed` y `total` — usar para progreso por rama
+4. **Estado**: Cada hoja del tree tiene `estado` — usar para clasificar tasks
+
+NO ejecutar comandos adicionales. Todo se extrae de los 3 outputs del Paso 1.
+
+#### Paso 3: Clasificar ramas (procesamiento de datos, SIN comandos adicionales)
+
+Usando `estado` de cada hoja del tree JSON (cmd 1):
+
+- **Ejecutables**: todas las tasks tienen estado Pending/Specified/In Progress, sin dependencias insatisfechas (verificar contra `edges[]` del graph, cmd 2)
+- **Bloqueadas**: al menos una task tiene `estado: Blocked` o dependencia cross-feature no Completed
 
 Dentro de ejecutables, identificar **quick wins** (ramas con 1 solo task).
+
+#### Anti-patrones de eficiencia
+
+- ❌ Loops `for f in ...; do grep/head; done` — usar JSON de rootline
+- ❌ Queries adicionales post-Paso 1 — toda la data necesaria está en los 3 outputs
+- ❌ Usar `rootline query` para listados — `rootline tree` da estructura + estados + conteos en un solo comando
+- ❌ Usar `rootline stats` por separado — tree ya incluye completed/total por nodo
+- ❌ Buscar `[[blocks:]]` con grep — rootline graph ya parsea wiki-links
+- ✅ Máximo 3 comandos (Paso 1), todos en paralelo, ~5.5 KB total, el resto es procesamiento de datos
 
 #### Paso 4: Renderizar árbol de decisión
 
@@ -321,9 +336,9 @@ BLOQUEADAS SIN CAMINO DIRECTO
 Reglas de renderizado:
 - Usar `├─►` para ramas ejecutables, `├──` para bloqueadas
 - `↓ desbloquea` entre tasks con dependencia `[[blocks:]]`
-- `↓ CIERRA [capacidad]` en el último task de la rama (leer del Feature README)
+- `↓ CIERRA [capacidad]` en el último task de la rama (extraer del nombre del nodo Feature en el tree JSON)
 - Marcar tasks cuya dependencia ya está Completed pero siguen en Blocked como `[stale?]`
-- Ordenar ramas ejecutables por proximidad al último commit (consultar `git log -1 --format=%s`)
+- Ordenar ramas ejecutables por proximidad al último commit (extraer de `git log` del Paso 1)
 
 #### Paso 5: Renderizar criterios de decisión
 
