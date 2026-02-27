@@ -31,14 +31,15 @@ rootline describe docs/api/
       "type": "enum",
       "values": ["draft", "review", "published"],
       "default": "draft",
+      "excludes": { "match": "*/README.md" },
       "source": "docs/api/.stem"
-    },
-    "id": {
-      "type": "sequence",
-      "prefix": "T",
-      "digits": 3,
-      "next": "T004",
-      "source": "docs/api/.stem"
+    }
+  },
+  "levels": {
+    "task": {
+      "match": "T*",
+      "children": [],
+      "schema": { "tipo": { "type": "string" } }
     }
   },
   "validate": [

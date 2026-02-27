@@ -110,44 +110,22 @@ A `.stem` file may appear in any directory. Rootline resolves configuration usin
 ```yaml
 version: 1
 
-scope:
-  match: "*.md"
-
 schema:
-  title:
-    type: string
-    required: true
-  status:
-    type: enum
-    values: [draft, review, published]
-    default: draft
-  id:
-    type: sequence
-    prefix: T
-    digits: 3
+  title: { type: string, required: true }
+  status: { type: enum, values: [draft, review, published], default: draft }
 
-validate:
-  - field: title
-    rule: non_empty
-  - rule: requires
-    if:
-      status: published
-    then:
-      fields: [owner]
-
-derive:
-  slug: 'slugify(title)'
+levels:
+  task:
+    match: "T*"
+    children: []
+    schema:
+      ejecutable_en: { type: string, required: true }
 
 aggregate:
-  total: 'len(descendants)'
+  completed: 'len(filter(descendants, .status == "published"))'
 
 links:
   allowed: [blocks, depends]
-
-structural:
-  require_index: true
-  min_children: 1
-  max_children: 10
 ```
 
 ---
@@ -155,6 +133,8 @@ structural:
 ## CLI
 
 Rootline ships as a **single static Go binary** with no dependencies.
+
+> **Universal Filtering**: Most commands support `--where 'expr'` (expr-lang syntax) to filter records before processing.
 
 ```bash
 # Core

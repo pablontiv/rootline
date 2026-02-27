@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completed
 ---
 # MCP Server
 
@@ -37,6 +37,8 @@ The server communicates over **stdio** using JSON-RPC 2.0. Connect to `rootline 
 ---
 
 ## Tool Catalog
+
+Rootline provides 8 functional MCP tools that map 1:1 to CLI commands.
 
 ### query
 

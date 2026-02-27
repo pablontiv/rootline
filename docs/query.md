@@ -14,14 +14,9 @@ The `--where` flag accepts [expr-lang/expr](https://expr-lang.org/) expressions.
 ```bash
 rootline query --where 'status == "published"'
 rootline query --where 'tipo in ["lxc", "vm"]' --where 'estado != "Completed"'
-rootline query --where 'body contains "migration"'
-rootline query --where 'tags != nil' --count
-rootline query --where 'estado == "Pending"' --limit 10
 ```
 
-Frontmatter fields are promoted to top-level variables — use `status` directly, not `frontmatter.status`. Derived fields take precedence over frontmatter fields of the same name.
-
-> **Note**: The `--where` flag is also available on `tree`, `stats`, `graph`, and `validate --all`. All transversal commands share the same expr-lang syntax and AND semantics for multiple `--where` flags.
+> **Universal Filtering**: The `--where` flag is not limited to `query`. It is also available on **`tree`**, **`stats`**, **`graph`**, and **`validate --all`**. All transversal commands share the same expr-lang syntax.
 
 ## Operators
 
