@@ -1,40 +1,43 @@
-version: 1
+version: 2
 
 schema:
   id:
     type: sequence
     prefix: E
     digits: 2
-
-levels:
-  epic:
-    match: "E*"
-    children: [feature]
-  feature:
+  tipo:
+    type: enum
     match: "F*"
-    children: [story]
-    schema:
-      tipo:
-        type: enum
-        values: [servicio-docker, modulo-sistema, operacion-sistema, lxc, vm, modulo-infraestructura, host-script, instance-script, software-module, software-test, ci-cd, documentation, feature, historia]
-        severity: warn
-  story:
+    severity: warn
+    values:
+      - servicio-docker
+      - modulo-sistema
+      - operacion-sistema
+      - lxc
+      - vm
+      - modulo-infraestructura
+      - host-script
+      - instance-script
+      - software-module
+      - software-test
+      - ci-cd
+      - documentation
+      - feature
+      - historia
+      - test
+      - refactor
+  cliente:
+    type: string
     match: "S*"
-    children: [task]
-    schema:
-      cliente:
-        type: string
-        severity: error
-  task:
+    severity: error
+  ejecutable_en:
+    type: string
     match: "T*"
-    children: []
-    schema:
-      ejecutable_en:
-        type: string
-        severity: error
-      hold:
-        type: string
-        severity: error
+    severity: error
+  hold:
+    type: string
+    match: "T*"
+    severity: error
 
 structural:
   subdirs:
@@ -44,9 +47,10 @@ structural:
 
 links:
   allowed: [blocks, reference]
-  blocks:
-    target: "^T\\d{3}-"
-    field: blocked_by
+  rules:
+    blocks:
+      target: "^T\\d{3}-"
+      field: blocked_by
 
 derive:
   estado: |
@@ -68,11 +72,11 @@ validate:
     severity: error
     then:
       fields:
-          - ejecutable_en
+        - ejecutable_en
   - if:
       tipo: ci-cd
     rule: requires
     severity: error
     then:
       fields:
-          - ejecutable_en
+        - ejecutable_en
