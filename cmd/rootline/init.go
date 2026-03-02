@@ -268,7 +268,7 @@ func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates m
 
 func generateStemYAML(schema *infer.InferredSchema) string {
 	var b strings.Builder
-	b.WriteString("version: 1\nscope:\n  match: \"*.md\"\nschema:\n")
+	b.WriteString("version: 2\nscope:\n  match: \"*.md\"\nschema:\n")
 
 	keys := make([]string, 0, len(schema.Schema))
 	for k := range schema.Schema {
