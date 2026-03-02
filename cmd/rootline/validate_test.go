@@ -98,7 +98,7 @@ func TestValidateCmd_SingleFileInvalid(t *testing.T) {
 
 func TestValidateCmd_AllMode(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem":     "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
+		".stem":     "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
 		"valid.md":  "---\ntitle: Good\n---\n",
 		"broken.md": "---\nstatus: draft\n---\n",
 	})
@@ -272,7 +272,7 @@ func TestSplitDotPath(t *testing.T) {
 
 func TestValidateCmd_AllWhere(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem":     "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n  tipo:\n    type: string\n",
+		".stem":     "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n  tipo:\n    type: string\n",
 		"good.md":   "---\nestado: Pending\ntipo: test\n---\n",
 		"bad.md":    "---\nestado: Completed\n---\n",
 		"broken.md": "---\ntipo: test\n---\n",

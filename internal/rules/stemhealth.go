@@ -254,5 +254,22 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		return nil, ctx.Err()
 	}
 
+	// Check 8: Deprecated v1 format
+	for sf, stem := range parsedStems {
+		if stem.Version == 0 || stem.Version == 1 {
+			relPath, _ := filepath.Rel(absRoot, sf)
+			checks = append(checks, StemHealthCheck{
+				Name:    "version-deprecated",
+				Status:  "warn",
+				Message: "stem uses deprecated v1 format — run: rootline migrate --to-v2",
+				Path:    relPath,
+			})
+		}
+	}
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	return &StemHealthResult{Checks: checks}, nil
 }

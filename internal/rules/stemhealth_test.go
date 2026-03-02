@@ -394,6 +394,59 @@ schema:
 	}
 }
 
+func TestValidateStemHealth_VersionDeprecated(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+schema:
+  titulo:
+    type: string
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, c := range result.Checks {
+		if c.Name == "version-deprecated" && c.Status == "warn" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected version-deprecated warn check for v1 stem")
+	}
+}
+
+func TestValidateStemHealth_V2NoWarning(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+scope:
+  match: "*.md"
+schema:
+  titulo:
+    type: string
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, c := range result.Checks {
+		if c.Name == "version-deprecated" {
+			t.Error("unexpected version-deprecated check for v2 stem")
+		}
+	}
+}
+
 func TestValidateStemHealth_MultipleStems(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
