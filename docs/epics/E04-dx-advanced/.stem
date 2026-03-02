@@ -1,5 +1,6 @@
+version: 2
 schema:
-  id:
-    type: sequence
-    prefix: F
-    digits: 2
+    id:
+        type: sequence
+        prefix: F
+        digits: 2

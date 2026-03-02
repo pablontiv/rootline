@@ -1,5 +1,6 @@
+version: 2
 schema:
-  id:
-    type: sequence
-    prefix: S
-    digits: 3
+    id:
+        type: sequence
+        prefix: S
+        digits: 3

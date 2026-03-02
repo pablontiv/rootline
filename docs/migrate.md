@@ -16,6 +16,8 @@ rootline migrate --from old.stem          # Compare against specific .stem file
 rootline migrate --rename old_field=new   # Rename field across all documents + .stem files
 rootline migrate --split                  # Split flat .stem into hierarchical per-level files
 rootline migrate --split --dry-run        # Preview split without writing files
+rootline migrate --from-levels            # Convert v1 levels: to v2 match:-based fields
+rootline migrate --from-levels --dry-run  # Preview conversion
 ```
 
 ### Flags
@@ -26,6 +28,7 @@ rootline migrate --split --dry-run        # Preview split without writing files
 | `--from` | Compare against specified `.stem` file instead of git HEAD |
 | `--rename old=new` | Rename a field across all documents and `.stem` files |
 | `--split` | Split a flat `.stem` into hierarchical `.stem` files per level |
+| `--from-levels` | Convert v1 `.stem` with `levels:` to v2 with `match:`-based fields |
 
 ## Change Detection
 
@@ -105,3 +108,15 @@ docs/epics/E03-name/F01-x/.stem → S-level sequence + S-only fields
 ```
 
 Requires at least 2 hierarchy levels to be detected. Use `--dry-run` to preview the split before applying.
+
+## From-Levels Migration
+
+`--from-levels` converts a v1 `.stem` that uses the `levels:` keyword into a v2 `.stem` with `match:`-based field annotations:
+
+```bash
+rootline migrate --from-levels docs/epics/
+```
+
+The migration reads each level's schema fields and converts them to flat schema fields with `match:` annotations. Sequence fields get per-pattern configs in their `match:` map. The `levels:` section is removed and `version` is set to `2`.
+
+See [Hierarchical Schema](levels.md) for the v2 format.

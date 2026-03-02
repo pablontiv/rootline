@@ -1,60 +1,86 @@
 ---
 estado: Completed
 ---
-# Hierarchical Levels
+# Hierarchical Schema (Match-Based)
 
-Rootline allows declaring schemas for an entire directory tree in a single root `.stem` file using the `levels:` keyword.
+Rootline v2 uses `match:` annotations on individual schema fields to scope them to specific directory levels. This replaces the v1 `levels:` keyword with a flat, composable approach.
 
-This eliminates the need for redundant child `.stem` files and enables structural validation of the hierarchy.
+> **Migration**: v1 `.stem` files with `levels:` can be converted via `rootline migrate --from-levels`.
 
 ## .stem Configuration
 
 ```yaml
-levels:
-  epic:
-    match: "E*"           # Glob pattern for directory name
-    children: [feature]   # Allowed child levels
-    schema:
-      id:
-        type: sequence
-        prefix: E
-        digits: 2
-  feature:
-    match: "F*"
-    children: [story]
-    schema:
-      tipo:
-        type: enum
-        values: [software, infra, docs]
-  story:
-    match: "S*"
-    children: [task]
-  task:
+version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Completed, Pending, Specified]
+  id:
+    type: sequence
+    match:
+      "E*": { prefix: E, digits: 2 }
+      "F*": { prefix: F, digits: 2 }
+      "S*": { prefix: S, digits: 3 }
+      "T*": { prefix: T, digits: 3 }
+  ejecutable_en:
+    type: string
+    required:
+      match: "T*"
     match: "T*"
-    children: []          # Leaf level: no subdirectories allowed
-    schema:
-      ejecutable_en:
-        type: string
-        required: true
 ```
 
-## How it Works
+Fields without `match:` apply to all records. Fields with `match:` apply only to records whose path matches the pattern.
 
-1. **Expansion**: When a record at `E01/F01/S001/T001.md` is processed, Rootline matches each path component against the `levels` definitions.
-2. **Virtual Merge**: It generates "virtual" rules for each level and merges them top-down.
-3. **Nesting Validation**: `rootline validate` checks if the actual directory structure follows the `children` constraints.
+## Match Forms
 
-### Nesting Errors
+The `match:` annotation supports three forms:
 
-If a task file is placed directly under an epic directory, and the epic level only allows `feature` children, Rootline will report a **nesting violation**:
-
-```bash
-rootline validate docs/epics/E01/T001.md
-# [nesting] level 'task' is not an allowed child of 'epic' (allowed: [feature])
+**String** — single glob pattern:
+```yaml
+ejecutable_en:
+  type: string
+  match: "T*"
 ```
+
+**Array** — multiple patterns:
+```yaml
+tipo:
+  type: enum
+  match: ["F*", "S*"]
+```
+
+**Map** — per-pattern configuration (used for sequence fields):
+```yaml
+id:
+  type: sequence
+  match:
+    "E*": { prefix: E, digits: 2 }
+    "T*": { prefix: T, digits: 3 }
+```
+
+## Conditional Required
+
+The `required` field also supports match scoping. This makes a field required only for records matching the pattern:
+
+```yaml
+ejecutable_en:
+  type: string
+  required:
+    match: "T*"
+  match: "T*"
+```
+
+Here `ejecutable_en` only exists for `T*` records and is required only for them.
+
+## How Resolution Works
+
+When validating or querying a record, `ResolveForRecord` filters schema fields by matching the record's path against each field's `match:` pattern. Fields without `match:` always apply. This means a single root `.stem` can define the schema for an entire hierarchy without child `.stem` files.
 
 ## Benefits
 
-- **Centralization**: Change the schema for all tasks in one place.
-- **Structural Integrity**: Ensure the project follows the Epic -> Feature -> Story -> Task architecture.
-- **Clarity**: The `.stem` file becomes a formal contract of the project's structure.
+- **Single file**: One `.stem` defines all levels — no redundant child `.stem` files.
+- **Composable**: Each field independently declares its scope.
+- **Debuggable**: `rootline describe` shows which fields apply at each path, with their source.

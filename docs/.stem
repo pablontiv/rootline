@@ -1,9 +1,7 @@
-version: 1
-
+version: 2
 scope:
-  match: "*.md"
-
+    match: "*.md"
 schema:
-  estado:
-    type: string
-    required: true
+    estado:
+        type: string
+        required: true

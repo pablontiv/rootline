@@ -1,5 +1,5 @@
 ---
-estado: Pre-research
+estado: In Progress
 fecha: "2026-02-27"
 metodo: collaborative-research
 ---
@@ -126,7 +126,7 @@ The literature and tooling have all the pieces but nobody combined them:
 project/
   .stem              ← root schema: defines the domain
   .stemignore        ← docs/, assets/ excluded from everything
-  epics/
+  docs/epics/
     E01/
       README.md      ← inherits root .stem, consistency checked
       features/
@@ -259,36 +259,244 @@ Key differences:
 
 ---
 
-## Part 4 — Open Questions
+## Part 4 — The Index File Problem
 
-### Q1: Sequence inference vs declaration
-Should `id` prefix/digits be fully inferred from existing directory names (zero config) or always require declaration? Inference is more aligned with the principle (the filesystem tells you) but may be fragile for new projects with no directories yet.
+### Discovery (2026-02-27)
 
-### Q2: Match pattern syntax
-Should `match` use glob patterns only (like current `levels.match`), or also support depth-based selectors (`depth: 2`) or path patterns (`epics/*/features/*`)? Globs are simpler but less expressive.
+While validating `homeserver/automation/docs/epics/` against a v2 `.stem`, rootline reported 0 errors and 375 valid files. But manual inspection found **11 estado drifts** — parent READMEs with `estado` values inconsistent with their children.
 
-### Q3: Migration path
-Three options for transitioning from `levels:` to the new model:
-- **a)** `levels:` deprecated but supported indefinitely (backwards compat)
-- **b)** `levels:` supported in v0.x, removed in v1.0 (breaking change)
-- **c)** `rootline migrate` auto-converts `levels:` to `match`-based schema
+Rootline's `DetectDrift()` actually caught 9 of 11 (as `drift_warnings`, a separate output section from `errors`). The 2 missed cases were non-unanimous children (mix of `Completado` + `Obsoleto`).
 
-### Q4: Partial exclusion
-Current model: `.stemignore` = doesn't exist at all. Is there a need for "index this file (validate its frontmatter) but don't include it in parent-child consistency"? Current assessment: no — if it's indexed, it participates. If it shouldn't participate, exclude it.
+But the deeper problem emerged: **rootline doesn't know what a README.md IS**.
+
+### The Missing Concept
+
+The engine knows:
+- `require_index: README.md` → "this file must exist in subdirectories"
+- `groupByParentDir()` → hardcodes `"README.md"` as the parent record
+
+The engine does NOT know:
+- **README.md is the directory node** — not just "a required file" but "the representation of this directory as a record"
+- **Other files are children** — T001.md, T002.md etc. are leaf records belonging to the directory
+- **estado in README.md should be computed** — it derives from children, not from manual input
+- **A file that matches no expected pattern is an intruder** — `notas.md` in `S001/` should be an error
+
+Example of the problem:
+
+```
+S006-final-opentofu-cleanup/
+├── README.md          → estado: Pending     ← WRONG (should be Completado)
+├── T001-xxx.md        → estado: Completado
+├── T002-xxx.md        → estado: Completado
+├── T003-xxx.md        → estado: Completado
+├── T004-xxx.md        → estado: Completado
+└── T005-xxx.md        → estado: Completado
+```
+
+The README is the Story. The T*.md files are its Tasks. The README's `estado` should be derived from the Tasks, not written by hand. But rootline has no way to know this because the schema doesn't declare the semantic relationship between the index file and its siblings.
+
+### What the Schema Needs to Express
+
+Three things the filesystem cannot tell the engine:
+
+1. **Which file is the index** — "README.md in this directory IS the directory's record"
+2. **What children look like** — "files matching T### are valid children; anything else is an intruder"
+3. **How derived fields are computed** — "estado in the index = f(children estados)"
+
+Everything else (parent-child relationships, nesting depth, sibling relationships) is intrinsic to the filesystem and should NOT be redeclared.
+
+---
+
+## Part 5 — Design Exploration: v3 Entity Model
+
+### The Circular Problem
+
+Multiple approaches were explored to extend the `.stem` format. Each iteration converged back to re-declaring hierarchy:
+
+| Approach | What it looked like | Why it failed |
+|----------|-------------------|---------------|
+| v2 `match:` path-aware | `"E*/F*/S*/T*": {prefix: T}` | Verbose, re-encodes the filesystem path |
+| `structural.children` | `children: { match: { "S*": "T*.md" } }` | Re-declares what the filesystem shows |
+| v3 `entities:` | `E: { children: [F] }` | Essentially `levels:` renamed |
+| v3 with `aggregate:` per entity | `E: { aggregate: { estado: "..." } }` | Back to per-level declarations |
+
+**Core tension**: the principle says "don't redeclare hierarchy" but the engine needs to know entity types to scope fields and compute aggregates. Every attempt to define entity types ends up re-declaring the hierarchy as a side effect, because entity types ARE the hierarchy.
+
+### Proposed v3 Format (work in progress)
+
+Despite the circular tension, the entity model is the clearest expression found:
+
+```yaml
+version: 3
+
+common:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, In Progress, Specified, Completado, Diferida, Bloqueada, Obsoleto]
+  cliente:
+    type: string
+
+entities:
+  E:
+    index: README.md
+    extends: [common]
+    children: [F]
+    fields:
+      id: { type: sequence, prefix: E, digits: 2 }
+    aggregate:
+      estado: <expr>    # computed from children
+
+  F:
+    index: README.md
+    extends: [common]
+    children: [S]
+    fields:
+      id: { type: sequence, prefix: F, digits: 2 }
+      tipo: { type: enum, severity: warn, values: [...] }
+    aggregate:
+      estado: <expr>
+
+  S:
+    index: README.md
+    extends: [common]
+    children: [T]
+    fields:
+      id: { type: sequence, prefix: S, digits: 3 }
+    aggregate:
+      estado: <expr>    # may differ from E/F
+
+  T:
+    extends: [common]
+    children: []
+    fields:
+      id: { type: sequence, prefix: T, digits: 3 }
+      tipo: { type: enum, required: true, values: [...] }
+      ejecutable_en: { type: string, severity: error }
+      hold: { type: string }
+    derive:
+      estado: |
+        hold != nil ? "On Hold" :
+        blocked_by != nil && !all(blocked_by, {# == "Completado"}) ? "Bloqueada" :
+        estado
+
+links:
+  allowed: [blocks, reference]
+  rules:
+    blocks:
+      target_entity: T
+      field: blocked_by
+
+validate:
+  - rule: requires
+    when: { entity: T, tipo: software-module }
+    then: { fields: [ejecutable_en] }
+    severity: error
+```
+
+### What v3 Solves
+
+- **Index semantics**: `index: README.md` means "this file IS the directory node"
+- **Children validation**: entity type regex (derived from `id` prefix+digits) validates what belongs; anything else is an intruder
+- **Derived vs written fields**: entities with `aggregate:` have computed fields; leaf entities (`children: []`) have written fields
+- **Validate scoping**: `when: { entity: T }` eliminates cross-level constraint conflicts (e.g., `tipo: ci-cd` requiring `ejecutable_en` only fires for T entities, not F entities that also have `tipo`)
+- **Bug fix**: v2 `match:` couldn't prevent a validate rule from requiring a field that doesn't exist at that level
+
+### What v3 Doesn't Solve
+
+- **Hierarchy re-declaration**: `children: [F]` is functionally identical to v1's `levels.epic.children: [feature]` — the filesystem already says E01/ contains F01/
+- **Aggregate repetition**: if E, F, S all use the same aggregation formula, it's repeated three times (or requires a named reference mechanism)
+- **The principle violation**: the core insight was "don't declare what the filesystem provides" — but entity types with `children:` do exactly that
+
+### Possible Resolution
+
+The `children:` declaration may not be hierarchy re-declaration but **type constraint**: "inside an E directory, only F-type entities are valid." The filesystem says E01/ contains F01/, but it doesn't say F01/ MUST be an F-type entity. A misplaced S001/ directory inside E01/ would be structurally valid to the filesystem but semantically wrong.
+
+This reframes `children:` from "declaring hierarchy" to "constraining what entity types are valid at each nesting level" — which IS new information that the filesystem alone cannot provide.
+
+Whether this reframing resolves the philosophical tension or merely rationalizes it remains an open question.
+
+---
+
+## Part 6 — State of the Art (Extended)
+
+### Additional Systems Surveyed
+
+| System | How it handles index files | How it handles hierarchy | Pattern syntax |
+|--------|--------------------------|-------------------------|----------------|
+| **Hugo** | `_index.md` = branch bundle (has children); `index.md` = leaf bundle (no children). The `_` prefix is the entire declaration. | Implicit from directory structure. `cascade` propagates values down. | N/A — convention-based |
+| **Zola** | `_index.md` creates a section. Without it, directory is invisible. `transparent: true` flattens hierarchy. | Implicit from directory structure. Front matter controls sorting, pagination. | N/A — convention-based |
+| **Next.js App Router** | `page.tsx` = the route, `layout.tsx` = wraps children, `loading.tsx` = skeleton. Each filename IS the semantic role. | Implicit from directory nesting. Dynamic segments via `[slug]`. | Convention: reserved filenames |
+| **Remix** | `route.tsx` inside a folder, or flat files with dot notation. | Dot notation: `concerts.trending.tsx` = `/concerts/trending`. Parent found by longest common prefix. | Dots encode hierarchy in filenames |
+| **EditorConfig** | N/A — configuration, not content. | Walk-up discovery. If pattern contains `/`, it's path-relative. Without `/`, matches at any depth. | Glob with path-awareness via `/` |
+| **directory-schema** | N/A — validates directory tree as JSON against JSON Schema. | Converts `tree -J` to JSON, validates structure with standard JSON Schema. | JSON Schema patterns on names |
+| **CUE** | N/A — not filesystem-based. | Lattice-based unification. Constraints only narrow. Values and types are the same thing. | CUE expressions |
+
+### Key Insight from EditorConfig
+
+EditorConfig's `/` convention elegantly separates "match anywhere" from "match at specific path":
+- `*.md` → matches at any depth
+- `docs/**/*.md` → matches only inside `docs/`
+
+This principle could apply to `.stem` match patterns: `T*` means "any entity named T-something regardless of depth" while `S*/T*` means "T-something that's a direct child of S-something." However, in practice this re-encodes hierarchy in patterns — the same circular problem.
+
+### Key Insight from Hugo/Zola
+
+The `_index.md` convention is maximally elegant: **zero configuration, pure convention**. The presence and name of the file IS the declaration. Rootline's `index: README.md` is close but requires explicit declaration per entity type.
+
+A fully convention-based approach would be: "any `README.md` is the directory's index file, always." No declaration needed. This is what `groupByParentDir()` already hardcodes — the question is whether to formalize or keep it as convention.
+
+---
+
+## Part 7 — Open Questions (Revised)
+
+### Q1: Is `children:` hierarchy re-declaration or type constraint?
+If `children: [F]` means "only F-type entities are valid inside E", it's new information. If it means "E contains F", it's redundant. The answer depends on whether the engine should reject a misplaced entity (S001/ directly inside E01/) or silently accept it.
+
+### Q2: Should `index:` be convention or declaration?
+Hugo chose convention (`_index.md`). Rootline currently mixes both (hardcoded in code, declared in structural). If every entity uses `README.md`, declaration is boilerplate. If different entities could use different index filenames, declaration has value.
+
+### Q3: Can aggregate formulas be inherited?
+If E, F, S all compute `estado` the same way, should `common` carry the aggregate expression with per-entity override capability? Or should aggregate always be per-entity because the semantics genuinely differ at each level?
+
+### Q4: v2 → v3 migration path
+v2 with `match:` works today. v3 with `entities:` is cleaner but requires engine changes. Options:
+- **a)** v2 and v3 coexist — engine supports both
+- **b)** `rootline migrate` converts v2 → v3
+- **c)** v3 is a future major version (post-1.0)
+
+### Q5: External review feedback — cross-level constraint conflicts
+An external review identified that v2's flat `validate:` rules can create impossible constraints: `tipo: ci-cd` in F-level triggers `requires ejecutable_en`, but `ejecutable_en` only exists at T-level. v3's `when: { entity: T }` scoping fixes this, but v2 has no mechanism to prevent it. This is a concrete bug that argues for entity-scoped validation.
 
 ---
 
 ## References
 
+### Hierarchical Database Theory
 - IBM IMS Hierarchical Database Model — [Wikipedia](https://en.wikipedia.org/wiki/Hierarchical_database_model), [O'Reilly](https://www.oreilly.com/library/view/an-introduction-to/9780132886987/ch07.html)
 - Czerwinski, David, Murlak, Parys — "Reasoning About Integrity Constraints for Tree-Structured Data" (ICDT 2016) — [Dagstuhl](https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.ICDT.2016.20), [Springer](https://link.springer.com/article/10.1007/s00224-017-9771-z)
 - Schema Evolution for XML — [ResearchGate](https://www.researchgate.net/publication/220976005)
 - OLAP Hierarchical Aggregation — [Medium](https://medium.com/learning-sql/olap-hierarchical-aggregation-with-sql-6c45ebc206d7), [SIGMOD Record](https://sigmodrecord.org/publications/sigmodRecord/0003/pourabbas.pdf)
+
+### Filesystem Content Systems
+- Hugo Page Bundles (`_index.md` vs `index.md`) — [Hugo docs](https://gohugo.io/content-management/page-bundles/)
+- Hugo Content Organization — [Hugo docs](https://gohugo.io/content-management/organization/)
 - Hugo cascade — [Hugo docs](https://gohugo.io/content-management/front-matter/)
+- Zola Sections (`_index.md`) — [Zola docs](https://www.getzola.org/documentation/content/section/)
 - Dendron schemas — [Dendron wiki](https://wiki.dendron.so/notes/c5e5adde-5459-409b-b34d-a0d75cbb1052/)
 - Statamic data inheritance — [Statamic docs](https://statamic.dev/data-inheritance)
 - Astro Content Collections — [Astro docs](https://docs.astro.build/en/guides/content-collections/)
-- CUE language — [CUE discussion](https://github.com/cue-lang/cue/discussions/669)
+
+### Filesystem Routing Conventions
+- Next.js App Router file conventions — [Next.js docs](https://nextjs.org/docs/app/getting-started/project-structure)
+- Remix flat routes (dot notation) — [Remix docs](https://remix.run/docs/en/main/file-conventions/route-files-v2)
+
+### Configuration Inheritance
+- EditorConfig specification (glob patterns, walk-up discovery) — [EditorConfig spec](https://spec.editorconfig.org/index.html)
 - Apache .htaccess — [Apache docs](https://httpd.apache.org/docs/current/howto/htaccess.html)
+
+### Schema & Constraint Systems
+- CUE language (lattice unification) — [CUE docs](https://cuelang.org/docs/introduction/), [Discussion](https://github.com/cue-lang/cue/discussions/669)
 - JSON Schema inheritance — [json-schema.org](https://json-schema.org/blog/posts/modelling-inheritance)
+- directory-schema (HubMAP, archived) — [GitHub](https://github.com/hubmapconsortium/directory-schema)
 - GNU Recutils — [gnu.org](https://www.gnu.org/software/recutils/)
