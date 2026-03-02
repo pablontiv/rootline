@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: feature
 ---
 # F01: Deprecate V1 Stem Format

@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: historia
 ---
 # S001: V1 Deprecation Engine & Migration

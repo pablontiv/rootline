@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 ---
 # E11: V1 Stem Format Deprecation
 
