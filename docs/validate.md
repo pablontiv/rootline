@@ -29,7 +29,7 @@ rootline validate --all --where 'estado != "Completed"'  # Filtered
 
 Batch validation runs four phases in order:
 
-1. **Stem Health** — 7 diagnostics on `.stem` files themselves: yaml-valid, scope-match, type-consistency, enum-values, rule-field-exists, field-override, aggregated-required.
+1. **Stem Health** — 8 diagnostics on `.stem` files themselves: yaml-valid, scope-match, type-consistency, enum-values, rule-field-exists, field-override, aggregated-required, version-deprecated.
 2. **Document Validation** — Checks each record against its effective schema: required fields, enum values, non_empty, exists, requires rules.
 3. **Structural Validation** — Directory-level rules: `require_index` (must have README.md), `min_children`/`max_children` constraints.
 4. **Drift Detection** — Warns when an index file's field value contradicts its children (e.g., parent says "Completed" but children are "Pending").

@@ -3,6 +3,8 @@ estado: Completed
 ---
 # Hierarchical Schema (Match-Based)
 
+> **Deprecated**: The v1 `.stem` format (version 0/1) is deprecated. Run `rootline migrate --to-v2` to upgrade existing stems. New stems are generated as v2 by default.
+
 Rootline v2 uses `match:` annotations on individual schema fields to scope them to specific directory levels. This replaces the v1 `levels:` keyword with a flat, composable approach.
 
 > **Migration**: v1 `.stem` files with `levels:` can be converted via `rootline migrate --from-levels`.

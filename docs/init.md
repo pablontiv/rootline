@@ -25,7 +25,7 @@ rootline init --force docs/api/                   # Overwrite existing .stem
 When no hierarchical naming pattern is detected, init produces a simple schema:
 
 ```yaml
-version: 1
+version: 2
 scope:
   match: "*.md"
 schema:
