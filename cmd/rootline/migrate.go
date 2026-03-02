@@ -21,6 +21,7 @@ var (
 	migrateRename   string
 	migrateSplit    bool
 	migrateFromLvls bool
+	migrateToV2     bool
 )
 
 var migrateCmd = &cobra.Command{
@@ -42,10 +43,14 @@ func init() {
 	migrateCmd.Flags().StringVar(&migrateRename, "rename", "", "rename a field: old_field=new_field")
 	migrateCmd.Flags().BoolVar(&migrateSplit, "split", false, "split a flat .stem into hierarchical .stem files per level")
 	migrateCmd.Flags().BoolVar(&migrateFromLvls, "from-levels", false, "convert v1 .stem with levels: to v2 with match:-based fields")
+	migrateCmd.Flags().BoolVar(&migrateToV2, "to-v2", false, "upgrade .stem version field from 0/1 to 2")
 	rootCmd.AddCommand(migrateCmd)
 }
 
 func runMigrate(cmd *cobra.Command, args []string) error {
+	if migrateToV2 {
+		return runMigrateToV2(cmd, args)
+	}
 	if migrateFromLvls {
 		return runMigrateFromLevels(cmd, args)
 	}
@@ -322,6 +327,47 @@ func renderMigrateBatchTable(cmd *cobra.Command, batch *MigrateBatchResult) erro
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Summary: %d stems checked, %d changes (%d breaking)\n",
 		batch.Summary.StemsChecked, batch.Summary.TotalChanges, batch.Summary.BreakingCount)
+	return nil
+}
+
+// --- To-v2 operation ---
+
+func runMigrateToV2(cmd *cobra.Command, args []string) error {
+	targetPath := "."
+	if len(args) > 0 {
+		targetPath = args[0]
+	}
+
+	result, err := migrate.UpgradeToV2(targetPath, migrateDryRun)
+	if err != nil {
+		return err
+	}
+
+	if outputFormat == "table" {
+		return renderMigrateToV2Table(cmd, result)
+	}
+	return outputJSON(cmd, result, false)
+}
+
+func renderMigrateToV2Table(cmd *cobra.Command, result *migrate.ToV2Result) error {
+	w := cmd.OutOrStdout()
+
+	if len(result.Updated) == 0 {
+		_, _ = fmt.Fprintln(w, "All stems already at version 2 (nothing to update)")
+		return nil
+	}
+
+	prefix := ""
+	if migrateDryRun {
+		prefix = "would "
+	}
+
+	_, _ = fmt.Fprintf(w, "Stems %supgraded to v2:\n", prefix)
+	for _, f := range result.Updated {
+		_, _ = fmt.Fprintf(w, "  %s\n", f)
+	}
+	_, _ = fmt.Fprintf(w, "\nSummary: %d %supgraded, %d skipped (of %d total)\n",
+		len(result.Updated), prefix, result.Skipped, result.Total)
 	return nil
 }
 
