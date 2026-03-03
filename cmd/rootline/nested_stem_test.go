@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 // setupNestedStemProject creates a directory structure with multiple .stem files
@@ -108,7 +110,7 @@ func TestExplainNestedStem_MultipleStemChain(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var result ExplainResult
+	var result rules.ExplainResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -236,7 +238,7 @@ func TestExplainNestedStem_RootFileHasNoChild(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var result ExplainResult
+	var result rules.ExplainResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
