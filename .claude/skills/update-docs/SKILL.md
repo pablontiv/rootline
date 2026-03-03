@@ -2,13 +2,13 @@
 name: update-docs
 description: |
   Detect code drift and update project documentation to match current implementation.
-  Compares code state against CLAUDE.md, README.md, and docs/*.md command references.
+  Compares code state against CLAUDE.md, README.md, docs/*.md, and .claude/skills/rootline/*.md.
   Does NOT touch docs/epics/ or docs/research/ (roadmap skill territory).
   This skill should be used when the user says "update docs", "sync documentation",
   "actualizar documentación", "docs are stale", "refresh docs",
   "update CLAUDE.md", "update README", "docs out of date",
-  "documentation drift", "sync docs with code".
-argument-hint: "[claude|readme|commands|all]"
+  "documentation drift", "sync docs with code", "update skills".
+argument-hint: "[claude|readme|commands|skills|all]"
 allowed-tools:
   - Bash
   - Read
@@ -32,6 +32,7 @@ Target documents (3 categories):
 | `claude` | `CLAUDE.md` | `internal/`, `cmd/rootline/*.go`, `go.mod` |
 | `readme` | `README.md` | CLI help output, feature implementations |
 | `commands` | `docs/*.md` (top-level only) | `rootline <cmd> --help`, cobra definitions |
+| `skills` | `.claude/skills/rootline/*.md` | `rootline <cmd> --help`, cobra flag definitions |
 
 **Excluded**: `docs/epics/**`, `docs/research/**` — governed by `/roadmap` skill and `.stem` schemas.
 
@@ -42,7 +43,8 @@ Target documents (3 categories):
 - `$ARGUMENTS` = `claude` → only CLAUDE.md
 - `$ARGUMENTS` = `readme` → only README.md
 - `$ARGUMENTS` = `commands` → only docs/*.md
-- `$ARGUMENTS` = `all` or empty → all three categories
+- `$ARGUMENTS` = `skills` → only .claude/skills/rootline/*.md
+- `$ARGUMENTS` = `all` or empty → all four categories
 
 ### 2. Gather current code state
 
@@ -96,6 +98,19 @@ For each command doc file:
 - Run `rootline <cmd> --help` and compare flags/usage against documented content
 - Check if any new subcommand `.go` files exist without a corresponding doc
 - Check if any doc files reference removed commands
+
+#### .claude/skills/rootline/*.md
+
+For `SKILL.md`:
+- Compare the Command Reference table against `rootline --help` output
+- Verify global flags section matches actual global flags
+- Check that all commands have a corresponding group section
+
+For each reference file (`ref-validate.md`, `ref-schema.md`, `ref-query.md`, `ref-advanced.md`):
+- Identify which commands the file covers
+- Run `rootline <cmd> --help` for each command
+- Compare flags, usage, and description against the reference content
+- Check for undocumented flags or removed flags
 
 ### 4. Present drift report
 

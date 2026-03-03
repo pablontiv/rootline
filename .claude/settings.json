@@ -2,22 +2,30 @@
   "permissions": {
     "allow": [
       "Skill(roadmap)",
-      "Skill(describe)",
-      "Skill(validate)",
+      "Skill(rootline)",
       "Skill(update-docs)"
     ]
   },
   "hooks": {
     "SessionStart": [
       {
-        "type": "prompt",
-        "prompt": "Silently check if project documentation may be stale. Run: git log --oneline -10 --diff-filter=M -- '*.go' 'go.mod' and git log --oneline -5 -- 'CLAUDE.md' 'README.md' 'docs/*.md'. If more than 5 code commits exist without a doc update, print ONE line: 'Docs may be stale. Run /update-docs to sync.' Otherwise say nothing."
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CODE=$(git log --oneline -10 --diff-filter=M -- '*.go' 'go.mod' | wc -l) && DOCS=$(git log --oneline -5 -- 'CLAUDE.md' 'README.md' 'docs/*.md' | wc -l) && if [ \"$CODE\" -gt 5 ] && [ \"$DOCS\" -eq 0 ]; then echo '{\"additionalContext\": \"Docs may be stale. Run /update-docs to sync.\"}'; fi"
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
-        "type": "prompt",
-        "prompt": "If the tool was Write or Edit on a file matching cmd/rootline/*.go, internal/*/*.go, or go.mod, silently note docs may need updating. Only after the user completes their current task, append: 'Tip: Code changes may affect docs. Consider /update-docs when ready.' Do nothing for non-Go files."
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "If the tool edited a file matching cmd/rootline/*.go, internal/*/*.go, or go.mod, respond with {\"additionalContext\": \"Tip: Code changes may affect docs. Consider /update-docs when ready.\"}. For non-Go files, respond with {\"ok\": true}. Input: $ARGUMENTS"
+          }
+        ]
       }
     ]
   }

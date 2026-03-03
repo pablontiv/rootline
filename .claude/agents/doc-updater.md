@@ -22,6 +22,7 @@ You maintain these documents:
 - `/opt/rootline/CLAUDE.md` — Architecture reference for AI assistants
 - `/opt/rootline/README.md` — Public-facing project documentation
 - `/opt/rootline/docs/*.md` — Individual CLI command documentation (top-level only)
+- `/opt/rootline/.claude/skills/rootline/*.md` — CLI skill references (SKILL.md + ref-*.md)
 
 You do **NOT** touch:
 
@@ -39,6 +40,8 @@ You do **NOT** touch:
 | Changed `go.mod` | CLAUDE.md | Dependencies |
 | Changed `internal/mcp/` | CLAUDE.md | Architecture (MCP tools count) |
 | Changed `internal/mcp/` | README.md | AI-Native / MCP Server section |
+| New/changed file in `cmd/rootline/` | `.claude/skills/rootline/SKILL.md` | Command Reference table |
+| New/changed file in `cmd/rootline/` | `.claude/skills/rootline/ref-*.md` | Corresponding reference file |
 
 ## Procedure
 
@@ -88,5 +91,6 @@ Output a summary listing what was updated, what was checked but found current, a
 - **CLAUDE.md**: Terse, reference-style prose with em-dashes. Technical and concise.
 - **README.md**: Standard open-source README style with code examples and sections.
 - **docs/*.md**: Include YAML frontmatter (`estado` field), CLI usage blocks, JSON output examples, and flag tables.
+- **skills/*.md**: Procedural, concise. Flag tables, bash examples, JSON output shapes. No prose — reference format.
 - Field names in documentation may be in Spanish (`estado`, `tipo`, etc.).
 - Keep descriptions factual — no marketing language.
