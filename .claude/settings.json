@@ -1,2 +1,24 @@
 {
+  "permissions": {
+    "allow": [
+      "Skill(roadmap)",
+      "Skill(describe)",
+      "Skill(validate)",
+      "Skill(update-docs)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "prompt",
+        "prompt": "Silently check if project documentation may be stale. Run: git log --oneline -10 --diff-filter=M -- '*.go' 'go.mod' and git log --oneline -5 -- 'CLAUDE.md' 'README.md' 'docs/*.md'. If more than 5 code commits exist without a doc update, print ONE line: 'Docs may be stale. Run /update-docs to sync.' Otherwise say nothing."
+      }
+    ],
+    "PostToolUse": [
+      {
+        "type": "prompt",
+        "prompt": "If the tool was Write or Edit on a file matching cmd/rootline/*.go, internal/*/*.go, or go.mod, silently note docs may need updating. Only after the user completes their current task, append: 'Tip: Code changes may affect docs. Consider /update-docs when ready.' Do nothing for non-Go files."
+      }
+    ]
+  }
 }
