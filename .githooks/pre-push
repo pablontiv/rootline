@@ -26,3 +26,11 @@ while read local_ref local_sha remote_ref remote_sha; do
     echo "docs/epics/ validation passed"
   fi
 done
+
+# Rebuild rootline binary so the installed version matches the pushed code
+echo "Rebuilding rootline binary..."
+if go build -ldflags "-X main.version=$(git describe --tags 2>/dev/null || echo dev)" -o /usr/local/bin/rootline ./cmd/rootline/ 2>&1; then
+  echo "rootline rebuilt: $(rootline --version)"
+else
+  echo "Warning: rootline rebuild failed (push continues)"
+fi
