@@ -108,18 +108,12 @@ A `.stem` file may appear in any directory. Rootline resolves configuration usin
 ### Example
 
 ```yaml
-version: 1
+version: 2
 
 schema:
   title: { type: string, required: true }
   status: { type: enum, values: [draft, review, published], default: draft }
-
-levels:
-  task:
-    match: "T*"
-    children: []
-    schema:
-      ejecutable_en: { type: string, required: true }
+  ejecutable_en: { type: string, required: true, match: "T*" }
 
 aggregate:
   completed: 'len(filter(descendants, .status == "published"))'
@@ -138,7 +132,7 @@ Rootline ships as a **single static Go binary** with no dependencies.
 
 ```bash
 # Core
-rootline validate [file|--all|--staged] [--where 'expr']  # Check documents against .stem rules
+rootline validate [file|--all|--staged] [--where 'expr'] [--strict]  # Check documents against .stem rules
 rootline query [path] --where 'expr' [--count] [--limit N]  # Search by metadata (expr-lang syntax)
 rootline describe <path>                  # Show effective schema for a directory
 rootline tree [path] [--where 'expr']     # Hierarchical view with completion counts
@@ -151,7 +145,7 @@ rootline init [path] [--force]            # Infer .stem (auto-detects hierarchy)
 rootline new <file> [--force] [--dry-run] # Scaffold document from effective schema
 rootline fix [file|--all]                 # Auto-repair: add fields, fix enums, propose changes
 rootline validate --all --where 'expr'   # Validate only records matching filter
-rootline migrate [path]                   # Detect schema changes, rename, split
+rootline migrate [path]                   # Detect schema changes, rename, split, --to-v2, --from-levels
 
 # Tooling
 rootline hooks install|uninstall|status   # Git pre-commit hook management
@@ -264,11 +258,19 @@ Available tools: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `f
 
 | Topic | Description |
 |-------|-------------|
-| [Query Engine](docs/query.md) | Query contract, operators, result shapes |
+| [Init](docs/init.md) | Schema inference from existing documents |
+| [Validate](docs/validate.md) | Validation rules, batch mode, staged checks |
 | [Describe](docs/describe.md) | Describe output, field extraction, source tracking |
-| [Derivation Engine](docs/derivation.md) | Derive and aggregate expressions, builtins, linked fields |
+| [Query Engine](docs/query.md) | Query contract, operators, result shapes |
+| [New](docs/new.md) | Document scaffolding from effective schema |
+| [Fix & Proposals](docs/fix.md) | Auto-repair, enum correction, field inference |
+| [Explain](docs/explain.md) | Field origin tracing, derivation chain, error diagnosis |
+| [Tree](docs/tree.md) | Hierarchical view with completion counts |
+| [Stats](docs/stats.md) | Summary counts by type and state |
 | [Dependency Graph](docs/graph.md) | Wiki-links, link schema, cycle detection, DOT/Mermaid |
-| [Schema Migration](docs/migrate.md) | Breaking change detection, field rename, migration log |
+| [Derivation Engine](docs/derivation.md) | Derive and aggregate expressions, builtins, linked fields |
+| [Schema Migration](docs/migrate.md) | Breaking change detection, field rename, v2 upgrade |
+| [Levels & Match](docs/levels.md) | Hierarchical field scoping with match patterns |
 | [MCP Server](docs/json-rpc.md) | Tool catalog, setup, JSON-RPC protocol |
 | [Extensibility](docs/extensibility.md) | Extractor architecture, future formats |
 | [Visual Identity](docs/identity.md) | Logo, colors, usage guidelines |
