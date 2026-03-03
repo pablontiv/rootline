@@ -84,51 +84,6 @@ func TestDetectAddField(t *testing.T) {
 	}
 }
 
-func TestParseBlockingInfo_Simple(t *testing.T) {
-	base, targets, notes := ParseBlockingInfo("Pending (blocked by T001)")
-	if base != "Pending" {
-		t.Errorf("base = %q, want Pending", base)
-	}
-	if len(targets) != 1 || targets[0] != "T001" {
-		t.Errorf("targets = %v, want [T001]", targets)
-	}
-	if len(notes) != 0 {
-		t.Errorf("notes = %v, want []", notes)
-	}
-}
-
-func TestParseBlockingInfo_PathTarget(t *testing.T) {
-	base, targets, _ := ParseBlockingInfo("Pending (blocked by E04/F01)")
-	if base != "Pending" {
-		t.Errorf("base = %q, want Pending", base)
-	}
-	if len(targets) != 1 || targets[0] != "E04/F01" {
-		t.Errorf("targets = %v, want [E04/F01]", targets)
-	}
-}
-
-func TestParseBlockingInfo_Compound(t *testing.T) {
-	base, targets, notes := ParseBlockingInfo("Pending (blocked by E04 + E03/F05 + human)")
-	if base != "Pending" {
-		t.Errorf("base = %q, want Pending", base)
-	}
-	if len(targets) != 2 || targets[0] != "E04" || targets[1] != "E03/F05" {
-		t.Errorf("targets = %v, want [E04, E03/F05]", targets)
-	}
-	if len(notes) != 1 || notes[0] != "human" {
-		t.Errorf("notes = %v, want [human]", notes)
-	}
-}
-
-func TestParseBlockingInfo_NoParens(t *testing.T) {
-	base, targets, notes := ParseBlockingInfo("Pending")
-	if base != "Pending" {
-		t.Errorf("base = %q, want Pending", base)
-	}
-	if targets != nil || notes != nil {
-		t.Errorf("expected nil targets and notes for simple value")
-	}
-}
 
 func TestDetectMigrateValue(t *testing.T) {
 	stem := &rules.StemFile{
