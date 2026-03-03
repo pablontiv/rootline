@@ -304,32 +304,6 @@ func handleStats(ctx context.Context, _ *mcp.CallToolRequest, input StatsInput) 
 	return jsonResult(result)
 }
 
-// explainResult is the versioned JSON output for explain.
-type explainResult struct {
-	Version   int            `json:"version"`
-	Kind      string         `json:"kind"`
-	Path      string         `json:"path"`
-	StemChain []string       `json:"stem_chain"`
-	Fields    []explainField `json:"fields"`
-	Errors    []explainError `json:"errors,omitempty"`
-}
-
-type explainField struct {
-	Name       string `json:"name"`
-	Value      any    `json:"value"`
-	Origin     string `json:"origin"`
-	Source     string `json:"source,omitempty"`
-	Expression string `json:"expression,omitempty"`
-}
-
-type explainError struct {
-	Rule     string `json:"rule"`
-	Field    string `json:"field"`
-	Message  string `json:"message"`
-	Source   string `json:"source"`
-	Severity string `json:"severity"`
-}
-
 func handleExplain(ctx context.Context, _ *mcp.CallToolRequest, input ExplainInput) (*mcp.CallToolResult, any, error) {
 	absPath, err := filepath.Abs(input.Path)
 	if err != nil {
@@ -389,105 +363,8 @@ func handleExplain(ctx context.Context, _ *mcp.CallToolRequest, input ExplainInp
 		valErrs = rules.Validate(ctx, record, effective)
 	}
 
-	result := buildExplainResult(input.Path, entries, effective, record, valErrs)
+	result := rules.NewExplainResult(input.Path, entries, effective, record, valErrs)
 	return jsonResult(result)
-}
-
-func buildExplainResult(
-	path string,
-	entries []rules.StemEntry,
-	effective *rules.StemFile,
-	record *extract.Record,
-	valErrs []rules.ValidationError,
-) *explainResult {
-	chain := make([]string, len(entries))
-	for i, e := range entries {
-		chain[i] = e.Path
-	}
-
-	var fields []explainField
-
-	fmKeys := sortedMapKeys(record.Frontmatter)
-	for _, k := range fmKeys {
-		f := explainField{
-			Name:   k,
-			Value:  record.Frontmatter[k],
-			Origin: "frontmatter",
-		}
-		if effective != nil {
-			if sf, ok := effective.Schema[k]; ok {
-				f.Source = sf.Source
-			}
-		}
-		fields = append(fields, f)
-	}
-
-	if effective != nil {
-		for name, sf := range effective.Schema {
-			if _, exists := record.Frontmatter[name]; exists {
-				continue
-			}
-			f := explainField{
-				Name:   name,
-				Value:  nil,
-				Origin: "schema",
-				Source: sf.Source,
-			}
-			if sf.Default != "" {
-				f.Value = sf.Default
-			}
-			fields = append(fields, f)
-		}
-
-		derivedKeys := sortedMapKeys(record.Derived)
-		for _, k := range derivedKeys {
-			f := explainField{
-				Name:   k,
-				Value:  record.Derived[k],
-				Origin: "derived",
-			}
-			if exprVal, ok := effective.Derive[k]; ok {
-				if exprStr, ok := exprVal.(string); ok {
-					f.Expression = exprStr
-				}
-			} else if exprVal, ok := effective.Aggregate[k]; ok {
-				f.Origin = "aggregate"
-				if exprStr, ok := exprVal.(string); ok {
-					f.Expression = exprStr
-				}
-			}
-			fields = append(fields, f)
-		}
-	}
-
-	var explainErrs []explainError
-	for _, ve := range valErrs {
-		explainErrs = append(explainErrs, explainError{
-			Rule:     ve.Rule,
-			Field:    ve.Field,
-			Message:  ve.Message,
-			Source:   ve.Source,
-			Severity: ve.Severity,
-		})
-	}
-
-	return &explainResult{
-		Version:   1,
-		Kind:      "rootline/explain",
-		Path:      path,
-		StemChain: chain,
-		Fields:    fields,
-		Errors:    explainErrs,
-	}
-}
-
-func sortedMapKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func handleFix(ctx context.Context, _ *mcp.CallToolRequest, input FixInput) (*mcp.CallToolResult, any, error) {
