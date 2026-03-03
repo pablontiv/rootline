@@ -43,15 +43,14 @@ while read local_ref local_sha remote_ref remote_sha; do
     fi
   fi
 
-  # Sync rootline skills to ~/.claude/skills/ if skill files changed
-  if git diff --name-only "$range" -- .claude/skills/rootline/ 2>/dev/null | grep -q .; then
-    SKILLS_DEST="$HOME/.claude/skills"
-    mkdir -p "$SKILLS_DEST"
-    rm -rf "${SKILLS_DEST:?}/rootline"
-    cp -r "$REPO_ROOT/.claude/skills/rootline" "$SKILLS_DEST/rootline"
-    echo "rootline: synced skills → $SKILLS_DEST/rootline"
-  fi
 done
+
+# Sync rootline skills to ~/.claude/skills/
+SKILLS_DEST="$HOME/.claude/skills"
+mkdir -p "$SKILLS_DEST"
+rm -rf "${SKILLS_DEST:?}/rootline"
+cp -r "$REPO_ROOT/.claude/skills/rootline" "$SKILLS_DEST/rootline"
+echo "rootline: synced skills → $SKILLS_DEST/rootline"
 
 # Rebuild rootline binary so the installed version matches the pushed code
 echo "Rebuilding rootline binary..."
