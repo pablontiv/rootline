@@ -304,7 +304,6 @@ func handleStats(ctx context.Context, _ *mcp.CallToolRequest, input StatsInput) 
 	return jsonResult(result)
 }
 
-
 func handleExplain(ctx context.Context, _ *mcp.CallToolRequest, input ExplainInput) (*mcp.CallToolResult, any, error) {
 	absPath, err := filepath.Abs(input.Path)
 	if err != nil {
@@ -366,15 +365,6 @@ func handleExplain(ctx context.Context, _ *mcp.CallToolRequest, input ExplainInp
 
 	result := rules.NewExplainResult(input.Path, entries, effective, record, valErrs)
 	return jsonResult(result)
-}
-
-func sortedMapKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func handleFix(ctx context.Context, _ *mcp.CallToolRequest, input FixInput) (*mcp.CallToolResult, any, error) {

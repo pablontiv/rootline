@@ -112,13 +112,7 @@ func NewExplainResult(
 	// Validation errors.
 	var explainErrs []ExplainError
 	for _, ve := range valErrs {
-		explainErrs = append(explainErrs, ExplainError{
-			Rule:     ve.Rule,
-			Field:    ve.Field,
-			Message:  ve.Message,
-			Source:   ve.Source,
-			Severity: ve.Severity,
-		})
+		explainErrs = append(explainErrs, ExplainError(ve))
 	}
 
 	return &ExplainResult{
