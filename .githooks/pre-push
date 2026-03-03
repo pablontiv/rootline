@@ -25,6 +25,22 @@ while read local_ref local_sha remote_ref remote_sha; do
     fi
     echo "docs/epics/ validation passed"
   fi
+
+  # Check if CLI code changed but docs or skills weren't updated
+  if git diff --name-only "$range" -- cmd/rootline/ 2>/dev/null | grep -q .; then
+    missing=""
+    if ! git diff --name-only "$range" -- docs/ README.md CLAUDE.md 2>/dev/null | grep -q .; then
+      missing="docs"
+    fi
+    if ! git diff --name-only "$range" -- .claude/skills/rootline/ 2>/dev/null | grep -q .; then
+      missing="${missing:+$missing + }skills"
+    fi
+    if [ -n "$missing" ]; then
+      echo "CLI code changed but $missing were not updated."
+      echo "Run: /update-docs all"
+      exit 1
+    fi
+  fi
 done
 
 # Rebuild rootline binary so the installed version matches the pushed code
