@@ -56,7 +56,14 @@ type ExtractionError struct {
 }
 
 // MarkdownExtractor extracts YAML frontmatter from Markdown files.
-type MarkdownExtractor struct{}
+// Set ParseAST to false to skip goldmark AST parsing (default: true).
+type MarkdownExtractor struct {
+	ParseAST *bool
+}
+
+func (m *MarkdownExtractor) shouldParseAST() bool {
+	return m.ParseAST != nil && *m.ParseAST
+}
 
 func (m *MarkdownExtractor) Name() string         { return "markdown" }
 func (m *MarkdownExtractor) Extensions() []string { return []string{".md", ".markdown"} }
@@ -75,7 +82,7 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 	if !strings.HasPrefix(text, "---\n") && !strings.HasPrefix(text, "---\r\n") {
 		record.Body = text
 		record.Links = ParseLinks(record.Body)
-		if record.Body != "" {
+		if record.Body != "" && m.shouldParseAST() {
 			reader := gmtext.NewReader([]byte(record.Body))
 			parser := goldmark.DefaultParser()
 			record.AST = parser.Parse(reader)
@@ -114,8 +121,8 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 	// Extract wiki-links from body.
 	record.Links = ParseLinks(record.Body)
 
-	// Parse body into AST if non-empty.
-	if record.Body != "" {
+	// Parse body into AST if non-empty and enabled.
+	if record.Body != "" && m.shouldParseAST() {
 		reader := gmtext.NewReader([]byte(record.Body))
 		parser := goldmark.DefaultParser()
 		record.AST = parser.Parse(reader)

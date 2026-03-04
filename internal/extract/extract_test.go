@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -278,5 +279,58 @@ func TestScanBodyFields_ValueWithParens(t *testing.T) {
 	got := ScanBodyFields(body)
 	if got["estado"] != "Completada (PRD-era, sin Tasks)" {
 		t.Errorf("estado = %q, want 'Completada (PRD-era, sin Tasks)'", got["estado"])
+	}
+}
+
+// generateMarkdown creates a markdown document with frontmatter and n body lines.
+func generateMarkdown(n int) []byte {
+	var b strings.Builder
+	b.WriteString("---\ntitle: Benchmark\nstatus: draft\n---\n")
+	for i := 0; i < n; i++ {
+		b.WriteString("This is line ")
+		b.WriteString(strings.Repeat("x", 60))
+		if i%10 == 0 {
+			b.WriteString(" [[link-target]]")
+		}
+		b.WriteByte('\n')
+	}
+	return []byte(b.String())
+}
+
+func BenchmarkExtractWithAST_Small(b *testing.B) {
+	content := generateMarkdown(50)
+	t := true
+	e := &MarkdownExtractor{ParseAST: &t}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = e.Extract("bench.md", content)
+	}
+}
+
+func BenchmarkExtractWithoutAST_Small(b *testing.B) {
+	content := generateMarkdown(50)
+	e := &MarkdownExtractor{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = e.Extract("bench.md", content)
+	}
+}
+
+func BenchmarkExtractWithAST_Medium(b *testing.B) {
+	content := generateMarkdown(500)
+	t := true
+	e := &MarkdownExtractor{ParseAST: &t}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = e.Extract("bench.md", content)
+	}
+}
+
+func BenchmarkExtractWithoutAST_Medium(b *testing.B) {
+	content := generateMarkdown(500)
+	e := &MarkdownExtractor{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = e.Extract("bench.md", content)
 	}
 }
