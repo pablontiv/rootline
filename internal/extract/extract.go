@@ -9,6 +9,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	gmtext "github.com/yuin/goldmark/text"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,6 +31,7 @@ type Record struct {
 	Type        string            `json:"type"`
 	Frontmatter map[string]any    `json:"frontmatter"`
 	Body        string            `json:"body"`
+	AST         ast.Node          `json:"-"`
 	Links       []Link            `json:"links,omitempty"`
 	Derived     map[string]any    `json:"derived,omitempty"`
 	Errors      []ExtractionError `json:"errors,omitempty"`
@@ -71,6 +75,11 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 	if !strings.HasPrefix(text, "---\n") && !strings.HasPrefix(text, "---\r\n") {
 		record.Body = text
 		record.Links = ParseLinks(record.Body)
+		if record.Body != "" {
+			reader := gmtext.NewReader([]byte(record.Body))
+			parser := goldmark.DefaultParser()
+			record.AST = parser.Parse(reader)
+		}
 		return record, nil
 	}
 
@@ -104,6 +113,13 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 
 	// Extract wiki-links from body.
 	record.Links = ParseLinks(record.Body)
+
+	// Parse body into AST if non-empty.
+	if record.Body != "" {
+		reader := gmtext.NewReader([]byte(record.Body))
+		parser := goldmark.DefaultParser()
+		record.AST = parser.Parse(reader)
+	}
 
 	return record, nil
 }
