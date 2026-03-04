@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/yuin/goldmark/ast"
+	east "github.com/yuin/goldmark/extension/ast"
 )
 
 // Section represents a heading-delimited section in a markdown body.
@@ -94,6 +95,100 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 	}
 
 	return sections
+}
+
+// CodeBlock represents a fenced code block in a markdown body.
+type CodeBlock struct {
+	Language  string `json:"language"`
+	Content   string `json:"content"`
+	StartLine int    `json:"start_line"`
+}
+
+// ExtractCodeBlocks extracts fenced code blocks from a markdown AST.
+// Inline code spans are ignored.
+func ExtractCodeBlocks(node ast.Node, source []byte) []CodeBlock {
+	var blocks []CodeBlock
+
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Kind() != ast.KindFencedCodeBlock {
+			continue
+		}
+		fcb := child.(*ast.FencedCodeBlock)
+
+		language := ""
+		if info := fcb.Info; info != nil {
+			seg := info.Segment
+			language = strings.TrimSpace(string(seg.Value(source)))
+		}
+
+		var content strings.Builder
+		lines := fcb.Lines()
+		for i := 0; i < lines.Len(); i++ {
+			seg := lines.At(i)
+			content.Write(seg.Value(source))
+		}
+
+		startLine := 0
+		if lines.Len() > 0 {
+			startLine = lineFromOffset(source, lines.At(0).Start)
+		}
+
+		blocks = append(blocks, CodeBlock{
+			Language:  language,
+			Content:   content.String(),
+			StartLine: startLine,
+		})
+	}
+
+	return blocks
+}
+
+// Table represents a markdown table.
+type Table struct {
+	Headers []string   `json:"headers"`
+	Rows    [][]string `json:"rows"`
+}
+
+// ExtractTables extracts tables from a markdown AST.
+// Requires the document to be parsed with the goldmark table extension.
+func ExtractTables(node ast.Node, source []byte) []Table {
+	var tables []Table
+
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		if child.Kind() != east.KindTable {
+			continue
+		}
+
+		var headers []string
+		var rows [][]string
+
+		for row := child.FirstChild(); row != nil; row = row.NextSibling() {
+			var cells []string
+			for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
+				var text strings.Builder
+				for c := cell.FirstChild(); c != nil; c = c.NextSibling() {
+					if c.Kind() == ast.KindText {
+						seg := c.(*ast.Text).Segment
+						text.Write(seg.Value(source))
+					}
+				}
+				cells = append(cells, strings.TrimSpace(text.String()))
+			}
+
+			if row.Kind() == east.KindTableHeader {
+				headers = cells
+			} else {
+				rows = append(rows, cells)
+			}
+		}
+
+		tables = append(tables, Table{
+			Headers: headers,
+			Rows:    rows,
+		})
+	}
+
+	return tables
 }
 
 // lineOffset returns the byte offset of the start of a 1-based line number.
