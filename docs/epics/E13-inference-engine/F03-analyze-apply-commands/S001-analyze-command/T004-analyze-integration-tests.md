@@ -17,7 +17,7 @@ tipo: software-module
 
 ## Contexto
 
-El comando analyze orquesta 13 detectores. Tests de integracion validan el pipeline completo: directorio con .stem + documentos → report JSON con inferencias correctas.
+El comando analyze orquesta todos los detectores. Tests de integracion validan el pipeline completo: directorio con .stem + documentos → report JSON con inferencias correctas.
 
 ## Alcance
 
@@ -26,7 +26,7 @@ El comando analyze orquesta 13 detectores. Tests de integracion validan el pipel
 2. Test: analyze produce report JSON parseable con version: 1
 3. Test: analyze con directorio vacio produce report con 0 inferencias
 4. Test: analyze con --output table produce output sin panic
-5. Test: inferencias de cat 8 (constant) aparecen en report cuando fixture tiene constantes
+5. Test: inferencias de constant-field aparecen en report cuando fixture tiene constantes
 
 **Out**: Tests de apply (S003). Tests de modo incremental (S002).
 
@@ -39,8 +39,8 @@ El comando analyze orquesta 13 detectores. Tests de integracion validan el pipel
 
 - ≥3 test cases en e2e
 - Test: JSON report tiene `version: 1` y `kind: "analyze"`
-- Test: directorio vacio → report valido con categorias vacias
-- Test: fixture con campo constante → cat 8 produce inferencia
+- Test: directorio vacio → report valido con detectores sin resultados
+- Test: fixture con campo constante → constant-field detector produce inferencia
 - `go test ./internal/e2e/ -race` pasa verde
 
 ## Fuente de verdad

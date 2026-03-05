@@ -5,12 +5,12 @@ tipo: historia
 # S001: Deterministic Inference
 
 **Feature**: [F02 Inference Category Expansion](../README.md)
-**Capacidad**: Categorias 100% engine (5, 7, 8, 10) implementadas como detectores Go
+**Capacidad**: Detectores puramente estructurales (link-type, back-reference, constant-field, cross-reference) implementados en Go
 **Cubre**: Milestone de F02 — detectores producen inferencias tipadas
 
 ## Antes / Despues
 
-**Antes**: Solo categorias 1-4 estan implementadas. Link-type validation tiene LinkSchema struct definida pero sin validacion. Back-reference/constant/cross-reference detectors no existen.
+**Antes**: Solo los detectores base (tipo, enum, sequence, aggregate) estan implementados. Link-type validation tiene LinkSchema struct definida pero sin validacion. Back-reference/constant/cross-reference detectors no existen.
 
 **Despues**: 4 detectores nuevos producen inferencias: link-type validation, back-reference consistency, constant field detection, cross-reference validation. Todos son pure Go sin LLM.
 

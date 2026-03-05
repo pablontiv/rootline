@@ -3,10 +3,10 @@ estado: Specified
 tipo: software-module
 ejecutable_en: 1 sesion
 ---
-# T002: Implementar Cat 11 engine portion — traceability link extraction
+# T002: Implementar traceability link extraction
 
-**Story**: [S003 Semantic Category Stubs 9/11](README.md)
-**Contribuye a**: Cat 11 extrae claims de traceability del body
+**Story**: [S003 Semantic Extraction](README.md)
+**Contribuye a**: Traceability detector extrae claims de traceability del body
 
 ## Preserva
 
@@ -17,7 +17,7 @@ ejecutable_en: 1 sesion
 
 ## Contexto
 
-Cat 11 (traceability) tiene 20% Go / 80% LLM. La porcion engine extrae claims explicitos de traceability: "Contribuye a", "Cubre", "Satisface" en el body. El semantic matching (¿realmente contribuye a ese objetivo?) queda para el agent.
+El detector de traceability extrae claims explicitos: "Contribuye a", "Cubre", "Satisface" en el body. El semantic matching (¿realmente contribuye a ese objetivo?) queda para un futuro agent.
 
 ## Alcance
 

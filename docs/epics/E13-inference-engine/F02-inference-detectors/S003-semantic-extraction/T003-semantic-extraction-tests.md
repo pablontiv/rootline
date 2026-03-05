@@ -3,10 +3,10 @@ estado: Specified
 tipo: test
 ejecutable_en: 1 sesion
 ---
-# T003: Tests para porciones engine de cat 9/11
+# T003: Tests para detectores de formal dependency y traceability
 
-**Story**: [S003 Semantic Category Stubs 9/11](README.md)
-**Contribuye a**: Cobertura completa de stubs engine para cats semanticas
+**Story**: [S003 Semantic Extraction](README.md)
+**Contribuye a**: Cobertura completa de detectores de extracción semántica
 
 ## Preserva
 
@@ -17,14 +17,14 @@ ejecutable_en: 1 sesion
 
 ## Contexto
 
-T001-T002 implementan las porciones Go de cats 9 y 11. Este task añade fixtures con documentos reales y valida que las inferencias con `requires_agent: true` estan correctamente flagged.
+T001-T002 implementan los detectores de formal dependency y traceability. Este task añade fixtures con documentos reales y valida que las inferencias con `requires_agent: true` estan correctamente flagged.
 
 ## Alcance
 
 **In**:
-1. Fixtures en `internal/infer/testdata/categories/semantic/`
-2. Cat 9: Documento con wiki-links `[[blocks:X]]` y seccion Dependencias con items informales
-3. Cat 11: Documento con `**Contribuye a**:` y `**Satisface**:` con targets variados
+1. Fixtures en `internal/infer/testdata/fixtures/semantic/`
+2. Formal dependency: Documento con wiki-links `[[blocks:X]]` y seccion Dependencias con items informales
+3. Traceability: Documento con `**Contribuye a**:` y `**Satisface**:` con targets variados
 4. Edge cases: seccion Dependencias vacia, traceability sin target, multiples claims en 1 linea
 5. Validar que `requires_agent` flag es consistente
 
@@ -32,11 +32,11 @@ T001-T002 implementan las porciones Go de cats 9 y 11. Este task añade fixtures
 
 ## Estado inicial esperado
 
-- T001-T002 completados — detectores de cats 9/11 existen
+- T001-T002 completados — detectores de formal dependency y traceability existen
 
 ## Criterios de Aceptacion
 
-- ≥2 fixtures creados en testdata/categories/semantic/
+- ≥2 fixtures creados en testdata/fixtures/semantic/
 - Test: formal dependency (wiki-link) tiene `requires_agent: false`
 - Test: informal dependency (prosa) tiene `requires_agent: true`
 - Test: traceability con wiki-link target tiene `requires_agent: false`

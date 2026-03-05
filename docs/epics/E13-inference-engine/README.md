@@ -4,18 +4,18 @@ tipo: feature
 ---
 # E13: Inference Engine
 
-**Metrica de exito**: `rootline analyze <path>` produce JSON report cubriendo categorias 1-13; `rootline apply` ejecuta inferencias aprobadas
+**Metrica de exito**: `rootline analyze <path>` produce JSON report cubriendo todos los detectores de inferencia; `rootline apply` ejecuta inferencias aprobadas
 **Timeline**: 2026-Q1
 
 ## Intencion
 
-Rootline tiene un schema inference engine parcial (`internal/infer/`) que detecta tipos, enums, sequences, y aggregates (categorias 1-4). Este Epic extiende el engine para cubrir las 13 categorias de inferencia identificadas en la investigacion (intake/inference-engine-architecture.md), añade goldmark como parser AST para body content, y expone los resultados via los comandos `rootline analyze` y `rootline apply`.
+Rootline tiene un schema inference engine parcial (`internal/infer/`) que detecta tipos, enums, sequences, y aggregates. Este Epic extiende el engine con 9 detectores nuevos (link-type validation, body section analysis, back-reference consistency, constant field detection, formal dependency extraction, cross-reference validation, traceability link extraction, invariant extraction, sub-schema detection), añade goldmark como parser AST para body content, y expone los resultados via los comandos `rootline analyze` y `rootline apply`.
 
-La arquitectura sigue el modelo de 2 capas: engine (Go) + agent (LLM). Este Epic cubre solo el engine — las porciones Go de cada categoria. Las porciones LLM (cat 9/11 semantic residue) quedan como stubs para un Epic separado de integracion agent.
+La arquitectura sigue el modelo de 2 capas: engine (Go) + agent (LLM). Este Epic cubre solo el engine — los detectores Go. Los detectores que requieren análisis semántico (formal dependency, traceability) producen datos parciales que un futuro Epic de integración agent completará.
 
 ## Postcondiciones
 
-- P1: `rootline analyze <path>` produce JSON report con `version: 1` cubriendo categorias 1-13
+- P1: `rootline analyze <path>` produce JSON report con `version: 1` cubriendo todos los detectores
 - P2: `rootline apply report.json` aplica cambios de schema y datos aprobados
 - P3: `rootline analyze --incremental` detecta delta entre .stem actual y datos
 
@@ -37,7 +37,7 @@ La arquitectura sigue el modelo de 2 capas: engine (Go) + agent (LLM). Este Epic
 | ID | Nombre | Descripcion |
 |----|--------|-------------|
 | F01 | [Body Content AST Infrastructure](F01-body-content-ast/) | goldmark integration y utilidades de extraccion de body |
-| F02 | [Inference Category Expansion](F02-inference-detectors/) | Implementar categorias 5-13 como Go puro (engine portions) |
+| F02 | [Inference Detectors](F02-inference-detectors/) | Implementar 9 detectores nuevos de inferencia en Go |
 | F03 | [Analyze & Apply Commands](F03-analyze-apply-commands/) | Comandos CLI que orquestan inferencias y aplican resultados |
 
 ## Orden de Ejecucion
@@ -45,18 +45,18 @@ La arquitectura sigue el modelo de 2 capas: engine (Go) + agent (LLM). Este Epic
 | Feature | Depende de | Razon |
 |---------|-----------|-------|
 | F01 | — | Foundation: AST habilita body-aware categories |
-| F02/S001 | — | Deterministic cats son independientes de AST |
-| F02/S002 | F01 | Body-aware cats necesitan AST |
-| F02/S003 | F01 | Semantic stubs usan body extraction |
-| F03 | F02 | Analyze orquesta todas las categorias |
+| F02/S001 | — | Structural detectors son independientes de AST |
+| F02/S002 | F01 | Body-aware detectors necesitan AST |
+| F02/S003 | F01 | Semantic extraction usa body extraction |
+| F03 | F02 | Analyze orquesta todos los detectores |
 
 ## Decision Log
 
 | Fecha | Decision | Razon |
 |-------|----------|-------|
-| 2026-03-03 | Solo engine, agent es Epic separado | computation-then-understanding: 2 capas, no mezclar |
+| 2026-03-03 | Solo engine, agent es Epic separado | 2 capas: engine detecta, agent razona — no mezclar |
 | 2026-03-03 | goldmark como parser AST | Pure Go, 0 deps, habilita ~5% mejora en proporcion engine |
-| 2026-03-03 | Cat 9/11 como stubs engine-only | 70-80% LLM — porciones Go extraen datos, agent decide |
+| 2026-03-03 | Dependency/traceability como stubs engine-only | Detectores extraen datos formales, agent hace disambiguation |
 
 ## Gaps Activos
 

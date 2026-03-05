@@ -3,10 +3,10 @@ estado: Completed
 tipo: software-module
 ejecutable_en: 1 sesion
 ---
-# T002: Implementar Cat 7 back-reference consistency check
+# T002: Implementar back-reference consistency check
 
-**Story**: [S001 Deterministic Categories 5/7/8/10](README.md)
-**Contribuye a**: Cat 7 back-reference consistency detecta links unidireccionales
+**Story**: [S001 Structural Detectors](README.md)
+**Contribuye a**: Back-reference consistency detecta links unidireccionales
 
 ## Preserva
 
@@ -17,7 +17,7 @@ ejecutable_en: 1 sesion
 
 ## Contexto
 
-`graph.Build()` en `internal/graph/graph.go` ya construye un grafo de dependencias entre documentos usando wiki-links. Cat 7 analiza este grafo para detectar links unidireccionales donde se espera reciprocidad — si A referencia B, ¿B referencia A?
+`graph.Build()` en `internal/graph/graph.go` ya construye un grafo de dependencias entre documentos usando wiki-links. Este detector analiza el grafo para detectar links unidireccionales donde se espera reciprocidad — si A referencia B, ¿B referencia A?
 
 ## Alcance
 

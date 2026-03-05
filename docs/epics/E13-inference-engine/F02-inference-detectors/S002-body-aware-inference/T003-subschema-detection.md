@@ -3,10 +3,10 @@ estado: Specified
 tipo: software-module
 ejecutable_en: 1 sesion
 ---
-# T003: Implementar Cat 13 sub-schema detection per type group
+# T003: Implementar sub-schema detection per type group
 
-**Story**: [S002 Body-Aware Categories 6/12/13](README.md)
-**Contribuye a**: Cat 13 detecta sub-schemas por valor de tipo
+**Story**: [S002 Body-Aware Inference](README.md)
+**Contribuye a**: Sub-schema detector detecta sub-schemas por valor de tipo
 
 ## Preserva
 
@@ -17,7 +17,7 @@ ejecutable_en: 1 sesion
 
 ## Contexto
 
-Cat 13 detecta que records con diferente `tipo` tienen diferentes campos. Ejemplo: tasks con `tipo: test` tienen campo `ejecutable_en` pero tasks con `tipo: implementación` pueden no tenerlo. Esto se implementa agrupando records por valor de un campo discriminador y corriendo Analyze() por subgrupo para detectar FieldStats diferentes.
+Este detector detecta que records con diferente `tipo` tienen diferentes campos. Ejemplo: tasks con `tipo: test` tienen campo `ejecutable_en` pero tasks con `tipo: implementación` pueden no tenerlo. Esto se implementa agrupando records por valor de un campo discriminador y corriendo Analyze() por subgrupo para detectar FieldStats diferentes.
 
 ## Alcance
 

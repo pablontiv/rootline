@@ -3,10 +3,10 @@ estado: Specified
 tipo: software-module
 ejecutable_en: 1 sesion
 ---
-# T002: Implementar Cat 12 invariant extraction via regex + AST
+# T002: Implementar invariant extraction via regex + AST
 
-**Story**: [S002 Body-Aware Categories 6/12/13](README.md)
-**Contribuye a**: Cat 12 extrae invariantes del body
+**Story**: [S002 Body-Aware Inference](README.md)
+**Contribuye a**: Invariant detector extrae invariantes del body
 
 ## Preserva
 
@@ -17,7 +17,7 @@ ejecutable_en: 1 sesion
 
 ## Contexto
 
-Cat 12 detecta invariantes documentados en el body con patron `INV\d+:` o `- INV\d+:`. Los invariantes suelen estar en secciones `## Invariantes` o `## Preserva`. AST permite localizar la seccion correcta antes de aplicar regex, evitando false positives en code blocks o ejemplos.
+Este detector detecta invariantes documentados en el body con patron `INV\d+:` o `- INV\d+:`. Los invariantes suelen estar en secciones `## Invariantes` o `## Preserva`. AST permite localizar la seccion correcta antes de aplicar regex, evitando false positives en code blocks o ejemplos.
 
 ## Alcance
 

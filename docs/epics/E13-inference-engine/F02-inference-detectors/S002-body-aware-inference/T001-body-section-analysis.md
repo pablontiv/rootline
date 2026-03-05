@@ -3,10 +3,10 @@ estado: Specified
 tipo: software-module
 ejecutable_en: 1 sesion
 ---
-# T001: Implementar Cat 6 body section structure analysis
+# T001: Implementar body section structure analysis
 
-**Story**: [S002 Body-Aware Categories 6/12/13](README.md)
-**Contribuye a**: Cat 6 detecta patrones de heading structure
+**Story**: [S002 Body-Aware Inference](README.md)
+**Contribuye a**: Body-section detector detecta patrones de heading structure
 
 ## Preserva
 
@@ -17,7 +17,7 @@ ejecutable_en: 1 sesion
 
 ## Contexto
 
-Cat 6 analiza la estructura de secciones del body para detectar patrones: ¿todos los docs de un directorio tienen las mismas secciones? ¿Hay secciones requeridas? Usa ExtractSections de F01/S002 para obtener headings del AST.
+Este detector analiza la estructura de secciones del body para detectar patrones: ¿todos los docs de un directorio tienen las mismas secciones? ¿Hay secciones requeridas? Usa ExtractSections de F01/S002 para obtener headings del AST.
 
 ## Alcance
 

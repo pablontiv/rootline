@@ -3,10 +3,10 @@ estado: Specified
 tipo: software-module
 ejecutable_en: 1 sesion
 ---
-# T001: Implementar Cat 9 engine portion — formal dependency extraction
+# T001: Implementar formal dependency extraction
 
-**Story**: [S003 Semantic Category Stubs 9/11](README.md)
-**Contribuye a**: Cat 9 extrae dependencias formales sin disambiguation semantica
+**Story**: [S003 Semantic Extraction](README.md)
+**Contribuye a**: Formal dependency detector extrae dependencias formales sin disambiguation semantica
 
 ## Preserva
 
@@ -17,7 +17,7 @@ ejecutable_en: 1 sesion
 
 ## Contexto
 
-Cat 9 (heterogeneous dependencies) tiene 30% Go / 70% LLM. La porcion engine extrae dependencias formales: wiki-links `[[blocks:X]]`, path references, y secciones "Dependencias" del body. La disambiguation semantica (¿es esta dependencia real o solo una mencion?) queda para el agent.
+El detector de formal dependency extrae dependencias formales: wiki-links `[[blocks:X]]`, path references, y secciones "Dependencias" del body. La disambiguation semantica (¿es esta dependencia real o solo una mencion?) queda para un futuro agent.
 
 ## Alcance
 

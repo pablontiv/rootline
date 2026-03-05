@@ -2,10 +2,10 @@
 estado: Specified
 tipo: historia
 ---
-# S003: Semantic Category Engine Stubs 9/11
+# S003: Semantic Extraction
 
-**Feature**: [F02 Inference Category Expansion](../README.md)
-**Capacidad**: Porciones engine de categorias con alto % LLM (9: deps heterogeneas, 11: traceability)
+**Feature**: [F02 Inference Detectors](../README.md)
+**Capacidad**: Detectores con datos parciales que requieren análisis semántico futuro (formal dependency, traceability)
 **Cubre**: Milestone de F02 — stubs engine extraen datos para futuro agent
 
 ## Antes / Despues
@@ -18,7 +18,7 @@ tipo: historia
 
 - [ ] Formal dependency extraction: Extrae dependencias formales de links + secciones "Dependencias" del body
 - [ ] Traceability link extraction: Extrae claims de traceability (`Contribuye a`, `Cubre`, `Satisface`) del body
-- [ ] Ambos producen inferencias tipadas con flag `requires_agent: true` para porciones LLM
+- [ ] Ambos producen inferencias tipadas con flag `requires_agent: true` para análisis semántico
 - [ ] `go test ./... -race` pasa verde
 
 ## Invariantes
@@ -32,12 +32,12 @@ tipo: historia
 
 | Task | Descripcion |
 |------|-------------|
-| [T001](T001-formal-dependency-stubs.md) | Implementar formal dependency extraction (engine portion) |
-| [T002](T002-traceability-link-stubs.md) | Implementar traceability link extraction (engine portion) |
-| [T003](T003-semantic-extraction-tests.md) | Tests para porciones engine de formal deps / traceability |
+| [T001](T001-formal-dependency-stubs.md) | Implementar formal dependency extraction |
+| [T002](T002-traceability-link-stubs.md) | Implementar traceability link extraction |
+| [T003](T003-semantic-extraction-tests.md) | Tests para detectores de formal dependency y traceability |
 
 ## Fuente de verdad
 
 - `internal/extract/links.go` — ParseLinks para wiki-links formales
 - `internal/extract/body.go` — ExtractSections para localizar secciones de dependencias
-- Proporciones: formal deps = 30% Go / 70% LLM, traceability = 20% Go / 80% LLM (Apendice A)
+- Ambos detectores producen datos parciales; análisis semántico queda para agent Epic

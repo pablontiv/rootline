@@ -17,7 +17,7 @@ ejecutable_en: 1 sesion
 
 ## Contexto
 
-Cat 13 (sub-schema by type) necesita extraer YAML blocks del body para analizar variantes por tipo. Cat 12 (invariants) se beneficia de distinguir prosa de code blocks. goldmark AST tiene `ast.KindFencedCodeBlock` con atributo Language y la extension table para tablas.
+El detector de sub-schema necesita extraer YAML blocks del body para analizar variantes por tipo. El detector de invariantes se beneficia de distinguir prosa de code blocks. goldmark AST tiene `ast.KindFencedCodeBlock` con atributo Language y la extension table para tablas.
 
 ## Alcance
 
@@ -28,7 +28,7 @@ Cat 13 (sub-schema by type) necesita extraer YAML blocks del body para analizar 
 4. `ExtractTables(node ast.Node, source []byte) []Table` — requiere goldmark extension table
 5. Tests para ambas funciones
 
-**Out**: Uso en categorias (F02). Inline code spans (no relevantes para inferencia).
+**Out**: Uso en detectores (F02). Inline code spans (no relevantes para inferencia).
 
 ## Estado inicial esperado
 

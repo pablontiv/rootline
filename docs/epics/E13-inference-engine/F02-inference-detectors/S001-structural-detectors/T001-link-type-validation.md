@@ -3,10 +3,10 @@ estado: Completed
 tipo: software-module
 ejecutable_en: 1 sesion
 ---
-# T001: Implementar Cat 5 link-type validation usando LinkSchema
+# T001: Implementar link-type validation usando LinkSchema
 
-**Story**: [S001 Deterministic Categories 5/7/8/10](README.md)
-**Contribuye a**: Cat 5 link-type validation produce inferencias
+**Story**: [S001 Structural Detectors](README.md)
+**Contribuye a**: Link-type validation produce inferencias
 
 ## Preserva
 
@@ -17,7 +17,7 @@ ejecutable_en: 1 sesion
 
 ## Contexto
 
-LinkSchema en `internal/rules/rules.go` ya tiene campo `Allowed []string` pero nunca se valida. Cat 5 infiere que tipos de links son validos basado en los links observados en el directorio, y valida contra Allowed si esta definido.
+LinkSchema en `internal/rules/rules.go` ya tiene campo `Allowed []string` pero nunca se valida. Este detector infiere que tipos de links son validos basado en los links observados en el directorio, y valida contra Allowed si esta definido.
 
 ## Alcance
 
