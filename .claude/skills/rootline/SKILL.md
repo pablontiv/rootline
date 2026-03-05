@@ -31,6 +31,7 @@ Rootline treats the filesystem as a database. This skill wraps all rootline CLI 
 | `migrate` | Schema change detection and migration | User modified `.stem` and needs to adapt |
 | `init` | Infer `.stem` from existing documents | User has docs but no schema yet |
 | `analyze` | Run all inference detectors | User wants a full analysis report of patterns |
+| `apply` | Apply inference results to .stem | User wants to update .stem based on analysis |
 
 ## Global Flags
 
@@ -115,6 +116,18 @@ rootline analyze <directory> --field summary         # Extract summary only
 Key flags: `--incremental` (filter inferences covered by .stem)
 
 **Procedure**: Scans directory, extracts records, runs 12 detector categories (field types, required fields, enums, constants, link types, back-refs, cross-refs, section patterns, invariants, sub-schemas, dependencies, traceability). Produces AnalyzeReport JSON with `version: 1`. With `--incremental`, filters out inferences already covered by the existing `.stem` schema.
+
+### Apply (apply)
+
+Apply inference results to .stem files.
+
+```bash
+rootline analyze <directory> --output json | rootline apply   # Pipe from analyze
+rootline apply report.json                                    # From file
+rootline apply report.json --output table                     # Human-readable
+```
+
+**Procedure**: Reads an analyze report, applies schema-modifying inferences (extend_enum, add_required, add_default, set_type) to the closest `.stem` file. Inferences with `requires_agent: true` are skipped with warnings.
 
 ### Advanced Operations (graph + migrate + init)
 
