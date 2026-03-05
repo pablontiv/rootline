@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: historia
 ---
 # S004: Naming Remediation — Eliminar terminología de investigación

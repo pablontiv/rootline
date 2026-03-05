@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: refactor
 ejecutable_en: 1 sesion
 ---
