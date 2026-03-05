@@ -38,7 +38,7 @@ func loadFixtures(t *testing.T, dir string) []*extract.Record {
 }
 
 func TestIntegrationLinkValidationWithFixtures(t *testing.T) {
-	records := loadFixtures(t, "testdata/categories")
+	records := loadFixtures(t, "testdata/fixtures")
 
 	// Inference mode (no allowed list): "reference" is the only link type in fixtures.
 	got := DetectLinkTypes(records, rules.LinkSchema{})
@@ -64,7 +64,7 @@ func TestIntegrationLinkValidationWithFixtures(t *testing.T) {
 }
 
 func TestIntegrationBackReferencesWithFixtures(t *testing.T) {
-	records := loadFixtures(t, "testdata/categories")
+	records := loadFixtures(t, "testdata/fixtures")
 
 	g := graph.Build(context.Background(), records)
 	got := DetectMissingBackReferences(g)
@@ -82,7 +82,7 @@ func TestIntegrationBackReferencesWithFixtures(t *testing.T) {
 }
 
 func TestIntegrationConstantFieldsWithFixtures(t *testing.T) {
-	records := loadFixtures(t, "testdata/categories")
+	records := loadFixtures(t, "testdata/fixtures")
 
 	got := DetectConstantFields(records)
 
@@ -113,7 +113,7 @@ func TestIntegrationCrossReferencesWithFixtures(t *testing.T) {
 		t.Skip("docs/epics/ not available, skipping cross-reference integration test")
 	}
 
-	records := loadFixtures(t, "testdata/categories")
+	records := loadFixtures(t, "testdata/fixtures")
 	got := DetectCrossReferences(records, rootDir)
 
 	// doc1 references E13/F02/S001 → should resolve (exists in docs/epics/)

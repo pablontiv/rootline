@@ -1,6 +1,6 @@
 package infer
 
-// Inference represents a single inference produced by a category detector.
+// Inference represents a single inference produced by an inference detector.
 type Inference struct {
 	Type    string `json:"type"`
 	Source  string `json:"source"`
