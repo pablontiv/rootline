@@ -108,10 +108,13 @@ Run all inference detectors and produce a structured report.
 ```bash
 rootline analyze <directory> --output json          # Full analysis report
 rootline analyze <directory> --output table          # Summary table
+rootline analyze <directory> --incremental           # Only uncovered inferences
 rootline analyze <directory> --field summary         # Extract summary only
 ```
 
-**Procedure**: Scans directory, extracts records, runs 12 detector categories (field types, required fields, enums, constants, link types, back-refs, cross-refs, section patterns, invariants, sub-schemas, dependencies, traceability). Produces AnalyzeReport JSON with `version: 1`.
+Key flags: `--incremental` (filter inferences covered by .stem)
+
+**Procedure**: Scans directory, extracts records, runs 12 detector categories (field types, required fields, enums, constants, link types, back-refs, cross-refs, section patterns, invariants, sub-schemas, dependencies, traceability). Produces AnalyzeReport JSON with `version: 1`. With `--incremental`, filters out inferences already covered by the existing `.stem` schema.
 
 ### Advanced Operations (graph + migrate + init)
 

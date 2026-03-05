@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var analyzeIncremental bool
+
 var analyzeCmd = &cobra.Command{
 	Use:   "analyze [directory]",
 	Short: "Analyze documents and infer schema patterns",
@@ -23,6 +25,7 @@ var analyzeCmd = &cobra.Command{
 }
 
 func init() {
+	analyzeCmd.Flags().BoolVar(&analyzeIncremental, "incremental", false, "report only inferences not covered by existing .stem")
 	rootCmd.AddCommand(analyzeCmd)
 }
 
@@ -118,8 +121,21 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		}},
 	}
 
+	// Load stem for incremental filtering.
+	var stem *rules.StemFile
+	if analyzeIncremental {
+		entries, walkErr := rules.WalkUp(root)
+		if walkErr == nil && len(entries) > 0 {
+			stem = rules.MergeStemFiles(entries)
+		}
+		report.Incremental = true
+	}
+
 	for _, cat := range categories {
 		inferences := safeRunDetector(ctx, cat.id, cat.run)
+		if analyzeIncremental && stem != nil {
+			inferences = infer.FilterCoveredInferences(inferences, stem)
+		}
 		report.AddCategory(cat.id, cat.name, inferences, agentRequiredTypes)
 	}
 

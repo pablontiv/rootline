@@ -4,11 +4,12 @@ import "encoding/json"
 
 // AnalyzeReport is the top-level output of the analyze command.
 type AnalyzeReport struct {
-	Version    int              `json:"version"`
-	Kind       string           `json:"kind"`
-	Path       string           `json:"path"`
-	Categories []CategoryResult `json:"categories"`
-	Summary    ReportSummary    `json:"summary"`
+	Version     int              `json:"version"`
+	Kind        string           `json:"kind"`
+	Path        string           `json:"path"`
+	Incremental bool             `json:"incremental,omitempty"`
+	Categories  []CategoryResult `json:"categories"`
+	Summary     ReportSummary    `json:"summary"`
 }
 
 // CategoryResult groups inferences by detector category.
