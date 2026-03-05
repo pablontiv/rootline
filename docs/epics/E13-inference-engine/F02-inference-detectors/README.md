@@ -19,9 +19,9 @@ tipo: feature
 
 | ID | Nombre | Capacidad |
 |----|--------|-----------|
-| S001 | [Deterministic Inference](S001-deterministic-inference/) | Categorias 100% engine implementadas como detectores Go |
+| S001 | [Deterministic Inference](S001-structural-detectors/) | Categorias 100% engine implementadas como detectores Go |
 | S002 | [Body-Aware Inference](S002-body-aware-inference/) | Categorias que usan goldmark AST para extraccion estructural |
-| S003 | [Semantic Category Stubs 9/11](S003-semantic-stubs-9-11/) | Porciones engine de cats con alto % LLM |
+| S003 | [Semantic Category Stubs 9/11](S003-semantic-extraction/) | Porciones engine de cats con alto % LLM |
 
 ## Invariantes
 

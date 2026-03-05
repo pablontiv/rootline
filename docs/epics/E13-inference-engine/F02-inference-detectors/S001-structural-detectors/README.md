@@ -36,7 +36,7 @@ tipo: historia
 | [T001](T001-link-type-validation.md) | Implementar link-type validation usando LinkSchema |
 | [T002](T002-back-reference-consistency.md) | Implementar back-reference consistency check |
 | [T003](T003-constant-detection-crossrefs.md) | Implementar constant field detection y cross-reference validation |
-| [T004](T004-deterministic-inference-tests.md) | Tests de integracion para detectores deterministicos |
+| [T004](T004-structural-detector-tests.md) | Tests de integracion para detectores deterministicos |
 
 ## Fuente de verdad
 

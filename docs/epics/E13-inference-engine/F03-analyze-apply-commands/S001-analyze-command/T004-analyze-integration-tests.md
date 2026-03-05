@@ -1,7 +1,7 @@
 ---
-estado: Specified
-tipo: test
 ejecutable_en: 1 sesion
+estado: Specified
+tipo: software-module
 ---
 # T004: Tests de integracion para analyze
 

@@ -34,7 +34,7 @@ tipo: historia
 |------|-------------|
 | [T001](T001-formal-dependency-stubs.md) | Implementar formal dependency extraction (engine portion) |
 | [T002](T002-traceability-link-stubs.md) | Implementar traceability link extraction (engine portion) |
-| [T003](T003-semantic-stubs-tests.md) | Tests para porciones engine de formal deps / traceability |
+| [T003](T003-semantic-extraction-tests.md) | Tests para porciones engine de formal deps / traceability |
 
 ## Fuente de verdad
 

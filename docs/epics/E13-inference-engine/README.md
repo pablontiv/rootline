@@ -37,7 +37,7 @@ La arquitectura sigue el modelo de 2 capas: engine (Go) + agent (LLM). Este Epic
 | ID | Nombre | Descripcion |
 |----|--------|-------------|
 | F01 | [Body Content AST Infrastructure](F01-body-content-ast/) | goldmark integration y utilidades de extraccion de body |
-| F02 | [Inference Category Expansion](F02-category-expansion/) | Implementar categorias 5-13 como Go puro (engine portions) |
+| F02 | [Inference Category Expansion](F02-inference-detectors/) | Implementar categorias 5-13 como Go puro (engine portions) |
 | F03 | [Analyze & Apply Commands](F03-analyze-apply-commands/) | Comandos CLI que orquestan inferencias y aplican resultados |
 
 ## Orden de Ejecucion
