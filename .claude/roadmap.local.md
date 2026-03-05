@@ -1,3 +1,24 @@
+---
+roadmap-root: docs/epics
+
+done-statuses:
+  - Completed
+  - Obsolete
+
+active-statuses:
+  - Pending
+  - Specified
+  - In Progress
+
+container-types:
+  - feature
+  - historia
+
+story-close-verify:
+  - go test ./... -race
+  - go vet ./...
+---
+
 # Roadmap — Rootline Project Type Specs
 
 Templates de Especificación Técnica para los tipos usados en este proyecto.
