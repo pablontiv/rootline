@@ -30,6 +30,7 @@ Rootline treats the filesystem as a database. This skill wraps all rootline CLI 
 | `graph` | Dependency graph from wiki-links | User wants to visualize dependencies |
 | `migrate` | Schema change detection and migration | User modified `.stem` and needs to adapt |
 | `init` | Infer `.stem` from existing documents | User has docs but no schema yet |
+| `analyze` | Run all inference detectors | User wants a full analysis report of patterns |
 
 ## Global Flags
 
@@ -99,6 +100,18 @@ Key flags: `--where`, `--count`, `--limit`, `--from`
 **Procedure**: Choose the right command based on what the user needs — query for filtering records, tree for structure, stats for aggregates, explain for debugging field values.
 
 For detailed procedures and JSON output formats, see [ref-query.md](ref-query.md).
+
+### Analysis (analyze)
+
+Run all inference detectors and produce a structured report.
+
+```bash
+rootline analyze <directory> --output json          # Full analysis report
+rootline analyze <directory> --output table          # Summary table
+rootline analyze <directory> --field summary         # Extract summary only
+```
+
+**Procedure**: Scans directory, extracts records, runs 12 detector categories (field types, required fields, enums, constants, link types, back-refs, cross-refs, section patterns, invariants, sub-schemas, dependencies, traceability). Produces AnalyzeReport JSON with `version: 1`.
 
 ### Advanced Operations (graph + migrate + init)
 
