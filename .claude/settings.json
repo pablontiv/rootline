@@ -11,16 +11,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "If the tool edited a file matching cmd/rootline/*.go, internal/*/*.go, or go.mod, respond with {\"additionalContext\": \"Tip: Code changes may affect docs. Consider /update-docs when ready.\"}. For non-Go files, respond with {\"ok\": true}. Input: $ARGUMENTS"
-          }
-        ]
-      }
-    ]
+    "PostToolUse": []
   }
 }
