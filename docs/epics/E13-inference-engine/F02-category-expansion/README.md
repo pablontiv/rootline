@@ -12,15 +12,15 @@ tipo: feature
 
 ## Scope
 
-**In**: Detectores Go para cats 5/6/7/8/9/10/11/12/13 (solo porciones engine)
-**Out**: Porciones LLM de cats 9/11 (agent Epic), comando analyze (F03)
+**In**: Detectores Go para categorias 5/6/7/8/9/10/11/12/13 (solo porciones engine)
+**Out**: Porciones LLM de categorias 9/11 (agent Epic), comando analyze (F03)
 
 ## Stories
 
 | ID | Nombre | Capacidad |
 |----|--------|-----------|
-| S001 | [Deterministic Categories 5/7/8/10](S001-deterministic-cats-5-7-8-10/) | Categorias 100% engine implementadas como detectores Go |
-| S002 | [Body-Aware Categories 6/12/13](S002-body-aware-cats-6-12-13/) | Categorias que usan goldmark AST para extraccion estructural |
+| S001 | [Deterministic Inference](S001-deterministic-inference/) | Categorias 100% engine implementadas como detectores Go |
+| S002 | [Body-Aware Inference](S002-body-aware-inference/) | Categorias que usan goldmark AST para extraccion estructural |
 | S003 | [Semantic Category Stubs 9/11](S003-semantic-stubs-9-11/) | Porciones engine de cats con alto % LLM |
 
 ## Invariantes

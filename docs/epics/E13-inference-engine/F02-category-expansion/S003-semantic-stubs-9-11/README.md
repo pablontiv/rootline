@@ -10,14 +10,14 @@ tipo: historia
 
 ## Antes / Despues
 
-**Antes**: Cat 9 (heterogeneous dependencies) y Cat 11 (traceability) no estan implementadas. El engine no extrae datos formales de dependencias ni links de traceability.
+**Antes**: Formal dependency extraction y traceability link extraction no estan implementadas. El engine no extrae datos formales de dependencias ni links de traceability.
 
-**Despues**: Cat 9 engine extrae dependencias formales (wiki-links, path references, tabla de dependencias) sin disambiguation semantica. Cat 11 engine extrae links "Contribuye a" y "Cubre" sin semantic matching. Ambos producen datos parciales que un futuro agent completara.
+**Despues**: Formal dependency extraction extrae dependencias formales (wiki-links, path references, tabla de dependencias) sin disambiguation semantica. Traceability link extraction extrae links "Contribuye a" y "Cubre" sin semantic matching. Ambos producen datos parciales que un futuro agent completara.
 
 ## Criterios de Aceptacion (semanticos)
 
-- [ ] Cat 9: Extrae dependencias formales de links + secciones "Dependencias" del body
-- [ ] Cat 11: Extrae claims de traceability (`Contribuye a`, `Cubre`, `Satisface`) del body
+- [ ] Formal dependency extraction: Extrae dependencias formales de links + secciones "Dependencias" del body
+- [ ] Traceability link extraction: Extrae claims de traceability (`Contribuye a`, `Cubre`, `Satisface`) del body
 - [ ] Ambos producen inferencias tipadas con flag `requires_agent: true` para porciones LLM
 - [ ] `go test ./... -race` pasa verde
 
@@ -32,12 +32,12 @@ tipo: historia
 
 | Task | Descripcion |
 |------|-------------|
-| [T001](T001-cat-9-formal-deps.md) | Implementar Cat 9 engine portion — formal dependency extraction |
-| [T002](T002-cat-11-traceability-links.md) | Implementar Cat 11 engine portion — traceability link extraction |
-| [T003](T003-semantic-stubs-tests.md) | Tests para porciones engine de cat 9/11 |
+| [T001](T001-formal-dependency-stubs.md) | Implementar formal dependency extraction (engine portion) |
+| [T002](T002-traceability-link-stubs.md) | Implementar traceability link extraction (engine portion) |
+| [T003](T003-semantic-stubs-tests.md) | Tests para porciones engine de formal deps / traceability |
 
 ## Fuente de verdad
 
 - `internal/extract/links.go` — ParseLinks para wiki-links formales
 - `internal/extract/body.go` — ExtractSections para localizar secciones de dependencias
-- Proporciones: Cat 9 = 30% Go / 70% LLM, Cat 11 = 20% Go / 80% LLM (Apendice A)
+- Proporciones: formal deps = 30% Go / 70% LLM, traceability = 20% Go / 80% LLM (Apendice A)
