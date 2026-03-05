@@ -29,9 +29,6 @@ func TestDetectConstantFieldsAllSameValue(t *testing.T) {
 	if got[0].Value != "Specified" {
 		t.Errorf("expected value Specified, got %s", got[0].Value)
 	}
-	if got[0].Category != 8 {
-		t.Errorf("expected category 8, got %d", got[0].Category)
-	}
 }
 
 func TestDetectConstantFieldsTwoDistinctValues(t *testing.T) {

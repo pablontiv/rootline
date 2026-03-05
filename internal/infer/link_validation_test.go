@@ -38,9 +38,6 @@ func TestDetectLinkTypesViolation(t *testing.T) {
 	if got[0].Value != "invalid" {
 		t.Errorf("expected value 'invalid', got %s", got[0].Value)
 	}
-	if got[0].Category != 5 {
-		t.Errorf("expected category 5, got %d", got[0].Category)
-	}
 }
 
 func TestDetectLinkTypesViolationDedup(t *testing.T) {
@@ -100,9 +97,6 @@ func TestDetectLinkTypesSuggestion(t *testing.T) {
 	}
 	if got[0].Type != "link_type_suggestion" {
 		t.Errorf("expected type link_type_suggestion, got %s", got[0].Type)
-	}
-	if got[0].Category != 5 {
-		t.Errorf("expected category 5, got %d", got[0].Category)
 	}
 }
 

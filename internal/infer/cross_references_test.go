@@ -35,9 +35,6 @@ func TestDetectCrossReferencesValid(t *testing.T) {
 	if got[0].Value != "E02/F04" {
 		t.Errorf("expected value E02/F04, got %s", got[0].Value)
 	}
-	if got[0].Category != 10 {
-		t.Errorf("expected category 10, got %d", got[0].Category)
-	}
 }
 
 func TestDetectCrossReferencesBroken(t *testing.T) {

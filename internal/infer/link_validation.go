@@ -60,12 +60,11 @@ func DetectLinkTypes(records []*extract.Record, schema rules.LinkSchema) []Infer
 			seen[occ.source][occ.linkType] = true
 
 			inferences = append(inferences, Inference{
-				Category: 5,
-				Type:     "link_type_violation",
-				Source:   occ.source,
-				Field:    "links.allowed",
-				Value:    occ.linkType,
-				Message:  fmt.Sprintf("link type %q is not in allowed list %v", occ.linkType, schema.Allowed),
+				Type:    "link_type_violation",
+				Source:  occ.source,
+				Field:   "links.allowed",
+				Value:   occ.linkType,
+				Message: fmt.Sprintf("link type %q is not in allowed list %v", occ.linkType, schema.Allowed),
 			})
 		}
 	} else {
@@ -82,12 +81,11 @@ func DetectLinkTypes(records []*extract.Record, schema rules.LinkSchema) []Infer
 
 		if len(suggested) > 0 {
 			inferences = append(inferences, Inference{
-				Category: 5,
-				Type:     "link_type_suggestion",
-				Source:   "",
-				Field:    "links.allowed",
-				Value:    fmt.Sprintf("%v", suggested),
-				Message:  fmt.Sprintf("observed link types with ≥80%% consensus: %v", suggested),
+				Type:    "link_type_suggestion",
+				Source:  "",
+				Field:   "links.allowed",
+				Value:   fmt.Sprintf("%v", suggested),
+				Message: fmt.Sprintf("observed link types with ≥80%% consensus: %v", suggested),
 			})
 		}
 	}

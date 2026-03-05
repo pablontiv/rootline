@@ -39,21 +39,19 @@ func DetectCrossReferences(records []*extract.Record, rootDir string) []Inferenc
 
 			if resolved != "" {
 				inferences = append(inferences, Inference{
-					Category: 10,
-					Type:     "cross_reference",
-					Source:   rec.Path,
-					Field:    "body",
-					Value:    ref,
-					Message:  fmt.Sprintf("cross-reference %q resolves to %s", ref, resolved),
+					Type:    "cross_reference",
+					Source:  rec.Path,
+					Field:   "body",
+					Value:   ref,
+					Message: fmt.Sprintf("cross-reference %q resolves to %s", ref, resolved),
 				})
 			} else {
 				inferences = append(inferences, Inference{
-					Category: 10,
-					Type:     "broken_cross_reference",
-					Source:   rec.Path,
-					Field:    "body",
-					Value:    ref,
-					Message:  fmt.Sprintf("cross-reference %q does not match any path under %s", ref, rootDir),
+					Type:    "broken_cross_reference",
+					Source:  rec.Path,
+					Field:   "body",
+					Value:   ref,
+					Message: fmt.Sprintf("cross-reference %q does not match any path under %s", ref, rootDir),
 				})
 			}
 		}

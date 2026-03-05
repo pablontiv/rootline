@@ -50,12 +50,11 @@ func DetectConstantFields(records []*extract.Record) []Inference {
 			value = v
 		}
 		inferences = append(inferences, Inference{
-			Category: 8,
-			Type:     "constant_field",
-			Source:   "",
-			Field:    name,
-			Value:    value,
-			Message:  fmt.Sprintf("field %q has constant value %q across all %d records", name, value, total),
+			Type:    "constant_field",
+			Source:  "",
+			Field:   name,
+			Value:   value,
+			Message: fmt.Sprintf("field %q has constant value %q across all %d records", name, value, total),
 		})
 	}
 

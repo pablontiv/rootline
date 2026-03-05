@@ -53,12 +53,11 @@ func DetectMissingBackReferences(g *graph.Graph) []Inference {
 			seen[reverse] = true
 
 			inferences = append(inferences, Inference{
-				Category: 7,
-				Type:     "missing_back_reference",
-				Source:   e.Target,
-				Field:    "links",
-				Value:    e.Source,
-				Message:  fmt.Sprintf("%s is referenced by %s (type %q) but has no back-reference", e.Target, e.Source, e.Type),
+				Type:    "missing_back_reference",
+				Source:  e.Target,
+				Field:   "links",
+				Value:   e.Source,
+				Message: fmt.Sprintf("%s is referenced by %s (type %q) but has no back-reference", e.Target, e.Source, e.Type),
 			})
 		}
 	}
