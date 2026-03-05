@@ -10,10 +10,10 @@ import (
 	"github.com/pablontiv/rootline/internal/extract"
 )
 
-// crossRefRe matches hierarchical path references like E02/F04, E13/F02/S001, etc.
-var crossRefRe = regexp.MustCompile(`\b([EFST]\d{2,4}(?:/[EFST]\d{2,4})*)\b`)
+// hierarchicalPathRe matches hierarchical path references like E02/F04, E13/F02/S001, etc.
+var hierarchicalPathRe = regexp.MustCompile(`\b([EFST]\d{2,4}(?:/[EFST]\d{2,4})*)\b`)
 
-// DetectCrossReferences implements Category 10: cross-epic path reference extraction.
+// DetectCrossReferences extracts hierarchical path references from body text and validates they exist.
 // It scans record bodies for hierarchical path patterns and validates they exist
 // relative to rootDir.
 func DetectCrossReferences(records []*extract.Record, rootDir string) []Inference {
@@ -24,7 +24,7 @@ func DetectCrossReferences(records []*extract.Record, rootDir string) []Inferenc
 			continue
 		}
 
-		matches := crossRefRe.FindAllString(rec.Body, -1)
+		matches := hierarchicalPathRe.FindAllString(rec.Body, -1)
 		seen := make(map[string]bool)
 
 		for _, ref := range matches {

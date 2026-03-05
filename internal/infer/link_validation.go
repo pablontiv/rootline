@@ -8,7 +8,7 @@ import (
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
-// DetectLinkTypes implements Category 5: link-type validation.
+// DetectLinkTypes validates observed link types against a schema's allowed list.
 // If LinkSchema.Allowed is defined, it validates observed link types against the list.
 // If Allowed is empty, it infers allowed types from observed links using consensus ≥80%.
 func DetectLinkTypes(records []*extract.Record, schema rules.LinkSchema) []Inference {

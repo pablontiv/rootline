@@ -13,7 +13,7 @@ var unidirectionalTypes = map[string]bool{
 	"depends": true,
 }
 
-// DetectMissingBackReferences implements Category 7: back-reference consistency.
+// DetectMissingBackReferences checks that bidirectional links have reciprocal references.
 // For each edge A→B with a reciprocal link type, it checks that B→A also exists.
 // Unidirectional types (blocks, parent, depends) are skipped.
 func DetectMissingBackReferences(g *graph.Graph) []Inference {

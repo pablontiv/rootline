@@ -37,7 +37,7 @@ func loadFixtures(t *testing.T, dir string) []*extract.Record {
 	return records
 }
 
-func TestIntegrationCat5WithFixtures(t *testing.T) {
+func TestIntegrationLinkValidationWithFixtures(t *testing.T) {
 	records := loadFixtures(t, "testdata/categories")
 
 	// Inference mode (no allowed list): "reference" is the only link type in fixtures.
@@ -63,7 +63,7 @@ func TestIntegrationCat5WithFixtures(t *testing.T) {
 	}
 }
 
-func TestIntegrationCat7WithFixtures(t *testing.T) {
+func TestIntegrationBackReferencesWithFixtures(t *testing.T) {
 	records := loadFixtures(t, "testdata/categories")
 
 	g := graph.Build(context.Background(), records)
@@ -81,7 +81,7 @@ func TestIntegrationCat7WithFixtures(t *testing.T) {
 	}
 }
 
-func TestIntegrationCat8WithFixtures(t *testing.T) {
+func TestIntegrationConstantFieldsWithFixtures(t *testing.T) {
 	records := loadFixtures(t, "testdata/categories")
 
 	got := DetectConstantFields(records)
@@ -106,7 +106,7 @@ func TestIntegrationCat8WithFixtures(t *testing.T) {
 	}
 }
 
-func TestIntegrationCat10WithFixtures(t *testing.T) {
+func TestIntegrationCrossReferencesWithFixtures(t *testing.T) {
 	// Use the real docs/epics/ directory for path resolution.
 	rootDir := filepath.Join("..", "..", "docs", "epics")
 	if _, err := os.Stat(rootDir); err != nil {
@@ -153,16 +153,16 @@ func TestIntegrationEmptyRecordsNoPanic(t *testing.T) {
 	got10 := DetectCrossReferences(empty, t.TempDir())
 
 	if got5 != nil {
-		t.Errorf("Cat5: expected nil for empty, got %d", len(got5))
+		t.Errorf("LinkValidation: expected nil for empty, got %d", len(got5))
 	}
 	if got7 != nil {
-		t.Errorf("Cat7: expected nil for empty, got %d", len(got7))
+		t.Errorf("BackReferences: expected nil for empty, got %d", len(got7))
 	}
 	if got8 != nil {
-		t.Errorf("Cat8: expected nil for empty, got %d", len(got8))
+		t.Errorf("ConstantFields: expected nil for empty, got %d", len(got8))
 	}
 	if got10 != nil {
-		t.Errorf("Cat10: expected nil for empty, got %d", len(got10))
+		t.Errorf("CrossReferences: expected nil for empty, got %d", len(got10))
 	}
 }
 
@@ -191,11 +191,11 @@ func TestAllDetectorsReturnSliceNotNil(t *testing.T) {
 
 	got8 := DetectConstantFields(records)
 	if got8 == nil {
-		t.Error("Cat8: expected non-nil slice when inferences are produced")
+		t.Error("ConstantFields: expected non-nil slice when inferences are produced")
 	}
 
 	got5 := DetectLinkTypes(records, rules.LinkSchema{})
 	if got5 == nil {
-		t.Error("Cat5: expected non-nil slice when inferences are produced")
+		t.Error("LinkValidation: expected non-nil slice when inferences are produced")
 	}
 }
