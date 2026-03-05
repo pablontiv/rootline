@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: historia
 ---
 # S003: Apply Command
