@@ -12,15 +12,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var applyDryRun bool
+
 var applyCmd = &cobra.Command{
 	Use:   "apply [report.json]",
-	Short: "Apply inference results to .stem files",
-	Long:  "Read an analyze report (from file or stdin) and apply\nschema-modifying inferences to the appropriate .stem files.",
+	Short: "Apply inference results to .stem and document files",
+	Long:  "Read an analyze report (from file or stdin) and apply\nschema-modifying inferences to .stem files and data corrections to documents.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  runApply,
 }
 
 func init() {
+	applyCmd.Flags().BoolVar(&applyDryRun, "dry-run", false, "Show changes without applying them")
 	rootCmd.AddCommand(applyCmd)
 }
 
@@ -43,7 +46,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parsing report: %w", err)
 	}
 
-	// Resolve stem path from report path.
+	// Resolve root path from report path.
 	root, err := filepath.Abs(report.Path)
 	if err != nil {
 		return fmt.Errorf("resolving path: %w", err)
@@ -57,15 +60,41 @@ func runApply(cmd *cobra.Command, args []string) error {
 	// Use the closest stem file.
 	stemPath := entries[0].Path
 
-	// Collect all schema-modifying inferences.
-	var allInferences []infer.ReportInference
+	// Separate schema-modifying and data-correction inferences.
+	var schemaInferences []infer.ReportInference
+	var dataInferences []infer.ReportInference
 	for _, cat := range report.Categories {
-		allInferences = append(allInferences, cat.Inferences...)
+		for _, inf := range cat.Inferences {
+			switch inf.Type {
+			case "migrate_value", "correct_value", "add_field":
+				dataInferences = append(dataInferences, inf)
+			default:
+				schemaInferences = append(schemaInferences, inf)
+			}
+		}
 	}
 
-	result, err := infer.ApplySchemaInferences(stemPath, allInferences)
+	// Apply schema modifications (to .stem).
+	schemaResult, err := infer.ApplySchemaInferences(stemPath, schemaInferences)
 	if err != nil {
-		return fmt.Errorf("applying: %w", err)
+		return fmt.Errorf("applying schema: %w", err)
+	}
+
+	// Apply data corrections (to documents).
+	opts := infer.ApplyOptions{
+		DryRun: applyDryRun,
+		Root:   root,
+	}
+	dataResult, err := infer.ApplyDataCorrections(dataInferences, opts)
+	if err != nil {
+		return fmt.Errorf("applying data: %w", err)
+	}
+
+	// Merge results.
+	result := &infer.ApplyResult{
+		Applied: append(schemaResult.Applied, dataResult.Applied...),
+		Skipped: append(schemaResult.Skipped, dataResult.Skipped...),
+		DryRun:  applyDryRun,
 	}
 
 	if outputFormat == "table" {
@@ -75,8 +104,15 @@ func runApply(cmd *cobra.Command, args []string) error {
 }
 
 func renderApplyTable(cmd *cobra.Command, result *infer.ApplyResult) error {
+	if result.DryRun {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Dry run (no changes applied):")
+	}
 	if len(result.Applied) > 0 {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Applied:")
+		label := "Applied:"
+		if result.DryRun {
+			label = "Would apply:"
+		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), label)
 		for _, a := range result.Applied {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  ✓ %s\n", a)
 		}

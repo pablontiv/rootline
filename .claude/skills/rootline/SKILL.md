@@ -119,15 +119,18 @@ Key flags: `--incremental` (filter inferences covered by .stem)
 
 ### Apply (apply)
 
-Apply inference results to .stem files.
+Apply inference results to .stem files and document frontmatter.
 
 ```bash
 rootline analyze <directory> --output json | rootline apply   # Pipe from analyze
 rootline apply report.json                                    # From file
 rootline apply report.json --output table                     # Human-readable
+rootline apply report.json --dry-run                          # Preview changes
 ```
 
-**Procedure**: Reads an analyze report, applies schema-modifying inferences (extend_enum, add_required, add_default, set_type) to the closest `.stem` file. Inferences with `requires_agent: true` are skipped with warnings.
+Key flags: `--dry-run` (show changes without applying)
+
+**Procedure**: Reads an analyze report, applies schema-modifying inferences (extend_enum, add_required, add_default, set_type) to the closest `.stem` file and data corrections (migrate_value, correct_value, add_field) to document frontmatter. Inferences with `requires_agent: true` are skipped with warnings.
 
 ### Advanced Operations (graph + migrate + init)
 

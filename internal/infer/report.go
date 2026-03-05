@@ -22,12 +22,15 @@ type CategoryResult struct {
 
 // ReportInference extends Inference with analyze-specific fields.
 type ReportInference struct {
-	Type          string `json:"type"`
-	Source        string `json:"source,omitempty"`
-	Field         string `json:"field,omitempty"`
-	Value         string `json:"value,omitempty"`
-	Message       string `json:"message"`
-	RequiresAgent bool   `json:"requires_agent"`
+	Type          string   `json:"type"`
+	Source        string   `json:"source,omitempty"`
+	Field         string   `json:"field,omitempty"`
+	Value         string   `json:"value,omitempty"`
+	From          string   `json:"from,omitempty"`
+	To            string   `json:"to,omitempty"`
+	Paths         []string `json:"paths,omitempty"`
+	Message       string   `json:"message"`
+	RequiresAgent bool     `json:"requires_agent"`
 }
 
 // ReportSummary provides aggregate counts for the analyze report.
