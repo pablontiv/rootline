@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 )
@@ -77,18 +78,55 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 
 // computeNextSequence scans dirPath for files/dirs matching the prefix pattern,
 // finds the highest numeric suffix, and returns prefix + next number zero-padded
-// to the specified digits.
+// to the specified digits. Supports both top-level prefix/digits and match configs
+// where prefix/digits are nested per-pattern (e.g., "E*": {prefix: E, digits: 2}).
 func computeNextSequence(dirPath string, field SchemaField) string {
-	if field.Prefix == "" || field.Digits <= 0 {
+	if field.Prefix != "" && field.Digits > 0 {
+		// Direct prefix/digits at top level
+		return computeNextFromPrefix(dirPath, field.Prefix, field.Digits)
+	}
+
+	// No direct prefix/digits — resolve from match configs
+	if field.Match == nil || field.Match.Configs == nil {
 		return ""
 	}
 
-	pattern := regexp.MustCompile(`^` + regexp.QuoteMeta(field.Prefix) + `(\d+)`)
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return ""
+	}
+
+	// Find which config pattern matches existing directory entries
+	for globPattern, config := range field.Match.Configs {
+		cfgMap, ok := config.(map[string]any)
+		if !ok {
+			continue
+		}
+		prefix, digits := extractPrefixDigits(cfgMap)
+		if prefix == "" || digits <= 0 {
+			continue
+		}
+
+		for _, e := range entries {
+			if matched, _ := filepath.Match(globPattern, e.Name()); matched {
+				// This config's pattern matches an entry — use it
+				return computeNextFromPrefix(dirPath, prefix, digits)
+			}
+		}
+	}
+
+	return ""
+}
+
+// computeNextFromPrefix scans dirPath for entries matching prefix + digits pattern
+// and returns the next sequence value.
+func computeNextFromPrefix(dirPath, prefix string, digits int) string {
+	pattern := regexp.MustCompile(`^` + regexp.QuoteMeta(prefix) + `(\d+)`)
 
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		// Directory doesn't exist or unreadable — start at 1
-		return fmt.Sprintf("%s%0*d", field.Prefix, field.Digits, 1)
+		return fmt.Sprintf("%s%0*d", prefix, digits, 1)
 	}
 
 	maxNum := 0
@@ -106,7 +144,20 @@ func computeNextSequence(dirPath string, field SchemaField) string {
 		}
 	}
 
-	return fmt.Sprintf("%s%0*d", field.Prefix, field.Digits, maxNum+1)
+	return fmt.Sprintf("%s%0*d", prefix, digits, maxNum+1)
+}
+
+// extractPrefixDigits extracts prefix and digits from a match config map.
+func extractPrefixDigits(cfgMap map[string]any) (string, int) {
+	prefix, _ := cfgMap["prefix"].(string)
+	var digits int
+	switch v := cfgMap["digits"].(type) {
+	case int:
+		digits = v
+	case float64:
+		digits = int(v)
+	}
+	return prefix, digits
 }
 
 // ToJSON serializes the describe result to stable JSON.
