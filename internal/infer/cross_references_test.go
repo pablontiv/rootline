@@ -89,6 +89,26 @@ func TestDetectCrossReferencesDedup(t *testing.T) {
 	}
 }
 
+func TestDetectCrossReferences_ReadDirError(t *testing.T) {
+	// Use a non-existent root directory to trigger os.ReadDir error in resolveHierarchicalPath.
+	records := []*extract.Record{
+		{
+			Path:        "doc.md",
+			Frontmatter: map[string]any{},
+			Body:        "Reference to E01/F01 in nonexistent root.",
+		},
+	}
+
+	got := DetectCrossReferences(records, "/nonexistent/path/that/does/not/exist")
+	// Should produce broken_cross_reference since resolveHierarchicalPath returns "".
+	if len(got) != 1 {
+		t.Fatalf("expected 1 inference, got %d", len(got))
+	}
+	if got[0].Type != "broken_cross_reference" {
+		t.Errorf("expected broken_cross_reference, got %s", got[0].Type)
+	}
+}
+
 func TestDetectCrossReferencesDeepPath(t *testing.T) {
 	rootDir := t.TempDir()
 	s001 := filepath.Join(rootDir, "E13-engine", "F02-cats", "S001-det")

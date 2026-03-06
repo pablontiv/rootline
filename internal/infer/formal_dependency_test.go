@@ -67,6 +67,68 @@ func TestDetectFormalDependencies_EmptyRecords(t *testing.T) {
 	}
 }
 
+func TestDetectFormalDependencies_EmptyListItem(t *testing.T) {
+	// Direct record with body content that has empty list items.
+	// Use raw body string with section content containing empty items.
+	rec := makeRecord("## Dependencias\n\n- \n- Valid dependency\n- \n")
+	rec.Path = "task.md"
+
+	inferences := DetectFormalDependencies([]*extract.Record{rec})
+
+	var candidates []string
+	for _, inf := range inferences {
+		if inf.Type == "informal_dependency_candidate" {
+			candidates = append(candidates, inf.Value)
+		}
+	}
+
+	// Only "Valid dependency" should be extracted; empty items skipped.
+	if len(candidates) != 1 {
+		t.Fatalf("expected 1 candidate, got %d: %v", len(candidates), candidates)
+	}
+	if candidates[0] != "Valid dependency" {
+		t.Errorf("unexpected candidate: %s", candidates[0])
+	}
+}
+
+func TestDetectFormalDependencies_EmptyTextAfterDash(t *testing.T) {
+	// Record with empty dash items ("- " with only spaces) and a valid dep.
+	// The goldmark AST section content preserves these lines.
+	rec := makeRecord("## Dependencias\n\n-   \n- Real dep\n\n## Contexto\n\nSome context.\n")
+	rec.Path = "task.md"
+
+	inferences := DetectFormalDependencies([]*extract.Record{rec})
+
+	var candidates []string
+	for _, inf := range inferences {
+		if inf.Type == "informal_dependency_candidate" {
+			candidates = append(candidates, inf.Value)
+		}
+	}
+
+	if len(candidates) != 1 {
+		t.Fatalf("expected 1 candidate, got %d: %v", len(candidates), candidates)
+	}
+}
+
+func TestDetectFormalDependencies_AsteriskListItems(t *testing.T) {
+	rec := makeRecord("## Dependencias\n\n* Dep with asterisk\n")
+	rec.Path = "task.md"
+
+	inferences := DetectFormalDependencies([]*extract.Record{rec})
+
+	var candidates []string
+	for _, inf := range inferences {
+		if inf.Type == "informal_dependency_candidate" {
+			candidates = append(candidates, inf.Value)
+		}
+	}
+
+	if len(candidates) != 1 {
+		t.Fatalf("expected 1 candidate for asterisk list, got %d", len(candidates))
+	}
+}
+
 func TestDetectFormalDependencies_AllPrefixes(t *testing.T) {
 	rec := &extract.Record{
 		Path: "task.md",
