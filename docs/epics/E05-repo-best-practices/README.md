@@ -18,6 +18,7 @@ Consolidar prácticas de seguridad de supply chain, calidad de CI/CD, testing av
 | F01 | [Supply Chain Security](F01-supply-chain-security/) | 0% | Dependabot, govulncheck, gosec, SHA-pinning de Actions |
 | F02 | [CI Quality Gates](F02-ci-quality-gates/) | 0% | Pinear lint version, go mod tidy check, coverage threshold, fuzz tests, benchmarks |
 | F03 | [Repository Hygiene](F03-repository-hygiene/) | 0% | Eliminar binario, reemplazar pre-commit archivado, editorconfig, CODEOWNERS, CONTRIBUTING |
+| F04 | [Local Auto-sync Pipeline](F04-local-auto-sync/) | 0% | Post-merge hook + systemd timer para pull automático, rebuild y sync de skills |
 
 ## Orden de Ejecucion
 
