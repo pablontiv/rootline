@@ -1,12 +1,20 @@
 ---
 name: rootline
 description: |
-  Rootline CLI operations: validate documents, fix errors, describe schemas,
-  scaffold new documents, query records, view tree/stats, explain field derivation,
-  build dependency graphs, migrate schemas, and infer schemas from existing files.
-  Use when the user says "validate", "fix", "describe", "new doc", "query",
-  "tree", "stats", "explain", "graph", "migrate", "init", "rootline",
-  "verificar", "crear documento", "que campos necesito", "buscar registros".
+  Rootline CLI: validate, fix, describe, new, query, tree, stats, explain, graph,
+  migrate, init, analyze (run inference detectors), and apply (update .stem from
+  analysis). Use whenever the user operates on rootline-managed documents or .stem
+  schemas — even without saying "rootline". Trigger on: initializing folders for
+  consistency ("inicializar", "bootstrap", "sin .stem", "inferir schema", "hacer
+  consistente", "analyze"), validating/fixing documents, querying status, creating
+  documents, checking required fields, exploring hierarchy, running inference
+  detectors, or applying analysis results. Keywords: "validate", "fix", "describe",
+  "query", "tree", "stats", "explain", "graph", "migrate", "init", "analyze",
+  "apply", "rootline", "verificar", "crear documento", "que campos necesito",
+  "buscar registros", "consistencia", "schema", "frontmatter", ".stem".
+  Do NOT trigger for: work decomposition into epics/stories (roadmap skill),
+  structured hypothesis research (hypothesize skill), doc sync (update-docs skill),
+  Go code debugging, or non-rootline YAML/file operations.
 argument-hint: "[command] [args...]"
 allowed-tools: Bash, Read, AskUserQuestion
 ---
@@ -14,6 +22,38 @@ allowed-tools: Bash, Read, AskUserQuestion
 # /rootline — CLI Operations
 
 Rootline treats the filesystem as a database. This skill wraps all rootline CLI commands.
+
+## Common Workflows
+
+### Bootstrap Consistency (most common)
+
+When a user has a folder with markdown files and wants rootline to make it consistent:
+
+```bash
+rootline init <path> --dry-run              # 1. Preview inferred schema
+rootline init <path>                        # 2. Write .stem (add --force if exists)
+rootline validate --all --output json       # 3. Check for errors
+rootline fix --all --dry-run                # 4. Preview fixes (if errors found)
+rootline fix --all                          # 5. Apply fixes
+rootline validate --all                     # 6. Verify clean state
+```
+
+**Key considerations during bootstrap:**
+- If `init` infers a field as `enum` but a parent `.stem` defines it as `string`, you'll get a `type-consistency` error. Resolution: remove the field from the local `.stem` and let it inherit from the parent.
+- If `init` infers date-like fields as `enum`, change them to `type: string` — dates are open-ended, not a closed set.
+- Always run `--dry-run` before writing to preview what will change.
+- After init, show the user the effective schema (`rootline describe <path>`) so they see both local and inherited fields.
+
+### Create → Validate Loop
+
+When scaffolding a new document:
+
+```bash
+rootline describe <dir> --field schema.id.next   # Get next auto-ID
+rootline new <filepath> --dry-run                 # Preview scaffold
+rootline new <filepath>                           # Create document
+rootline validate <filepath>                      # Verify it's valid
+```
 
 ## Command Reference
 

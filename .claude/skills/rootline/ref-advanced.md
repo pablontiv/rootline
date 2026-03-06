@@ -116,10 +116,28 @@ rootline init <path> --force                # Overwrite existing .stem
   - Flat mode: Single `.stem` with inferred schema
   - Hierarchical mode: Single `.stem` with `version: 2`, match-based per-level schema, auto-generated aggregates
 
-### Typical workflow
+### Typical workflow (full bootstrap)
 
 ```bash
-rootline init docs/epics/ --dry-run         # Preview inferred schema
-rootline init docs/epics/                   # Write .stem
-rootline validate --all docs/epics/         # Verify against new schema
+rootline init <path> --dry-run              # 1. Preview inferred schema
+# Review output: check for fields inferred as enum that should be string (e.g. dates)
+rootline init <path>                        # 2. Write .stem (--force to overwrite)
+rootline describe <path> --output table     # 3. Show effective schema (local + inherited)
+rootline validate --all --output json       # 4. Validate all documents
+# If type-consistency errors: a field conflicts with parent .stem type.
+# Fix: remove the field from local .stem and let it inherit from parent.
+rootline fix --all --dry-run                # 5. Preview any auto-fixes
+rootline fix --all                          # 6. Apply fixes
+rootline validate --all                     # 7. Confirm clean state
+rootline tree <path> --output table         # 8. Show final structure to user
 ```
+
+### Inheritance conflict resolution
+
+When `init` infers a field that a parent `.stem` already defines with a different type (e.g., local enum vs parent string), rootline raises a `type-consistency` error. The correct fix is:
+
+1. Remove the conflicting field from the local `.stem`
+2. The field will inherit from the parent with its original type
+3. Re-validate to confirm the conflict is resolved
+
+This is common with `estado` — the parent defines it as `string` (to allow different values per subtree), so child `.stem` files should not redefine it as `enum`.
