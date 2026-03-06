@@ -151,8 +151,8 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scanning: %w", err)
 	}
 
-	// Run derivation for --where filtering on derived fields.
 	derive.DeriveAllSimple(ctx, records, root)
+	derive.EnrichBuiltinsSimple(ctx, records, root)
 	derive.AggregateAllSimple(ctx, records, root)
 
 	// Apply --where filter.

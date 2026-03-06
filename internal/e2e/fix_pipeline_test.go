@@ -61,6 +61,7 @@ func scanAndAggregate(t *testing.T, ctx context.Context, root string) []*extract
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
+	derive.EnrichBuiltinsSimple(ctx, records, root)
 	derive.AggregateAllSimple(ctx, records, root)
 	return records
 }

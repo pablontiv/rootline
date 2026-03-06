@@ -43,7 +43,7 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 		// required: true → field must exist
 		if field.Required && !exists {
 			// Layer 1: Skip for aggregate-computed fields on index files.
-			if _, hasAggregate := effective.Aggregate[name]; hasAggregate && isIndexFile(record.Path, effective) {
+			if _, hasAggregate := effective.Aggregate[name]; hasAggregate && IsIndexFile(record.Path, effective) {
 				continue
 			}
 			// Layer 2: Skip if excludes.match pattern matches the record path.
@@ -79,7 +79,7 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 	// Phase 1b: Aggregate consistency — if a field has an aggregate expression
 	// and this is an index file, the frontmatter value must match the derived value.
 	for name := range effective.Aggregate {
-		if !isIndexFile(record.Path, effective) {
+		if !IsIndexFile(record.Path, effective) {
 			continue
 		}
 		fmVal, hasFM := record.Frontmatter[name]
@@ -339,9 +339,9 @@ func stringSliceContains(slice []string, s string) bool {
 	return false
 }
 
-// isIndexFile reports whether a record path is a directory index file.
+// IsIndexFile reports whether a record path is a directory index file.
 // It checks structural.subdirs.require_index (default "README.md").
-func isIndexFile(path string, stem *StemFile) bool {
+func IsIndexFile(path string, stem *StemFile) bool {
 	indexName := "README.md"
 	if stem != nil && stem.Structural.Subdirs.RequireIndex != "" {
 		indexName = stem.Structural.Subdirs.RequireIndex

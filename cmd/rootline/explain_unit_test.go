@@ -2,9 +2,11 @@ package main
 
 import (
 	"testing"
+
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
-func TestIsExplainIndexFile(t *testing.T) {
+func TestIsIndexFile(t *testing.T) {
 	tests := []struct {
 		path string
 		want bool
@@ -16,9 +18,33 @@ func TestIsExplainIndexFile(t *testing.T) {
 		{"/tmp/project/README.txt", false},
 	}
 	for _, tt := range tests {
-		got := isExplainIndexFile(tt.path)
+		got := rules.IsIndexFile(tt.path, nil)
 		if got != tt.want {
-			t.Errorf("isExplainIndexFile(%q) = %v, want %v", tt.path, got, tt.want)
+			t.Errorf("IsIndexFile(%q, nil) = %v, want %v", tt.path, got, tt.want)
+		}
+	}
+}
+
+func TestIsIndexFile_CustomRequireIndex(t *testing.T) {
+	stem := &rules.StemFile{
+		Structural: rules.StructuralRules{
+			Subdirs: rules.SubdirRules{
+				RequireIndex: "index.md",
+			},
+		},
+	}
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"/tmp/project/index.md", true},
+		{"/tmp/project/README.md", false},
+		{"/tmp/project/doc1.md", false},
+	}
+	for _, tt := range tests {
+		got := rules.IsIndexFile(tt.path, stem)
+		if got != tt.want {
+			t.Errorf("IsIndexFile(%q, custom) = %v, want %v", tt.path, got, tt.want)
 		}
 	}
 }

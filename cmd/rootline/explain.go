@@ -25,7 +25,6 @@ func init() {
 	rootCmd.AddCommand(explainCmd)
 }
 
-
 func runExplain(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
@@ -70,12 +69,13 @@ func runExplain(cmd *cobra.Command, args []string) error {
 	}
 
 	// Run aggregation for index files.
-	if effective != nil && len(effective.Aggregate) > 0 && isExplainIndexFile(absPath) {
+	if effective != nil && len(effective.Aggregate) > 0 && rules.IsIndexFile(absPath, effective) {
 		scanDir := filepath.Dir(absPath)
 		reg2 := extract.NewRegistry()
 		siblings, scanErr := index.Scan(ctx, scanDir, reg2)
 		if scanErr == nil && len(siblings) > 0 {
 			derive.DeriveAllSimple(ctx, siblings, scanDir)
+			derive.EnrichBuiltinsSimple(ctx, siblings, scanDir)
 			derive.AggregateAllSimple(ctx, siblings, scanDir)
 			// Copy derived values from the scanned version of this record.
 			for _, s := range siblings {
@@ -140,8 +140,4 @@ func sortedMapKeys(m map[string]any) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-func isExplainIndexFile(absPath string) bool {
-	return filepath.Base(absPath) == "README.md"
 }

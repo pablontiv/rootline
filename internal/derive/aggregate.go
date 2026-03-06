@@ -31,7 +31,7 @@ func AggregateAll(ctx context.Context, records []*extract.Record, root string, r
 	var nonIndexRecords []*extract.Record
 
 	for _, rec := range records {
-		if isIndexFile(rec.Path) {
+		if isIdx, ok := rec.Derived["isIndex"]; ok && isIdx == true {
 			indexRecords = append(indexRecords, rec)
 		} else {
 			nonIndexRecords = append(nonIndexRecords, rec)
@@ -160,9 +160,4 @@ func aggregateRecord(record *extract.Record, effective *rules.StemFile, descenda
 // AggregateAllSimple runs aggregation using the default resolver.
 func AggregateAllSimple(ctx context.Context, records []*extract.Record, root string) {
 	AggregateAll(ctx, records, root, DefaultResolver())
-}
-
-// isIndexFile reports whether a record path is a directory index file.
-func isIndexFile(path string) bool {
-	return filepath.Base(path) == "README.md"
 }

@@ -22,14 +22,15 @@ func TestAggregateAll_BasicEstado(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
+	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived["estado"] != "Completed" {
 		t.Errorf("README estado = %v, want Completed", records[0].Derived["estado"])
 	}
-	// Non-index records should NOT have derived estado.
-	if records[1].Derived != nil {
-		t.Errorf("task[0].Derived = %v, want nil", records[1].Derived)
+	// Non-index records should NOT have derived estado from aggregation.
+	if _, hasEstado := records[1].Derived["estado"]; hasEstado {
+		t.Errorf("task[0].Derived[estado] = %v, want absent", records[1].Derived["estado"])
 	}
 }
 
@@ -47,6 +48,7 @@ func TestAggregateAll_NotAllCompleted(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
+	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived["estado"] != "Blocked" {
@@ -73,6 +75,7 @@ func TestAggregateAll_MultiLevel(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
+	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	// Story README: descendants = [T001, T002] → all Completed
@@ -101,6 +104,7 @@ func TestAggregateAll_ChildrenVariable(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
+	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	// E01 README has 1 child index (F01/README.md)
@@ -123,10 +127,11 @@ func TestAggregateAll_NoConfig(t *testing.T) {
 	stem := &rules.StemFile{} // no aggregate
 	resolver := func(dir string) *rules.StemFile { return stem }
 
+	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
 
-	if records[0].Derived != nil {
-		t.Errorf("Derived = %v, want nil", records[0].Derived)
+	if _, hasEstado := records[0].Derived["estado"]; hasEstado {
+		t.Errorf("Derived[estado] = %v, want absent (no aggregate config)", records[0].Derived["estado"])
 	}
 }
 
@@ -141,12 +146,13 @@ func TestAggregateAll_NoIndexFiles(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
+	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
 
-	// No index files → no aggregation
+	// No index files → no aggregation (only isIndex from enrichment)
 	for _, rec := range records {
-		if rec.Derived != nil {
-			t.Errorf("%s.Derived = %v, want nil", rec.Path, rec.Derived)
+		if _, hasEstado := rec.Derived["estado"]; hasEstado {
+			t.Errorf("%s.Derived[estado] = %v, want absent (no index files)", rec.Path, rec.Derived["estado"])
 		}
 	}
 }
@@ -175,6 +181,7 @@ func TestAggregateAll_EmptyDescendants(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
+	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived["estado"] != "Pending" {
@@ -200,6 +207,7 @@ func TestAggregateAll_RootReadme(t *testing.T) {
 	}
 	resolver := func(dir string) *rules.StemFile { return stem }
 
+	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	// Root README should see all descendants including F02/T001 which is Pending.

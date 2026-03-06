@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/graph"
 	"github.com/pablontiv/rootline/internal/index"
@@ -62,6 +63,8 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
+
+	derive.EnrichBuiltinsSimple(ctx, records, absRoot)
 
 	// Apply --where filter.
 	records, err = filterRecords(ctx, records, graphWhere)

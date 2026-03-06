@@ -350,3 +350,41 @@ func TestExecuteExpr_PathContains(t *testing.T) {
 		t.Errorf("count = %d, want 1", qr.Meta.Count)
 	}
 }
+
+func TestMatchRecord_IsIndex_True(t *testing.T) {
+	rec := &extract.Record{
+		Path: "dir/README.md", Type: "markdown",
+		Frontmatter: map[string]any{},
+		Derived:     map[string]any{"isIndex": true},
+	}
+	prog, err := CompileWhere("isIndex == true")
+	if err != nil {
+		t.Fatal(err)
+	}
+	match, err := MatchRecord(context.Background(), prog, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !match {
+		t.Error("expected match for isIndex == true on README.md")
+	}
+}
+
+func TestMatchRecord_IsIndex_False(t *testing.T) {
+	rec := &extract.Record{
+		Path: "dir/T001.md", Type: "markdown",
+		Frontmatter: map[string]any{},
+		Derived:     map[string]any{"isIndex": false},
+	}
+	prog, err := CompileWhere("isIndex == false")
+	if err != nil {
+		t.Fatal(err)
+	}
+	match, err := MatchRecord(context.Background(), prog, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !match {
+		t.Error("expected match for isIndex == false on T001.md")
+	}
+}

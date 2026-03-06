@@ -62,8 +62,8 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scanning: %w", err)
 	}
 
-	// Run derivation for derived fields.
 	derive.DeriveAllSimple(ctx, records, root)
+	derive.EnrichBuiltinsSimple(ctx, records, root)
 	derive.AggregateAllSimple(ctx, records, root)
 
 	// Load stem for link schema.

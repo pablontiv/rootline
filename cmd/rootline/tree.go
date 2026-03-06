@@ -72,8 +72,8 @@ func runTree(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
-	// Run derivation and aggregation (best-effort, errors silently skipped).
 	derive.DeriveAllSimple(ctx, records, absRoot)
+	derive.EnrichBuiltinsSimple(ctx, records, absRoot)
 	derive.AggregateAllSimple(ctx, records, absRoot)
 
 	// Apply --where filter.
