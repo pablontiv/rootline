@@ -19,7 +19,7 @@ metodo: collaborative-research
 
 | Mode | Trigger | Output |
 |------|---------|--------|
-| Flat | <2 hierarchy levels detected | `version: 1` `.stem` with flat schema |
+| Flat | <2 hierarchy levels detected | `version: 2` `.stem` with flat schema |
 | Hierarchical | ≥2 levels with pattern `[A-Z]+\d+-` | `version: 2` `.stem` with `match:` conditions |
 
 **Source files**:
