@@ -3,7 +3,6 @@ package rules
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -442,25 +441,7 @@ schema:
 	}
 }
 
-func TestParseStemV2_RejectsLevels(t *testing.T) {
-	content := []byte(`version: 2
-levels:
-  epic:
-    match: "E*"
-schema:
-  estado:
-    type: enum
-`)
-	_, err := ParseStem("test/.stem", content)
-	if err == nil {
-		t.Fatal("expected error for v2 stem with levels:, got nil")
-	}
-	if !strings.Contains(err.Error(), "levels") {
-		t.Errorf("error should mention 'levels', got: %v", err)
-	}
-}
-
-func TestParseStemV2_V1BackwardCompat(t *testing.T) {
+func TestParseStemV2_V2ParsesCorrectly(t *testing.T) {
 	// v2 stems should parse correctly
 	content := []byte(`version: 2
 scope:
@@ -480,23 +461,6 @@ schema:
 	}
 	if !stem.Schema["estado"].Required {
 		t.Error("estado.required should be true")
-	}
-}
-
-func TestParseStemV2_UnsetVersionBackwardCompat(t *testing.T) {
-	// Unset version (0) should behave as v1
-	content := []byte(`scope:
-  match: "*.md"
-schema:
-  title:
-    type: string
-`)
-	stem, err := ParseStem("test/.stem", content)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if stem.Version != 0 {
-		t.Errorf("version = %d, want 0", stem.Version)
 	}
 }
 

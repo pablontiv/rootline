@@ -394,7 +394,7 @@ schema:
 	}
 }
 
-func TestValidateStemHealth_VersionDeprecated(t *testing.T) {
+func TestValidateStemHealth_V1RejectedAtParse(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
 		t.Fatal(err)
@@ -410,40 +410,16 @@ schema:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	// v1 stems now fail at parse time (yaml-valid check)
 	found := false
 	for _, c := range result.Checks {
-		if c.Name == "version-deprecated" && c.Status == "warn" {
+		if c.Name == "yaml-valid" && c.Status == "fail" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("expected version-deprecated warn check for v1 stem")
-	}
-}
-
-func TestValidateStemHealth_V2NoWarning(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
-scope:
-  match: "*.md"
-schema:
-  titulo:
-    type: string
-`))
-
-	result, err := ValidateStemHealth(context.Background(), dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	for _, c := range result.Checks {
-		if c.Name == "version-deprecated" {
-			t.Error("unexpected version-deprecated check for v2 stem")
-		}
+		t.Error("expected yaml-valid fail check for v1 stem")
 	}
 }
 

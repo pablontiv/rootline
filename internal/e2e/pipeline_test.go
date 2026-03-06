@@ -76,7 +76,7 @@ func TestPipeline_ScanExtractWithStemScope(t *testing.T) {
 		"config.yml": "key: value",
 
 		// Subdirectory with its own .stem narrowing scope
-		"docs/.stem":        "scope:\n  match: \"*.md\"\nschema:\n  status:\n    type: string\n",
+		"docs/.stem":        "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  status:\n    type: string\n",
 		"docs/guide.md":     "---\ntitle: Guide\nstatus: draft\n---\n# Guide",
 		"docs/api.md":       "---\ntitle: API Reference\nstatus: published\n---\n# API",
 		"docs/changelog.md": "---\ntitle: Changelog\n---\n# Changes",
@@ -119,7 +119,7 @@ func TestPipeline_ScopeNarrowsInSubdirectory(t *testing.T) {
 		"readme.md": "---\ntitle: Root\n---\n",
 
 		// tasks/ narrows scope to T*.md only
-		"tasks/.stem":       "scope:\n  match: \"T*.md\"\n",
+		"tasks/.stem":       "version: 2\nscope:\n  match: \"T*.md\"\n",
 		"tasks/T001-foo.md": "---\ntitle: Task 1\n---\n",
 		"tasks/T002-bar.md": "---\ntitle: Task 2\n---\n",
 		"tasks/README.md":   "---\ntitle: Tasks Index\n---\n",
@@ -192,7 +192,7 @@ func TestPipeline_StemMergeInheritance(t *testing.T) {
 		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n  owner:\n    type: string\n",
 
 		// Child adds status field, inherits title + owner
-		"docs/.stem": "schema:\n  status:\n    type: string\n    values:\n      - draft\n      - published\n",
+		"docs/.stem": "version: 2\nschema:\n  status:\n    type: string\n    values:\n      - draft\n      - published\n",
 
 		"docs/guide.md": "---\ntitle: Guide\nstatus: draft\nowner: team-a\n---\n# Guide",
 	})
@@ -274,8 +274,8 @@ func TestPipeline_NoStemMatchesEverything(t *testing.T) {
 func TestPipeline_DeepNesting(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		".stem":                   "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  project:\n    type: string\n",
-		"epics/.stem":             "schema:\n  epic:\n    type: string\n",
-		"epics/features/.stem":    "schema:\n  feature:\n    type: string\n",
+		"epics/.stem":             "version: 2\nschema:\n  epic:\n    type: string\n",
+		"epics/features/.stem":    "version: 2\nschema:\n  feature:\n    type: string\n",
 		"epics/features/task.md":  "---\ntitle: Task\nproject: rootline\nepic: E01\nfeature: F01\n---\n# Task",
 		"epics/features/notes.md": "---\ntitle: Notes\n---\n# Notes",
 	})
@@ -399,7 +399,8 @@ schema:
     required: true
 `,
 		// PRD .stem: adds Estado enum + conditional requires
-		"prd/.stem": `schema:
+		"prd/.stem": `version: 2
+schema:
   Estado:
     type: enum
     values:
@@ -595,7 +596,8 @@ schema:
     type: string
     required: true
 `,
-		"prd/.stem": `schema:
+		"prd/.stem": `version: 2
+schema:
   Estado:
     type: enum
     values:

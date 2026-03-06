@@ -23,7 +23,7 @@ func executeDescribe(t *testing.T, args ...string) (string, error) {
 func TestDescribeCmd_FullContract(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
 		".stem":     "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  Fecha:\n    type: string\n    required: true\n",
-		"prd/.stem": "schema:\n  Estado:\n    type: enum\n    values:\n      - Pending\n      - Completado\n    required: true\nvalidate:\n  - rule: requires\n    if: { Estado: Completado }\n    then: { fields: [Fecha] }\n",
+		"prd/.stem": "version: 2\nschema:\n  Estado:\n    type: enum\n    values:\n      - Pending\n      - Completado\n    required: true\nvalidate:\n  - rule: requires\n    if: { Estado: Completado }\n    then: { fields: [Fecha] }\n",
 	})
 
 	stdout, err := executeDescribe(t, filepath.Join(root, "prd"))
@@ -135,7 +135,7 @@ func TestDescribeCmd_FieldExtraction(t *testing.T) {
 func TestDescribeCmd_FieldApplies(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
 		".stem":     "version: 2\nschema:\n  title:\n    type: string\n",
-		"sub/.stem": "schema:\n  status:\n    type: string\n",
+		"sub/.stem": "version: 2\nschema:\n  status:\n    type: string\n",
 	})
 
 	stdout, err := executeDescribe(t, "--field", "applies", filepath.Join(root, "sub"))
@@ -156,7 +156,7 @@ func TestDescribeCmd_FieldApplies(t *testing.T) {
 func TestDescribeCmd_ScopeInherited(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
 		".stem":     "version: 2\nscope:\n  match: \"*.md\"\n",
-		"sub/.stem": "schema:\n  x:\n    type: string\n",
+		"sub/.stem": "version: 2\nschema:\n  x:\n    type: string\n",
 	})
 
 	stdout, err := executeDescribe(t, filepath.Join(root, "sub"))
@@ -178,8 +178,8 @@ func TestDescribeCmd_ScopeInherited(t *testing.T) {
 func TestDescribeCmd_DeepInheritance(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
 		".stem":           "version: 2\nschema:\n  project:\n    type: string\n",
-		"epics/.stem":     "schema:\n  epic:\n    type: string\n",
-		"epics/E01/.stem": "schema:\n  feature:\n    type: string\n",
+		"epics/.stem":     "version: 2\nschema:\n  epic:\n    type: string\n",
+		"epics/E01/.stem": "version: 2\nschema:\n  feature:\n    type: string\n",
 	})
 
 	stdout, err := executeDescribe(t, filepath.Join(root, "epics", "E01"))
