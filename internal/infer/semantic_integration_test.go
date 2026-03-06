@@ -105,6 +105,65 @@ func TestIntegration_TraceabilityFixture(t *testing.T) {
 	}
 }
 
+func TestIntegration_RequiresAgentConsistency(t *testing.T) {
+	// Verify that formal dependency inferences and verified traceability
+	// are NOT flagged as requires_agent, while informal/unverified ARE.
+	agentTypes := map[string]bool{
+		"informal_dependency_candidate": true,
+		"unverified_traceability":       true,
+	}
+
+	// Build inferences from formal-deps fixture.
+	formalRec := loadSemanticFixture(t, "formal-deps.md")
+	formalRec.Links = extract.ParseLinks(formalRec.Body)
+	formalInfs := DetectFormalDependencies([]*extract.Record{formalRec})
+
+	report := NewAnalyzeReport("/test")
+	report.AddCategory("formal_deps", "Formal Dependencies", formalInfs, agentTypes)
+
+	// Build inferences from traceability fixture.
+	traceRec := loadSemanticFixture(t, "traceability.md")
+	traceInfs := DetectTraceabilityLinks([]*extract.Record{traceRec})
+
+	report.AddCategory("traceability", "Traceability Links", traceInfs, agentTypes)
+	report.Finalize()
+
+	// formal_dependency should have requires_agent: false.
+	for _, cat := range report.Categories {
+		for _, inf := range cat.Inferences {
+			switch inf.Type {
+			case "formal_dependency":
+				if inf.RequiresAgent {
+					t.Errorf("formal_dependency should not require agent: %+v", inf)
+				}
+			case "informal_dependency_candidate":
+				if !inf.RequiresAgent {
+					t.Errorf("informal_dependency_candidate should require agent: %+v", inf)
+				}
+			case "verified_traceability":
+				if inf.RequiresAgent {
+					t.Errorf("verified_traceability should not require agent: %+v", inf)
+				}
+			case "unverified_traceability":
+				if !inf.RequiresAgent {
+					t.Errorf("unverified_traceability should require agent: %+v", inf)
+				}
+			}
+		}
+	}
+
+	// Summary should reflect the mix.
+	if report.Summary.TotalInferences == 0 {
+		t.Error("expected non-zero total inferences")
+	}
+	if report.Summary.AgentRequired == 0 {
+		t.Error("expected non-zero agent-required inferences")
+	}
+	if report.Summary.EngineResolved == 0 {
+		t.Error("expected non-zero engine-resolved inferences")
+	}
+}
+
 func TestIntegration_EmptyDependenciesSection(t *testing.T) {
 	rec := loadSemanticFixture(t, "edge-empty-deps.md")
 
