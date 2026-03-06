@@ -31,6 +31,19 @@ Uses `expr-lang/expr`:
 - Boolean: `&&` (AND)
 - Field access: direct field names from frontmatter and derived fields
 
+### Built-in fields
+
+Available in all `--where` expressions without `.stem` configuration:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `isIndex` | `bool` | `true` for index files (README.md), `false` for content files |
+
+```bash
+rootline query --where 'isIndex == false'   # content records only
+rootline tree --where 'isIndex == false'     # tree without index files
+```
+
 ### Output format (`kind: "rootline/query"`):
 
 ```json

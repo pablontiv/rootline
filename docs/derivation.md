@@ -52,13 +52,31 @@ links:
 
 This enables derived state from dependencies — e.g., a task is blocked if any linked blocker has `estado != "Completed"`.
 
+## Built-in Derived Fields
+
+Rootline automatically computes structural metadata fields before user-defined derivation runs. These fields are always available in `--where` expressions without any `.stem` configuration.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `isIndex` | `bool` | `true` if the record is a directory index file (default: `README.md`, configurable via `.stem` `structural.subdirs.require_index`) |
+
+Example usage:
+
+```bash
+# List only content records (exclude index files)
+rootline query docs/epics/ --where 'isIndex == false'
+
+# Count index files
+rootline query docs/epics/ --where 'isIndex == true' --count
+```
+
 ## Pipeline
 
 ```
-Extraction → Validation → Derivation → Aggregation → Query
+Extraction → Validation → Derivation → Enrichment → Aggregation → Query
 ```
 
-Aggregation processes deepest indices first (bottom-up), so parent index files see fully-derived children.
+Enrichment computes built-in fields (`isIndex`). Aggregation processes deepest indices first (bottom-up), so parent index files see fully-derived children.
 
 ## Tracing with Explain
 
