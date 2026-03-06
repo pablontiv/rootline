@@ -120,6 +120,43 @@ func TestIntegration_InvariantEdgeCases(t *testing.T) {
 	}
 }
 
+func TestIntegration_SubSchemaDetection(t *testing.T) {
+	records := loadFixtures(t, "testdata/fixtures/body-aware")
+
+	// Filter to subschema- prefixed fixtures.
+	var subschemaRecords []*extract.Record
+	for _, rec := range records {
+		matched, _ := matchPrefix(rec.Path, "subschema-")
+		if matched {
+			subschemaRecords = append(subschemaRecords, rec)
+		}
+	}
+	if len(subschemaRecords) != 5 {
+		t.Fatalf("expected 5 subschema fixtures, got %d", len(subschemaRecords))
+	}
+
+	inferences := DetectSubSchemas(subschemaRecords, "tipo")
+
+	// "ejecutable_en" is specific to tipo=test (3 records), not in implementacion.
+	// "componente" is specific to tipo=implementacion (2 records), not in test.
+	foundEjec := false
+	foundComp := false
+	for _, inf := range inferences {
+		if inf.Type == "type_specific_field" && inf.Field == "ejecutable_en" && inf.Value == "test" {
+			foundEjec = true
+		}
+		if inf.Type == "type_specific_field" && inf.Field == "componente" && inf.Value == "implementacion" {
+			foundComp = true
+		}
+	}
+	if !foundEjec {
+		t.Error("expected type_specific_field for ejecutable_en in test group")
+	}
+	if !foundComp {
+		t.Error("expected type_specific_field for componente in implementacion group")
+	}
+}
+
 func TestIntegration_BodyNoHeadings(t *testing.T) {
 	records := loadBodyAwareFixtures(t, "no-headings")
 	if len(records) != 1 {

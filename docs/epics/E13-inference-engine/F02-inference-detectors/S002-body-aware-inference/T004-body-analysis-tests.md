@@ -1,6 +1,6 @@
 ---
 ejecutable_en: 1 sesion
-estado: Specified
+estado: Completed
 tipo: software-module
 ---
 # T004: Tests para body-aware detectors
