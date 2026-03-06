@@ -1,3 +1,8 @@
+---
+tipo: field-log
+linea: descriptive-normative-barrier
+ciclos_registrados: 1
+---
 # Field Log: descriptive-normative-barrier
 
 > "If it's not in the field log, it didn't happen."

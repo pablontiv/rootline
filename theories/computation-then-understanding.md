@@ -1,3 +1,9 @@
+---
+tipo: theory
+confianza: emergent
+fecha: "2026-03-03"
+linea_origen: inference-engine-architecture
+---
 # Theory: Computation-then-Understanding
 
 **Date documented:** 2026-03-03

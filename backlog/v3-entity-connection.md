@@ -1,3 +1,8 @@
+---
+tipo: backlog-question
+tema: schema, versioning, compatibility
+fuente: intake/inference-engine-architecture
+---
 # Q4: Connection to v3 Entity Model
 
 ## Question

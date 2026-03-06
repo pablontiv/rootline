@@ -1,0 +1,16 @@
+version: 2
+schema:
+    tipo:
+        type: enum
+        enum: [theory]
+        required: true
+    confianza:
+        type: enum
+        enum: [emergent, developing, consolidated]
+        required: true
+    fecha:
+        type: string
+        required: true
+    linea_origen:
+        type: string
+        required: true

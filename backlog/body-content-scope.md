@@ -1,3 +1,8 @@
+---
+tipo: backlog-question
+tema: architecture, scope, validation
+fuente: intake/inference-engine-architecture
+---
 # Q5: Body Content as First-Class Data
 
 ## Question

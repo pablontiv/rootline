@@ -1,3 +1,8 @@
+---
+tipo: backlog-question
+tema: api-design, versioning, compatibility
+fuente: intake/inference-engine-architecture
+---
 # Q1: Report Schema Versioning
 
 ## Question

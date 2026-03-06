@@ -112,7 +112,47 @@ For each reference file (`ref-validate.md`, `ref-schema.md`, `ref-query.md`, `re
 - Compare flags, usage, and description against the reference content
 - Check for undocumented flags or removed flags
 
-### 4. Present drift report
+### 4. Rootline-enhanced detection (optional)
+
+If `rootline` is available, use it for deeper validation. Gate check first:
+
+```bash
+command -v rootline
+```
+
+If rootline is not installed, skip this step — basic drift detection from step 3 is sufficient.
+
+#### Schema validation
+
+If `.stem` files exist in any target doc directories, run validation to surface schema violations as additional drift indicators:
+
+```bash
+rootline validate --all
+```
+
+Report any validation errors alongside the manual drift findings. Exclude `docs/epics/` and `docs/research/` results (roadmap territory).
+
+#### Metadata staleness
+
+Use rootline query to check for documents with potentially stale metadata:
+
+```bash
+rootline query docs/ --where 'isIndex == false' --output table
+```
+
+Review the output for documents whose metadata fields (dates, status, etc.) appear inconsistent with recent code changes detected in step 2.
+
+#### Structure check
+
+Use rootline tree to verify the documentation hierarchy is consistent with code structure:
+
+```bash
+rootline tree docs/
+```
+
+Flag any structural mismatches (e.g., missing index files, orphaned docs, directories without `.stem` coverage).
+
+### 5. Present drift report
 
 Show the user a summary:
 
@@ -131,9 +171,14 @@ README.md
 docs/
   ✗ docs/migrate.md: --split flag undocumented
   ✓ All commands have doc files
+
+rootline (optional)
+  ✗ validate: 2 schema violations in docs/
+  ✗ staleness: docs/query.md metadata may be stale
+  ✓ structure: doc hierarchy consistent
 ```
 
-### 5. Apply updates
+### 6. Apply updates
 
 For each category with drift:
 1. Read the current document section
@@ -142,11 +187,11 @@ For each category with drift:
 4. Ask the user for confirmation via AskUserQuestion before applying
 5. Apply edits using Edit tool (surgical, minimal changes)
 
-### 6. Validate
+### 7. Validate
 
 Run `rootline validate` on any updated docs that are under `.stem` schemas.
 
-### 7. Summary
+### 8. Summary
 
 Report what was updated and suggest a commit message:
 

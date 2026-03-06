@@ -1,0 +1,12 @@
+version: 2
+schema:
+    estado:
+        type: string
+        required: true
+    fecha:
+        type: string
+        required: true
+    metodo:
+        type: string
+    origen:
+        type: string

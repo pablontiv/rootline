@@ -1,3 +1,9 @@
+---
+tipo: closure
+fecha_cierre: "2026-03-03"
+ciclos_completados: 3
+teoria_emergente: computation-then-understanding
+---
 # Closure: inference-engine-architecture
 
 **Closure date:** 2026-03-03

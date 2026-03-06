@@ -1,3 +1,8 @@
+---
+tipo: field-log
+linea: inference-engine-architecture
+ciclos_registrados: 3
+---
 # Field Log: inference-engine-architecture
 
 > "If it's not in the field log, it didn't happen."

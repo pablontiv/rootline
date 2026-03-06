@@ -1,0 +1,12 @@
+version: 2
+schema:
+    tipo:
+        type: enum
+        enum: [backlog-question]
+        required: true
+    tema:
+        type: string
+        required: true
+    fuente:
+        type: string
+        required: true

@@ -1,3 +1,8 @@
+---
+tipo: backlog-question
+tema: configuration, heuristics, inference
+fuente: intake/inference-engine-architecture
+---
 # Q3: Threshold Configurability
 
 ## Question

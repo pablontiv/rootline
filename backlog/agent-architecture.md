@@ -1,3 +1,8 @@
+---
+tipo: backlog-question
+tema: architecture, agents, inference
+fuente: intake/inference-engine-architecture
+---
 # Q2: Agent Architecture — Single Generalist vs Multiple Specialized
 
 ## Question

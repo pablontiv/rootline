@@ -1,3 +1,9 @@
+---
+tipo: question
+estado: closed
+tipo_entendimiento: understand
+fecha_inicio: "2026-03-03"
+---
 # Inference Engine Architecture — Pre-implementation Decisions
 
 ## Central question
