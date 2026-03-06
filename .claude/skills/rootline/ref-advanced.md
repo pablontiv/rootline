@@ -49,8 +49,6 @@ rootline migrate                            # Diff current .stem vs git HEAD
 rootline migrate .stem --from old.stem      # Diff against specific file
 rootline migrate --rename old_field=new     # Rename a field across all docs
 rootline migrate --split                    # Flat .stem → hierarchical files
-rootline migrate --to-v2                    # Upgrade version field to v2
-rootline migrate .stem --from-levels        # Convert v1 levels: to v2 match:
 rootline migrate --dry-run <flag>           # Preview any migration
 ```
 
@@ -62,16 +60,12 @@ rootline migrate --dry-run <flag>           # Preview any migration
 | `--from <file>` | Compare against specified .stem file |
 | `--rename old=new` | Rename a field in all documents and .stem files |
 | `--split` | Split flat .stem into hierarchical per-level files |
-| `--to-v2` | Upgrade .stem version from 0/1 to 2 |
-| `--from-levels` | Convert v1 `levels:` syntax to v2 `match:`-based fields |
 
 ### Output formats
 
 - **Diff mode** (`kind: "rootline/migrate-diff"`): Changes with field, kind, breaking flag, message
 - **Rename mode** (`kind: "rootline/migrate-rename"`): Files and stems updated, migration log appended
 - **Split mode**: Creates hierarchical .stem files with auto-generated aggregates
-- **To-v2 mode** (`kind: "rootline/migrate-to-v2"`): Files upgraded, summary
-- **From-levels mode**: Prints converted .stem content to stdout
 
 ### Typical workflow
 
@@ -83,10 +77,6 @@ rootline migrate                            # Apply migration
 # Rename a field
 rootline migrate --rename estado=status --dry-run
 rootline migrate --rename estado=status
-
-# Upgrade schema format
-rootline migrate --to-v2 --dry-run
-rootline migrate --to-v2
 ```
 
 ---
