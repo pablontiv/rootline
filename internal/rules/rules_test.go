@@ -3,6 +3,7 @@ package rules
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -438,6 +439,42 @@ schema:
 	tipo := stem.Schema["tipo"]
 	if tipo.Match == nil || len(tipo.Match.Patterns) != 2 {
 		t.Errorf("tipo.match.patterns len = %d, want 2", len(tipo.Match.Patterns))
+	}
+}
+
+func TestParseStem_RejectsV1(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		wantVer int
+	}{
+		{
+			name:    "version 1 rejected",
+			content: "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: string\n",
+			wantVer: 1,
+		},
+		{
+			name:    "version 0 rejected (no version field)",
+			content: "scope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n",
+			wantVer: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseStem("test/.stem", []byte(tt.content))
+			if err == nil {
+				t.Fatalf("expected error for version %d, got nil", tt.wantVer)
+			}
+			wantMsg := "no longer supported"
+			if !strings.Contains(err.Error(), wantMsg) {
+				t.Errorf("error should contain %q, got: %v", wantMsg, err)
+			}
+			wantUpgrade := "migrate --to-v2"
+			if !strings.Contains(err.Error(), wantUpgrade) {
+				t.Errorf("error should contain %q, got: %v", wantUpgrade, err)
+			}
+		})
 	}
 }
 
