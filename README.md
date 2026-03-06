@@ -286,7 +286,7 @@ go vet ./...                      # Static analysis
 golangci-lint run ./...           # Full lint
 ```
 
-Pre-commit hooks run `golangci-lint` and `gofmt` automatically. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): description`), enforced by a commit-msg hook.
+Pre-commit hooks run `golangci-lint` and `gofmt` automatically. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): description`), enforced by a commit-msg hook. To manually sync skills and rebuild after pulling: `bash .githooks/pre-push`.
 
 ---
 
