@@ -68,7 +68,7 @@ func recordPaths(records []*extract.Record) []string {
 func TestPipeline_ScanExtractWithStemScope(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		// Root .stem: scope only *.md files
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n",
 
 		// Markdown files at root
 		"readme.md":  "---\ntitle: Root Readme\n---\n# Welcome",
@@ -114,7 +114,7 @@ func TestPipeline_ScanExtractWithStemScope(t *testing.T) {
 func TestPipeline_ScopeNarrowsInSubdirectory(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		// Root: match all markdown
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\n",
 
 		"readme.md": "---\ntitle: Root\n---\n",
 
@@ -156,7 +156,7 @@ func TestPipeline_ScopeNarrowsInSubdirectory(t *testing.T) {
 // exclusions and scope filtering work together correctly.
 func TestPipeline_StemignoreAndScopeCombined(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem":       "version: 1\nscope:\n  match: \"*.md\"\n",
+		".stem":       "version: 2\nscope:\n  match: \"*.md\"\n",
 		".stemignore": "draft-*.md\n",
 
 		"published.md":  "---\ntitle: Published\n---\n",
@@ -189,7 +189,7 @@ func TestPipeline_StemignoreAndScopeCombined(t *testing.T) {
 func TestPipeline_StemMergeInheritance(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		// Root defines base schema
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n  owner:\n    type: string\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n    required: true\n  owner:\n    type: string\n",
 
 		// Child adds status field, inherits title + owner
 		"docs/.stem": "schema:\n  status:\n    type: string\n    values:\n      - draft\n      - published\n",
@@ -273,7 +273,7 @@ func TestPipeline_NoStemMatchesEverything(t *testing.T) {
 // inheritance at each level.
 func TestPipeline_DeepNesting(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem":                   "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  project:\n    type: string\n",
+		".stem":                   "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  project:\n    type: string\n",
 		"epics/.stem":             "schema:\n  epic:\n    type: string\n",
 		"epics/features/.stem":    "schema:\n  feature:\n    type: string\n",
 		"epics/features/task.md":  "---\ntitle: Task\nproject: rootline\nepic: E01\nfeature: F01\n---\n# Task",
@@ -333,7 +333,7 @@ func TestPipeline_DeepNesting(t *testing.T) {
 // records preserve all frontmatter types correctly through the pipeline.
 func TestPipeline_FrontmatterExtractionIntegrity(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem":  "version: 1\nscope:\n  match: \"*.md\"\n",
+		".stem":  "version: 2\nscope:\n  match: \"*.md\"\n",
 		"doc.md": "---\ntitle: Test Doc\nstatus: draft\npriority: 1\ntags:\n  - go\n  - testing\n---\n# Body\n\nParagraph.",
 	})
 
@@ -390,7 +390,7 @@ func TestPipeline_FrontmatterExtractionIntegrity(t *testing.T) {
 func TestPipeline_ValidateAfterExtraction(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		// Root .stem: Fecha required for all docs
-		".stem": `version: 1
+		".stem": `version: 2
 scope:
   match: "*.md"
 schema:
@@ -516,7 +516,7 @@ validate:
 // to JSON output: scan → extract → validate → BatchValidationResult.
 func TestPipeline_BatchValidationOutput(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem": `version: 1
+		".stem": `version: 2
 scope:
   match: "*.md"
 schema:
@@ -587,7 +587,7 @@ schema:
 // WalkUp → Merge → DescribeResult with source tracking and applies.
 func TestPipeline_DescribeEffectiveSchema(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem": `version: 1
+		".stem": `version: 2
 scope:
   match: "*.md"
 schema:
@@ -693,7 +693,7 @@ validate:
 // scan → extract → query with operators.
 func TestPipeline_QueryAfterScanExtract(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem":         "version: 1\nscope:\n  match: \"*.md\"\n",
+		".stem":         "version: 2\nscope:\n  match: \"*.md\"\n",
 		"tasks/T001.md": "---\ntitle: Deploy Redis\nestado: Pending\ntipo: servicio-docker\n---\n# Deploy",
 		"tasks/T002.md": "---\ntitle: Auth Module\nestado: Completed\ntipo: modulo-sistema\n---\n# Auth",
 		"tasks/T003.md": "---\ntitle: LXC Setup\nestado: Pending\ntipo: lxc\n---\n# LXC\n\nMigration needed.",

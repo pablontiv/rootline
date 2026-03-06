@@ -22,7 +22,7 @@ func executeDescribe(t *testing.T, args ...string) (string, error) {
 
 func TestDescribeCmd_FullContract(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem":     "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  Fecha:\n    type: string\n    required: true\n",
+		".stem":     "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  Fecha:\n    type: string\n    required: true\n",
 		"prd/.stem": "schema:\n  Estado:\n    type: enum\n    values:\n      - Pending\n      - Completado\n    required: true\nvalidate:\n  - rule: requires\n    if: { Estado: Completado }\n    then: { fields: [Fecha] }\n",
 	})
 
@@ -114,7 +114,7 @@ func TestDescribeCmd_NoStemAncestors(t *testing.T) {
 
 func TestDescribeCmd_FieldExtraction(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  Estado:\n    type: enum\n    values:\n      - Pending\n      - Done\n    required: true\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  Estado:\n    type: enum\n    values:\n      - Pending\n      - Done\n    required: true\n",
 	})
 
 	stdout, err := executeDescribe(t, "--field", "schema.Estado.values", root)
@@ -134,7 +134,7 @@ func TestDescribeCmd_FieldExtraction(t *testing.T) {
 
 func TestDescribeCmd_FieldApplies(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem":     "version: 1\nschema:\n  title:\n    type: string\n",
+		".stem":     "version: 2\nschema:\n  title:\n    type: string\n",
 		"sub/.stem": "schema:\n  status:\n    type: string\n",
 	})
 
@@ -155,7 +155,7 @@ func TestDescribeCmd_FieldApplies(t *testing.T) {
 
 func TestDescribeCmd_ScopeInherited(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem":     "version: 1\nscope:\n  match: \"*.md\"\n",
+		".stem":     "version: 2\nscope:\n  match: \"*.md\"\n",
 		"sub/.stem": "schema:\n  x:\n    type: string\n",
 	})
 
@@ -177,7 +177,7 @@ func TestDescribeCmd_ScopeInherited(t *testing.T) {
 
 func TestDescribeCmd_DeepInheritance(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem":           "version: 1\nschema:\n  project:\n    type: string\n",
+		".stem":           "version: 2\nschema:\n  project:\n    type: string\n",
 		"epics/.stem":     "schema:\n  epic:\n    type: string\n",
 		"epics/E01/.stem": "schema:\n  feature:\n    type: string\n",
 	})
@@ -244,7 +244,7 @@ func TestDescribeCmd_NoStemTableHint(t *testing.T) {
 
 func TestDescribeCmd_SequenceFieldNext(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem":                "version: 1\nschema:\n  id:\n    type: sequence\n    prefix: T\n    digits: 3\n",
+		".stem":                "version: 2\nschema:\n  id:\n    type: sequence\n    prefix: T\n    digits: 3\n",
 		"tasks/T001-first.md":  "---\nestado: Done\n---\n# First\n",
 		"tasks/T002-second.md": "---\nestado: Pending\n---\n# Second\n",
 	})
@@ -263,7 +263,7 @@ func TestDescribeCmd_SequenceFieldNext(t *testing.T) {
 
 func TestDescribeCmd_SequenceFieldNextEmpty(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem": "version: 1\nschema:\n  id:\n    type: sequence\n    prefix: S\n    digits: 3\n",
+		".stem": "version: 2\nschema:\n  id:\n    type: sequence\n    prefix: S\n    digits: 3\n",
 	})
 
 	// Root has no files matching S prefix → S001
@@ -280,7 +280,7 @@ func TestDescribeCmd_SequenceFieldNextEmpty(t *testing.T) {
 
 func TestDescribeCmd_WithStemNoHints(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values:\n      - Pending\n      - Done\n    required: true\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values:\n      - Pending\n      - Done\n    required: true\n",
 	})
 
 	stdout, err := executeDescribe(t, root)

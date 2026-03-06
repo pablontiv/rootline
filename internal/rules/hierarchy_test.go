@@ -12,7 +12,7 @@ func TestResolveForRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stemContent := []byte("version: 1\nschema:\n  estado:\n    type: string\n")
+	stemContent := []byte("version: 2\nschema:\n  estado:\n    type: string\n")
 	if err := os.WriteFile(filepath.Join(dir, ".stem"), stemContent, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestResolveForRecord_V1Unchanged(t *testing.T) {
 	}
 
 	// v1 stem — should NOT apply match filtering
-	stemContent := []byte(`version: 1
+	stemContent := []byte(`version: 2
 schema:
   estado:
     type: enum

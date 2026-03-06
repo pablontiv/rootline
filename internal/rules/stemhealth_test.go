@@ -19,7 +19,7 @@ func mustWriteStemTestFile(t *testing.T, path string, data []byte) {
 
 func TestValidateStemHealth_ValidStems(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 scope:
   match: "*.md"
 schema:
@@ -65,7 +65,7 @@ func TestValidateStemHealth_InvalidYAML(t *testing.T) {
 
 func TestValidateStemHealth_OrphanScope(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 scope:
   match: "*.xyz"
 `))
@@ -88,7 +88,7 @@ scope:
 
 func TestValidateStemHealth_ScopeMatchWithMatchingFile(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 scope:
   match: "*.md"
 `))
@@ -107,7 +107,7 @@ scope:
 
 func TestValidateStemHealth_EnumValues(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
   estado:
     type: enum
@@ -132,7 +132,7 @@ schema:
 
 func TestValidateStemHealth_EnumWithTwoValues_NoWarning(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
   estado:
     type: enum
@@ -155,13 +155,13 @@ func TestValidateStemHealth_TypeConsistency(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
   estado:
     type: string
 `))
 	sub := filepath.Join(dir, "sub")
-	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 2
 schema:
   estado:
     type: enum
@@ -192,7 +192,7 @@ func TestValidateStemHealth_RuleFieldExists(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
   estado:
     type: string
@@ -223,13 +223,13 @@ func TestValidateStemHealth_FieldOverride(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
   estado:
     type: string
 `))
 	sub := filepath.Join(dir, "sub")
-	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 2
 schema:
   estado:
     type: string
@@ -257,7 +257,7 @@ schema:
 
 func TestValidateStemHealth_AggregatedRequired(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
   estado:
     type: enum
@@ -285,7 +285,7 @@ aggregate:
 
 func TestValidateStemHealth_RequiredWithoutAggregate_NoWarning(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
   estado:
     type: enum
@@ -306,7 +306,7 @@ schema:
 
 func TestValidateStemHealth_AggregateWithoutRequired_NoWarning(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
   estado:
     type: enum
@@ -348,8 +348,8 @@ func TestValidateStemHealth_NoStems(t *testing.T) {
 func TestValidateStemHealth_SkipsGitDir(t *testing.T) {
 	dir := t.TempDir()
 	gitDir := filepath.Join(dir, ".git")
-	mustWriteStemTestFile(t, filepath.Join(gitDir, ".stem"), []byte(`version: 1`))
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(gitDir, ".stem"), []byte(`version: 2`))
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
   x:
     type: string
@@ -372,7 +372,7 @@ schema:
 
 func TestValidateStemHealth_EnumZeroValues(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
   estado:
     type: enum
@@ -452,13 +452,13 @@ func TestValidateStemHealth_MultipleStems(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
   titulo:
     type: string
 `))
 	sub := filepath.Join(dir, "sub")
-	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 1
+	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 2
 schema:
   prioridad:
     type: string

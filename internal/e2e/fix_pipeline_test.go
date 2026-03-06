@@ -102,7 +102,7 @@ func readFile(t *testing.T, root, relPath string) string {
 
 func TestValidateAggregateConsistency_Mismatch(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem":          "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed, \"In Progress\"]\n    required: true\naggregate:\n  estado: |\n    all(descendants, {.estado == \"Completed\"}) ? \"Completed\" : \"Pending\"\n",
+		".stem":          "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed, \"In Progress\"]\n    required: true\naggregate:\n  estado: |\n    all(descendants, {.estado == \"Completed\"}) ? \"Completed\" : \"Pending\"\n",
 		"S001/README.md": "---\nestado: Pending\n---\n# Story\n",
 		"S001/T001.md":   "---\nestado: Completed\n---\n# Task 1\n",
 		"S001/T002.md":   "---\nestado: Completed\n---\n# Task 2\n",
@@ -129,7 +129,7 @@ func TestValidateAggregateConsistency_Mismatch(t *testing.T) {
 
 func TestValidateAggregateConsistency_Match(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem":          "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\naggregate:\n  estado: |\n    all(descendants, {.estado == \"Completed\"}) ? \"Completed\" : \"Pending\"\n",
+		".stem":          "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\naggregate:\n  estado: |\n    all(descendants, {.estado == \"Completed\"}) ? \"Completed\" : \"Pending\"\n",
 		"S001/README.md": "---\nestado: Completed\n---\n# Story\n",
 		"S001/T001.md":   "---\nestado: Completed\n---\n# Task 1\n",
 		"S001/T002.md":   "---\nestado: Completed\n---\n# Task 2\n",
@@ -152,7 +152,7 @@ func TestValidateAggregateConsistency_Match(t *testing.T) {
 
 func TestFixPipeline_AddField(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
 		"a.md":  "---\n\n---\n# Missing estado\n",
 	})
 
@@ -182,7 +182,7 @@ func TestFixPipeline_AddField(t *testing.T) {
 
 func TestFixPipeline_CorrectValue(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed, \"In Progress\"]\n    required: true\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed, \"In Progress\"]\n    required: true\n",
 		"a.md":  "---\nestado: Completo\n---\n# Typo\n",
 	})
 
@@ -210,7 +210,7 @@ func TestFixPipeline_CorrectValue(t *testing.T) {
 
 func TestFixPipeline_MigrateValue(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed, Blocked]\n    required: true\nlinks:\n  allowed: [blocks]\n  blocks:\n    target: \"T.*\"\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed, Blocked]\n    required: true\nlinks:\n  allowed: [blocks]\n  blocks:\n    target: \"T.*\"\n",
 		"a.md":  "---\nestado: Pending (blocked by T001)\n---\n# Blocked task\n",
 	})
 
@@ -238,7 +238,7 @@ func TestFixPipeline_MigrateValue(t *testing.T) {
 
 func TestFixPipeline_ExtractBody(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem":         "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
+		".stem":         "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
 		"dir/README.md": "---\n\n---\n# Story\n\n**Estado**: Completed\n",
 	})
 
@@ -266,7 +266,7 @@ func TestFixPipeline_ExtractBody(t *testing.T) {
 
 func TestFixPipeline_InferFromChildren(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem":          "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed, \"In Progress\"]\n    required: true\n",
+		".stem":          "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed, \"In Progress\"]\n    required: true\n",
 		"S001/README.md": "---\n\n---\n# Story\n",
 		"S001/T001.md":   "---\nestado: Completed\n---\n# Task 1\n",
 		"S001/T002.md":   "---\nestado: Completed\n---\n# Task 2\n",
@@ -296,7 +296,7 @@ func TestFixPipeline_InferFromChildren(t *testing.T) {
 
 func TestFixPipeline_CorrectLink(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem":                 "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\nlinks:\n  allowed: [blocks]\n  blocks:\n    target: \"^T\\\\d{3}-\"\n",
+		".stem":                 "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\nlinks:\n  allowed: [blocks]\n  blocks:\n    target: \"^T\\\\d{3}-\"\n",
 		"dir/a.md":              "---\nestado: Pending\n---\n# Task\n\n[[blocks:T001]]\n",
 		"dir/T001-full-name.md": "---\nestado: Completed\n---\n# Target task\n",
 	})
@@ -324,7 +324,7 @@ func TestFixPipeline_CorrectLink(t *testing.T) {
 
 func TestFixPipeline_InferFromSiblings(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem":     "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: enum\n    values: [a, b, c]\n    required: true\n",
+		".stem":     "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: enum\n    values: [a, b, c]\n    required: true\n",
 		"dir/f1.md": "---\ntipo: a\n---\n# F1\n",
 		"dir/f2.md": "---\ntipo: a\n---\n# F2\n",
 		"dir/f3.md": "---\ntipo: a\n---\n# F3\n",
@@ -355,7 +355,7 @@ func TestFixPipeline_InferFromSiblings(t *testing.T) {
 
 func TestFixPipeline_CorrectOutlier(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem":     "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: enum\n    values: [a, b]\n    required: true\n",
+		".stem":     "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: enum\n    values: [a, b]\n    required: true\n",
 		"dir/f1.md": "---\ntipo: a\n---\n# F1\n",
 		"dir/f2.md": "---\ntipo: a\n---\n# F2\n",
 		"dir/f3.md": "---\ntipo: a\n---\n# F3\n",
@@ -388,7 +388,7 @@ func TestFixPipeline_CorrectOutlier(t *testing.T) {
 
 func TestFixPipeline_ExtendEnum(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: enum\n    values: [a, b]\n    required: true\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: enum\n    values: [a, b]\n    required: true\n",
 		"f1.md": "---\ntipo: nuevo\n---\n# F1\n",
 		"f2.md": "---\ntipo: nuevo\n---\n# F2\n",
 	})
@@ -420,7 +420,7 @@ func TestFixPipeline_ExtendEnum(t *testing.T) {
 
 func TestValidateRule_NonEmpty(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  titulo:\n    type: string\nvalidate:\n  - rule: non_empty\n    field: titulo\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  titulo:\n    type: string\nvalidate:\n  - rule: non_empty\n    field: titulo\n",
 		"a.md":  "---\ntitulo: \"\"\n---\n# Empty title\n",
 	})
 
@@ -443,7 +443,7 @@ func TestValidateRule_NonEmpty(t *testing.T) {
 
 func TestValidateRule_Requires(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: enum\n    values: [software-module, documentation]\n    required: true\n  ejecutable_en:\n    type: string\nvalidate:\n  - rule: requires\n    if:\n      tipo: software-module\n    then:\n      fields: [ejecutable_en]\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: enum\n    values: [software-module, documentation]\n    required: true\n  ejecutable_en:\n    type: string\nvalidate:\n  - rule: requires\n    if:\n      tipo: software-module\n    then:\n      fields: [ejecutable_en]\n",
 		"a.md":  "---\ntipo: software-module\n---\n# Missing ejecutable_en\n",
 	})
 
@@ -468,7 +468,7 @@ func TestValidateRule_Requires(t *testing.T) {
 
 func TestFixRoundTrip_AggregateStale(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem":          "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\naggregate:\n  estado: |\n    all(descendants, {.estado == \"Completed\"}) ? \"Completed\" : \"Pending\"\n",
+		".stem":          "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\naggregate:\n  estado: |\n    all(descendants, {.estado == \"Completed\"}) ? \"Completed\" : \"Pending\"\n",
 		"S001/README.md": "---\nestado: Pending\n---\n# Story\n",
 		"S001/T001.md":   "---\nestado: Completed\n---\n# Task 1\n",
 		"S001/T002.md":   "---\nestado: Completed\n---\n# Task 2\n",

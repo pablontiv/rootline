@@ -40,7 +40,7 @@ func setupTestDir(t *testing.T, stemContent string, files map[string]string) str
 }
 
 func TestRenameExistingField(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   titulo:
     type: string
@@ -114,7 +114,7 @@ schema:
 }
 
 func TestRenameNonexistentField(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   titulo:
     type: string
@@ -147,7 +147,7 @@ schema:
 }
 
 func TestRenameDryRun(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   titulo:
     type: string
@@ -196,7 +196,7 @@ schema:
 }
 
 func TestRenameStemSchemaUpdated(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   titulo:
     type: string
@@ -244,7 +244,7 @@ schema:
 }
 
 func TestRenameFileWithoutField(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   titulo:
     type: string
@@ -289,7 +289,7 @@ schema:
 }
 
 func TestRenamePreservesBody(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   titulo:
     type: string
@@ -382,7 +382,7 @@ func TestRenameFrontmatterField(t *testing.T) {
 }
 
 func TestRenameSubdirectory(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   titulo:
     type: string

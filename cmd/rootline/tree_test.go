@@ -34,7 +34,7 @@ func TestTreeCmd_ScopeFiltering_ExcludesOutOfScope(t *testing.T) {
 	// Root .stem scopes only to docs/ subdirectory patterns via a nested stem.
 	// Files at root level without a matching .stem scope should be excluded.
 	root := setupTreeProject(t, map[string]string{
-		"docs/.stem":    "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
+		"docs/.stem":    "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
 		"docs/task1.md": "---\nestado: Pending\n---\n# Task 1\n",
 		"docs/task2.md": "---\nestado: Completed\n---\n# Task 2\n",
 		// These files at root have no .stem => no scope => should be excluded
@@ -63,7 +63,7 @@ func TestTreeCmd_ScopeFiltering_SubdirOnly(t *testing.T) {
 	// When running tree on a subdirectory, only files matching that
 	// subdirectory's scope should appear.
 	root := setupTreeProject(t, map[string]string{
-		"docs/.stem":        "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
+		"docs/.stem":        "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
 		"docs/epic1/F01.md": "---\nestado: Pending\n---\n# F01\n",
 		"docs/epic1/F02.md": "---\nestado: Completed\n---\n# F02\n",
 	})
@@ -88,7 +88,7 @@ func TestTreeCmd_ScopeFiltering_SubdirOnly(t *testing.T) {
 
 func TestTreeCmd_ScopeFiltering_ASCIIOutput(t *testing.T) {
 	root := setupTreeProject(t, map[string]string{
-		"docs/.stem":    "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
+		"docs/.stem":    "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
 		"docs/task1.md": "---\nestado: Pending\n---\n# Task 1\n",
 		"CHANGELOG.md":  "---\n---\n# Changelog\n",
 	})
@@ -108,7 +108,7 @@ func TestTreeCmd_ScopeFiltering_ASCIIOutput(t *testing.T) {
 
 func TestTreeCmd_JSONStructure(t *testing.T) {
 	root := setupTreeProject(t, map[string]string{
-		".stem":    "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
+		".stem":    "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
 		"a.md":     "---\nestado: Completed\n---\n",
 		"sub/b.md": "---\nestado: Pending\n---\n",
 	})
@@ -139,7 +139,7 @@ func TestTreeCmd_JSONStructure(t *testing.T) {
 
 func TestTreeCmd_EmptyDirectory(t *testing.T) {
 	root := setupTreeProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\n",
 	})
 
 	out, err := runCmd(t, "tree", root)
@@ -159,7 +159,7 @@ func TestTreeCmd_EmptyDirectory(t *testing.T) {
 
 func TestTreeCmd_DefaultsToCurrentDir(t *testing.T) {
 	root := setupTreeProject(t, map[string]string{
-		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending]\n    required: true\n",
+		".stem":  "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending]\n    required: true\n",
 		"doc.md": "---\nestado: Pending\n---\n",
 	})
 
@@ -182,7 +182,7 @@ func TestTreeCmd_DefaultsToCurrentDir(t *testing.T) {
 
 func TestTreeCmd_ASCIIRendering(t *testing.T) {
 	root := setupTreeProject(t, map[string]string{
-		".stem":    "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
+		".stem":    "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
 		"a.md":     "---\nestado: Completed\n---\n",
 		"sub/b.md": "---\nestado: Pending\n---\n",
 		"sub/c.md": "---\nestado: Completed\n---\n",
@@ -218,7 +218,7 @@ func TestTreeCmd_ASCIIRendering(t *testing.T) {
 
 func TestTreeCmd_NoEstadoShowsDash(t *testing.T) {
 	root := setupTreeProject(t, map[string]string{
-		".stem":  "version: 1\nscope:\n  match: \"*.md\"\n",
+		".stem":  "version: 2\nscope:\n  match: \"*.md\"\n",
 		"doc.md": "---\ntitle: Hello\n---\n",
 	})
 
@@ -235,7 +235,7 @@ func TestTreeCmd_NoEstadoShowsDash(t *testing.T) {
 
 func TestTreeCmd_DeepNesting(t *testing.T) {
 	root := setupTreeProject(t, map[string]string{
-		".stem":             "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
+		".stem":             "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
 		"a/b/c/deep.md":     "---\nestado: Pending\n---\n",
 		"a/b/c/d/deeper.md": "---\nestado: Completed\n---\n",
 	})
@@ -526,7 +526,7 @@ func TestPropagateCounts_SortsByName(t *testing.T) {
 
 func TestTreeCmd_FieldExtraction(t *testing.T) {
 	root := setupTreeProject(t, map[string]string{
-		".stem":  "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending]\n    required: true\n",
+		".stem":  "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending]\n    required: true\n",
 		"doc.md": "---\nestado: Pending\n---\n",
 	})
 
@@ -543,7 +543,7 @@ func TestTreeCmd_FieldExtraction(t *testing.T) {
 func TestTreeCmd_RestrictedScopePattern(t *testing.T) {
 	// .stem with a restrictive scope pattern that only matches T*.md files.
 	root := setupTreeProject(t, map[string]string{
-		".stem":        "version: 1\nscope:\n  match: \"T*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
+		".stem":        "version: 2\nscope:\n  match: \"T*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n",
 		"T001.md":      "---\nestado: Pending\n---\n",
 		"T002.md":      "---\nestado: Completed\n---\n",
 		"README.md":    "---\nestado: Pending\n---\n",
@@ -586,7 +586,7 @@ func TestTreeCmd_RestrictedScopePattern(t *testing.T) {
 
 func TestTreeCmd_WhereFilters(t *testing.T) {
 	root := setupTreeProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n  tipo:\n    type: string\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n  tipo:\n    type: string\n",
 		"a.md":  "---\nestado: Completed\ntipo: test\n---\n",
 		"b.md":  "---\nestado: Pending\ntipo: prod\n---\n",
 		"c.md":  "---\nestado: Completed\ntipo: prod\n---\n",
@@ -609,7 +609,7 @@ func TestTreeCmd_WhereFilters(t *testing.T) {
 
 func TestTreeCmd_WhereInvalidExpr(t *testing.T) {
 	root := setupTreeProject(t, map[string]string{
-		".stem":  "version: 1\nscope:\n  match: \"*.md\"\n",
+		".stem":  "version: 2\nscope:\n  match: \"*.md\"\n",
 		"doc.md": "---\ntitle: Test\n---\n",
 	})
 
@@ -621,7 +621,7 @@ func TestTreeCmd_WhereInvalidExpr(t *testing.T) {
 
 func TestTreeCmd_WhereMultiple(t *testing.T) {
 	root := setupTreeProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n  tipo:\n    type: string\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\n  tipo:\n    type: string\n",
 		"a.md":  "---\nestado: Pending\ntipo: test\n---\n",
 		"b.md":  "---\nestado: Pending\ntipo: prod\n---\n",
 		"c.md":  "---\nestado: Completed\ntipo: test\n---\n",

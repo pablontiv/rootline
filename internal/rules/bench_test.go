@@ -23,7 +23,7 @@ func BenchmarkWalkUp(b *testing.B) {
 			b.Fatal(err)
 		}
 		stemPath := filepath.Join(dir, ".stem")
-		content := fmt.Sprintf("version: 1\nschema:\n  field%d:\n    type: string\n", i)
+		content := fmt.Sprintf("version: 2\nschema:\n  field%d:\n    type: string\n", i)
 		if err := os.WriteFile(stemPath, []byte(content), 0600); err != nil {
 			b.Fatal(err)
 		}

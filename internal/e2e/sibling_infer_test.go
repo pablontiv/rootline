@@ -13,7 +13,7 @@ import (
 
 func TestFixAllSiblingInference(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem": "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: enum\n    required: true\n    values:\n      - a\n      - b\n      - c\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: enum\n    required: true\n    values:\n      - a\n      - b\n      - c\n",
 		"f1.md": "---\ntipo: a\n---\n# File 1\n",
 		"f2.md": "---\ntipo: a\n---\n# File 2\n",
 		"f3.md": "---\ntipo: a\n---\n# File 3\n",

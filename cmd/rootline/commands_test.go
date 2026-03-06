@@ -20,7 +20,7 @@ func setupTestDir(t *testing.T) string {
 	}
 
 	// .stem file with schema
-	stemContent := `version: 1
+	stemContent := `version: 2
 scope:
   match: "*.md"
 schema:
@@ -618,7 +618,7 @@ func TestExplainWithValidationErrors(t *testing.T) {
 func TestExplainWithDerived(t *testing.T) {
 	dir := setupTestDir(t)
 	// Add derive to .stem.
-	stemContent := `version: 1
+	stemContent := `version: 2
 scope:
   match: "*.md"
 schema:
@@ -679,7 +679,7 @@ func TestExplainTableWithErrors(t *testing.T) {
 func TestExplainWithSchemaDefault(t *testing.T) {
 	dir := setupTestDir(t)
 	// Add a default value to schema.
-	stemContent := `version: 1
+	stemContent := `version: 2
 scope:
   match: "*.md"
 schema:

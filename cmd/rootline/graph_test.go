@@ -13,7 +13,7 @@ import (
 
 func TestGraphJSON_Empty(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# No links\n"), 0644)
 
 	out, err := runCmd(t, "graph", dir)
@@ -39,7 +39,7 @@ func TestGraphJSON_Empty(t *testing.T) {
 
 func TestGraphJSON_WithLinks(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "doc1.md"), []byte("---\n---\n# Doc1\n[[doc2.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "doc2.md"), []byte("---\n---\n# Doc2\n"), 0644)
 
@@ -59,7 +59,7 @@ func TestGraphJSON_WithLinks(t *testing.T) {
 
 func TestGraphCheck_Clean(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "doc1.md"), []byte("---\n---\n# Doc1\n[[doc2.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "doc2.md"), []byte("---\n---\n# Doc2\n"), 0644)
 
@@ -74,7 +74,7 @@ func TestGraphCheck_Clean(t *testing.T) {
 
 func TestGraphCheck_WithCycle(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
 
@@ -89,7 +89,7 @@ func TestGraphCheck_WithCycle(t *testing.T) {
 
 func TestGraphCheck_WithBrokenLink(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[nonexistent.md]]\n"), 0644)
 
 	out, err := runCmd(t, "graph", "--check", dir)
@@ -103,7 +103,7 @@ func TestGraphCheck_WithBrokenLink(t *testing.T) {
 
 func TestGraphFormat_DOT(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n"), 0644)
 
 	out, err := runCmd(t, "graph", "-o", "table", "--format", "dot", dir)
@@ -117,7 +117,7 @@ func TestGraphFormat_DOT(t *testing.T) {
 
 func TestGraphFormat_Mermaid(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n"), 0644)
 
 	out, err := runCmd(t, "graph", "-o", "table", "--format", "mermaid", dir)
@@ -131,7 +131,7 @@ func TestGraphFormat_Mermaid(t *testing.T) {
 
 func TestGraphFormat_Invalid(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n"), 0644)
 
 	_, err := runCmd(t, "graph", "-o", "table", "--format", "xyz", dir)
@@ -189,7 +189,7 @@ func TestFilterLinksBySchema_EmptySchema(t *testing.T) {
 
 func TestGraphWhere_Filters(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 1\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: string\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: string\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\ntipo: test\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\ntipo: prod\n---\n# B\n"), 0644)
 
@@ -209,7 +209,7 @@ func TestGraphWhere_Filters(t *testing.T) {
 
 func TestGraphWhere_InvalidExpr(t *testing.T) {
 	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n"), 0644)
 
 	_, err := runCmd(t, "graph", dir, "--where", "== bad")
@@ -224,7 +224,7 @@ func TestGraphCheck_SchemaFiltersReferenceLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	// .stem with links schema that only has rules for "blocks"
-	stem := "version: 1\nlinks:\n  allowed: [blocks, reference]\n  blocks:\n    target: \"*.md\"\n"
+	stem := "version: 2\nlinks:\n  allowed: [blocks, reference]\n  blocks:\n    target: \"*.md\"\n"
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stem), 0644)
 	// doc with a [[reference]] link to nonexistent target — should be filtered out
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[nonexistent]]\n"), 0644)

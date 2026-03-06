@@ -618,7 +618,7 @@ func TestRewriteRecordFile(t *testing.T) {
 // --- addEnumValueToNode ---
 
 func TestAddEnumValueToNode(t *testing.T) {
-	stemYAML := `version: 1
+	stemYAML := `version: 2
 schema:
   estado:
     type: enum
@@ -643,7 +643,7 @@ schema:
 }
 
 func TestAddEnumValueToNode_FieldNotFound(t *testing.T) {
-	stemYAML := `version: 1
+	stemYAML := `version: 2
 schema:
   estado:
     type: enum
@@ -676,7 +676,7 @@ func setupStemDir(t *testing.T) string {
 	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	stemContent := `version: 1
+	stemContent := `version: 2
 scope:
   match: "*.md"
 schema:

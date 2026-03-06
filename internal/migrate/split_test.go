@@ -22,7 +22,7 @@ func makeHierarchy(rootSchema map[string]rules.SchemaField, levels []infer.Level
 
 func TestBuildSplitStems_BasicTwoLevels(t *testing.T) {
 	existing := &rules.StemFile{
-		Version: 1,
+		Version: 2,
 		Scope:   rules.Scope{Match: "*.md"},
 		Schema: map[string]rules.SchemaField{
 			"id":     {Type: "sequence", Prefix: "E", Digits: 2},
@@ -75,8 +75,8 @@ func TestBuildSplitStems_BasicTwoLevels(t *testing.T) {
 	if !strings.Contains(root.Content, "estado:") {
 		t.Errorf("root should contain estado, got:\n%s", root.Content)
 	}
-	if !strings.Contains(root.Content, "version: 1") {
-		t.Errorf("root should contain version: 1, got:\n%s", root.Content)
+	if !strings.Contains(root.Content, "version: 2") {
+		t.Errorf("root should contain version: 2, got:\n%s", root.Content)
 	}
 	if !strings.Contains(root.Content, `match: "*.md"`) {
 		t.Errorf("root should preserve scope match, got:\n%s", root.Content)
@@ -105,7 +105,7 @@ func TestBuildSplitStems_BasicTwoLevels(t *testing.T) {
 
 func TestBuildSplitStems_PreservesStructural(t *testing.T) {
 	existing := &rules.StemFile{
-		Version: 1,
+		Version: 2,
 		Schema: map[string]rules.SchemaField{
 			"id":     {Type: "sequence", Prefix: "E", Digits: 2},
 			"estado": {Type: "string"},
@@ -150,7 +150,7 @@ func TestBuildSplitStems_PreservesStructural(t *testing.T) {
 
 func TestBuildSplitStems_PreservesLinks(t *testing.T) {
 	existing := &rules.StemFile{
-		Version: 1,
+		Version: 2,
 		Schema: map[string]rules.SchemaField{
 			"id":     {Type: "sequence", Prefix: "E", Digits: 2},
 			"estado": {Type: "string"},
@@ -186,7 +186,7 @@ func TestBuildSplitStems_PreservesLinks(t *testing.T) {
 
 func TestBuildSplitStems_PreservesDeriveAndAggregate(t *testing.T) {
 	existing := &rules.StemFile{
-		Version: 1,
+		Version: 2,
 		Schema: map[string]rules.SchemaField{
 			"id":     {Type: "sequence", Prefix: "E", Digits: 2},
 			"estado": {Type: "string"},
@@ -222,7 +222,7 @@ func TestBuildSplitStems_PreservesDeriveAndAggregate(t *testing.T) {
 
 func TestBuildSplitStems_PreservesValidate(t *testing.T) {
 	existing := &rules.StemFile{
-		Version: 1,
+		Version: 2,
 		Schema: map[string]rules.SchemaField{
 			"id":     {Type: "sequence", Prefix: "E", Digits: 2},
 			"estado": {Type: "string"},
@@ -259,7 +259,7 @@ func TestBuildSplitStems_PreservesValidate(t *testing.T) {
 
 func TestBuildSplitStems_ChildYAMLHasOnlyLevelFields(t *testing.T) {
 	existing := &rules.StemFile{
-		Version: 1,
+		Version: 2,
 		Schema: map[string]rules.SchemaField{
 			"id":     {Type: "sequence", Prefix: "E", Digits: 2},
 			"estado": {Type: "string", Required: true},
@@ -315,7 +315,7 @@ func TestBuildSplitStems_ChildYAMLHasOnlyLevelFields(t *testing.T) {
 
 func TestBuildSplitStems_NoScopeOmitted(t *testing.T) {
 	existing := &rules.StemFile{
-		Version: 1,
+		Version: 2,
 		Schema: map[string]rules.SchemaField{
 			"id":     {Type: "sequence", Prefix: "E", Digits: 2},
 			"estado": {Type: "string"},

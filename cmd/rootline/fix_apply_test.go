@@ -14,7 +14,7 @@ func TestFixAllApplyMigrateValue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stemContent := `version: 1
+	stemContent := `version: 2
 scope:
   match: "*.md"
 schema:
@@ -72,7 +72,7 @@ func TestApplyMigrateValueWithNotes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stemContent := `version: 1
+	stemContent := `version: 2
 scope:
   match: "*.md"
 schema:

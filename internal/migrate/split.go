@@ -92,7 +92,7 @@ func BuildSplitStems(absTarget string, existing *rules.StemFile, hierarchy *infe
 func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.SchemaField, hierarchy *infer.HierarchyResult, generatedAgg map[string]string) string {
 	var b strings.Builder
 
-	b.WriteString("version: 1\n")
+	b.WriteString("version: 2\n")
 	if existing.Scope.Match != "" {
 		fmt.Fprintf(&b, "scope:\n  match: %q\n", existing.Scope.Match)
 	}

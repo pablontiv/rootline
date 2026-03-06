@@ -7,7 +7,7 @@ import (
 
 func TestSchemaField_SequenceDeserialization(t *testing.T) {
 	yaml := `
-version: 1
+version: 2
 schema:
   id:
     type: sequence

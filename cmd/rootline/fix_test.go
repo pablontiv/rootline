@@ -619,7 +619,7 @@ func TestFixAllSelectsRichestStem(t *testing.T) {
 	}
 
 	// Rich stem at root: has estado enum with known values.
-	richStem := `version: 1
+	richStem := `version: 2
 scope:
   match: "*.md"
 schema:
@@ -638,7 +638,7 @@ schema:
 	if err := os.MkdirAll(subdir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	poorStem := `version: 1
+	poorStem := `version: 2
 scope:
   match: "*.md"
 schema:
@@ -685,7 +685,7 @@ func TestFixAllDryRunConsistentFromRootAndSubdir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stemContent := `version: 1
+	stemContent := `version: 2
 scope:
   match: "*.md"
 schema:
@@ -811,7 +811,7 @@ func TestFix_AddAggregate_DryRun(t *testing.T) {
 	_ = os.Mkdir(filepath.Join(root, ".git"), 0o755)
 
 	// .stem with enum estado but no aggregate section.
-	stem := `version: 1
+	stem := `version: 2
 scope:
   match: "*.md"
 schema:
@@ -876,7 +876,7 @@ func TestFix_AddAggregate_Apply(t *testing.T) {
 	_ = os.Mkdir(filepath.Join(root, ".git"), 0o755)
 
 	// .stem with enum estado but no aggregate section.
-	stem := `version: 1
+	stem := `version: 2
 scope:
   match: "*.md"
 schema:

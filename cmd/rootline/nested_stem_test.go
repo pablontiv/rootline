@@ -21,7 +21,7 @@ func setupNestedStemProject(t *testing.T) string {
 	}
 
 	// Root .stem: defines estado enum.
-	rootStem := `version: 1
+	rootStem := `version: 2
 scope:
   match: "*.md"
 schema:
@@ -36,7 +36,7 @@ schema:
 	if err := os.MkdirAll(filepath.Join(root, "epics"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	epicsStem := `version: 1
+	epicsStem := `version: 2
 scope:
   match: "*.md"
 schema:
@@ -53,7 +53,7 @@ derive:
 	if err := os.MkdirAll(filepath.Join(root, "epics", "E01"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	e01Stem := `version: 1
+	e01Stem := `version: 2
 scope:
   match: "*.md"
 schema:

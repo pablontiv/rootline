@@ -17,7 +17,7 @@ func setupTestProject(t *testing.T) string {
 		t.Fatal(err)
 	}
 
-	stem := `version: 1
+	stem := `version: 2
 scope:
   match: "*.md"
 schema:

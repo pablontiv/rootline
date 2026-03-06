@@ -19,7 +19,7 @@ import (
 //   - If no blockers (blocked_by == nil): keep original estado
 //   - If all blockers are Completed: "Pending" (unblocked, ready to work)
 //   - Otherwise: "Blocked" (blocked by incomplete dependencies)
-const stemWithDeriveAndLinks = `version: 1
+const stemWithDeriveAndLinks = `version: 2
 scope:
   match: "*.md"
 schema:

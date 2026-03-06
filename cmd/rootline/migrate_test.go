@@ -36,7 +36,7 @@ func setupMigrateDir(t *testing.T, stemContent string, files map[string]string) 
 // --- migrate --rename tests ---
 
 func TestMigrateRenameJSON(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   titulo:
     type: string
@@ -70,7 +70,7 @@ schema:
 }
 
 func TestMigrateRenameTable(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   titulo:
     type: string
@@ -94,7 +94,7 @@ schema:
 }
 
 func TestMigrateRenameTableNoMatch(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   estado:
     type: string
@@ -114,7 +114,7 @@ schema:
 }
 
 func TestMigrateRenameDryRunTable(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   titulo:
     type: string
@@ -149,7 +149,7 @@ func TestMigrateRenameInvalidFormat(t *testing.T) {
 }
 
 func TestMigrateRenameWithStemUpdate(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   titulo:
     type: string
@@ -182,7 +182,7 @@ func TestMigrateDiffNoStemFiles(t *testing.T) {
 }
 
 func TestMigrateDiffSingleStemWithFrom(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   estado:
     type: enum
@@ -192,7 +192,7 @@ schema:
 	dir := setupMigrateDir(t, stem, nil)
 
 	// Create a "previous" version of the .stem.
-	prevStem := `version: 1
+	prevStem := `version: 2
 schema:
   estado:
     type: enum
@@ -217,7 +217,7 @@ schema:
 }
 
 func TestMigrateDiffTableOutput(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   estado:
     type: enum
@@ -226,7 +226,7 @@ schema:
 `
 	dir := setupMigrateDir(t, stem, nil)
 
-	prevStem := `version: 1
+	prevStem := `version: 2
 schema:
   estado:
     type: enum
@@ -249,7 +249,7 @@ schema:
 }
 
 func TestMigrateDiffNoChanges(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   estado:
     type: string
@@ -270,7 +270,7 @@ schema:
 }
 
 func TestMigrateDiffFieldExtraction(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   estado:
     type: enum
@@ -278,7 +278,7 @@ schema:
 `
 	dir := setupMigrateDir(t, stem, nil)
 
-	prevStem := `version: 1
+	prevStem := `version: 2
 schema:
   estado:
     type: enum
@@ -298,7 +298,7 @@ schema:
 
 func TestMigrateDiffFromOnlyWithSingleStem(t *testing.T) {
 	// --from can only be used with a single .stem file target.
-	stem := `version: 1
+	stem := `version: 2
 schema:
   estado:
     type: string
@@ -329,12 +329,12 @@ func TestMigrateBatchDiffJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stem1 := `version: 1
+	stem1 := `version: 2
 schema:
   estado:
     type: string
 `
-	stem2 := `version: 1
+	stem2 := `version: 2
 schema:
   tipo:
     type: string
@@ -380,7 +380,7 @@ func TestMigrateBatchDiffTable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stem1 := `version: 1
+	stem1 := `version: 2
 schema:
   estado:
     type: string
@@ -412,7 +412,7 @@ func TestMigrateBatchDiffFieldExtraction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stem := `version: 1
+	stem := `version: 2
 schema:
   estado:
     type: string
@@ -441,7 +441,7 @@ schema:
 
 func setupSplitDir(t *testing.T) string {
 	t.Helper()
-	stem := `version: 1
+	stem := `version: 2
 scope:
   match: "*.md"
 schema:
@@ -542,7 +542,7 @@ func TestMigrateSplitDryRun(t *testing.T) {
 }
 
 func TestMigrateSplitNoHierarchy(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 schema:
   estado:
     type: string
@@ -585,7 +585,7 @@ func TestMigrateSplitPreservesCustom(t *testing.T) {
 }
 
 func TestMigrateSplitPreservesValidateRules(t *testing.T) {
-	stem := `version: 1
+	stem := `version: 2
 scope:
   match: "*.md"
 schema:
@@ -646,7 +646,7 @@ validate:
 
 func TestMigrateSplit_GeneratesAggregate(t *testing.T) {
 	// .stem with enum estado but no aggregate section.
-	stem := `version: 1
+	stem := `version: 2
 scope:
   match: "*.md"
 schema:

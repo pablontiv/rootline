@@ -18,7 +18,7 @@ func setupStrictTestDir(t *testing.T) string {
 	}
 
 	// .stem with estado as warn severity, tipo as error severity
-	stemContent := `version: 1
+	stemContent := `version: 2
 scope:
   match: "*.md"
 schema:

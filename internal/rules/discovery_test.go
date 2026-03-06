@@ -24,7 +24,7 @@ func setupTree(t *testing.T, stems []string, gitAt string) string {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		content := []byte("version: 1\nscope:\n  match: \"*.md\"\n")
+		content := []byte("version: 2\nscope:\n  match: \"*.md\"\n")
 		if err := os.WriteFile(filepath.Join(root, s), content, 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -156,7 +156,7 @@ func TestWalkUp_TargetIsFile(t *testing.T) {
 func TestParseStemFile_Success(t *testing.T) {
 	dir := t.TempDir()
 	stemPath := filepath.Join(dir, ".stem")
-	content := []byte("version: 1\nscope:\n  match: \"*.md\"\n")
+	content := []byte("version: 2\nscope:\n  match: \"*.md\"\n")
 	if err := os.WriteFile(stemPath, content, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -165,8 +165,8 @@ func TestParseStemFile_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if stem.Version != 1 {
-		t.Errorf("version = %d, want 1", stem.Version)
+	if stem.Version != 2 {
+		t.Errorf("version = %d, want 2", stem.Version)
 	}
 	if stem.Scope.Match != "*.md" {
 		t.Errorf("scope.match = %q, want %q", stem.Scope.Match, "*.md")

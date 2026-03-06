@@ -6,7 +6,7 @@ import (
 
 func TestParseSeverityDefault(t *testing.T) {
 	content := []byte(`
-version: 1
+version: 2
 schema:
   estado:
     type: string
@@ -24,7 +24,7 @@ schema:
 
 func TestParseSeverityWarn(t *testing.T) {
 	content := []byte(`
-version: 1
+version: 2
 schema:
   estado:
     type: string
@@ -42,7 +42,7 @@ schema:
 
 func TestParseSeverityOff(t *testing.T) {
 	content := []byte(`
-version: 1
+version: 2
 schema:
   estado:
     type: string
@@ -60,7 +60,7 @@ schema:
 
 func TestParseValidationRuleSeverityDefault(t *testing.T) {
 	content := []byte(`
-version: 1
+version: 2
 validate:
   - field: estado
     rule: required

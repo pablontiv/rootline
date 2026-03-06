@@ -24,17 +24,17 @@ func TestFindStemFiles(t *testing.T) {
 	}
 
 	// Write .stem files.
-	if err := os.WriteFile(filepath.Join(dir, ".stem"), []byte("version: 1\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(sub1, ".stem"), []byte("version: 1\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(sub1, ".stem"), []byte("version: 2\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(sub2, ".stem"), []byte("version: 1\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(sub2, ".stem"), []byte("version: 2\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	// .stem inside hidden dir should be skipped.
-	if err := os.WriteFile(filepath.Join(hidden, ".stem"), []byte("version: 1\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(hidden, ".stem"), []byte("version: 2\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -102,7 +102,7 @@ func TestFindGitRootNotFound(t *testing.T) {
 func TestLoadPreviousStemFromFile(t *testing.T) {
 	dir := t.TempDir()
 
-	stemContent := `version: 1
+	stemContent := `version: 2
 schema:
   estado:
     type: string
@@ -140,7 +140,7 @@ func TestLoadPreviousStemFromGitFails(t *testing.T) {
 	// loadFromGit should fail.
 	dir := t.TempDir()
 	stemPath := filepath.Join(dir, ".stem")
-	if err := os.WriteFile(stemPath, []byte("version: 1\n"), 0644); err != nil {
+	if err := os.WriteFile(stemPath, []byte("version: 2\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 

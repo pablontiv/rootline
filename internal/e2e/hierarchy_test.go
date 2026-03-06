@@ -14,7 +14,7 @@ import (
 // resolves correctly using standard walk-up merge.
 func TestResolveForRecordBackwardCompat(t *testing.T) {
 	root := setupProject(t, map[string]string{
-		".stem": `version: 1
+		".stem": `version: 2
 scope:
   match: "*.md"
 schema:

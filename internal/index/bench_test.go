@@ -14,7 +14,7 @@ func BenchmarkScan(b *testing.B) {
 	root := b.TempDir()
 
 	// Create .stem with schema.
-	stemContent := "version: 1\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: string\n"
+	stemContent := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: string\n"
 	if err := os.WriteFile(filepath.Join(root, ".stem"), []byte(stemContent), 0600); err != nil {
 		b.Fatal(err)
 	}

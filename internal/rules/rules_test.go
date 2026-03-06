@@ -9,7 +9,7 @@ import (
 
 func TestParseStem_AllSections(t *testing.T) {
 	content := []byte(`
-version: 1
+version: 2
 
 scope:
   match: "*.md"
@@ -47,8 +47,8 @@ links:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if stem.Version != 1 {
-		t.Errorf("version = %d, want 1", stem.Version)
+	if stem.Version != 2 {
+		t.Errorf("version = %d, want 2", stem.Version)
 	}
 	if stem.Path != "docs/.stem" {
 		t.Errorf("path = %q, want %q", stem.Path, "docs/.stem")
@@ -98,7 +98,7 @@ links:
 
 func TestParseStem_MinimalVersionAndScope(t *testing.T) {
 	content := []byte(`
-version: 1
+version: 2
 scope:
   match: "*.md"
 `)
@@ -108,8 +108,8 @@ scope:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if stem.Version != 1 {
-		t.Errorf("version = %d, want 1", stem.Version)
+	if stem.Version != 2 {
+		t.Errorf("version = %d, want 2", stem.Version)
 	}
 	if stem.Scope.Match != "*.md" {
 		t.Errorf("scope.match = %q, want %q", stem.Scope.Match, "*.md")
@@ -124,7 +124,7 @@ scope:
 
 func TestParseStem_MalformedYAML(t *testing.T) {
 	content := []byte(`
-version: 1
+version: 2
 schema:
   - this is not a map
   title: broken
@@ -138,7 +138,7 @@ schema:
 
 func TestParseStem_UnknownSectionsIgnored(t *testing.T) {
 	content := []byte(`
-version: 1
+version: 2
 scope:
   match: "*.md"
 future_section:
@@ -150,8 +150,8 @@ another_unknown: 42
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if stem.Version != 1 {
-		t.Errorf("version = %d, want 1", stem.Version)
+	if stem.Version != 2 {
+		t.Errorf("version = %d, want 2", stem.Version)
 	}
 	if stem.Scope.Match != "*.md" {
 		t.Errorf("scope.match = %q, want %q", stem.Scope.Match, "*.md")
@@ -203,7 +203,7 @@ func TestParseStemFile_NotFound(t *testing.T) {
 
 func TestParseStem_Structural(t *testing.T) {
 	content := []byte(`
-version: 1
+version: 2
 structural:
   subdirs:
     require_index: README.md
@@ -237,7 +237,7 @@ structural:
 }
 
 func TestParseStem_ExcludesField(t *testing.T) {
-	content := []byte(`version: 1
+	content := []byte(`version: 2
 schema:
   estado:
     type: enum
@@ -260,7 +260,7 @@ schema:
 }
 
 func TestParseStem_ExcludesAbsent(t *testing.T) {
-	content := []byte(`version: 1
+	content := []byte(`version: 2
 schema:
   estado:
     type: enum
@@ -276,7 +276,7 @@ schema:
 }
 
 func TestFieldMatch_StringForm(t *testing.T) {
-	content := []byte(`version: 1
+	content := []byte(`version: 2
 schema:
   tipo:
     type: enum
@@ -300,7 +300,7 @@ schema:
 }
 
 func TestFieldMatch_ListForm(t *testing.T) {
-	content := []byte(`version: 1
+	content := []byte(`version: 2
 schema:
   tipo:
     type: enum
@@ -324,7 +324,7 @@ schema:
 }
 
 func TestFieldMatch_MapForm(t *testing.T) {
-	content := []byte(`version: 1
+	content := []byte(`version: 2
 schema:
   id:
     type: sequence
@@ -355,7 +355,7 @@ schema:
 }
 
 func TestFieldMatch_Absent(t *testing.T) {
-	content := []byte(`version: 1
+	content := []byte(`version: 2
 schema:
   estado:
     type: enum
@@ -371,7 +371,7 @@ schema:
 }
 
 func TestFieldMatch_NilBehavesAsNoFilter(t *testing.T) {
-	content := []byte(`version: 1
+	content := []byte(`version: 2
 schema:
   estado:
     type: enum
@@ -461,8 +461,8 @@ schema:
 }
 
 func TestParseStemV2_V1BackwardCompat(t *testing.T) {
-	// v1 stems should parse identically as before
-	content := []byte(`version: 1
+	// v2 stems should parse correctly
+	content := []byte(`version: 2
 scope:
   match: "*.md"
 schema:
@@ -475,8 +475,8 @@ schema:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if stem.Version != 1 {
-		t.Errorf("version = %d, want 1", stem.Version)
+	if stem.Version != 2 {
+		t.Errorf("version = %d, want 2", stem.Version)
 	}
 	if !stem.Schema["estado"].Required {
 		t.Error("estado.required should be true")
@@ -584,7 +584,7 @@ schema:
 }
 
 func TestParseStem_NoStructural(t *testing.T) {
-	content := []byte("version: 1\n")
+	content := []byte("version: 2\n")
 	dir := t.TempDir()
 	stemPath := filepath.Join(dir, ".stem")
 	if err := os.WriteFile(stemPath, content, 0644); err != nil {
