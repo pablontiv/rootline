@@ -16,12 +16,10 @@ import (
 )
 
 var (
-	migrateDryRun   bool
-	migrateFrom     string
-	migrateRename   string
-	migrateSplit    bool
-	migrateFromLvls bool
-	migrateToV2     bool
+	migrateDryRun bool
+	migrateFrom   string
+	migrateRename string
+	migrateSplit  bool
 )
 
 var migrateCmd = &cobra.Command{
@@ -42,18 +40,10 @@ func init() {
 	migrateCmd.Flags().StringVar(&migrateFrom, "from", "", "compare against specified .stem file instead of git HEAD")
 	migrateCmd.Flags().StringVar(&migrateRename, "rename", "", "rename a field: old_field=new_field")
 	migrateCmd.Flags().BoolVar(&migrateSplit, "split", false, "split a flat .stem into hierarchical .stem files per level")
-	migrateCmd.Flags().BoolVar(&migrateFromLvls, "from-levels", false, "convert v1 .stem with levels: to v2 with match:-based fields")
-	migrateCmd.Flags().BoolVar(&migrateToV2, "to-v2", false, "upgrade .stem version field from 0/1 to 2")
 	rootCmd.AddCommand(migrateCmd)
 }
 
 func runMigrate(cmd *cobra.Command, args []string) error {
-	if migrateToV2 {
-		return runMigrateToV2(cmd, args)
-	}
-	if migrateFromLvls {
-		return runMigrateFromLevels(cmd, args)
-	}
 	if migrateSplit {
 		return runMigrateSplit(cmd, args)
 	}
@@ -327,88 +317,6 @@ func renderMigrateBatchTable(cmd *cobra.Command, batch *MigrateBatchResult) erro
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Summary: %d stems checked, %d changes (%d breaking)\n",
 		batch.Summary.StemsChecked, batch.Summary.TotalChanges, batch.Summary.BreakingCount)
-	return nil
-}
-
-// --- To-v2 operation ---
-
-func runMigrateToV2(cmd *cobra.Command, args []string) error {
-	targetPath := "."
-	if len(args) > 0 {
-		targetPath = args[0]
-	}
-
-	result, err := migrate.UpgradeToV2(targetPath, migrateDryRun)
-	if err != nil {
-		return err
-	}
-
-	if outputFormat == "table" {
-		return renderMigrateToV2Table(cmd, result)
-	}
-	return outputJSON(cmd, result, false)
-}
-
-func renderMigrateToV2Table(cmd *cobra.Command, result *migrate.ToV2Result) error {
-	w := cmd.OutOrStdout()
-
-	if len(result.Updated) == 0 {
-		_, _ = fmt.Fprintln(w, "All stems already at version 2 (nothing to update)")
-		return nil
-	}
-
-	prefix := ""
-	if migrateDryRun {
-		prefix = "would "
-	}
-
-	_, _ = fmt.Fprintf(w, "Stems %supgraded to v2:\n", prefix)
-	for _, f := range result.Updated {
-		_, _ = fmt.Fprintf(w, "  %s\n", f)
-	}
-	_, _ = fmt.Fprintf(w, "\nSummary: %d %supgraded, %d skipped (of %d total)\n",
-		len(result.Updated), prefix, result.Skipped, result.Total)
-	return nil
-}
-
-// --- From-levels operation ---
-
-func runMigrateFromLevels(cmd *cobra.Command, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("--from-levels requires a .stem file path argument")
-	}
-
-	stemPath := args[0]
-	absPath, err := filepath.Abs(stemPath)
-	if err != nil {
-		return fmt.Errorf("resolving path: %w", err)
-	}
-
-	content, err := os.ReadFile(absPath)
-	if err != nil {
-		return fmt.Errorf("reading %s: %w", stemPath, err)
-	}
-
-	result, err := migrate.ConvertLevelsToMatch(content, absPath)
-	if err != nil {
-		return fmt.Errorf("converting: %w", err)
-	}
-
-	data, err := migrate.MarshalStemV2(result)
-	if err != nil {
-		return fmt.Errorf("marshaling v2 stem: %w", err)
-	}
-
-	if migrateDryRun {
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), string(data))
-		return nil
-	}
-
-	if err := os.WriteFile(absPath, data, 0644); err != nil {
-		return fmt.Errorf("writing %s: %w", stemPath, err)
-	}
-
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Converted %s from v1 levels to v2 match-based format\n", stemPath)
 	return nil
 }
 
