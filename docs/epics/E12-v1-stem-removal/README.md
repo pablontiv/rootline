@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: feature
 ---
 # E12: V1 Stem Removal

@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: feature
 ---
 # F02: Remove V1 Migration Tooling

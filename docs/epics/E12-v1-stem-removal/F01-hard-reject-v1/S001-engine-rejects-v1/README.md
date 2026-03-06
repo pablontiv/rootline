@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: historia
 ---
 # S001: Engine rechaza stems v1 en tiempo de carga

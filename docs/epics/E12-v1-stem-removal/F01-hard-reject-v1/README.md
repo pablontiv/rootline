@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: feature
 ---
 # F01: Hard-reject V1 Stems

@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: historia
 ---
 # S002: Body-Aware Inference

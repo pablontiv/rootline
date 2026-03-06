@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: historia
 ---
 # S001: Codigo de migracion v1 eliminado del binario
