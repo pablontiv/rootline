@@ -96,6 +96,10 @@ rootline fix --all --dry-run    # Preview all fixes
 | `--all` | Fix all files in scope from current directory |
 | `--dry-run` | Show proposed changes without modifying files |
 
+### Pipeline
+
+`fix --all` runs the derive pipeline (derive → enrich builtins → aggregate) before validation, so aggregate mismatches and computed field errors are detectable and fixable.
+
 ### Procedure
 
 1. Run `rootline fix <target> --dry-run --output json` first to preview
