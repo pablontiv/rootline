@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completed
 tipo: historia
 ---
 # S002: Propagate Detector
