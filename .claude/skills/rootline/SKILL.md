@@ -1,20 +1,17 @@
 ---
 name: rootline
 description: |
-  Rootline CLI: validate, fix, describe, new, query, tree, stats, explain, graph,
-  migrate, init, analyze (run inference detectors), and apply (update .stem from
-  analysis). Use whenever the user operates on rootline-managed documents or .stem
-  schemas — even without saying "rootline". Trigger on: initializing folders for
-  consistency ("inicializar", "bootstrap", "sin .stem", "inferir schema", "hacer
-  consistente", "analyze"), validating/fixing documents, querying status, creating
-  documents, checking required fields, exploring hierarchy, running inference
-  detectors, or applying analysis results. Keywords: "validate", "fix", "describe",
-  "query", "tree", "stats", "explain", "graph", "migrate", "init", "analyze",
-  "apply", "rootline", "verificar", "crear documento", "que campos necesito",
-  "buscar registros", "consistencia", "schema", "frontmatter", ".stem".
-  Do NOT trigger for: work decomposition into epics/stories (roadmap skill),
-  structured hypothesis research (hypothesize skill), doc sync (update-docs skill),
-  Go code debugging, or non-rootline YAML/file operations.
+  Wrapper del CLI de rootline: validate, fix, describe, new, query, tree, stats,
+  explain, graph, migrate, init, analyze, apply. Usar siempre que el usuario
+  trabaje con documentos gestionados por rootline o schemas .stem — incluso sin
+  decir "rootline". Usar este skill siempre que el usuario quiera validar
+  documentos, verificar frontmatter, consultar registros estructurados, crear
+  archivos scaffolded, bootstrap de consistencia, o inspeccionar schemas —
+  incluso si solo dice "verificar si este archivo está bien", "que campos
+  necesito", "buscar registros", "inferir schema", "hacer consistente",
+  "check if this file is valid", o "what fields does this need".
+  (No para: descomposición en epics/stories = roadmap, investigación = hypothesize,
+  sync de docs = update-docs, debugging de Go, operaciones YAML no-rootline.)
 argument-hint: "[command] [args...]"
 allowed-tools: Bash, Read, AskUserQuestion
 ---
