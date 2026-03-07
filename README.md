@@ -146,6 +146,8 @@ rootline new <file> [--force] [--dry-run] # Scaffold document from effective sch
 rootline fix [file|--all]                 # Auto-repair: add fields, fix enums, propose changes
 rootline validate --all --where 'expr'   # Validate only records matching filter
 rootline migrate [path]                   # Detect schema changes, rename, split, --to-v2, --from-levels
+rootline analyze [path] [--incremental]   # Run inference detectors, produce report
+rootline apply [file] [--dry-run]         # Apply inference results to .stem and docs
 
 # Tooling
 rootline hooks install|uninstall|status   # Git pre-commit hook management
@@ -274,6 +276,7 @@ Available tools: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `f
 | [MCP Server](docs/json-rpc.md) | Tool catalog, setup, JSON-RPC protocol |
 | [Extensibility](docs/extensibility.md) | Extractor architecture, future formats |
 | [Visual Identity](docs/identity.md) | Logo, colors, usage guidelines |
+| [Distribution Pipeline](docs/marketplace-pipeline.md) | Marketplace distribution pipeline |
 
 ---
 

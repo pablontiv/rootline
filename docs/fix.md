@@ -22,6 +22,7 @@ Rootline categorizes issues into specific proposal types to preserve semantic me
 | **correct_link** | Fixes broken wiki-links by resolving to the closest valid target | `[[T099]]` → `[[T001]]` |
 | **add_aggregate** | Generates aggregate expressions for index files missing them | Adding `estado: len(filter(...))` to README |
 | **remove_stem_field** | Removes invalid fields from `.stem` detected by stem health checks | Removing a field that references a non-existent type |
+| **propagate_aggregate** | Detects stale aggregate values in index files and corrects them | Updating `completed` count after child status changes |
 
 ## CLI Usage
 
@@ -31,6 +32,7 @@ Always preview changes before applying them.
 
 ```bash
 rootline fix --all --dry-run
+rootline fix --all --no-propagate   # Skip aggregate propagation proposals
 ```
 
 The output groups proposals by type, showing affected files and rationale:
@@ -65,7 +67,8 @@ The output groups proposals by type, showing affected files and rationale:
     "correct_outlier": 0,
     "correct_link": 0,
     "add_aggregate": 0,
-    "remove_stem_field": 0
+    "remove_stem_field": 0,
+    "propagate_aggregate": 0
   }
 }
 ```
