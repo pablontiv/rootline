@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completed
 tipo: historia
 ---
 # S001: Git Hook Integration

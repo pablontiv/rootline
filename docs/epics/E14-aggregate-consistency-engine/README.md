@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completed
 ---
 # E14: Aggregate Consistency Engine
 

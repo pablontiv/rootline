@@ -44,6 +44,22 @@ End-to-end verification that the post-merge hook works in a realistic workflow: 
 - Parent README estado is updated after merge
 - `rootline validate --all docs/epics/` shows 0 aggregate errors after merge
 
+## Verification Results
+
+**Procedure executed**: 2026-03-07
+
+1. Created branch `test/post-merge-verify` from master
+2. Marked T002 as Completed on the branch (S001, F03, E14 READMEs still `Pending`)
+3. Merged branch back to master with `git merge test/post-merge-verify`
+4. Post-merge hook fired: rebuilt rootline, then ran `rootline fix --all docs/epics/`
+5. **Results**:
+   - S001 README: `Pending` → `Completed` (both tasks completed)
+   - F03 README: `Pending` → `Completed` (all stories completed)
+   - E14 README: `Pending` → `Completed` (all features completed)
+   - `rootline validate --all docs/epics/`: 0 errors across 574 files
+
+All 3 acceptance criteria satisfied.
+
 ## Fuente de verdad
 
 - `.githooks/post-merge` — post-merge hook script
