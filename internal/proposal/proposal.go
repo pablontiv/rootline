@@ -21,17 +21,18 @@ import (
 type Type string
 
 const (
-	ExtendEnum        Type = "extend_enum"
-	MigrateValue      Type = "migrate_value"
-	CorrectValue      Type = "correct_value"
-	ExtractBody       Type = "extract_body"
-	InferFromChildren Type = "infer_from_children"
-	AddField          Type = "add_field"
-	CorrectLink       Type = "correct_link"
-	InferFromSiblings Type = "infer_from_siblings"
-	CorrectOutlier    Type = "correct_outlier"
-	AddAggregate      Type = "add_aggregate"
-	RemoveStemField   Type = "remove_stem_field"
+	ExtendEnum         Type = "extend_enum"
+	MigrateValue       Type = "migrate_value"
+	CorrectValue       Type = "correct_value"
+	ExtractBody        Type = "extract_body"
+	InferFromChildren  Type = "infer_from_children"
+	AddField           Type = "add_field"
+	CorrectLink        Type = "correct_link"
+	InferFromSiblings  Type = "infer_from_siblings"
+	CorrectOutlier     Type = "correct_outlier"
+	AddAggregate       Type = "add_aggregate"
+	RemoveStemField    Type = "remove_stem_field"
+	PropagateAggregate Type = "propagate_aggregate"
 )
 
 // Proposal represents a suggested fix for one or more validation errors.
@@ -57,18 +58,19 @@ type Report struct {
 
 // Summary holds aggregate counts for a report.
 type Summary struct {
-	Total             int `json:"total"`
-	ExtendEnum        int `json:"extend_enum"`
-	MigrateValue      int `json:"migrate_value"`
-	CorrectValue      int `json:"correct_value"`
-	ExtractBody       int `json:"extract_body"`
-	InferFromChildren int `json:"infer_from_children"`
-	AddField          int `json:"add_field"`
-	InferFromSiblings int `json:"infer_from_siblings"`
-	CorrectOutlier    int `json:"correct_outlier"`
-	CorrectLink       int `json:"correct_link"`
-	AddAggregate      int `json:"add_aggregate"`
-	RemoveStemField   int `json:"remove_stem_field"`
+	Total              int `json:"total"`
+	ExtendEnum         int `json:"extend_enum"`
+	MigrateValue       int `json:"migrate_value"`
+	CorrectValue       int `json:"correct_value"`
+	ExtractBody        int `json:"extract_body"`
+	InferFromChildren  int `json:"infer_from_children"`
+	AddField           int `json:"add_field"`
+	InferFromSiblings  int `json:"infer_from_siblings"`
+	CorrectOutlier     int `json:"correct_outlier"`
+	CorrectLink        int `json:"correct_link"`
+	AddAggregate       int `json:"add_aggregate"`
+	RemoveStemField    int `json:"remove_stem_field"`
+	PropagateAggregate int `json:"propagate_aggregate"`
 }
 
 // Analyze runs all detectors against validation errors and returns a Report.
@@ -189,6 +191,8 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 			summary.AddAggregate++
 		case RemoveStemField:
 			summary.RemoveStemField++
+		case PropagateAggregate:
+			summary.PropagateAggregate++
 		}
 	}
 

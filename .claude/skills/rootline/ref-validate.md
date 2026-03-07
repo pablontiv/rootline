@@ -129,6 +129,7 @@ The fix engine generates typed proposals:
 - `migrate_value` — update deprecated value
 - `remove_stem_field` — clean up unused .stem field
 - `add_aggregate` — add missing aggregation
+- `propagate_aggregate` — correct stale aggregate value in index file
 
 ### Typical workflow
 
