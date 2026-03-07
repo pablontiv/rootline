@@ -1,9 +1,25 @@
 ---
-estado: In Progress
+estado: Implemented
 fecha: "2026-02-27"
 metodo: collaborative-research
 ---
 # Intrinsic Hierarchy Principle
+
+## Implementation Status
+
+Parts 1-4 implemented in engine v2 (stem v0/v1 rejected, `levels:` removed, `match:` field scoping, automatic drift detection, configurable index file). Part 5 (v3 entity model) remains open design — see Q1-Q5 in Part 7.
+
+| Proposal | Status | Engine location |
+|----------|--------|-----------------|
+| Remove `levels:` | Done | `rules.go:255-258` rejects v0/v1 |
+| `match:` field scoping | Done | `match.go` — 3 YAML forms |
+| Automatic drift detection | Done | `drift.go` — no `aggregate:` required |
+| Index file semantics | Done | `validate.go:IsIndexFile()` + `structural.subdirs.require_index` |
+| v3 `entities:` model | Open | Not implemented — circular tension unresolved (Part 5) |
+| Children type constraints | Open | Not implemented |
+| Entity-scoped validation | Open | Not implemented |
+
+---
 
 **Context**: Discovered during investigation of parent-child data inconsistencies in a rootline-managed project. Epic README files had `estado: In Progress` while all their child Features were `Completado`. Rootline didn't detect the inconsistency because `aggregate:` wasn't configured — vertical consistency was opt-in, not automatic.
 

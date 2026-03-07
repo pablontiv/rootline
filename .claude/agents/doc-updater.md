@@ -80,7 +80,27 @@ Read the specific sections of the affected documents.
 
 ### 6. Validate
 
-Run `rootline validate` on any docs under `.stem` schema governance.
+After editing, validate updated documents against `.stem` schemas:
+
+```bash
+# Validate specific updated files
+rootline validate <updated-file-1> <updated-file-2> --output json
+
+# For docs/*.md files (under .stem governance)
+rootline validate --all docs/ --output json
+
+# For skill references
+rootline validate --all .claude/skills/rootline/ --output json 2>/dev/null
+```
+
+If validation fails, fix the frontmatter issues before reporting. Use `rootline fix <file>` for auto-repair if the error is schema-related (missing field, invalid enum).
+
+Also verify that documentation accurately reflects the current CLI by spot-checking:
+
+```bash
+# Ensure documented command count matches actual
+rootline --help 2>&1 | grep -c "^  [a-z]"
+```
 
 ### 7. Report
 
