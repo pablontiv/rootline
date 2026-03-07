@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/fix"
 	"github.com/pablontiv/rootline/internal/index"
@@ -172,6 +173,11 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
 	}
+
+	// Run derive pipeline so aggregate values are available for validation.
+	derive.DeriveAllSimple(ctx, records, root)
+	derive.EnrichBuiltinsSimple(ctx, records, root)
+	derive.AggregateAllSimple(ctx, records, root)
 
 	// First pass: collect all records, their effective stems, and errors.
 	allErrs := make(map[string][]rules.ValidationError)
