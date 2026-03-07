@@ -89,6 +89,11 @@ func ApplyProposals(_ context.Context, report *proposal.Report, root string, rec
 				return fmt.Errorf("correct_outlier %s: %w", p.Paths[0], err)
 			}
 			applied = append(applied, p)
+		case proposal.PropagateAggregate:
+			if err := applyCorrectValue(p, root, recordMap); err != nil {
+				return fmt.Errorf("propagate_aggregate %s: %w", p.Paths[0], err)
+			}
+			applied = append(applied, p)
 		case proposal.CorrectLink:
 			if err := applyCorrectLink(p, root); err != nil {
 				return fmt.Errorf("correct_link %s: %w", p.Paths[0], err)

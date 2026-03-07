@@ -41,8 +41,9 @@ type FixSummary struct {
 }
 
 var (
-	fixDryRun bool
-	fixAll    bool
+	fixDryRun      bool
+	fixAll         bool
+	fixNoPropagate bool
 )
 
 var fixCmd = &cobra.Command{
@@ -64,6 +65,7 @@ var fixCmd = &cobra.Command{
 func init() {
 	fixCmd.Flags().BoolVar(&fixDryRun, "dry-run", false, "show proposed changes without modifying files")
 	fixCmd.Flags().BoolVar(&fixAll, "all", false, "fix all files in scope from current directory")
+	fixCmd.Flags().BoolVar(&fixNoPropagate, "no-propagate", false, "skip aggregate propagation proposals")
 	rootCmd.AddCommand(fixCmd)
 }
 
@@ -209,6 +211,9 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 
 	report := proposal.Analyze(records, effective, allErrs)
 	appendAggregateProposals(report, root, records, effective)
+	if !fixNoPropagate {
+		appendPropagateProposals(report, records, effective)
+	}
 	appendStemHealthProposals(report, ctx, root)
 
 	// In dry-run mode, use proposal engine for richer output.
@@ -247,6 +252,16 @@ func appendStemHealthProposals(report *proposal.Report, ctx context.Context, roo
 		report.Proposals = append(report.Proposals, stemProposals...)
 		report.Summary.RemoveStemField += len(stemProposals)
 		report.Summary.Total += len(stemProposals)
+	}
+}
+
+// appendPropagateProposals detects stale aggregate values in index files and appends proposals to the report.
+func appendPropagateProposals(report *proposal.Report, records []*extract.Record, effective *rules.StemFile) {
+	propProposals := proposal.DetectPropagateAggregate(records, effective)
+	if len(propProposals) > 0 {
+		report.Proposals = append(report.Proposals, propProposals...)
+		report.Summary.PropagateAggregate += len(propProposals)
+		report.Summary.Total += len(propProposals)
 	}
 }
 

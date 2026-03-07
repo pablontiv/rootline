@@ -95,6 +95,7 @@ rootline fix --all --dry-run    # Preview all fixes
 |------|-------------|
 | `--all` | Fix all files in scope from current directory |
 | `--dry-run` | Show proposed changes without modifying files |
+| `--no-propagate` | Skip aggregate propagation proposals |
 
 ### Pipeline
 
