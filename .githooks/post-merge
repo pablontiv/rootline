@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync rootline skills and rebuild binary after every pull
+# Post-merge: sync skills, rebuild binary, propagate aggregates
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
@@ -14,6 +14,9 @@ echo "rootline: synced skills → $SKILLS_DEST/rootline"
 echo "Rebuilding rootline binary..."
 if go build -ldflags "-X main.version=$(git describe --tags 2>/dev/null || echo dev)" -o /usr/local/bin/rootline ./cmd/rootline/ 2>&1; then
   echo "rootline rebuilt: $(rootline --version)"
+
+  # Propagate aggregate values after merge (fix stale parent READMEs)
+  rootline fix --all "$REPO_ROOT/docs/epics/" 2>/dev/null || true
 else
   echo "Warning: rootline rebuild failed"
 fi
