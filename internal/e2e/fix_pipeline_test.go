@@ -61,6 +61,7 @@ func scanAndAggregate(t *testing.T, ctx context.Context, root string) []*extract
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
+	derive.DeriveAllSimple(ctx, records, root)
 	derive.EnrichBuiltinsSimple(ctx, records, root)
 	derive.AggregateAllSimple(ctx, records, root)
 	return records
@@ -149,6 +150,34 @@ func TestValidateAggregateConsistency_Match(t *testing.T) {
 }
 
 // --- Fix Pipeline Tests ---
+
+func TestFixPipeline_DeriveInFix(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem":          "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed, \"In Progress\"]\n    required: true\naggregate:\n  estado: |\n    all(descendants, {.estado == \"Completed\"}) ? \"Completed\" : \"Pending\"\n",
+		"S001/README.md": "---\nestado: Pending\n---\n# Story\n",
+		"S001/T001.md":   "---\nestado: Completed\n---\n# Task 1\n",
+		"S001/T002.md":   "---\nestado: Completed\n---\n# Task 2\n",
+	})
+
+	ctx := context.Background()
+
+	// Full pipeline: scan + derive + enrich + aggregate + validate.
+	records := scanAndAggregate(t, ctx, root)
+	allErrs := collectErrors(ctx, root, records)
+
+	// After derive pipeline runs, aggregate should detect stale README estado.
+	var aggErr bool
+	for _, errs := range allErrs {
+		for _, e := range errs {
+			if e.Rule == "aggregate" {
+				aggErr = true
+			}
+		}
+	}
+	if !aggErr {
+		t.Errorf("expected aggregate error for stale README estado after derive pipeline, got none; allErrs: %v", allErrs)
+	}
+}
 
 func TestFixPipeline_AddField(t *testing.T) {
 	root := setupProject(t, map[string]string{

@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completed
 tipo: historia
 ---
 # S001: Derive Pipeline in Fix
