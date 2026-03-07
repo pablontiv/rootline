@@ -445,6 +445,110 @@ func TestFixPipeline_ExtendEnum(t *testing.T) {
 	}
 }
 
+// --- Propagation Tests ---
+
+func TestFixPipeline_PropagateSingleLevel(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem":          "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\naggregate:\n  estado: |\n    all(descendants, {.estado == \"Completed\"}) ? \"Completed\" : \"Pending\"\n",
+		"S001/README.md": "---\nestado: Pending\n---\n# Story\n",
+		"S001/T001.md":   "---\nestado: Completed\n---\n# Task 1\n",
+		"S001/T002.md":   "---\nestado: Completed\n---\n# Task 2\n",
+	})
+
+	ctx := context.Background()
+
+	// Step 1: scan + derive + validate + propose + propagate.
+	records := scanAndAggregate(t, ctx, root)
+	allErrs := collectErrors(ctx, root, records)
+	effective := richestStem(root, records)
+
+	report := proposal.Analyze(records, effective, allErrs)
+	propProposals := proposal.DetectPropagateAggregate(records, effective)
+	report.Proposals = append(report.Proposals, propProposals...)
+
+	if len(propProposals) != 1 {
+		t.Fatalf("got %d propagate proposals, want 1", len(propProposals))
+	}
+
+	// Step 2: apply fix.
+	if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	// Step 3: re-read and verify README was updated.
+	content := readFile(t, root, "S001/README.md")
+	if !strings.Contains(content, "estado: Completed") {
+		t.Errorf("README not updated to Completed:\n%s", content)
+	}
+
+	// Step 4: re-validate -> 0 aggregate errors.
+	records2 := scanAndAggregate(t, ctx, root)
+	allErrs2 := collectErrors(ctx, root, records2)
+	for path, errs := range allErrs2 {
+		for _, e := range errs {
+			if e.Rule == "aggregate" {
+				t.Errorf("still has aggregate error after fix: %s: %s", path, e.Message)
+			}
+		}
+	}
+}
+
+func TestFixPipeline_PropagateDeepHierarchy(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\naggregate:\n  estado: |\n    all(descendants, {.estado == \"Completed\"}) ? \"Completed\" : \"Pending\"\n",
+		// Epic level
+		"E01/README.md": "---\nestado: Pending\n---\n# Epic\n",
+		// Feature level
+		"E01/F01/README.md": "---\nestado: Pending\n---\n# Feature\n",
+		// Story level
+		"E01/F01/S001/README.md": "---\nestado: Pending\n---\n# Story\n",
+		// Tasks — all completed
+		"E01/F01/S001/T001.md": "---\nestado: Completed\n---\n# Task 1\n",
+		"E01/F01/S001/T002.md": "---\nestado: Completed\n---\n# Task 2\n",
+	})
+
+	ctx := context.Background()
+
+	// Aggregation is bottom-up, so we may need multiple passes.
+	// Pass 1: Story README gets updated.
+	for pass := 0; pass < 3; pass++ {
+		records := scanAndAggregate(t, ctx, root)
+		allErrs := collectErrors(ctx, root, records)
+		effective := richestStem(root, records)
+
+		report := proposal.Analyze(records, effective, allErrs)
+		propProposals := proposal.DetectPropagateAggregate(records, effective)
+		report.Proposals = append(report.Proposals, propProposals...)
+
+		if len(propProposals) == 0 {
+			break // no more stale values
+		}
+
+		if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
+			t.Fatalf("apply pass %d: %v", pass, err)
+		}
+	}
+
+	// Verify all READMEs at Story, Feature, Epic levels are Completed.
+	for _, path := range []string{"E01/F01/S001/README.md", "E01/F01/README.md", "E01/README.md"} {
+		content := readFile(t, root, path)
+		if !strings.Contains(content, "estado: Completed") {
+			t.Errorf("%s not updated to Completed:\n%s", path, content)
+		}
+	}
+
+	// Final validate: 0 aggregate errors.
+	records := scanAndAggregate(t, ctx, root)
+	allErrs := collectErrors(ctx, root, records)
+	for path, errs := range allErrs {
+		for _, e := range errs {
+			if e.Rule == "aggregate" {
+				t.Errorf("still has aggregate error after fix: %s: %s", path, e.Message)
+			}
+		}
+	}
+}
+
 // --- Validation Rule Tests ---
 
 func TestValidateRule_NonEmpty(t *testing.T) {

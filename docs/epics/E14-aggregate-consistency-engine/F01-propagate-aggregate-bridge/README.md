@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completed
 tipo: feature
 ---
 # F01: Propagate Aggregate Bridge

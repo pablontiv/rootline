@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completed
 tipo: historia
 ---
 # S003: Fix Pipeline Integration
