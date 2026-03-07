@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 )
 
 // StemHealthCheck represents a single stem-health diagnostic result.
@@ -245,6 +247,61 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 					),
 					Path:  relPath,
 					Field: fieldName,
+				})
+			}
+		}
+	}
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	// Check 8: Aggregate formula coverage (formula references all enum values)
+	quotedStringRe := regexp.MustCompile(`"([^"]*)"`)
+	for sf, stem := range parsedStems {
+		relPath, _ := filepath.Rel(absRoot, sf)
+		// Build effective schema for this stem.
+		dir := filepath.Dir(sf)
+		entries, walkErr := WalkUp(dir)
+		if walkErr != nil {
+			continue
+		}
+		effective := MergeStemFiles(entries)
+		if effective == nil {
+			continue
+		}
+
+		for fieldName, exprAny := range stem.Aggregate {
+			expr, ok := exprAny.(string)
+			if !ok {
+				continue
+			}
+			sf, exists := effective.Schema[fieldName]
+			if !exists || sf.Type != "enum" || len(sf.Values) == 0 {
+				continue
+			}
+
+			// Extract all quoted strings from the expression.
+			matches := quotedStringRe.FindAllStringSubmatch(expr, -1)
+			quotedValues := make(map[string]bool)
+			for _, m := range matches {
+				quotedValues[m[1]] = true
+			}
+
+			// Check each enum value is referenced.
+			var missing []string
+			for _, v := range sf.Values {
+				if !quotedValues[v] {
+					missing = append(missing, v)
+				}
+			}
+			if len(missing) > 0 {
+				checks = append(checks, StemHealthCheck{
+					Name:    "aggregate-formula-coverage",
+					Status:  "warn",
+					Message: fmt.Sprintf("aggregate formula for %q does not reference enum value(s): %s", fieldName, strings.Join(missing, ", ")),
+					Path:    relPath,
+					Field:   fieldName,
 				})
 			}
 		}
