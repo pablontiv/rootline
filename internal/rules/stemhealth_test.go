@@ -423,6 +423,111 @@ schema:
 	}
 }
 
+func TestStemHealth_FormulaCompleteness_Complete(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: enum
+    values: [Pending, Completed, Blocked]
+aggregate:
+  estado: |
+    all(descendants, {.estado == "Completed"}) ? "Completed" :
+    any(descendants, {.estado == "Blocked"}) ? "Blocked" : "Pending"
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, c := range result.Checks {
+		if c.Name == "aggregate-formula-coverage" {
+			t.Errorf("unexpected formula-coverage warning for complete formula: %s", c.Message)
+		}
+	}
+}
+
+func TestStemHealth_FormulaCompleteness_Incomplete(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: enum
+    values: [Pending, Completed, Obsolete]
+aggregate:
+  estado: |
+    all(descendants, {.estado == "Completed"}) ? "Completed" : "Pending"
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, c := range result.Checks {
+		if c.Name == "aggregate-formula-coverage" && c.Status == "warn" {
+			found = true
+			if c.Field != "estado" {
+				t.Errorf("expected field 'estado', got %q", c.Field)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("expected aggregate-formula-coverage warning for missing Obsolete")
+	}
+}
+
+func TestStemHealth_FormulaCompleteness_NonEnumField(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  score:
+    type: string
+aggregate:
+  score: "sum(descendants, {.score})"
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, c := range result.Checks {
+		if c.Name == "aggregate-formula-coverage" {
+			t.Errorf("unexpected formula-coverage check for non-enum field: %s", c.Message)
+		}
+	}
+}
+
+func TestStemHealth_FormulaCompleteness_NoAggregate(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: enum
+    values: [Pending, Completed]
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, c := range result.Checks {
+		if c.Name == "aggregate-formula-coverage" {
+			t.Errorf("unexpected formula-coverage check for stem without aggregate: %s", c.Message)
+		}
+	}
+}
+
 func TestValidateStemHealth_MultipleStems(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {

@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completed
 tipo: historia
 ---
 # S001: Stem-Health Formula Check
