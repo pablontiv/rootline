@@ -11,12 +11,17 @@ Rootline is a **file-based database and constraint engine** for structured docum
 ## Build & Test Commands
 
 ```bash
-go build ./cmd/rootline/          # Build the binary
-go test ./... -race               # Run all tests with race detector
-go test ./internal/extract/ -run TestName  # Run a single test
-go vet ./...                      # Static analysis
-golangci-lint run ./...           # Full lint (govet, errcheck, staticcheck, unused, ineffassign, gocritic)
+just check              # gofmt check + golangci-lint + go build
+just test               # go test ./... -race
+just fmt                # gofmt -l -w
+just validate           # rootline validate --all docs/epics/
+just fix-docs           # rootline fix --all docs/epics/
+just sync-version       # sync root.go version with latest git tag
+just release-patch      # check + test → bump patch → commit → tag → push
+just release-minor      # check + test → bump minor → commit → tag → push
 ```
+
+Run a single test: `go test ./internal/extract/ -run TestName`
 
 Pre-commit hooks run `golangci-lint` + `gofmt` automatically (`.pre-commit-config.yaml`). Tests use the standard `testing` package — no external test frameworks.
 
@@ -112,16 +117,14 @@ After v1.0: `feat` bumps minor, breaking bumps major (standard semver).
 
 ## Release Flow
 
-Releases are **fully automated**. When CI passes on `master`, the `auto-tag` job iterates over all untagged commits since the last tag, creates individual version tags for each `feat`/`fix`/`perf` commit, and runs goreleaser for the latest tag. This handles both individual and batch pushes correctly.
-
-Pipeline: `push to master → CI passes → tag each untagged commit → goreleaser release`
-
-For manual tagging (e.g., pre-releases):
+Local releases use `just` recipes that sync `root.go` version from the latest git tag, run quality gates, bump, and push:
 
 ```bash
-git describe --tags --abbrev=0   # Show current version (latest git tag)
-git tag v1.0.0 && git push --tags  # Manual tag and trigger goreleaser
+just release-patch   # v0.9.87 → v0.9.88
+just release-minor   # v0.9.87 → v0.10.0
 ```
+
+CI also auto-tags on push to `master`: the `auto-tag` job iterates untagged commits, creates version tags for each `feat`/`fix`/`perf` commit, and runs goreleaser for the latest tag.
 
 ## Module Path
 

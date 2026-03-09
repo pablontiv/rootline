@@ -8,7 +8,7 @@ import (
 )
 
 // Version is set at build time via ldflags.
-var version = "0.1.0-dev"
+var version = "0.9.87"
 
 var (
 	outputFormat string

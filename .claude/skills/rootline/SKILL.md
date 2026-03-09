@@ -190,3 +190,4 @@ These commands are used less frequently. For detailed procedures, see [ref-advan
 2. All JSON responses include `"version": 1` and `"kind": "rootline/<command>"`
 3. Use `--output table` when displaying results directly to the user
 4. Use `--field` for extracting specific values (e.g., `--field schema.id.next`)
+5. Use `just validate` / `just fix-docs` as shortcuts for batch operations
