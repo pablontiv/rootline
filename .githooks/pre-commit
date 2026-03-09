@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Scan staged changes for secrets before commit
+# Requires gitleaks: https://github.com/gitleaks/gitleaks
+
+if command -v gitleaks &>/dev/null; then
+  gitleaks git --pre-commit --staged
+else
+  echo "Warning: gitleaks not installed, skipping secret scan"
+fi
