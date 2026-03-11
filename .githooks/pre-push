@@ -43,6 +43,15 @@ while read local_ref local_sha remote_ref remote_sha; do
     fi
   fi
 
+  # Check if CI, install scripts, or build config changed but docs weren't updated
+  if git diff --name-only "$range" -- .github/ .goreleaser.yml install.sh install.ps1 Justfile go.mod 2>/dev/null | grep -q .; then
+    if ! git diff --name-only "$range" -- README.md docs/ CLAUDE.md 2>/dev/null | grep -q .; then
+      echo "CI/scripts/config changed but docs were not updated."
+      echo "Update README.md, docs/, or CLAUDE.md before pushing."
+      exit 1
+    fi
+  fi
+
 done
 
 # Sync rootline skills to ~/.claude/skills/
