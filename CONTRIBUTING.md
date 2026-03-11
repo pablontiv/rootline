@@ -27,9 +27,6 @@ Run `just --list` to see all available recipes. Key ones:
 | `just fmt` | Auto-format code |
 | `just validate` | Validate docs/epics with rootline |
 | `just fix-docs` | Fix and propagate doc aggregates |
-| `just sync-version` | Sync `root.go` version with latest git tag |
-| `just release-patch` | Full release: check → test → bump patch → commit → tag → push |
-| `just release-minor` | Same but bumps minor version |
 
 ## Workflow
 
@@ -42,14 +39,7 @@ Run `just --list` to see all available recipes. Key ones:
 
 ## Releasing
 
-Releases use `just` recipes that derive the next version from the latest git tag, run quality gates, bump the version in `root.go`, and push:
-
-```bash
-just release-patch   # v0.9.87 → v0.9.88
-just release-minor   # v0.9.87 → v0.10.0
-```
-
-CI also auto-tags on push to master based on conventional commit prefixes, and triggers goreleaser for cross-platform binaries.
+Releases are fully automated via CI. On push to `master`, the CI pipeline analyzes conventional commit prefixes, auto-tags, and triggers goreleaser for cross-platform binaries and GitHub Releases. No manual release steps needed — just push with conventional commit messages.
 
 ## Commit Convention
 

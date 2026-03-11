@@ -16,9 +16,6 @@ just test               # go test ./... -race
 just fmt                # gofmt -l -w
 just validate           # rootline validate --all docs/epics/
 just fix-docs           # rootline fix --all docs/epics/
-just sync-version       # sync root.go version with latest git tag
-just release-patch      # check + test → bump patch → commit → tag → push
-just release-minor      # check + test → bump minor → commit → tag → push
 ```
 
 Run a single test: `go test ./internal/extract/ -run TestName`
@@ -117,14 +114,9 @@ After v1.0: `feat` bumps minor, breaking bumps major (standard semver).
 
 ## Release Flow
 
-Local releases use `just` recipes that sync `root.go` version from the latest git tag, run quality gates, bump, and push:
+Releases are fully automated via CI. On push to `master`, the `auto-tag` job analyzes conventional commits since the last tag, creates version tags, and triggers goreleaser to build multi-platform binaries and create GitHub Releases. Version is injected at build time via `-ldflags -X main.version={{.Version}}`.
 
-```bash
-just release-patch   # v0.9.87 → v0.9.88
-just release-minor   # v0.9.87 → v0.10.0
-```
-
-CI also auto-tags on push to `master`: the `auto-tag` job iterates untagged commits, creates version tags for each `feat`/`fix`/`perf` commit, and runs goreleaser for the latest tag.
+No manual release steps are needed — just push to master with conventional commit messages. The Justfile contains only development recipes (`check`, `test`, `fmt`, `validate`). Release logic lives exclusively in CI to avoid duplication.
 
 ## Module Path
 
