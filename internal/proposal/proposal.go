@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -281,7 +282,7 @@ func detectMigrateValue(effective *rules.StemFile, errs map[string][]rules.Valid
 			if newValue == "" {
 				newValue = base // preserve original base if no close match
 			}
-			var wikiLinks []string
+			wikiLinks := make([]string, 0, len(targets)+len(notes))
 			for _, t := range targets {
 				wikiLinks = append(wikiLinks, "[[blocks:"+t+"]]")
 			}
@@ -289,10 +290,23 @@ func detectMigrateValue(effective *rules.StemFile, errs map[string][]rules.Valid
 				wikiLinks = append(wikiLinks, "[[note:"+n+"]]")
 			}
 
-			desc := fmt.Sprintf("migrate %q to %q", val, newValue)
+			var sb strings.Builder
+			sb.Grow(len(val) + len(newValue) + len(notes)*10 + 30)
+			sb.WriteString("migrate ")
+			sb.WriteString(strconv.Quote(val))
+			sb.WriteString(" to ")
+			sb.WriteString(strconv.Quote(newValue))
 			if len(notes) > 0 {
-				desc += fmt.Sprintf(" (notes: %s)", strings.Join(notes, ", "))
+				sb.WriteString(" (notes: ")
+				for i, n := range notes {
+					if i > 0 {
+						sb.WriteString(", ")
+					}
+					sb.WriteString(n)
+				}
+				sb.WriteString(")")
 			}
+			desc := sb.String()
 
 			proposals = append(proposals, Proposal{
 				Type:        MigrateValue,
