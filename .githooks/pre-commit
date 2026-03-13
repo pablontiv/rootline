@@ -1,7 +1,24 @@
 #!/usr/bin/env bash
-# Scan staged changes for secrets before commit
-# Requires gitleaks: https://github.com/gitleaks/gitleaks
+# Pre-commit: format check, lint, and secret scan
 
+echo "Running gofmt check..."
+UNFORMATTED=$(gofmt -l . 2>/dev/null | grep -v vendor || true)
+if [ -n "$UNFORMATTED" ]; then
+  echo "ERROR: Files not formatted:"
+  echo "$UNFORMATTED"
+  echo "Run: gofmt -l -w ."
+  exit 1
+fi
+
+echo "Running golangci-lint..."
+if command -v golangci-lint &>/dev/null; then
+  golangci-lint run
+else
+  echo "Warning: golangci-lint not installed, running go vet instead"
+  go vet ./...
+fi
+
+# Scan staged changes for secrets
 if command -v gitleaks &>/dev/null; then
   gitleaks git --pre-commit --staged
 else

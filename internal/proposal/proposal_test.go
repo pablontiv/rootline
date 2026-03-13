@@ -84,7 +84,6 @@ func TestDetectAddField(t *testing.T) {
 	}
 }
 
-
 func TestDetectMigrateValue(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
