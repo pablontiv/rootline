@@ -218,6 +218,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ steps.tag.outputs.latest }}
 
+      - name: Smoke Test
+        if: steps.tag.outputs.latest != ''
+        run: |
+          EXPECTED="$(echo ${{ steps.tag.outputs.latest }} | sed 's/^v//')"
+          BINARY="$(find dist -name 'rootline' -type f -path '*linux_amd64*' | head -1)"
+          "$BINARY" --version | grep -q "$EXPECTED" || { echo "Version mismatch: expected $EXPECTED"; exit 1; }
+          "$BINARY" --help
+
       - name: Attest Build Provenance
         if: steps.tag.outputs.latest != ''
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
