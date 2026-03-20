@@ -56,6 +56,7 @@ rootline graph docs/epics/ --open --where "tipo=='feature'"  # filtered graph
 <!DOCTYPE html>
 <html><head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Rootline Graph</title>
   <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
 </head><body>
@@ -63,6 +64,8 @@ rootline graph docs/epics/ --open --where "tipo=='feature'"  # filtered graph
   <script>mermaid.initialize({startOnLoad: true, theme: 'default'});</script>
 </body></html>
 ```
+
+Note: Mermaid.js is loaded from CDN — requires internet connectivity.
 
 Template embedded via `go:embed`.
 
@@ -76,7 +79,7 @@ func OpenBrowser(url string) error {
     case "darwin":
         return exec.Command("open", url).Start()
     case "windows":
-        return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+        return exec.Command("cmd", "/c", "start", "", url).Start()
     default:
         return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
     }
@@ -87,7 +90,7 @@ func OpenBrowser(url string) error {
 
 - HTML output contains valid Mermaid content
 - `--open` + `--check` produces error
-- `--open` overrides `--format dot` to mermaid
+- `--open` + `--format dot` produces error (no silent override)
 - OpenBrowser function is tested via interface (injectable opener for unit tests)
 
 ### Estimated Scope
@@ -124,6 +127,8 @@ rootline init --template pablontiv/epic-tracking --force    # overwrite existing
 1. Parse ref: `owner/repo[@tag]` or `github.com/owner/repo[@tag]`
 2. Verify `git` is in PATH (error if not: `"git is required for --template"`)
 3. `git clone --depth 1 [--branch <tag>] https://github.com/<owner>/<repo>.git <tmpdir>`
+   - Environment: `GIT_TERMINAL_PROMPT=0` (fail-fast on private repos, no interactive auth hang)
+   - Timeout: 30 seconds via `context.WithTimeout`
    - If no tag specified: default branch (no `--branch` flag)
 4. Find all `.stem` files in the cloned repo root (recursive)
 5. Validate each `.stem` is valid YAML via `yaml.Unmarshal`
@@ -136,6 +141,8 @@ rootline init --template pablontiv/epic-tracking --force    # overwrite existing
 |-----------|---------------|
 | `git` not in PATH | `git is required for --template` |
 | Repo doesn't exist | Git clone error propagated |
+| Private repo (auth required) | `authentication required for <repo> (private repositories are not supported)` |
+| Clone timeout (>30s) | `git clone timed out after 30s` |
 | No `.stem` files found | `no .stem files found in <repo>` |
 | Invalid YAML in `.stem` | `invalid .stem file: <name>: <parse error>` |
 | Target `.stem` exists (no `--force`) | `<name> already exists (use --force to overwrite)` |
@@ -168,11 +175,13 @@ New detector that analyzes directory structure and infers `structural.subdirs` r
 
 ### Inference Heuristics
 
-| Rule | Signal | Threshold |
-|------|--------|-----------|
-| `require_index` | % of subdirs with README.md | ≥90% presence → infer |
-| `min_children` | Minimum observed subdirectory count per parent | `min(counts)` across parents at same level |
-| `max_children` | Maximum observed subdirectory count per parent | `max(counts)` across parents at same level |
+| Rule | Signal | Threshold | Guard |
+|------|--------|-----------|-------|
+| `require_index` | % of subdirs with README.md | ≥90% presence | min 3 directories observed |
+| `min_children` | Minimum observed subdirectory count per parent | `floor(min(counts) * 0.8)` (20% padding down) | min 3 parents observed |
+| `max_children` | Maximum observed subdirectory count per parent | `ceil(max(counts) * 1.2)` (20% padding up) | min 3 parents observed |
+
+**Design note (from review):** Exact min/max from observed data is brittle — a project with 5 subdirs would get `max_children: 5` and fail on the 6th. The ±20% padding prevents immediate breakage. Minimum sample size of 3 avoids false positives from tiny datasets.
 
 ### Interface
 
@@ -222,11 +231,12 @@ Results appear in `rootline analyze` report as new inference type:
 
 ### Tests
 
-- Directory with 100% README.md → infers `require_index`
+- Directory with 100% README.md (5 dirs) → infers `require_index`
 - Directory with 80% README.md → does NOT infer (below 90%)
+- Only 2 directories → does NOT infer (below min sample size 3)
 - Empty directory → no inference
-- Consistent child counts → infers min/max_children
-- Varied child counts → uses actual min/max observed
+- 5 parents with 3-5 children → min_children: 2 (floor(3*0.8)), max_children: 6 (ceil(5*1.2))
+- Varied child counts → uses padded min/max observed
 
 ### Estimated Scope
 
