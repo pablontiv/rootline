@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -322,6 +323,67 @@ func TestInitAutoHierarchy_NoAggregateForNonEnum(t *testing.T) {
 	}
 	if strings.Contains(string(content), "aggregate:") {
 		t.Errorf("expected no aggregate section for non-enum fields, got:\n%s", string(content))
+	}
+}
+
+func TestInitTemplateInvalidRef(t *testing.T) {
+	dir := t.TempDir()
+	_, err := runCmd(t, "init", dir, "--template", "invalid")
+	if err == nil {
+		t.Fatal("expected error for invalid template ref")
+	}
+	if !strings.Contains(err.Error(), "invalid template ref") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestInitTemplateDryRun(t *testing.T) {
+	// Create a local fixture repo.
+	remote := t.TempDir()
+	mustWriteFile(t, filepath.Join(remote, ".stem"), []byte("version: 2\nscope:\n  match: \"*.md\"\n"), 0644)
+	mustRunGit(t, remote, "init")
+	mustRunGit(t, remote, "add", ".")
+	mustRunGit(t, remote, "commit", "-m", "init")
+
+	dir := t.TempDir()
+	// Use FetchFromURL directly via the --template flag isn't possible with local paths,
+	// but we can test the invalid ref error path from cmd level.
+	_, err := runCmd(t, "init", dir, "--template", "nonexistent/repo-that-does-not-exist-12345")
+	if err == nil {
+		t.Fatal("expected error for nonexistent remote repo")
+	}
+}
+
+func mustRunGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...) //nolint:gosec
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
+	}
+}
+
+func TestInitStructuralInference(t *testing.T) {
+	dir := t.TempDir()
+	// Create 4 subdirectories all with README.md to trigger structural inference.
+	for _, name := range []string{"A", "B", "C", "D"} {
+		subdir := filepath.Join(dir, name)
+		_ = os.MkdirAll(subdir, 0755)
+		mustWriteFile(t, filepath.Join(subdir, "README.md"),
+			[]byte("---\nestado: draft\n---\n# "+name+"\n"), 0644)
+	}
+
+	out, err := runCmd(t, "init", dir, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "structural:") {
+		t.Errorf("expected structural: section in output, got: %s", out)
+	}
+	if !strings.Contains(out, "require_index:") {
+		t.Errorf("expected require_index in output, got: %s", out)
 	}
 }
 

@@ -56,6 +56,7 @@ func resetFlags() {
 	statsFrom = "."
 	initDryRun = false
 	initForce = false
+	initTemplate = ""
 	newForce = false
 	newDryRun = false
 	fixDryRun = false

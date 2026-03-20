@@ -37,6 +37,33 @@ func TestRenderHTML_ContainsMermaidContent(t *testing.T) {
 	}
 }
 
+func TestRenderHTML_HTMLStructure(t *testing.T) {
+	htmlPath, err := RenderHTML("graph TD;")
+	if err != nil {
+		t.Fatalf("RenderHTML: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(htmlPath) })
+
+	data, err := os.ReadFile(htmlPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	html := string(data)
+
+	for _, expected := range []string{"<!DOCTYPE html>", "<html>", "</html>", "mermaid.initialize"} {
+		if !strings.Contains(html, expected) {
+			t.Errorf("HTML missing %q", expected)
+		}
+	}
+}
+
+func TestOpenBrowser_NonExistentFile(t *testing.T) {
+	// OpenBrowser starts a process async — on CI with no display,
+	// xdg-open or equivalent will fail but Start() may still succeed.
+	// We just verify the function doesn't panic.
+	_ = OpenBrowser("/tmp/nonexistent-rootline-test-file.html")
+}
+
 func TestRenderHTML_CreatesValidHTMLFile(t *testing.T) {
 	mermaidContent := "graph TD;\n  X[\"x\"];\n"
 

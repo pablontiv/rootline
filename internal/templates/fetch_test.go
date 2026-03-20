@@ -224,6 +224,57 @@ func TestFetchTemplate_DryRun(t *testing.T) {
 	}
 }
 
+func TestFetchTemplate_InvalidRef(t *testing.T) {
+	dest := t.TempDir()
+	_, err := FetchTemplate("invalid", dest, false, false)
+	if err == nil {
+		t.Fatal("expected error for invalid ref")
+	}
+	if !strings.Contains(err.Error(), "invalid template ref") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFetchTemplate_ValidRefNonexistentRepo(t *testing.T) {
+	dest := t.TempDir()
+	_, err := FetchTemplate("nonexistent-owner-xyz/nonexistent-repo-xyz", dest, false, false)
+	if err == nil {
+		t.Fatal("expected error for nonexistent repo")
+	}
+	// Should get a git clone error (not an invalid ref error).
+	if strings.Contains(err.Error(), "invalid template ref") {
+		t.Fatalf("expected clone error, got ref error: %v", err)
+	}
+}
+
+func TestCopyFile(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	dst := filepath.Join(dir, "dst.txt")
+	content := "hello world\n"
+	if err := os.WriteFile(src, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFile(src, dst); err != nil {
+		t.Fatalf("copyFile: %v", err)
+	}
+	data, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("ReadFile dst: %v", err)
+	}
+	if string(data) != content {
+		t.Errorf("got %q, want %q", string(data), content)
+	}
+}
+
+func TestCopyFile_SrcNotExist(t *testing.T) {
+	dir := t.TempDir()
+	err := copyFile(filepath.Join(dir, "nope"), filepath.Join(dir, "dst"))
+	if err == nil {
+		t.Fatal("expected error for nonexistent src")
+	}
+}
+
 func TestFetchTemplate_InvalidYAML(t *testing.T) {
 	repoDir := makeFixtureRepo(t, map[string]string{
 		".stem": "not: valid: yaml: [\n",

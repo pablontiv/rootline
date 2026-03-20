@@ -1,4 +1,5 @@
 # Advanced Operations Reference
+<!-- updated 2026-03-20: graph --open, init --template, structural inference -->
 
 ## graph — Dependency graph from wiki-links
 
