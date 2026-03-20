@@ -109,7 +109,7 @@ func runInitFlat(cmd *cobra.Command, absTarget, target string, records []*extrac
 	}
 
 	// Generate YAML
-	yaml := generateStemYAML(schema)
+	yaml := generateStemYAML(schema, absTarget)
 
 	if initDryRun {
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), yaml)
@@ -189,7 +189,7 @@ func buildHierarchicalStems(absTarget string, hierarchy *infer.HierarchyResult) 
 	sort.Strings(aggNames)
 
 	// Single root .stem: common fields + levels section + aggregates.
-	rootYAML := generateHierarchicalRootYAML(hierarchy, aggregates)
+	rootYAML := generateHierarchicalRootYAML(hierarchy, aggregates, absTarget)
 	files = append(files, stemFile{
 		path:    filepath.Join(absTarget, ".stem"),
 		content: rootYAML,
@@ -198,9 +198,34 @@ func buildHierarchicalStems(absTarget string, hierarchy *infer.HierarchyResult) 
 	return files, aggNames
 }
 
+// generateStructuralYAML generates the structural: section for a .stem file
+// by running the structural inference detector on scanRoot.
+func generateStructuralYAML(scanRoot string) string {
+	inferences := infer.DetectStructural(scanRoot)
+	if len(inferences) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("structural:\n  subdirs:\n")
+	for _, inf := range inferences {
+		if inf.Type != "add_structural_rule" {
+			continue
+		}
+		switch inf.Field {
+		case "require_index":
+			fmt.Fprintf(&b, "    require_index: %s\n", inf.Value)
+		case "min_children":
+			fmt.Fprintf(&b, "    min_children: %s\n", inf.Value)
+		case "max_children":
+			fmt.Fprintf(&b, "    max_children: %s\n", inf.Value)
+		}
+	}
+	return b.String()
+}
+
 // generateHierarchicalRootYAML generates the root .stem with common fields,
 // match-based per-level schema, and aggregates.
-func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates map[string]string) string {
+func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates map[string]string, scanRoot string) string {
 	var b strings.Builder
 	b.WriteString("version: 2\nscope:\n  match: \"*.md\"\nschema:\n")
 
@@ -281,10 +306,15 @@ func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates m
 		}
 	}
 
+	// Append structural inference section if detected.
+	if s := generateStructuralYAML(scanRoot); s != "" {
+		b.WriteString(s)
+	}
+
 	return b.String()
 }
 
-func generateStemYAML(schema *infer.InferredSchema) string {
+func generateStemYAML(schema *infer.InferredSchema, scanRoot string) string {
 	var b strings.Builder
 	b.WriteString("version: 2\nscope:\n  match: \"*.md\"\nschema:\n")
 
@@ -304,6 +334,11 @@ func generateStemYAML(schema *infer.InferredSchema) string {
 		if len(field.Values) > 0 {
 			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(field.Values, ", "))
 		}
+	}
+
+	// Append structural inference section if detected.
+	if s := generateStructuralYAML(scanRoot); s != "" {
+		b.WriteString(s)
 	}
 
 	return b.String()
