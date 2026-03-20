@@ -1,5 +1,5 @@
 ---
-estado: Pre-research
+estado: Deferred
 fecha: "2026-02-27"
 metodo: collaborative-research
 ---
@@ -361,15 +361,30 @@ La razon: spec-kit ya tiene templates optimizados para AI consumption. No tiene 
 
 ## Part 6 — Estado actual de rootline y siguiente paso sugerido
 
-### Paquetes candidatos para retroactive spec
+### Feasibility Assessment (updated 2026-03-20)
 
-Ordenados por impacto (funcionalidad core + baja granularidad de tests):
+**Urgency has decreased significantly.** When this doc was written, several packages had low coverage. Current state:
 
-| Paquete | Tests existentes | Que cubre | Candidato para spec retroactivo |
+| Paquete | Coverage actual | Tests | Cambio desde Feb 2026 |
+|---------|----------------|-------|----------------------|
+| `internal/infer/` | 97.8% | 32 archivos _test.go | Era 2 archivos → ahora 32. Masivamente expandido |
+| `internal/graph/` | 95.1% | Well covered | Era candidato #1 → ya cubierto |
+| `internal/fix/` | — | Expanded | Era candidato #2 → coverage mejorado |
+| `internal/mcp/` | — | 2+ archivos | Posible candidato aún |
+| `internal/rules/` | — | 12 archivos | Ya bien cubierto |
+| `internal/extract/` | — | 4 archivos + fuzz | Ya bien cubierto |
+
+**Conclusion**: El concepto de SDD→test generation sigue siendo valido pero la urgencia es baja. Coverage global esta por encima del gate de 85%. El valor principal seria para **features nuevas** (TDD desde spec), no para retroactive coverage.
+
+**Deferred because**: spec-kit no adoptado, no constitution.md, no `docs/specs/`. La Opcion B (formato nativo) sigue siendo la mas alineada con rootline si se reactiva.
+
+### Paquetes candidatos para retroactive spec (original, for reference)
+
+| Paquete | Tests existentes (Feb 2026) | Que cubre | Candidato para spec retroactivo |
 |---------|-----------------|-----------|--------------------------------|
-| `internal/graph/` | 1 archivo | Cycle detection, broken links | Si — bajo coverage relativo |
-| `internal/fix/` | 1 archivo | Frontmatter rewriting | Si — critico y poco testeado |
-| `internal/infer/` | 2 archivos | Schema inference | Si — logica compleja |
+| `internal/graph/` | 1 archivo | Cycle detection, broken links | ~~Si~~ Cubierto (95.1%) |
+| `internal/fix/` | 1 archivo | Frontmatter rewriting | Posible aún |
+| `internal/infer/` | 2 archivos | Schema inference | ~~Si~~ Cubierto (97.8%) |
 | `internal/mcp/` | 2 archivos | MCP server tools | Posible — 8 tools, variedad de edge cases |
 | `internal/rules/` | 12 archivos | Validation, merge, hierarchy | No — ya bien cubierto |
 | `internal/extract/` | 4 archivos + fuzz | YAML extraction | No — ya bien cubierto |

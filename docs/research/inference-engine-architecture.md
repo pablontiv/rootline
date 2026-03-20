@@ -1,5 +1,5 @@
 ---
-estado: Pre-research
+estado: Implemented
 fecha: "2026-03-02"
 metodo: collaborative-research
 ---
@@ -378,6 +378,36 @@ The [Intrinsic Hierarchy Principle](intrinsic-hierarchy-principle.md) proposes a
 ### Q5: Body content as first-class data
 
 Categories 6-13 operate on body content, which rootline currently doesn't validate. Extending inference to body structure (required headings, section ordering) would require a new validation dimension beyond frontmatter. Is this in scope for rootline core, or should it remain in the skill/agent layer?
+
+---
+
+## Implementation Status (assessed 2026-03-20)
+
+12 of 13 inference categories are implemented in `internal/infer/`. The analyze/apply pipeline is production-ready.
+
+| # | Category | Status | Implementation |
+|---|----------|--------|----------------|
+| 1 | Schema (types, enums, required) | **Done** | `infer.go` |
+| 2 | Sequences (prefix, digits) | **Done** | `hierarchy.go` |
+| 3 | Aggregates (enum rollup) | **Done** | `internal/derive/` + `internal/migrate/aggregate.go` |
+| 4 | Structural (require_index, min_children) | **Pending** | Not implemented — only category remaining |
+| 5 | Links (allowed types) | **Done** | `link_validation.go` |
+| 6 | Body structure (required sections) | **Done** | `body_sections.go` |
+| 7 | Back-references | **Done** | `back_references.go` |
+| 8 | Constants | **Done** | `constant_fields.go` |
+| 9 | Heterogeneous dependencies | **Done** | `formal_dependency.go` (formal=engine, informal=agent-required) |
+| 10 | Cross-epic references | **Done** | `cross_references.go` |
+| 11 | Traceability (Contribuye a) | **Done** | `traceability_links.go` (verified=engine, unverified=agent-required) |
+| 12 | Invariants (Preserva) | **Done** | `invariant_extraction.go` |
+| 13 | Sub-schema by type | **Done** | `subschema_detection.go` |
+
+**Three-layer model**: Realized as engine (11 categories deterministic) + agent-required flag (2 types: `informal_dependency_candidate`, `unverified_traceability`). Skills layer not formalized as separate code — skills operate via Claude Code plugin.
+
+**Commands**: `rootline analyze` (12 detectors, `--incremental`, JSON/table output) and `rootline apply` (`--dry-run`, schema + data corrections) are fully functional.
+
+**Test coverage**: `internal/infer/` at 97.8%, `internal/graph/` at 95.1%. E2E tests cover full analyze→apply pipeline.
+
+**Remaining work**: Category 4 (structural rules inference) is the only gap. Low urgency — structural rules can be authored manually.
 
 ---
 

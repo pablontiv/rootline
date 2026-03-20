@@ -1,5 +1,5 @@
 ---
-estado: Pre-research
+estado: Feasible
 fecha: "2026-02-17"
 metodo: web-research
 ---
@@ -88,6 +88,21 @@ plugin → stdout: {"path": "file.yaml", "type": "yaml", "frontmatter": {...}, "
 | Precedente Rootline | — | Alineado con D29 | — | Usado por OpenTofu |
 
 **Hipótesis preliminar**: External process es el candidato más fuerte para Rootline. Simple, cross-platform, alineado con D29, y permite plugins en cualquier lenguaje. El overhead de un exec por archivo es negligible para documentación (<1000 files).
+
+---
+
+## Current State (assessed 2026-03-20)
+
+**Extractor registry exists** (`internal/extract/registry.go`): compile-time `Extractor` interface with `Register()`, `Extract()`, `Extensions()`, `Name()` methods. Only `MarkdownExtractor` is registered. Third-party extractors require forking or embedding as library.
+
+**No dynamic plugin system built**. None of the 4 options (`.so`, external process, WASM, go-plugin) have been implemented.
+
+**Feasibility assessment**:
+- **Need**: Low — rootline currently only processes Markdown with YAML frontmatter, which covers all use cases
+- **Technical feasibility**: High — external process approach (Option 2) is simple, aligned with D29, and the `Extractor` interface is already clean
+- **Effort**: ~2-3 sessions for external process MVP (discovery, exec, JSON protocol)
+- **Trigger**: Need becomes real when users want to validate non-Markdown files (TOML configs, JSON schemas, code comments)
+- **Recommendation**: Keep as reference. Build only when a concrete non-Markdown use case appears
 
 ---
 

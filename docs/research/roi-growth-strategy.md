@@ -1,5 +1,5 @@
 ---
-estado: Pre-research
+estado: Feasible
 fecha: "2026-02-23"
 metodo: market-analysis
 ---
@@ -46,12 +46,26 @@ Este documento detalla el orden de implementación recomendado para maximizar el
 
 ---
 
+## Execution Status (assessed 2026-03-20)
+
+| Fase | Estado | Evidencia |
+|------|--------|-----------|
+| Fase 1: MCP Server | **Completada** | 8 tools en `internal/mcp/`, `rootline serve` funcional |
+| Fase 2: Visual + Adopción | **Parcial** | `rootline graph` soporta DOT + Mermaid, pero NO HTML viewer ni `--open`. No hay starter templates (`--template`) |
+| Fase 3: CI/CD Governance | **Completada** | `action.yml` publicada (362 líneas), composite action con checksums, PR annotations, step summary. Dogfooding activo en CI |
+| Fase 4: Plugin Expansion | **No iniciada** | Extractor registry compile-time existe, pero no hay plugins dinámicos. Ver `plugin-architecture.md` |
+| Fase 5: LSP | **No iniciada** | No hay código LSP ni dependencias relacionadas |
+
+**Siguiente paso natural**: Fase 2 — completar Graph HTML Viewer (`--open` flag con Mermaid embed) y Starter Templates (`rootline init --template`). Ambos son de bajo esfuerzo y alto impacto visual.
+
+---
+
 ## Resumen de Prioridades
 
-| Prioridad | Tarea | Esfuerzo | Impacto |
-| :--- | :--- | :--- | :--- |
-| ~~**1**~~ | ~~MCP Server (`serve`)~~ | ~~Bajo~~ | ~~Máximo (IA)~~ Completado |
-| **2** | GitHub Action Dogfooding | Muy Bajo | Alto (Calidad) |
-| **3** | Graph HTML Viewer | Bajo | Alto (Visual) |
-| **4** | Starter Templates | Bajo | Medio (Adopción) |
-| **5** | LSP | Alto | Crítico (Retención) |
+| Prioridad | Tarea | Esfuerzo | Impacto | Estado |
+| :--- | :--- | :--- | :--- | :--- |
+| ~~**1**~~ | ~~MCP Server (`serve`)~~ | ~~Bajo~~ | ~~Máximo (IA)~~ | Completado |
+| ~~**2**~~ | ~~GitHub Action Dogfooding~~ | ~~Muy Bajo~~ | ~~Alto (Calidad)~~ | Completado |
+| **3** | Graph HTML Viewer | Bajo | Alto (Visual) | Pendiente |
+| **4** | Starter Templates | Bajo | Medio (Adopción) | Pendiente |
+| **5** | LSP | Alto | Crítico (Retención) | Pendiente |

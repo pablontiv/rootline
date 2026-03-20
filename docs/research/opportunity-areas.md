@@ -7,6 +7,24 @@ metodo: brainstorm
 
 **Origen**: Rescatado de I9 (eliminado en 630f597). Se excluyeron secciones ya implementadas: GitHub Actions (F06), Migraciones (E07), Claude Code Plugin (F07), Graph (F05), Homebrew (release pipeline), MCP Server (F05-mcp).
 
+## Feasibility Summary (assessed 2026-03-20)
+
+| # | Área | Estado | Impacto | Esfuerzo |
+|---|------|--------|---------|----------|
+| 1 | Schema Registry | Not started | Alto (adoption) | Alto |
+| 2 | Multi-Repo Federation | Not started | Medio (enterprise) | Alto |
+| 3 | .stem como Contrato | Partial — MCP + Claude skills enable AI consumption | Alto | N/A (realized via MCP) |
+| 4 | LSP | Not started | Critico (retention) | Alto |
+| 5 | RAG Knowledge Base | Partial — MCP provides structured access | Alto | Bajo (incremental) |
+| 6 | .stem como Prompt Engineering | Realized — Claude Code skills consume .stem natively | Medio | N/A (done) |
+| 7 | Watch Mode | Not started | Medio | Medio |
+| 8 | Time-Travel/Audit | Not started | Bajo | Alto |
+| 9 | Nuevos Dominios | Not started | Alto (adoption) | Bajo per domain |
+| 10 | Incremental Validation | Not started | Medio (perf) | Medio |
+| 11 | WASM Playground | Not started | Bajo | Alto |
+
+**Top 3 por ROI**: (4) LSP, (1) Schema Registry, (9) Static Site Generator linting.
+
 ---
 
 ## 1. Schema Registry Publicable
