@@ -8,6 +8,7 @@
 rootline graph                              # DOT format (default)
 rootline graph --format mermaid             # Mermaid format
 rootline graph --check                      # Validate only (cycles + broken links)
+rootline graph --open                       # Open interactive Mermaid diagram in browser
 rootline graph --where "tipo == 'feature'"  # Filtered
 ```
 
@@ -17,6 +18,7 @@ rootline graph --where "tipo == 'feature'"  # Filtered
 |------|-------------|
 | `--format dot\|mermaid` | Output format (default: `dot`) |
 | `--check` | Validate only, no diagram output |
+| `--open` | Render Mermaid diagram in browser (HTML temp file). Incompatible with `--check` and `--format dot` |
 | `--where "expr"` | Filter expression (repeatable) |
 
 ### Output format (`kind: "rootline/graph"`):
@@ -89,6 +91,8 @@ rootline migrate --rename estado=status
 rootline init                               # Current directory
 rootline init <path> --dry-run              # Preview inferred schema
 rootline init <path> --force                # Overwrite existing .stem
+rootline init --template owner/repo         # Fetch .stem from GitHub repo
+rootline init --template owner/repo@v2      # Fetch specific tag/branch
 ```
 
 ### Flags
@@ -97,14 +101,23 @@ rootline init <path> --force                # Overwrite existing .stem
 |------|-------------|
 | `--dry-run` | Print inferred .stem to stdout without writing |
 | `--force` | Overwrite existing .stem file |
+| `--template <ref>` | Fetch `.stem` from remote GitHub repo (`owner/repo[@tag]`). Skips inference. |
 
 ### Behavior
 
+**Inference mode** (default):
 - Analyzes frontmatter across all documents in the directory
 - Detects field types, enum values, required fields
+- Infers structural rules (require_index, min/max_children) from directory analysis
 - **Hierarchy detection**: Recognizes naming patterns (E##, F##, S###, T###)
   - Flat mode: Single `.stem` with inferred schema
   - Hierarchical mode: Single `.stem` with `version: 2`, match-based per-level schema, auto-generated aggregates
+
+**Template mode** (`--template`):
+- Downloads `.stem` files from a GitHub repository
+- Validates YAML before copying
+- Preserves relative paths from the source repo
+- Requires `git` in PATH
 
 ### Typical workflow (full bootstrap)
 
