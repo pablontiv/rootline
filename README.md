@@ -1,7 +1,7 @@
 # Rootline
 
 [![CI](https://github.com/pablontiv/rootline/actions/workflows/ci.yml/badge.svg)](https://github.com/pablontiv/rootline/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue)](LICENSE)
 
 A **file-based database and constraint engine** for structured documentation.
@@ -137,11 +137,11 @@ rootline query [path] --where 'expr' [--count] [--limit N]  # Search by metadata
 rootline describe <path>                  # Show effective schema for a directory
 rootline tree [path] [--where 'expr']     # Hierarchical view with completion counts
 rootline stats [path] [--where 'expr']    # Summary counts by estado and tipo
-rootline graph [path] [--where 'expr']    # Dependency graph (DOT, Mermaid, --check)
+rootline graph [path] [--where 'expr']    # Dependency graph (DOT, Mermaid, --check, --open)
 rootline explain <file>                   # Trace field origins, derivations, and errors
 
 # Document lifecycle
-rootline init [path] [--force]            # Infer .stem (auto-detects hierarchy)
+rootline init [path] [--force] [--template owner/repo]  # Infer .stem or fetch from remote
 rootline new <file> [--force] [--dry-run] # Scaffold document from effective schema
 rootline fix [file|--all]                 # Auto-repair: add fields, fix enums, propose changes
 rootline validate --all --where 'expr'   # Validate only records matching filter
@@ -204,6 +204,7 @@ Documents reference each other via `[[wiki-links]]` in their body. Rootline extr
 rootline graph docs/ --format mermaid   # Mermaid diagram
 rootline graph docs/ --format dot       # Graphviz DOT
 rootline graph docs/ --check            # Validate: detect cycles and broken links
+rootline graph docs/ --open             # Open interactive diagram in browser
 ```
 
 Link schemas in `.stem` files control which link types are allowed and validate targets against regex patterns.
