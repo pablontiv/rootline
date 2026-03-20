@@ -152,7 +152,7 @@ rootline analyze <directory> --field summary         # Extract summary only
 
 Key flags: `--incremental` (filter inferences covered by .stem)
 
-**Procedure**: Scans directory, extracts records, runs 12 detector categories (field types, required fields, enums, constants, link types, back-refs, cross-refs, section patterns, invariants, sub-schemas, dependencies, traceability). Produces AnalyzeReport JSON with `version: 1`. With `--incremental`, filters out inferences already covered by the existing `.stem` schema.
+**Procedure**: Scans directory, extracts records, runs 13 detector categories (field types, required fields, enums, constants, link types, back-refs, cross-refs, section patterns, invariants, sub-schemas, dependencies, traceability, structural rules). Produces AnalyzeReport JSON with `version: 1`. With `--incremental`, filters out inferences already covered by the existing `.stem` schema.
 
 ### Apply (apply)
 

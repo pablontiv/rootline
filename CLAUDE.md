@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Rootline is a **file-based database and constraint engine** for structured documentation, written in Go. It treats the filesystem as a database: directories are tables, files are records, metadata comes from YAML frontmatter, and structure is inherited via `.stem` files with parent-to-child merge semantics.
 
-**Status**: Engine and MCP server complete — all CLI commands and 8 MCP tools functional. Requires Go 1.25+.
+**Status**: Engine and MCP server complete — all CLI commands and 8 MCP tools functional. 13 inference detectors. Requires Go 1.25+.
 
 ## Build & Test Commands
 

@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -142,6 +141,78 @@ func TestInitMixedBelowThresholdNoWarning(t *testing.T) {
 	}
 }
 
+func TestInitTemplateInvalidRef(t *testing.T) {
+	dir := t.TempDir()
+	_, err := runCmd(t, "init", dir, "--template", "invalid")
+	if err == nil {
+		t.Fatal("expected error for invalid template ref")
+	}
+	if !strings.Contains(err.Error(), "invalid template ref") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestInitTemplateDryRun(t *testing.T) {
+	// Test that --template with a nonexistent repo returns an error.
+	dir := t.TempDir()
+	_, err := runCmd(t, "init", dir, "--template", "nonexistent-xyz/repo-xyz-12345")
+	if err == nil {
+		t.Fatal("expected error for nonexistent remote repo")
+	}
+}
+
+func TestInitStructuralInference(t *testing.T) {
+	dir := t.TempDir()
+	// Create 4 subdirectories all with README.md to trigger structural inference.
+	for _, name := range []string{"A", "B", "C", "D"} {
+		subdir := filepath.Join(dir, name)
+		_ = os.MkdirAll(subdir, 0755)
+		mustWriteFile(t, filepath.Join(subdir, "README.md"),
+			[]byte("---\nestado: draft\n---\n# "+name+"\n"), 0644)
+	}
+
+	out, err := runCmd(t, "init", dir, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "structural:") {
+		t.Errorf("expected structural: section in output, got: %s", out)
+	}
+	if !strings.Contains(out, "require_index:") {
+		t.Errorf("expected require_index in output, got: %s", out)
+	}
+}
+
+func TestInitFlatFallback(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create flat directory without naming patterns.
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\nestado: draft\n---\n# A\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\nestado: done\n---\n# B\n"), 0644)
+
+	out, err := runCmd(t, "init", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should fall back to flat mode.
+	if !strings.Contains(out, "Created") {
+		t.Errorf("expected 'Created' message, got: %s", out)
+	}
+	if strings.Contains(out, "levels detected") {
+		t.Errorf("expected flat mode (no levels), got: %s", out)
+	}
+
+	// Single .stem file should exist.
+	content, err := os.ReadFile(filepath.Join(dir, ".stem"))
+	if err != nil {
+		t.Fatalf("expected .stem file: %v", err)
+	}
+	if !strings.Contains(string(content), "version:") {
+		t.Errorf("expected version:, got: %s", string(content))
+	}
+}
+
 func TestInitAutoHierarchy(t *testing.T) {
 	dir := t.TempDir()
 
@@ -242,8 +313,6 @@ func TestInitAutoHierarchyDryRun(t *testing.T) {
 func TestInitAutoHierarchy_GeneratesAggregate(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create a 2-level hierarchy with enum field "estado" that has overlapping values
-	// at both levels (required for fieldsCompatible to classify as root field).
 	estados := []string{"Pending", "In Progress", "Completed"}
 	for i, epic := range []string{"E01-infra", "E02-platform"} {
 		epicDir := filepath.Join(dir, epic)
@@ -264,12 +333,10 @@ func TestInitAutoHierarchy_GeneratesAggregate(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should contain the note about auto-generated aggregate.
 	if !strings.Contains(out, "Note: auto-generated aggregate for 'estado'") {
 		t.Errorf("expected aggregate note in output, got: %s", out)
 	}
 
-	// Root .stem should have aggregate section.
 	rootStem := filepath.Join(dir, ".stem")
 	content, err := os.ReadFile(rootStem)
 	if err != nil {
@@ -282,7 +349,6 @@ func TestInitAutoHierarchy_GeneratesAggregate(t *testing.T) {
 	if !strings.Contains(s, "estado:") {
 		t.Errorf("expected estado field in aggregate section, got:\n%s", s)
 	}
-	// Should use descendants-based expressions.
 	if !strings.Contains(s, "descendants") {
 		t.Errorf("expected descendants-based expression, got:\n%s", s)
 	}
@@ -291,7 +357,6 @@ func TestInitAutoHierarchy_GeneratesAggregate(t *testing.T) {
 func TestInitAutoHierarchy_NoAggregateForNonEnum(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create hierarchy where the shared field is string, not enum.
 	for _, epic := range []string{"E01-a", "E02-b"} {
 		epicDir := filepath.Join(dir, epic)
 		_ = os.MkdirAll(epicDir, 0755)
@@ -311,108 +376,15 @@ func TestInitAutoHierarchy_NoAggregateForNonEnum(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should NOT contain aggregate note.
 	if strings.Contains(out, "Note: auto-generated aggregate") {
 		t.Errorf("expected no aggregate note for non-enum fields, got: %s", out)
 	}
 
-	// Root .stem should NOT have aggregate section.
 	content, err := os.ReadFile(filepath.Join(dir, ".stem"))
 	if err != nil {
 		t.Fatalf("expected root .stem: %v", err)
 	}
 	if strings.Contains(string(content), "aggregate:") {
 		t.Errorf("expected no aggregate section for non-enum fields, got:\n%s", string(content))
-	}
-}
-
-func TestInitTemplateInvalidRef(t *testing.T) {
-	dir := t.TempDir()
-	_, err := runCmd(t, "init", dir, "--template", "invalid")
-	if err == nil {
-		t.Fatal("expected error for invalid template ref")
-	}
-	if !strings.Contains(err.Error(), "invalid template ref") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestInitTemplateDryRun(t *testing.T) {
-	// Create a local fixture repo.
-	remote := t.TempDir()
-	mustWriteFile(t, filepath.Join(remote, ".stem"), []byte("version: 2\nscope:\n  match: \"*.md\"\n"), 0644)
-	mustRunGit(t, remote, "init")
-	mustRunGit(t, remote, "add", ".")
-	mustRunGit(t, remote, "commit", "-m", "init")
-
-	dir := t.TempDir()
-	// Use FetchFromURL directly via the --template flag isn't possible with local paths,
-	// but we can test the invalid ref error path from cmd level.
-	_, err := runCmd(t, "init", dir, "--template", "nonexistent/repo-that-does-not-exist-12345")
-	if err == nil {
-		t.Fatal("expected error for nonexistent remote repo")
-	}
-}
-
-func mustRunGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...) //nolint:gosec
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v failed: %v\n%s", args, err, out)
-	}
-}
-
-func TestInitStructuralInference(t *testing.T) {
-	dir := t.TempDir()
-	// Create 4 subdirectories all with README.md to trigger structural inference.
-	for _, name := range []string{"A", "B", "C", "D"} {
-		subdir := filepath.Join(dir, name)
-		_ = os.MkdirAll(subdir, 0755)
-		mustWriteFile(t, filepath.Join(subdir, "README.md"),
-			[]byte("---\nestado: draft\n---\n# "+name+"\n"), 0644)
-	}
-
-	out, err := runCmd(t, "init", dir, "--dry-run")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "structural:") {
-		t.Errorf("expected structural: section in output, got: %s", out)
-	}
-	if !strings.Contains(out, "require_index:") {
-		t.Errorf("expected require_index in output, got: %s", out)
-	}
-}
-
-func TestInitFlatFallback(t *testing.T) {
-	dir := t.TempDir()
-
-	// Create flat directory without naming patterns.
-	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\nestado: draft\n---\n# A\n"), 0644)
-	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\nestado: done\n---\n# B\n"), 0644)
-
-	out, err := runCmd(t, "init", dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Should fall back to flat mode.
-	if !strings.Contains(out, "Created") {
-		t.Errorf("expected 'Created' message, got: %s", out)
-	}
-	if strings.Contains(out, "levels detected") {
-		t.Errorf("expected flat mode (no levels), got: %s", out)
-	}
-
-	// Single .stem file should exist.
-	content, err := os.ReadFile(filepath.Join(dir, ".stem"))
-	if err != nil {
-		t.Fatalf("expected .stem file: %v", err)
-	}
-	if !strings.Contains(string(content), "version:") {
-		t.Errorf("expected version:, got: %s", string(content))
 	}
 }
