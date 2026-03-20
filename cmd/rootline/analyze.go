@@ -119,6 +119,9 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		{"traceability", "Traceability Link Extraction", func() []infer.Inference {
 			return infer.DetectTraceabilityLinks(records)
 		}},
+		{"structural", "Structural Rule Detection", func() []infer.Inference {
+			return infer.DetectStructural(root)
+		}},
 	}
 
 	// Load stem for incremental filtering.
