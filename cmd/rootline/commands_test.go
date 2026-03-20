@@ -66,6 +66,7 @@ func resetFlags() {
 	graphFormat = "dot"
 	graphCheck = false
 	graphWhere = nil
+	graphOpen = false
 	migrateDryRun = false
 	migrateFrom = ""
 	migrateRename = ""

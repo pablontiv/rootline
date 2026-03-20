@@ -18,6 +18,7 @@ var (
 	graphFormat string
 	graphCheck  bool
 	graphWhere  []string
+	graphOpen   bool
 )
 
 var graphCmd = &cobra.Command{
@@ -32,6 +33,7 @@ func init() {
 	graphCmd.Flags().StringVar(&graphFormat, "format", "dot", "output format: dot or mermaid")
 	graphCmd.Flags().BoolVar(&graphCheck, "check", false, "validate only (cycles + broken links), no diagram")
 	graphCmd.Flags().StringArrayVar(&graphWhere, "where", nil, "filter expression (e.g. \"tipo != 'feature'\")")
+	graphCmd.Flags().BoolVar(&graphOpen, "open", false, "render diagram in browser")
 	rootCmd.AddCommand(graphCmd)
 }
 
@@ -47,6 +49,14 @@ type GraphResult struct {
 
 func runGraph(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
+
+	// Validate --open flag combinations up front.
+	if graphOpen && graphCheck {
+		return fmt.Errorf("cannot use --open with --check")
+	}
+	if graphOpen && graphFormat == "dot" {
+		return fmt.Errorf("cannot use --open with --format dot")
+	}
 
 	scanRoot := "."
 	if len(args) > 0 {
@@ -108,6 +118,18 @@ func runGraph(cmd *cobra.Command, args []string) error {
 			cmd.SilenceErrors = true
 			return ErrValidationFailed
 		}
+		return nil
+	}
+
+	// --open mode: render mermaid into temp HTML and open in browser.
+	if graphOpen {
+		mermaidText := mermaidGraphText(g)
+		htmlPath, err := graph.RenderHTML(mermaidText)
+		if err != nil {
+			return fmt.Errorf("rendering HTML: %w", err)
+		}
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Opened: %s\n", htmlPath)
+		_ = graph.OpenBrowser(htmlPath)
 		return nil
 	}
 
@@ -193,8 +215,12 @@ func filterLinksBySchema(records []*extract.Record, schema rules.LinkSchema) {
 }
 
 func renderMermaid(cmd *cobra.Command, g *graph.Graph) {
-	w := cmd.OutOrStdout()
-	_, _ = fmt.Fprintln(w, "graph TD;")
+	_, _ = fmt.Fprint(cmd.OutOrStdout(), mermaidGraphText(g))
+}
+
+// mermaidGraphText generates a Mermaid diagram string from a Graph.
+func mermaidGraphText(g *graph.Graph) string {
+	var sb strings.Builder
 
 	// Sanitize node IDs for mermaid (replace special chars).
 	id := func(path string) string {
@@ -202,12 +228,14 @@ func renderMermaid(cmd *cobra.Command, g *graph.Graph) {
 		return r.Replace(path)
 	}
 
+	_, _ = fmt.Fprintln(&sb, "graph TD;")
 	for path := range g.Nodes {
-		_, _ = fmt.Fprintf(w, "  %s[%q];\n", id(path), path)
+		_, _ = fmt.Fprintf(&sb, "  %s[%q];\n", id(path), path)
 	}
 	for _, edges := range g.Edges {
 		for _, e := range edges {
-			_, _ = fmt.Fprintf(w, "  %s --> |%s| %s;\n", id(e.Source), e.Type, id(e.Target))
+			_, _ = fmt.Fprintf(&sb, "  %s --> |%s| %s;\n", id(e.Source), e.Type, id(e.Target))
 		}
 	}
+	return sb.String()
 }
