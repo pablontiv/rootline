@@ -11,12 +11,14 @@ import (
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/migrate"
+	"github.com/pablontiv/rootline/internal/templates"
 	"github.com/spf13/cobra"
 )
 
 var (
-	initDryRun bool
-	initForce  bool
+	initDryRun   bool
+	initForce    bool
+	initTemplate string
 )
 
 var initCmd = &cobra.Command{
@@ -30,6 +32,7 @@ var initCmd = &cobra.Command{
 func init() {
 	initCmd.Flags().BoolVar(&initDryRun, "dry-run", false, "print to stdout without writing file")
 	initCmd.Flags().BoolVar(&initForce, "force", false, "overwrite existing .stem file")
+	initCmd.Flags().StringVar(&initTemplate, "template", "", "fetch .stem from remote repo (owner/repo[@tag])")
 	rootCmd.AddCommand(initCmd)
 }
 
@@ -44,6 +47,21 @@ func runInit(cmd *cobra.Command, args []string) error {
 	absTarget, err := filepath.Abs(target)
 	if err != nil {
 		return fmt.Errorf("resolving path: %w", err)
+	}
+
+	if initTemplate != "" {
+		files, err := templates.FetchTemplate(initTemplate, absTarget, initForce, initDryRun)
+		if err != nil {
+			return err
+		}
+		if initDryRun {
+			for _, f := range files {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Would copy: %s\n", f)
+			}
+			return nil
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Installed %d .stem file(s) from %s\n", len(files), initTemplate)
+		return nil
 	}
 
 	// Scan for records
