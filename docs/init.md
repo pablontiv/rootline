@@ -71,3 +71,43 @@ aggregate:
 ```
 
 Fields present at all levels stay global; fields present at specific levels get `match:` annotations. Aggregate expressions are auto-generated for enum fields on index files.
+
+## Section Field Inference
+
+When AST extraction is enabled, `rootline init` also scans document bodies and infers `type: section` fields for Markdown headings that appear frequently across files.
+
+Init uses a **0.80 threshold** — a heading must appear in at least 80% of files to be emitted as a section field. This is stricter than `analyze`'s default threshold of 0.60, to avoid generating spurious required sections from document-specific headings.
+
+### Example
+
+Given a directory where every file has a `## Summary` heading and 85% have `## Changelog`:
+
+```yaml
+version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Completed, In Progress, Pending]
+  "## Summary":
+    type: section
+    required: true
+  "## Changelog":
+    type: section
+    required: false
+    default: "<!-- TODO -->"
+```
+
+Headings below the 0.80 threshold are omitted from the generated `.stem`.
+
+### Section Field Properties
+
+| Property | Description |
+|----------|-------------|
+| `type: section` | Marks a Markdown H2/H3 heading as a first-class schema field |
+| `heading` | The heading string (defaults to the field key) |
+| `required` | Whether the section must be present in every document |
+| `default` | Content inserted when `rootline migrate --scaffold` adds the section |
+| `ordered` | If true, validate that the section appears in schema-defined order |

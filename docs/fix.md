@@ -23,6 +23,23 @@ Rootline categorizes issues into specific proposal types to preserve semantic me
 | **add_aggregate** | Generates aggregate expressions for index files missing them | Adding `estado: len(filter(...))` to README |
 | **remove_stem_field** | Removes invalid fields from `.stem` detected by stem health checks | Removing a field that references a non-existent type |
 | **propagate_aggregate** | Detects stale aggregate values in index files and corrects them | Updating `completed` count after child status changes |
+| **set_field** | Sets a frontmatter field to a specific value via the `rootline set` pipeline | Setting `estado: Completed` after all children are done |
+| **set_section** | Sets or replaces a section body via the `rootline set` pipeline | Populating an empty `## Summary` section with inferred content |
+
+## Proposal Struct
+
+Each proposal in the output has the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | Proposal type (see table above) |
+| `field` | string | Field name the proposal targets |
+| `description` | string | Human-readable explanation |
+| `paths` | string[] | Affected file paths |
+| `heading` | string | For `set_section` proposals: the Markdown heading to mutate |
+| `mode` | string | For `set_section` proposals: `set` (replace) or `append` |
+
+`heading` and `mode` are only populated on `set_field` and `set_section` proposals. `set_field` reuses the existing `applySetField` pipeline from `rootline set`.
 
 ## CLI Usage
 

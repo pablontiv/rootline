@@ -26,6 +26,7 @@ rootline migrate --split --dry-run        # Preview split without writing files
 | `--from` | Compare against specified `.stem` file instead of git HEAD |
 | `--rename old=new` | Rename a field across all documents and `.stem` files |
 | `--split` | Split a flat `.stem` into hierarchical `.stem` files per level |
+| `--scaffold` | Scaffold missing required sections into documents using schema defaults |
 
 ## Change Detection
 
@@ -105,3 +106,46 @@ docs/epics/E03-name/F01-x/.stem → S-level sequence + S-only fields
 ```
 
 Requires at least 2 hierarchy levels to be detected. Use `--dry-run` to preview the split before applying.
+
+## Scaffold Mode
+
+`--scaffold` adds missing required sections to documents that do not have them. It uses the `default` property of each `type: section` field in the effective `.stem` to populate inserted content.
+
+```bash
+rootline migrate --scaffold docs/epics/          # Add missing required sections
+rootline migrate --scaffold --dry-run docs/      # Preview without writing
+```
+
+### Content Priority
+
+When inserting a missing section, content is selected in this order:
+
+1. `default` value from the `type: section` field in the effective `.stem`
+2. `"<!-- TODO -->"` (fallback when no default is defined)
+
+### Example
+
+Given a `.stem` with:
+
+```yaml
+schema:
+  "## Summary":
+    type: section
+    required: true
+    default: "Describe the purpose of this document."
+  "## References":
+    type: section
+    required: true
+```
+
+Running `rootline migrate --scaffold` on a file missing both sections produces:
+
+```
+~ docs/epics/E03/README.md
+  + ## Summary
+    Describe the purpose of this document.
+  + ## References
+    <!-- TODO -->
+```
+
+Sections are inserted at the end of the document body. Use `--dry-run` to review insertions before applying.

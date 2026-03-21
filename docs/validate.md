@@ -95,6 +95,24 @@ When validation fails, errors include the rule, field, message, source `.stem`, 
 }
 ```
 
+## Section Validation
+
+When a `.stem` defines `type: section` fields, Rootline validates their presence alongside frontmatter fields during Document Validation (phase 2).
+
+Required sections are checked like required frontmatter fields. A missing section emits an error with `rule: required` and the heading as the `field` value:
+
+```json
+{
+  "rule": "required",
+  "field": "## Summary",
+  "message": "required section \"## Summary\" is missing",
+  "source": "docs/.stem",
+  "severity": "error"
+}
+```
+
+Section validation requires AST extraction to be active (default for markdown files). Sections are matched by their heading text, normalized to trim leading/trailing whitespace.
+
 ## Exit Codes
 
 | Code | Meaning |

@@ -8,7 +8,7 @@ A **file-based database and constraint engine** for structured documentation.
 
 Rootline treats the filesystem as a database: directories are tables, files are records, metadata comes from YAML frontmatter, and structure is inherited via `.stem` files.
 
-> **Status**: Engine and MCP server complete — all CLI commands and 8 MCP tools functional.
+> **Status**: Engine and MCP server complete — all CLI commands and 9 MCP tools functional.
 
 ---
 
@@ -114,6 +114,8 @@ schema:
   title: { type: string, required: true }
   status: { type: enum, values: [draft, review, published], default: draft }
   ejecutable_en: { type: string, required: true, match: "T*" }
+  "## Summary": { type: section, required: true }
+  "## Changelog": { type: section, default: "<!-- TODO -->" }
 
 aggregate:
   completed: 'len(filter(descendants, .status == "published"))'
@@ -121,6 +123,8 @@ aggregate:
 links:
   allowed: [blocks, depends]
 ```
+
+> Sections (`type: section`) are first-class schema fields — validated, defaulted, and queryable alongside frontmatter.
 
 ---
 
@@ -143,6 +147,7 @@ rootline explain <file>                   # Trace field origins, derivations, an
 # Document lifecycle
 rootline init [path] [--force] [--template owner/repo]  # Infer .stem or fetch from remote
 rootline new <file> [--force] [--dry-run] # Scaffold document from effective schema
+rootline set <file> field=value [...]     # Mutate frontmatter and sections with validation
 rootline fix [file|--all]                 # Auto-repair: add fields, fix enums, propose changes
 rootline validate --all --where 'expr'   # Validate only records matching filter
 rootline migrate [path]                   # Detect schema changes, rename, split, --to-v2, --from-levels
@@ -238,7 +243,7 @@ Rootline is designed as a **structured knowledge source for AI assistants**. All
 
 ### MCP Server
 
-`rootline serve` starts a **Model Context Protocol (MCP)** server over stdio, exposing 8 tools via JSON-RPC 2.0. AI assistants query Rootline using the same contracts as the CLI.
+`rootline serve` starts a **Model Context Protocol (MCP)** server over stdio, exposing 9 tools via JSON-RPC 2.0. AI assistants query Rootline using the same contracts as the CLI.
 
 Configure in Claude Desktop or any MCP client:
 
@@ -253,7 +258,7 @@ Configure in Claude Desktop or any MCP client:
 }
 ```
 
-Available tools: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`. See [MCP Server docs](docs/json-rpc.md) for full tool catalog.
+Available tools: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`. See [MCP Server docs](docs/json-rpc.md) for full tool catalog.
 
 ---
 
@@ -266,6 +271,7 @@ Available tools: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `f
 | [Describe](docs/describe.md) | Describe output, field extraction, source tracking |
 | [Query Engine](docs/query.md) | Query contract, operators, result shapes |
 | [New](docs/new.md) | Document scaffolding from effective schema |
+| [Set](docs/set.md) | Mutate frontmatter and sections with schema validation |
 | [Fix & Proposals](docs/fix.md) | Auto-repair, enum correction, field inference |
 | [Explain](docs/explain.md) | Field origin tracing, derivation chain, error diagnosis |
 | [Tree](docs/tree.md) | Hierarchical view with completion counts |

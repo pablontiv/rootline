@@ -38,7 +38,7 @@ The server communicates over **stdio** using JSON-RPC 2.0. Connect to `rootline 
 
 ## Tool Catalog
 
-Rootline provides 8 functional MCP tools that map 1:1 to CLI commands.
+Rootline provides 9 functional MCP tools that map 1:1 to CLI commands.
 
 ### query
 
@@ -117,6 +117,41 @@ Analyze validation errors and return fix proposals. Always read-only — never m
 | `all` | bool | no | Fix all files in scope |
 
 **Returns**: `rootline/proposals` — typed proposals (extend_enum, correct_value, add_field, migrate_value, etc.).
+
+### set
+
+Mutate frontmatter fields or section bodies in a document, with schema validation. This is the first mutation capability in the MCP server — all other tools are read-only.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | File to mutate (absolute path) |
+| `fields` | map[string]string | no | Frontmatter or section assignments (`field → value`) |
+| `append_fields` | map[string]string | no | Section append assignments (`field → content`) |
+| `create_sections` | bool | no | Create sections that do not exist when appending |
+| `dry_run` | bool | no | Return proposed diff without writing to disk |
+
+**Returns**: `rootline/set` — list of applied mutations and post-validation result. If `dry_run` is true, returns the proposed diff only.
+
+**SetInput schema**:
+
+```json
+{
+  "path": "/home/user/project/docs/overview.md",
+  "fields": {
+    "estado": "Completed",
+    "## Summary": "Describes the API surface."
+  },
+  "append_fields": {
+    "## Changelog": "- Added /v2/status endpoint"
+  },
+  "dry_run": false
+}
+```
+
+**Notes**:
+- Pre-validation checks enum membership and type before applying changes.
+- Post-validation runs the full schema check after applying; failures trigger rollback.
+- `append_fields` requires the section to already exist unless `create_sections` is true.
 
 ### graph
 
