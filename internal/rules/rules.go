@@ -161,6 +161,9 @@ type SchemaField struct {
 	Excludes      *ExcludeRule `yaml:"excludes" json:"excludes,omitempty"`
 	Match         *FieldMatch  `yaml:"match" json:"match,omitempty"`
 	RequiredMatch *FieldMatch  `yaml:"-" json:"required_match,omitempty"`
+	// Section fields (type: section)
+	Heading string `yaml:"heading" json:"heading,omitempty"`
+	Ordered *int   `yaml:"ordered" json:"ordered,omitempty"`
 }
 
 // schemaFieldRaw is the intermediate type for YAML unmarshaling.
@@ -175,6 +178,8 @@ type schemaFieldRaw struct {
 	Digits   int          `yaml:"digits"`
 	Excludes *ExcludeRule `yaml:"excludes"`
 	Match    *FieldMatch  `yaml:"match"`
+	Heading  string       `yaml:"heading"`
+	Ordered  *int         `yaml:"ordered"`
 }
 
 // UnmarshalYAML implements custom unmarshaling for SchemaField.
@@ -194,6 +199,8 @@ func (sf *SchemaField) UnmarshalYAML(value *yaml.Node) error {
 	sf.Digits = raw.Digits
 	sf.Excludes = raw.Excludes
 	sf.Match = raw.Match
+	sf.Heading = raw.Heading
+	sf.Ordered = raw.Ordered
 
 	// Parse "required" field: bool or {match: [...]}
 	switch raw.Required.Kind {
