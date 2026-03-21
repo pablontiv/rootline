@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/pablontiv/rootline/internal/proposal"
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 func setupTestProject(t *testing.T) string {
@@ -481,5 +483,428 @@ func TestTool_Set_DryRun(t *testing.T) {
 	}
 	if string(afterData) != string(originalData) {
 		t.Error("dry_run=true must not modify the file")
+	}
+}
+
+// --- Direct handler unit tests for error/edge paths ---
+
+// setupProjectWithSections creates a temp project with a section field in the schema.
+func setupProjectWithSections(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stem := `version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    values: [Pending, Completed]
+    required: true
+  tipo:
+    type: string
+  notes:
+    type: section
+    heading: "## Notes"
+    required: false
+`
+	if err := os.WriteFile(filepath.Join(root, ".stem"), []byte(stem), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("---\nestado: Pending\ntipo: task\n---\n# A\n\n## Notes\n\nInitial notes.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestHandleSet_FileNotFound(t *testing.T) {
+	_, _, err := handleSet(context.Background(), nil, SetInput{
+		Path:   "/nonexistent/path/file.md",
+		Fields: map[string]string{"estado": "Completed"},
+	})
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+	if !strings.Contains(err.Error(), "file not found") {
+		t.Errorf("expected 'file not found' error, got: %v", err)
+	}
+}
+
+func TestHandleSet_NoFieldsSpecified(t *testing.T) {
+	root := setupTestProject(t)
+	_, _, err := handleSet(context.Background(), nil, SetInput{
+		Path:   filepath.Join(root, "a.md"),
+		Fields: map[string]string{},
+	})
+	if err == nil {
+		t.Fatal("expected error for no fields")
+	}
+	if !strings.Contains(err.Error(), "no fields specified") {
+		t.Errorf("expected 'no fields specified' error, got: %v", err)
+	}
+}
+
+func TestHandleSet_InvalidEnumValue(t *testing.T) {
+	root := setupTestProject(t)
+	_, _, err := handleSet(context.Background(), nil, SetInput{
+		Path:   filepath.Join(root, "a.md"),
+		Fields: map[string]string{"estado": "InvalidValue"},
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid enum value")
+	}
+	if !strings.Contains(err.Error(), "not in allowed values") {
+		t.Errorf("expected 'not in allowed values' error, got: %v", err)
+	}
+}
+
+func TestHandleSet_AppendSection(t *testing.T) {
+	root := setupProjectWithSections(t)
+	filePath := filepath.Join(root, "a.md")
+	originalData, _ := os.ReadFile(filePath)
+
+	_, _, err := handleSet(context.Background(), nil, SetInput{
+		Path:         filePath,
+		AppendFields: map[string]string{"notes": "Additional notes."},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, _ := os.ReadFile(filePath)
+	if string(data) == string(originalData) {
+		t.Error("expected file to be modified")
+	}
+	if !strings.Contains(string(data), "Additional notes.") {
+		t.Errorf("expected appended content in file, got:\n%s", string(data))
+	}
+	if !strings.Contains(string(data), "Initial notes.") {
+		t.Errorf("expected original content preserved, got:\n%s", string(data))
+	}
+}
+
+func TestHandleSet_SectionDryRun(t *testing.T) {
+	root := setupProjectWithSections(t)
+	filePath := filepath.Join(root, "a.md")
+
+	res, _, err := handleSet(context.Background(), nil, SetInput{
+		Path:   filePath,
+		Fields: map[string]string{"notes": "New notes content."},
+		DryRun: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	text := res.Content[0].(*mcp.TextContent)
+	var sr map[string]any
+	if err := json.Unmarshal([]byte(text.Text), &sr); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if sr["dry_run"] != true {
+		t.Errorf("expected dry_run=true in result")
+	}
+	previews := sr["previews"].([]any)
+	if len(previews) == 0 {
+		t.Error("expected previews for section dry run")
+	}
+	found := false
+	for _, p := range previews {
+		if strings.Contains(p.(string), "section") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'section' in preview, got: %v", previews)
+	}
+}
+
+func TestHandleSet_NoGitRoot(t *testing.T) {
+	// Create a directory WITHOUT .git
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "file.md")
+	if err := os.WriteFile(filePath, []byte("---\nestado: Pending\n---\n# File\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := handleSet(context.Background(), nil, SetInput{
+		Path:   filePath,
+		Fields: map[string]string{"estado": "Completed"},
+	})
+	if err == nil {
+		t.Fatal("expected error when no git root")
+	}
+	if !strings.Contains(err.Error(), "finding git root") {
+		t.Errorf("expected 'finding git root' error, got: %v", err)
+	}
+}
+
+func TestFindGitRoot_NoGit(t *testing.T) {
+	dir := t.TempDir()
+	_, err := findGitRoot(dir)
+	if err == nil {
+		t.Fatal("expected error when no .git directory")
+	}
+	if !strings.Contains(err.Error(), "no .git directory") {
+		t.Errorf("expected 'no .git directory' error, got: %v", err)
+	}
+}
+
+func TestFindGitRoot_Found(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subDir := filepath.Join(dir, "sub", "dir")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := findGitRoot(subDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != dir {
+		t.Errorf("expected root %s, got %s", dir, got)
+	}
+}
+
+func TestHandleGraph_DotFormat(t *testing.T) {
+	root := setupTestProject(t)
+	// Add wiki-link
+	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("---\nestado: Pending\ntipo: task\n---\n# A\n[[blocks:b]]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, _, err := handleGraph(context.Background(), nil, GraphInput{
+		Path:   root,
+		Format: "dot",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	text := res.Content[0].(*mcp.TextContent)
+	if !strings.Contains(text.Text, "digraph {") {
+		t.Errorf("expected DOT format output, got: %s", text.Text)
+	}
+}
+
+func TestHandleGraph_MermaidFormat(t *testing.T) {
+	root := setupTestProject(t)
+
+	res, _, err := handleGraph(context.Background(), nil, GraphInput{
+		Path:   root,
+		Format: "mermaid",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	text := res.Content[0].(*mcp.TextContent)
+	if !strings.Contains(text.Text, "graph TD") {
+		t.Errorf("expected Mermaid format output, got: %s", text.Text)
+	}
+}
+
+func TestHandleExplain_FileNotFound(t *testing.T) {
+	_, _, err := handleExplain(context.Background(), nil, ExplainInput{
+		Path: "/nonexistent/path/file.md",
+	})
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+	if !strings.Contains(err.Error(), "file not found") {
+		t.Errorf("expected 'file not found' error, got: %v", err)
+	}
+}
+
+func TestHandleExplain_NoExtractor(t *testing.T) {
+	// Create a non-markdown file that has no extractor
+	dir := t.TempDir()
+	binFile := filepath.Join(dir, "test.xyz")
+	if err := os.WriteFile(binFile, []byte("binary content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := handleExplain(context.Background(), nil, ExplainInput{
+		Path: binFile,
+	})
+	if err == nil {
+		t.Fatal("expected error for file with no extractor")
+	}
+	if !strings.Contains(err.Error(), "no extractor") {
+		t.Errorf("expected 'no extractor' error, got: %v", err)
+	}
+}
+
+func TestHandleQuery_BadWhere(t *testing.T) {
+	root := setupTestProject(t)
+	_, _, err := handleQuery(context.Background(), nil, QueryInput{
+		Path:  root,
+		Where: []string{"invalid @@@ expression"},
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid where expression")
+	}
+}
+
+func TestHandleValidate_BadWhere(t *testing.T) {
+	root := setupTestProject(t)
+	_, _, err := handleValidate(context.Background(), nil, ValidateInput{
+		Path:  root,
+		Where: []string{"invalid @@@ expression"},
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid where expression")
+	}
+}
+
+func TestHandleStats_BadWhere(t *testing.T) {
+	root := setupTestProject(t)
+	_, _, err := handleStats(context.Background(), nil, StatsInput{
+		Path:  root,
+		Where: []string{"invalid @@@ expression"},
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid where expression")
+	}
+}
+
+func TestBuildSetProposal_AppendSection(t *testing.T) {
+	effective := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"notes": {Type: "section", Heading: "## Notes"},
+		},
+	}
+
+	p, err := buildSetProposal("notes", "new content", true, "file.md", effective, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.Type != proposal.SetSection {
+		t.Errorf("expected SetSection, got %s", p.Type)
+	}
+	if p.Mode != "append" {
+		t.Errorf("expected mode 'append', got %q", p.Mode)
+	}
+}
+
+func TestBuildSetProposal_AppendNonSection(t *testing.T) {
+	effective := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}},
+		},
+	}
+
+	_, err := buildSetProposal("estado", "Completed", true, "file.md", effective, false)
+	if err == nil {
+		t.Fatal("expected error for append on non-section field")
+	}
+	if !strings.Contains(err.Error(), "append is only supported for section") {
+		t.Errorf("expected 'append is only supported for section' error, got: %v", err)
+	}
+}
+
+func TestBuildSetProposal_CreateSection(t *testing.T) {
+	effective := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"notes": {Type: "section"}, // no heading set
+		},
+	}
+
+	p, err := buildSetProposal("notes", "content", false, "file.md", effective, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.Type != proposal.SetSection {
+		t.Errorf("expected SetSection, got %s", p.Type)
+	}
+	if p.Mode != "create" {
+		t.Errorf("expected mode 'create', got %q", p.Mode)
+	}
+	// When no heading set, should default to "## <field>"
+	if p.Heading != "## notes" {
+		t.Errorf("expected heading '## notes', got %q", p.Heading)
+	}
+}
+
+func TestBuildSetProposal_NilEffective(t *testing.T) {
+	p, err := buildSetProposal("title", "value", false, "file.md", nil, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.Type != proposal.SetField {
+		t.Errorf("expected SetField, got %s", p.Type)
+	}
+}
+
+func TestBuildSetProposal_NilEffectiveAppend(t *testing.T) {
+	// append=true with nil effective → no section found → error
+	_, err := buildSetProposal("notes", "content", true, "file.md", nil, false)
+	if err == nil {
+		t.Fatal("expected error for append with nil effective")
+	}
+}
+
+func TestHandleTree_WithSubdirs(t *testing.T) {
+	// Create a project with nested files to exercise findChild
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stem := `version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    values: [Pending, Completed]
+`
+	if err := os.WriteFile(filepath.Join(root, ".stem"), []byte(stem), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create nested structure: sub/a.md, sub/b.md (shares parent "sub")
+	subDir := filepath.Join(root, "sub")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subDir, "a.md"), []byte("---\nestado: Pending\n---\n# A\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subDir, "b.md"), []byte("---\nestado: Completed\n---\n# B\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, _, err := handleTree(context.Background(), nil, TreeInput{Path: root})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	text := res.Content[0].(*mcp.TextContent)
+	var tr map[string]any
+	if err := json.Unmarshal([]byte(text.Text), &tr); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	rootNode := tr["root"].(map[string]any)
+	if rootNode["total"].(float64) != 2 {
+		t.Errorf("expected 2 total, got %v", rootNode["total"])
+	}
+}
+
+func TestHandleSet_AppendNonSection(t *testing.T) {
+	root := setupTestProject(t)
+	// Use AppendFields on a non-section field → should fail
+	_, _, err := handleSet(context.Background(), nil, SetInput{
+		Path:         filepath.Join(root, "a.md"),
+		AppendFields: map[string]string{"estado": "Completed"},
+	})
+	if err == nil {
+		t.Fatal("expected error for append on non-section field")
 	}
 }

@@ -1302,6 +1302,500 @@ func TestApplySetSection_Create(t *testing.T) {
 	}
 }
 
+// --- applySetSection error paths ---
+
+func TestApplySetSection_UnknownMode(t *testing.T) {
+	dir := t.TempDir()
+	relPath := "task.md"
+	absPath := filepath.Join(dir, relPath)
+
+	mustWriteFile(t, absPath, []byte("---\nestado: Pending\n---\n\n## Contexto\n\nSome text.\n"))
+
+	p := proposal.Proposal{
+		Type:    proposal.SetSection,
+		Heading: "## Contexto",
+		Value:   "value",
+		Mode:    "unknown_mode",
+		Paths:   []string{relPath},
+	}
+
+	err := applySetSection(p, dir, nil)
+	if err == nil {
+		t.Fatal("expected error for unknown mode")
+	}
+	if !strings.Contains(err.Error(), "unknown mode") {
+		t.Errorf("expected 'unknown mode' error, got: %v", err)
+	}
+}
+
+func TestApplySetSection_HeadingNotFoundNoCreate(t *testing.T) {
+	dir := t.TempDir()
+	relPath := "task.md"
+	absPath := filepath.Join(dir, relPath)
+
+	mustWriteFile(t, absPath, []byte("---\nestado: Pending\n---\n\n# Title\n\nSome text.\n"))
+
+	p := proposal.Proposal{
+		Type:    proposal.SetSection,
+		Heading: "## Nonexistent",
+		Value:   "value",
+		Mode:    "replace",
+		Paths:   []string{relPath},
+	}
+
+	err := applySetSection(p, dir, nil)
+	if err == nil {
+		t.Fatal("expected error for heading not found in replace mode")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' error, got: %v", err)
+	}
+}
+
+func TestApplySetSection_FileNotFound(t *testing.T) {
+	dir := t.TempDir()
+
+	p := proposal.Proposal{
+		Type:    proposal.SetSection,
+		Heading: "## Contexto",
+		Value:   "value",
+		Mode:    "replace",
+		Paths:   []string{"nonexistent.md"},
+	}
+
+	err := applySetSection(p, dir, nil)
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+}
+
+func TestApplySetSection_HeadingAtStart(t *testing.T) {
+	// Test heading at very first line (no leading newline)
+	dir := t.TempDir()
+	relPath := "task.md"
+	absPath := filepath.Join(dir, relPath)
+
+	mustWriteFile(t, absPath, []byte("## Heading\n\nOriginal content.\n"))
+
+	p := proposal.Proposal{
+		Type:    proposal.SetSection,
+		Heading: "## Heading",
+		Value:   "New content.",
+		Mode:    "replace",
+		Paths:   []string{relPath},
+	}
+
+	err := applySetSection(p, dir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, _ := os.ReadFile(absPath)
+	content := string(data)
+	if !strings.Contains(content, "New content.") {
+		t.Errorf("expected new content, got:\n%s", content)
+	}
+	if strings.Contains(content, "Original content.") {
+		t.Errorf("expected old content replaced, got:\n%s", content)
+	}
+}
+
+func TestApplySetSection_CreateWhenFoundActsLikeAppend(t *testing.T) {
+	// When mode=create and heading is found, it should act like append
+	dir := t.TempDir()
+	relPath := "task.md"
+	absPath := filepath.Join(dir, relPath)
+
+	mustWriteFile(t, absPath, []byte("---\nestado: Pending\n---\n\n## Contexto\n\nExisting content.\n"))
+
+	p := proposal.Proposal{
+		Type:    proposal.SetSection,
+		Heading: "## Contexto",
+		Value:   "Additional content.",
+		Mode:    "create",
+		Paths:   []string{relPath},
+	}
+
+	err := applySetSection(p, dir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, _ := os.ReadFile(absPath)
+	content := string(data)
+	if !strings.Contains(content, "Existing content.") {
+		t.Errorf("expected original content preserved, got:\n%s", content)
+	}
+	if !strings.Contains(content, "Additional content.") {
+		t.Errorf("expected additional content appended, got:\n%s", content)
+	}
+}
+
+// --- ApplyProposals dispatch for remaining types ---
+
+func TestApplyProposals_CorrectOutlier(t *testing.T) {
+	dir := setupStemDir(t)
+
+	mustWriteFile(t, filepath.Join(dir, "task.md"),
+		[]byte("---\nestado: Outlier\ntipo: test\n---\n# Task\n"))
+
+	records := []*extract.Record{
+		{Path: "task.md", Frontmatter: map[string]any{"estado": "Outlier", "tipo": "test"}},
+	}
+
+	report := &proposal.Report{
+		Version: 1,
+		Kind:    "rootline/proposals",
+		Proposals: []proposal.Proposal{
+			{
+				Type:  proposal.CorrectOutlier,
+				Field: "estado",
+				From:  "Outlier",
+				To:    "Pending",
+				Paths: []string{"task.md"},
+			},
+		},
+	}
+
+	err := ApplyProposals(context.Background(), report, dir, records)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	content, _ := os.ReadFile(filepath.Join(dir, "task.md"))
+	if !strings.Contains(string(content), "estado: Pending") {
+		t.Errorf("expected estado: Pending, got:\n%s", string(content))
+	}
+}
+
+func TestApplyProposals_PropagateAggregate(t *testing.T) {
+	dir := setupStemDir(t)
+
+	mustWriteFile(t, filepath.Join(dir, "README.md"),
+		[]byte("---\nestado: Pending\n---\n# Root\n"))
+
+	records := []*extract.Record{
+		{Path: "README.md", Frontmatter: map[string]any{"estado": "Pending"}},
+	}
+
+	report := &proposal.Report{
+		Version: 1,
+		Kind:    "rootline/proposals",
+		Proposals: []proposal.Proposal{
+			{
+				Type:  proposal.PropagateAggregate,
+				Field: "estado",
+				From:  "Pending",
+				To:    "Completed",
+				Paths: []string{"README.md"},
+			},
+		},
+	}
+
+	err := ApplyProposals(context.Background(), report, dir, records)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	content, _ := os.ReadFile(filepath.Join(dir, "README.md"))
+	if !strings.Contains(string(content), "estado: Completed") {
+		t.Errorf("expected estado: Completed, got:\n%s", string(content))
+	}
+}
+
+func TestApplyProposals_AddAggregate(t *testing.T) {
+	dir := setupStemDir(t)
+	stemPath := filepath.Join(dir, ".stem")
+
+	records := []*extract.Record{}
+
+	report := &proposal.Report{
+		Version: 1,
+		Kind:    "rootline/proposals",
+		Proposals: []proposal.Proposal{
+			{
+				Type:          proposal.AddAggregate,
+				Field:         "progress",
+				AggregateExpr: "count(estado == 'Completed') / count(*)",
+				Paths:         []string{stemPath},
+			},
+		},
+	}
+
+	err := ApplyProposals(context.Background(), report, dir, records)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	content, _ := os.ReadFile(stemPath)
+	if !strings.Contains(string(content), "progress") {
+		t.Errorf("expected progress in .stem, got:\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "aggregate") {
+		t.Errorf("expected aggregate section in .stem, got:\n%s", string(content))
+	}
+}
+
+func TestApplyProposals_AddAggregate_NoPaths(t *testing.T) {
+	// AddAggregate with empty Paths should not error, just skip
+	dir := setupStemDir(t)
+	records := []*extract.Record{}
+
+	report := &proposal.Report{
+		Version: 1,
+		Kind:    "rootline/proposals",
+		Proposals: []proposal.Proposal{
+			{
+				Type:          proposal.AddAggregate,
+				Field:         "progress",
+				AggregateExpr: "count(*)",
+				Paths:         []string{},
+			},
+		},
+	}
+
+	err := ApplyProposals(context.Background(), report, dir, records)
+	if err != nil {
+		t.Fatalf("unexpected error for empty paths: %v", err)
+	}
+	if len(report.Proposals) != 1 {
+		t.Errorf("expected proposal to be in applied list, got %d", len(report.Proposals))
+	}
+}
+
+func TestApplyProposals_RemoveStemField_NoPaths(t *testing.T) {
+	// RemoveStemField with empty Paths should not error
+	dir := setupStemDir(t)
+	records := []*extract.Record{}
+
+	report := &proposal.Report{
+		Version: 1,
+		Kind:    "rootline/proposals",
+		Proposals: []proposal.Proposal{
+			{
+				Type:  proposal.RemoveStemField,
+				Field: "estado",
+				Paths: []string{},
+			},
+		},
+	}
+
+	err := ApplyProposals(context.Background(), report, dir, records)
+	if err != nil {
+		t.Fatalf("unexpected error for empty paths: %v", err)
+	}
+}
+
+func TestApplyProposals_SetSection(t *testing.T) {
+	dir := setupStemDir(t)
+
+	mustWriteFile(t, filepath.Join(dir, "task.md"),
+		[]byte("---\nestado: Pending\n---\n\n## Contexto\n\nOld content.\n"))
+
+	records := []*extract.Record{
+		{Path: "task.md", Frontmatter: map[string]any{"estado": "Pending"}},
+	}
+
+	report := &proposal.Report{
+		Version: 1,
+		Kind:    "rootline/proposals",
+		Proposals: []proposal.Proposal{
+			{
+				Type:    proposal.SetSection,
+				Field:   "contexto",
+				Heading: "## Contexto",
+				Value:   "New content.",
+				Mode:    "replace",
+				Paths:   []string{"task.md"},
+			},
+		},
+	}
+
+	err := ApplyProposals(context.Background(), report, dir, records)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	content, _ := os.ReadFile(filepath.Join(dir, "task.md"))
+	if !strings.Contains(string(content), "New content.") {
+		t.Errorf("expected new content, got:\n%s", string(content))
+	}
+}
+
+// --- addAggregateToStem ---
+
+func TestAddAggregateToStem_NewSection(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte(`version: 2
+schema:
+  estado:
+    type: string
+`))
+
+	err := addAggregateToStem(stemPath, "progress", "count(estado == 'Completed') / count(*)")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	content, _ := os.ReadFile(stemPath)
+	if !strings.Contains(string(content), "aggregate") {
+		t.Errorf("expected aggregate section, got:\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "progress") {
+		t.Errorf("expected progress field, got:\n%s", string(content))
+	}
+}
+
+func TestAddAggregateToStem_ExistingSection(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte(`version: 2
+schema:
+  estado:
+    type: string
+aggregate:
+  count_total: count(*)
+`))
+
+	err := addAggregateToStem(stemPath, "count_done", "count(estado == 'Completed')")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	content, _ := os.ReadFile(stemPath)
+	if !strings.Contains(string(content), "count_total") {
+		t.Errorf("expected existing aggregate preserved, got:\n%s", string(content))
+	}
+	if !strings.Contains(string(content), "count_done") {
+		t.Errorf("expected new aggregate added, got:\n%s", string(content))
+	}
+}
+
+func TestAddAggregateToStem_FileNotFound(t *testing.T) {
+	err := addAggregateToStem("/nonexistent/path/.stem", "field", "expr")
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+}
+
+func TestAddAggregateToStem_EmptyDocument(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte(`~`))
+
+	// An empty/null YAML doc has no content nodes
+	// yaml.Unmarshal("~") gives a doc with a null scalar node as content
+	// Let's use truly empty
+	mustWriteFile(t, stemPath, []byte(``))
+
+	err := addAggregateToStem(stemPath, "field", "expr")
+	if err == nil {
+		t.Fatal("expected error for empty document")
+	}
+}
+
+// --- removeStemSchemaField error paths ---
+
+func TestRemoveStemSchemaField_FileNotFound(t *testing.T) {
+	err := removeStemSchemaField("/nonexistent/path/.stem", "field")
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+}
+
+func TestRemoveStemSchemaField_EmptyDocument(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte(``))
+
+	err := removeStemSchemaField(stemPath, "field")
+	if err == nil {
+		t.Fatal("expected error for empty document")
+	}
+}
+
+func TestRemoveStemSchemaField_NoSchemaSection(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte(`version: 2
+scope:
+  match: "*.md"
+`))
+
+	err := removeStemSchemaField(stemPath, "some_field")
+	if err == nil {
+		t.Fatal("expected error when no schema section")
+	}
+	if !strings.Contains(err.Error(), "no schema section") {
+		t.Errorf("expected 'no schema section' error, got: %v", err)
+	}
+}
+
+func TestRemoveStemSchemaField_NonMappingRoot(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte(`- item1
+- item2
+`))
+
+	err := removeStemSchemaField(stemPath, "field")
+	if err == nil {
+		t.Fatal("expected error for non-mapping root")
+	}
+}
+
+// --- rewriteRecordFile error paths ---
+
+func TestRewriteRecordFile_FileNotFound(t *testing.T) {
+	dir := t.TempDir()
+	fm := map[string]any{"estado": "test"}
+	err := rewriteRecordFile(dir, "nonexistent.md", fm)
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+}
+
+// --- applyCorrectValue with missing record ---
+
+func TestApplyCorrectValue_MissingRecord(t *testing.T) {
+	dir := t.TempDir()
+	recordMap := map[string]*extract.Record{} // empty - path not in map
+
+	p := proposal.Proposal{
+		Type:  proposal.CorrectValue,
+		Field: "estado",
+		From:  "Wrong",
+		To:    "Correct",
+		Paths: []string{"missing.md"},
+	}
+
+	// Should not error - missing records are skipped
+	err := applyCorrectValue(p, dir, recordMap)
+	if err != nil {
+		t.Fatalf("unexpected error for missing record: %v", err)
+	}
+}
+
+// --- applySetField with missing record ---
+
+func TestApplySetField_MissingRecord(t *testing.T) {
+	dir := t.TempDir()
+	recordMap := map[string]*extract.Record{}
+
+	p := proposal.Proposal{
+		Type:  proposal.SetField,
+		Field: "estado",
+		Value: "Pending",
+		Paths: []string{"missing.md"},
+	}
+
+	err := applySetField(p, dir, recordMap)
+	if err != nil {
+		t.Fatalf("unexpected error for missing record: %v", err)
+	}
+}
+
 // --- helper ---
 
 func mustWriteFile(t *testing.T, path string, content []byte) {

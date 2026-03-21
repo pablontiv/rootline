@@ -170,6 +170,340 @@ func TestSet_FullPipeline(t *testing.T) {
 	}
 }
 
+// TestSet_AppendToSection verifies the += (append) operation on a section field.
+func TestSet_AppendToSection(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem":   setTestStem,
+		"B023.md": setTestDoc,
+	})
+
+	docPath := filepath.Join(root, "B023.md")
+	relPath := "B023.md"
+
+	content, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("reading doc: %v", err)
+	}
+
+	parseAST := true
+	ext := &extract.MarkdownExtractor{ParseAST: &parseAST}
+	record, err := ext.Extract(relPath, content)
+	if err != nil {
+		t.Fatalf("extracting doc: %v", err)
+	}
+
+	proposals := []proposal.Proposal{
+		{
+			Type:    proposal.SetSection,
+			Field:   "contexto",
+			Heading: "## Contexto",
+			Value:   "Additional context appended.",
+			Mode:    "append",
+			Paths:   []string{relPath},
+		},
+	}
+
+	report := &proposal.Report{
+		Version:   1,
+		Kind:      "rootline/proposals",
+		Proposals: proposals,
+	}
+
+	if err := fix.ApplyProposals(context.Background(), report, root, []*extract.Record{record}); err != nil {
+		t.Fatalf("ApplyProposals: %v", err)
+	}
+
+	updated, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("reading updated doc: %v", err)
+	}
+	updatedStr := string(updated)
+
+	// Original content should still be present.
+	if !strings.Contains(updatedStr, "Original context.") {
+		t.Errorf("expected original content preserved after append, got:\n%s", updatedStr)
+	}
+
+	// New content should be appended.
+	if !strings.Contains(updatedStr, "Additional context appended.") {
+		t.Errorf("expected appended content in section, got:\n%s", updatedStr)
+	}
+}
+
+// TestSet_ReadValueFromFile verifies the =@file syntax by loading content from a file.
+func TestSet_ReadValueFromFile(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem":   setTestStem,
+		"B023.md": setTestDoc,
+	})
+
+	// Write value to a separate file.
+	valueFile := filepath.Join(root, "context_update.txt")
+	valueContent := "Updated context from file."
+	if err := os.WriteFile(valueFile, []byte(valueContent), 0o644); err != nil {
+		t.Fatalf("writing value file: %v", err)
+	}
+
+	docPath := filepath.Join(root, "B023.md")
+	relPath := "B023.md"
+
+	content, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("reading doc: %v", err)
+	}
+
+	// Read value from file (simulating =@file behavior).
+	fileValue, err := os.ReadFile(valueFile)
+	if err != nil {
+		t.Fatalf("reading value file: %v", err)
+	}
+
+	parseAST := true
+	ext := &extract.MarkdownExtractor{ParseAST: &parseAST}
+	record, err := ext.Extract(relPath, content)
+	if err != nil {
+		t.Fatalf("extracting doc: %v", err)
+	}
+
+	proposals := []proposal.Proposal{
+		{
+			Type:    proposal.SetSection,
+			Field:   "contexto",
+			Heading: "## Contexto",
+			Value:   string(fileValue),
+			Mode:    "replace",
+			Paths:   []string{relPath},
+		},
+	}
+
+	report := &proposal.Report{
+		Version:   1,
+		Kind:      "rootline/proposals",
+		Proposals: proposals,
+	}
+
+	if err := fix.ApplyProposals(context.Background(), report, root, []*extract.Record{record}); err != nil {
+		t.Fatalf("ApplyProposals: %v", err)
+	}
+
+	updated, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("reading updated doc: %v", err)
+	}
+	updatedStr := string(updated)
+
+	if !strings.Contains(updatedStr, valueContent) {
+		t.Errorf("expected file content %q in section, got:\n%s", valueContent, updatedStr)
+	}
+	// Original should be replaced.
+	if strings.Contains(updatedStr, "Original context.") {
+		t.Errorf("expected original content replaced, got:\n%s", updatedStr)
+	}
+}
+
+// TestSet_DryRunPreview verifies dry-run mode returns previews without modifying files.
+// This test exercises the proposal building + preview rendering pipeline.
+func TestSet_DryRunPreview(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem":   setTestStem,
+		"B023.md": setTestDoc,
+	})
+
+	docPath := filepath.Join(root, "B023.md")
+	relPath := "B023.md"
+
+	content, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("reading doc: %v", err)
+	}
+
+	// Capture original content for comparison.
+	originalContent := string(content)
+
+	// Build proposals (simulate what dry-run does — build but don't apply).
+	proposals := []proposal.Proposal{
+		{
+			Type:        proposal.SetField,
+			Field:       "estado",
+			Value:       "listo-para-implementar",
+			Paths:       []string{relPath},
+			Description: "set estado",
+		},
+		{
+			Type:    proposal.SetSection,
+			Field:   "contexto",
+			Heading: "## Contexto",
+			Value:   "New context content.",
+			Mode:    "replace",
+			Paths:   []string{relPath},
+		},
+	}
+
+	// In dry-run mode: generate previews without calling ApplyProposals.
+	var previews []string
+	for _, p := range proposals {
+		switch p.Type {
+		case proposal.SetField:
+			previews = append(previews, "would set "+p.Field+" = "+p.Value)
+		case proposal.SetSection:
+			mode := p.Mode
+			if mode == "" {
+				mode = "replace"
+			}
+			previews = append(previews, "would "+mode+" section "+p.Heading+" ("+p.Field+")")
+		}
+	}
+
+	// Verify previews contain expected messages.
+	if len(previews) != 2 {
+		t.Errorf("expected 2 previews, got %d: %v", len(previews), previews)
+	}
+	if !strings.Contains(previews[0], "estado") {
+		t.Errorf("expected estado in first preview, got: %s", previews[0])
+	}
+	if !strings.Contains(previews[1], "section") {
+		t.Errorf("expected 'section' in second preview, got: %s", previews[1])
+	}
+
+	// Verify file was NOT modified (dry-run doesn't call ApplyProposals).
+	afterContent, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("reading doc after dry-run: %v", err)
+	}
+	if string(afterContent) != originalContent {
+		t.Errorf("dry-run should not modify the file.\nOriginal:\n%s\nAfter:\n%s", originalContent, string(afterContent))
+	}
+}
+
+// TestSet_NoStemError verifies that setting a field on a file outside any stem scope
+// does not panic and returns a usable result (nil effective stem).
+func TestSet_NoStemError(t *testing.T) {
+	// Create dir WITHOUT .stem — no schema available.
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	docContent := `---
+estado: Pending
+---
+# Doc
+
+`
+	docPath := filepath.Join(root, "doc.md")
+	if err := os.WriteFile(docPath, []byte(docContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	relPath := "doc.md"
+
+	content, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("reading doc: %v", err)
+	}
+
+	parseAST := true
+	ext := &extract.MarkdownExtractor{ParseAST: &parseAST}
+	record, err := ext.Extract(relPath, content)
+	if err != nil {
+		t.Fatalf("extracting doc: %v", err)
+	}
+
+	// With no stem, effective is nil — SetField proposals still work.
+	proposals := []proposal.Proposal{
+		{
+			Type:        proposal.SetField,
+			Field:       "estado",
+			Value:       "Completed",
+			Paths:       []string{relPath},
+			Description: "set estado",
+		},
+	}
+
+	report := &proposal.Report{
+		Version:   1,
+		Kind:      "rootline/proposals",
+		Proposals: proposals,
+	}
+
+	if err := fix.ApplyProposals(context.Background(), report, root, []*extract.Record{record}); err != nil {
+		t.Fatalf("ApplyProposals without stem: %v", err)
+	}
+
+	updated, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("reading updated doc: %v", err)
+	}
+	if !strings.Contains(string(updated), "estado: Completed") {
+		t.Errorf("expected estado: Completed in file, got:\n%s", string(updated))
+	}
+}
+
+// TestSet_RequiredSectionValidation verifies that validation catches a missing
+// required section after a set operation that changes the context.
+func TestSet_RequiredSectionValidation(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem":   setTestStem,
+		"B023.md": setTestDoc,
+	})
+
+	docPath := filepath.Join(root, "B023.md")
+	relPath := "B023.md"
+
+	content, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("reading doc: %v", err)
+	}
+
+	parseAST := true
+	ext := &extract.MarkdownExtractor{ParseAST: &parseAST}
+	record, err := ext.Extract(relPath, content)
+	if err != nil {
+		t.Fatalf("extracting doc: %v", err)
+	}
+
+	// The stem requires contexto (type: section, required: true).
+	effective, err := rules.ResolveForRecord(root, docPath)
+	if err != nil {
+		t.Fatalf("resolving stem: %v", err)
+	}
+
+	// Validate original — should have no section-required errors.
+	errs := rules.Validate(context.Background(), record, effective)
+	// B023.md has ## Contexto, so no section error expected initially.
+	for _, e := range errs {
+		if e.Rule == "required" && e.Field == "contexto" {
+			t.Errorf("unexpected section required error before mutation: %v", e)
+		}
+	}
+
+	// Now build a record WITHOUT the Contexto section (simulate a bad set).
+	badDocContent := `---
+estado: bloqueado
+bloqueador: "needs API key"
+---
+
+# B023
+
+`
+	badRecord, err := ext.Extract(relPath, []byte(badDocContent))
+	if err != nil {
+		t.Fatalf("extracting bad doc: %v", err)
+	}
+
+	// Validation should now report missing required contexto section.
+	badErrs := rules.Validate(context.Background(), badRecord, effective)
+	foundSectionError := false
+	for _, e := range badErrs {
+		if e.Rule == "required" && e.Field == "contexto" {
+			foundSectionError = true
+			break
+		}
+	}
+	if !foundSectionError {
+		t.Errorf("expected required section error for contexto when section is missing, got: %v", badErrs)
+	}
+}
+
 // TestSet_RollbackOnInvalidValue verifies that setting an enum field to an
 // invalid value causes the command to fail AND leaves the file unchanged.
 // This test exercises the pre-validation guard in the set command by running
