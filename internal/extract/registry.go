@@ -21,6 +21,18 @@ func NewRegistry() *Registry {
 	return r
 }
 
+// NewASTRegistry creates a registry with AST parsing enabled.
+// Use this when body structure (sections, headings) needs to be inspected.
+func NewASTRegistry() *Registry {
+	r := &Registry{
+		byName:      make(map[string]Extractor),
+		byExtension: make(map[string]Extractor),
+	}
+	parseAST := true
+	r.Register(&MarkdownExtractor{ParseAST: &parseAST})
+	return r
+}
+
 // Register adds an extractor to the registry.
 // Panics on duplicate name or extension (programmer error, not user error).
 func (r *Registry) Register(e Extractor) {

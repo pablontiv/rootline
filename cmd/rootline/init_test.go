@@ -354,6 +354,107 @@ func TestInitAutoHierarchy_GeneratesAggregate(t *testing.T) {
 	}
 }
 
+func TestInitEmitsSectionFields(t *testing.T) {
+	dir := t.TempDir()
+
+	// 5 documents: all have "## Context", 4/5 have "## Notes"
+	docs := []string{
+		"---\ntitle: doc1\n---\n## Context\ncontent\n## Notes\nnotes here\n",
+		"---\ntitle: doc2\n---\n## Context\ncontent\n## Notes\nnotes here\n",
+		"---\ntitle: doc3\n---\n## Context\ncontent\n## Notes\nnotes here\n",
+		"---\ntitle: doc4\n---\n## Context\ncontent\n## Notes\nnotes here\n",
+		"---\ntitle: doc5\n---\n## Context\ncontent\n",
+	}
+	for i, content := range docs {
+		mustWriteFile(t, filepath.Join(dir, fmt.Sprintf("doc%d.md", i+1)), []byte(content), 0644)
+	}
+
+	out, err := runCmd(t, "init", dir, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// "## Context" appears in 5/5 = 100% → required_section at 0.80 threshold
+	if !strings.Contains(out, "type: section") {
+		t.Errorf("expected 'type: section' in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "context:") {
+		t.Errorf("expected 'context:' field name in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, `heading: "## Context"`) {
+		t.Errorf("expected 'heading: \"## Context\"' in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "required: true") {
+		t.Errorf("expected 'required: true' for context section, got:\n%s", out)
+	}
+
+	// "## Notes" appears in 4/5 = 80% → exactly at 0.80 threshold → required_section
+	if !strings.Contains(out, "notes:") {
+		t.Errorf("expected 'notes:' field name in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, `heading: "## Notes"`) {
+		t.Errorf("expected 'heading: \"## Notes\"' in output, got:\n%s", out)
+	}
+}
+
+func TestInitSectionFieldsWrittenToFile(t *testing.T) {
+	dir := t.TempDir()
+
+	// 5 documents all with "## Context"
+	for i := 1; i <= 5; i++ {
+		content := fmt.Sprintf("---\ntitle: doc%d\n---\n## Context\ncontent here\n", i)
+		mustWriteFile(t, filepath.Join(dir, fmt.Sprintf("doc%d.md", i)), []byte(content), 0644)
+	}
+
+	_, err := runCmd(t, "init", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	stemPath := filepath.Join(dir, ".stem")
+	content, err := os.ReadFile(stemPath)
+	if err != nil {
+		t.Fatalf("expected .stem file: %v", err)
+	}
+	s := string(content)
+
+	if !strings.Contains(s, "type: section") {
+		t.Errorf("expected 'type: section' in .stem, got:\n%s", s)
+	}
+	if !strings.Contains(s, "context:") {
+		t.Errorf("expected 'context:' field in .stem, got:\n%s", s)
+	}
+	if !strings.Contains(s, `heading: "## Context"`) {
+		t.Errorf("expected heading in .stem, got:\n%s", s)
+	}
+}
+
+func TestInitSectionThresholdStrict(t *testing.T) {
+	dir := t.TempDir()
+
+	// 5 documents: "## Rare" appears in only 3/5 = 60% → below 0.80, should NOT appear
+	docs := []string{
+		"---\ntitle: doc1\n---\n## Rare\ncontent\n",
+		"---\ntitle: doc2\n---\n## Rare\ncontent\n",
+		"---\ntitle: doc3\n---\n## Rare\ncontent\n",
+		"---\ntitle: doc4\n---\n# Just title\n",
+		"---\ntitle: doc5\n---\n# Just title\n",
+	}
+	for i, content := range docs {
+		mustWriteFile(t, filepath.Join(dir, fmt.Sprintf("doc%d.md", i+1)), []byte(content), 0644)
+	}
+
+	out, err := runCmd(t, "init", dir, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// At 0.80 threshold, 3/5 = 60% should NOT be emitted as a section field
+	if strings.Contains(out, "rare:") {
+		t.Errorf("expected 'rare:' NOT in output at 0.80 threshold (60%%), got:\n%s", out)
+	}
+}
+
 func TestInitAutoHierarchy_NoAggregateForNonEnum(t *testing.T) {
 	dir := t.TempDir()
 

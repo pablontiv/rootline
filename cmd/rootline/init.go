@@ -11,6 +11,7 @@ import (
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/migrate"
+	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/pablontiv/rootline/internal/templates"
 	"github.com/spf13/cobra"
 )
@@ -64,8 +65,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Scan for records
-	reg := extract.NewRegistry()
+	// Scan for records with AST parsing enabled so section patterns can be detected.
+	reg := extract.NewASTRegistry()
 	records, err := index.Scan(ctx, absTarget, reg)
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", target, err)
@@ -95,8 +96,24 @@ func runInitFlat(cmd *cobra.Command, absTarget, target string, records []*extrac
 		}
 	}
 
-	// Analyze
+	// Analyze frontmatter
 	schema := infer.Analyze(records)
+
+	// Detect section patterns at a stricter 0.80 threshold (init is more
+	// prescriptive than analyze's 0.60 default).
+	sectionInferences := infer.DetectSectionPatterns(records, 0.80)
+	for _, inf := range sectionInferences {
+		fieldName := sectionFieldName(inf.Field)
+		heading := "## " + inf.Field
+		sf := rules.SchemaField{
+			Type:    "section",
+			Heading: heading,
+		}
+		if inf.Type == "required_section" {
+			sf.Required = true
+		}
+		schema.Schema[fieldName] = sf
+	}
 
 	// Warn about mixed content
 	if schema.TotalFiles > 0 && schema.FilesWithout > 0 {
@@ -334,6 +351,9 @@ func generateStemYAML(schema *infer.InferredSchema, scanRoot string) string {
 		if len(field.Values) > 0 {
 			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(field.Values, ", "))
 		}
+		if field.Heading != "" {
+			fmt.Fprintf(&b, "    heading: %q\n", field.Heading)
+		}
 	}
 
 	// Append structural inference section if detected.
@@ -342,4 +362,10 @@ func generateStemYAML(schema *infer.InferredSchema, scanRoot string) string {
 	}
 
 	return b.String()
+}
+
+// sectionFieldName converts a heading text to a .stem field name:
+// lowercase with spaces replaced by underscores.
+func sectionFieldName(heading string) string {
+	return strings.ToLower(strings.ReplaceAll(heading, " ", "_"))
 }
