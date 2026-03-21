@@ -84,6 +84,11 @@ func ApplyProposals(_ context.Context, report *proposal.Report, root string, rec
 				return fmt.Errorf("%s %s: %w", p.Type, p.Paths[0], err)
 			}
 			applied = append(applied, p)
+		case proposal.SetSection:
+			if err := applySetSection(p, root, recordMap); err != nil {
+				return fmt.Errorf("set_section %s: %w", p.Heading, err)
+			}
+			applied = append(applied, p)
 		case proposal.CorrectOutlier:
 			if err := applyCorrectValue(p, root, recordMap); err != nil {
 				return fmt.Errorf("correct_outlier %s: %w", p.Paths[0], err)
@@ -435,6 +440,116 @@ func rewriteRecordFile(root, path string, fm map[string]any) error {
 	}
 	newContent := RewriteFrontmatter(string(content), fm)
 	return os.WriteFile(absPath, []byte(newContent), 0644)
+}
+
+func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Record) error {
+	for _, relPath := range p.Paths {
+		absPath := filepath.Join(root, relPath)
+		data, err := os.ReadFile(absPath)
+		if err != nil {
+			return err
+		}
+		content := string(data)
+
+		heading := p.Heading
+		newValue := strings.TrimRight(p.Value, "\n")
+
+		// Find the heading. We look for "\n<heading>\n" to anchor to a line boundary.
+		// Also handle heading at the very start of file (no leading newline).
+		headingEnd := -1   // byte offset just after the heading line's trailing newline
+		var sectionEnd int // byte offset where the section content ends
+
+		searchFor := "\n" + heading + "\n"
+		idx := strings.Index(content, searchFor)
+		if idx >= 0 {
+			// headingEnd = position right after the heading line's newline
+			headingEnd = idx + len(searchFor)
+		} else if strings.HasPrefix(content, heading+"\n") {
+			// Heading is the very first line of the file
+			headingEnd = len(heading) + 1
+		}
+
+		if headingEnd == -1 {
+			if p.Mode == "create" {
+				// Append new section at EOF
+				if !strings.HasSuffix(content, "\n") {
+					content += "\n"
+				}
+				content += "\n" + heading + "\n\n" + newValue + "\n"
+				if err := os.WriteFile(absPath, []byte(content), 0644); err != nil {
+					return err
+				}
+				continue
+			}
+			return fmt.Errorf("section %q not found in %s", heading, relPath)
+		}
+
+		// Determine heading level (count leading '#' chars)
+		headingLevel := 0
+		for _, ch := range heading {
+			if ch == '#' {
+				headingLevel++
+			} else {
+				break
+			}
+		}
+
+		// Find section end: next heading of same or higher level (fewer or equal '#')
+		sectionEnd = len(content)
+		remaining := content[headingEnd:]
+		offset := headingEnd
+		for len(remaining) > 0 {
+			lineEnd := strings.Index(remaining, "\n")
+			var line string
+			var advance int
+			if lineEnd == -1 {
+				line = remaining
+				advance = len(remaining)
+				remaining = ""
+			} else {
+				line = remaining[:lineEnd]
+				advance = lineEnd + 1
+				remaining = remaining[lineEnd+1:]
+			}
+
+			if len(line) > 0 && line[0] == '#' {
+				level := 0
+				for _, ch := range line {
+					if ch == '#' {
+						level++
+					} else {
+						break
+					}
+				}
+				if level > 0 && level <= headingLevel {
+					sectionEnd = offset
+					break
+				}
+			}
+			offset += advance
+		}
+
+		switch p.Mode {
+		case "replace", "":
+			// Keep heading line, replace section body (headingEnd..sectionEnd)
+			content = content[:headingEnd] + "\n" + newValue + "\n" + content[sectionEnd:]
+		case "append":
+			// Keep existing body, append new value
+			existingBody := strings.TrimRight(content[headingEnd:sectionEnd], "\n\r ")
+			content = content[:headingEnd] + existingBody + "\n\n" + newValue + "\n" + content[sectionEnd:]
+		case "create":
+			// Heading found — treat like append (section already exists)
+			existingBody := strings.TrimRight(content[headingEnd:sectionEnd], "\n\r ")
+			content = content[:headingEnd] + existingBody + "\n\n" + newValue + "\n" + content[sectionEnd:]
+		default:
+			return fmt.Errorf("unknown mode %q for set_section", p.Mode)
+		}
+
+		if err := os.WriteFile(absPath, []byte(content), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func applyCorrectLink(p proposal.Proposal, root string) error {

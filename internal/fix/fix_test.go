@@ -1183,6 +1183,125 @@ func TestApplySetField(t *testing.T) {
 	}
 }
 
+// --- applySetSection ---
+
+func TestApplySetSection_Replace(t *testing.T) {
+	dir := t.TempDir()
+	relPath := "task.md"
+	absPath := filepath.Join(dir, relPath)
+
+	original := "---\nestado: Pending\n---\n\n## Contexto\n\nOld content.\n\n## Desbloqueo\n\nStuff.\n"
+	mustWriteFile(t, absPath, []byte(original))
+
+	p := proposal.Proposal{
+		Type:    proposal.SetSection,
+		Heading: "## Contexto",
+		Value:   "New content.",
+		Mode:    "replace",
+		Paths:   []string{relPath},
+	}
+
+	err := applySetSection(p, dir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, _ := os.ReadFile(absPath)
+	content := string(data)
+
+	if strings.Contains(content, "Old content.") {
+		t.Errorf("expected old content removed, got:\n%s", content)
+	}
+	if !strings.Contains(content, "New content.") {
+		t.Errorf("expected new content present, got:\n%s", content)
+	}
+	if !strings.Contains(content, "## Contexto") {
+		t.Errorf("expected heading preserved, got:\n%s", content)
+	}
+	if !strings.Contains(content, "## Desbloqueo") {
+		t.Errorf("expected other section preserved, got:\n%s", content)
+	}
+	if !strings.Contains(content, "Stuff.") {
+		t.Errorf("expected other section content preserved, got:\n%s", content)
+	}
+}
+
+func TestApplySetSection_Append(t *testing.T) {
+	dir := t.TempDir()
+	relPath := "task.md"
+	absPath := filepath.Join(dir, relPath)
+
+	original := "---\nestado: Pending\n---\n\n## Contexto\n\nExisting content.\n"
+	mustWriteFile(t, absPath, []byte(original))
+
+	p := proposal.Proposal{
+		Type:    proposal.SetSection,
+		Heading: "## Contexto",
+		Value:   "Appended content.",
+		Mode:    "append",
+		Paths:   []string{relPath},
+	}
+
+	err := applySetSection(p, dir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, _ := os.ReadFile(absPath)
+	content := string(data)
+
+	if !strings.Contains(content, "Existing content.") {
+		t.Errorf("expected existing content preserved, got:\n%s", content)
+	}
+	if !strings.Contains(content, "Appended content.") {
+		t.Errorf("expected appended content present, got:\n%s", content)
+	}
+	if !strings.Contains(content, "## Contexto") {
+		t.Errorf("expected heading preserved, got:\n%s", content)
+	}
+}
+
+func TestApplySetSection_Create(t *testing.T) {
+	dir := t.TempDir()
+	relPath := "task.md"
+	absPath := filepath.Join(dir, relPath)
+
+	original := "---\nestado: Pending\n---\n\n## Contexto\n\nSome text.\n"
+	mustWriteFile(t, absPath, []byte(original))
+
+	p := proposal.Proposal{
+		Type:    proposal.SetSection,
+		Heading: "## Investigación",
+		Value:   "Research notes.",
+		Mode:    "create",
+		Paths:   []string{relPath},
+	}
+
+	err := applySetSection(p, dir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, _ := os.ReadFile(absPath)
+	content := string(data)
+
+	if !strings.Contains(content, "## Investigación") {
+		t.Errorf("expected new heading at EOF, got:\n%s", content)
+	}
+	if !strings.Contains(content, "Research notes.") {
+		t.Errorf("expected new content at EOF, got:\n%s", content)
+	}
+	if !strings.Contains(content, "## Contexto") {
+		t.Errorf("expected original section preserved, got:\n%s", content)
+	}
+	// New section should be at the end.
+	contextoIdx := strings.Index(content, "## Contexto")
+	investigacionIdx := strings.Index(content, "## Investigación")
+	if investigacionIdx < contextoIdx {
+		t.Errorf("expected new section after existing section, got:\n%s", content)
+	}
+}
+
 // --- helper ---
 
 func mustWriteFile(t *testing.T, path string, content []byte) {
