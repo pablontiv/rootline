@@ -35,6 +35,9 @@ func BuildEnv(rec *extract.Record) map[string]any {
 	for k, v := range rec.Derived {
 		env[k] = v
 	}
+	if rec.Sections != nil {
+		env["sections"] = rec.Sections
+	}
 	return env
 }
 

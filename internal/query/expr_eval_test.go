@@ -388,3 +388,22 @@ func TestMatchRecord_IsIndex_False(t *testing.T) {
 		t.Error("expected match for isIndex == false on T001.md")
 	}
 }
+
+func TestMatchRecord_SectionField(t *testing.T) {
+	rec := &extract.Record{
+		Path:        "test.md",
+		Frontmatter: map[string]any{"estado": "bloqueado"},
+		Sections:    map[string]string{"## Contexto": "API key needed"},
+	}
+	prog, err := CompileWhere(`sections["## Contexto"] contains "API key"`)
+	if err != nil {
+		t.Fatalf("CompileWhere: %v", err)
+	}
+	match, err := MatchRecord(context.Background(), prog, rec)
+	if err != nil {
+		t.Fatalf("MatchRecord: %v", err)
+	}
+	if !match {
+		t.Error("expected match for section containing 'API key'")
+	}
+}
