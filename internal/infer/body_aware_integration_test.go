@@ -52,7 +52,7 @@ func TestIntegration_BodySectionPatterns(t *testing.T) {
 		t.Fatalf("expected 5 section fixtures, got %d", len(records))
 	}
 
-	inferences := DetectSectionPatterns(records)
+	inferences := DetectSectionPatterns(records, 0.80)
 
 	// Contexto, Alcance, Criterios de Aceptacion appear in 5/5 → required
 	requiredSections := map[string]bool{
@@ -164,7 +164,7 @@ func TestIntegration_BodyNoHeadings(t *testing.T) {
 	}
 
 	// Should not panic
-	inferences := DetectSectionPatterns(records)
+	inferences := DetectSectionPatterns(records, 0.80)
 
 	for _, inf := range inferences {
 		if inf.Type == "required_section" || inf.Type == "optional_section" {

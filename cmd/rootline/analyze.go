@@ -15,6 +15,7 @@ import (
 )
 
 var analyzeIncremental bool
+var analyzeThreshold float64
 
 var analyzeCmd = &cobra.Command{
 	Use:   "analyze [directory]",
@@ -26,6 +27,7 @@ var analyzeCmd = &cobra.Command{
 
 func init() {
 	analyzeCmd.Flags().BoolVar(&analyzeIncremental, "incremental", false, "report only inferences not covered by existing .stem")
+	analyzeCmd.Flags().Float64Var(&analyzeThreshold, "threshold", 0.60, "section pattern detection threshold (0.0-1.0)")
 	rootCmd.AddCommand(analyzeCmd)
 }
 
@@ -105,7 +107,7 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 			return infer.DetectCrossReferences(records, root)
 		}},
 		{"section_patterns", "Body Section Patterns", func() []infer.Inference {
-			return infer.DetectSectionPatterns(records)
+			return infer.DetectSectionPatterns(records, analyzeThreshold)
 		}},
 		{"invariants", "Invariant Extraction", func() []infer.Inference {
 			return infer.DetectInvariants(records)

@@ -7,10 +7,10 @@ import (
 )
 
 // DetectSectionPatterns analyzes heading structure across records in a directory.
-// Headings present in ≥80% of records are "required_section".
+// Headings present in ≥threshold of records are "required_section".
 // Headings present in <20% of records are "optional_section".
 // Records without an AST (empty body) are excluded from the analysis.
-func DetectSectionPatterns(records []*extract.Record) []Inference {
+func DetectSectionPatterns(records []*extract.Record, threshold float64) []Inference {
 	// Filter to records that have a parsed AST.
 	var valid []*extract.Record
 	for _, rec := range records {
@@ -50,7 +50,7 @@ func DetectSectionPatterns(records []*extract.Record) []Inference {
 		freqStr := fmt.Sprintf("%.2f", freq)
 
 		switch {
-		case freq >= 0.8:
+		case freq >= threshold:
 			inferences = append(inferences, Inference{
 				Type:    "required_section",
 				Field:   heading,
