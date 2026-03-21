@@ -1,7 +1,7 @@
 ---
 name: rootline
 description: |
-  Wrapper del CLI de rootline: validate, fix, describe, new, query, tree, stats,
+  Wrapper del CLI de rootline: validate, fix, set, describe, new, query, tree, stats,
   explain, graph, migrate, init, analyze, apply. Usar siempre que el usuario
   trabaje con documentos gestionados por rootline o schemas .stem — incluso sin
   decir "rootline". Usar este skill siempre que el usuario quiera validar
@@ -9,6 +9,7 @@ description: |
   archivos scaffolded, bootstrap de consistencia, o inspeccionar schemas —
   incluso si solo dice "verificar si este archivo está bien", "que campos
   necesito", "buscar registros", "inferir schema", "hacer consistente",
+  "set field", "cambiar estado", "actualizar campo", "mutar documento",
   "check if this file is valid", o "what fields does this need".
   (No para: descomposición en epics/stories = roadmap, investigación = hypothesize,
   sync de docs = update-docs, debugging de Go, operaciones YAML no-rootline.)
@@ -68,6 +69,7 @@ rootline validate <filepath>                      # Verify it's valid
 | `migrate` | Schema change detection and migration | User modified `.stem` and needs to adapt |
 | `init` | Infer `.stem` from existing documents | User has docs but no schema yet |
 | `analyze` | Run all inference detectors | User wants a full analysis report of patterns |
+| `set` | Set field values (frontmatter or body sections) | User wants to mutate a document field with schema validation |
 | `apply` | Apply inference results to .stem | User wants to update .stem based on analysis |
 
 ## Global Flags
@@ -138,6 +140,23 @@ Key flags: `--where`, `--count`, `--limit`, `--from`
 **Procedure**: Choose the right command based on what the user needs — query for filtering records, tree for structure, stats for aggregates, explain for debugging field values.
 
 For detailed procedures and JSON output formats, see [ref-query.md](ref-query.md).
+
+### Mutation (set)
+
+Set field values on documents with schema validation. Supports frontmatter and body section fields.
+
+```bash
+rootline set file.md estado=listo-para-implementar       # Frontmatter enum
+rootline set file.md bloqueador=""                        # Clear string
+rootline set file.md investigacion=@findings.md           # Section from file
+rootline set file.md investigacion+="New evidence"        # Append to section
+rootline set --create file.md investigacion="GO"          # Create new section
+rootline set --dry-run file.md estado=listo               # Preview changes
+```
+
+Key flags: `--dry-run` (preview), `--create` (create sections), `--no-validate` (skip post-validation)
+
+**Procedure**: Determine target file + field=value pairs → schema lookup → pre-validate (enum check) → apply proposals → post-validate + rollback on failure. Section fields use the `heading` from `.stem` schema for exact match.
 
 ### Analysis (analyze)
 

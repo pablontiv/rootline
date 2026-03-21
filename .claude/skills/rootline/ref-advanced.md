@@ -1,5 +1,5 @@
 # Advanced Operations Reference
-<!-- updated 2026-03-20: graph --open, init --template, structural inference -->
+<!-- updated 2026-03-21: set command, migrate --scaffold, init section fields, type: section -->
 
 ## graph — Dependency graph from wiki-links
 
@@ -63,12 +63,24 @@ rootline migrate --dry-run <flag>           # Preview any migration
 | `--from <file>` | Compare against specified .stem file |
 | `--rename old=new` | Rename a field in all documents and .stem files |
 | `--split` | Split flat .stem into hierarchical per-level files |
+| `--scaffold` | Scaffold missing required `type: section` fields in documents |
 
 ### Output formats
 
 - **Diff mode** (`kind: "rootline/migrate-diff"`): Changes with field, kind, breaking flag, message
 - **Rename mode** (`kind: "rootline/migrate-rename"`): Files and stems updated, migration log appended
 - **Split mode**: Creates hierarchical .stem files with auto-generated aggregates
+
+### Scaffold mode
+
+When `.stem` defines `type: section` fields with `required: true`, scaffold inserts missing sections into documents:
+
+```bash
+rootline migrate --scaffold <path> --dry-run   # Preview what sections would be added
+rootline migrate --scaffold <path>             # Add missing sections
+```
+
+Content priority: schema `default` value → `<!-- TODO -->` placeholder. Sections are appended at EOF, ordered by `ordered` property if present.
 
 ### Typical workflow
 
@@ -80,6 +92,10 @@ rootline migrate                            # Apply migration
 # Rename a field
 rootline migrate --rename estado=status --dry-run
 rootline migrate --rename estado=status
+
+# After adding required sections to .stem
+rootline migrate --scaffold <path> --dry-run   # Preview scaffolding
+rootline migrate --scaffold <path>             # Apply
 ```
 
 ---
@@ -109,6 +125,7 @@ rootline init --template owner/repo@v2      # Fetch specific tag/branch
 **Inference mode** (default):
 - Analyzes frontmatter across all documents in the directory
 - Detects field types, enum values, required fields
+- Infers `type: section` fields from recurring H2/H3 headings (threshold: 0.80 for init)
 - Infers structural rules (require_index, min/max_children) from directory analysis
 - **Hierarchy detection**: Recognizes naming patterns (E##, F##, S###, T###)
   - Flat mode: Single `.stem` with inferred schema

@@ -30,7 +30,7 @@ rootline describe <dir> --field schema.estado.values # Extract enum values
   "applies": [".stem", "../.stem"],
   "schema": {
     "field_name": {
-      "type": "string|enum|sequence",
+      "type": "string|enum|sequence|section",
       "required": true,
       "values": ["val1", "val2"],
       "default": "value",
