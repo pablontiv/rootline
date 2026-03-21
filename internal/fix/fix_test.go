@@ -1138,6 +1138,51 @@ func TestApplyProposals_RemoveStemField(t *testing.T) {
 	}
 }
 
+// --- TestApplySetField ---
+
+func TestApplySetField(t *testing.T) {
+	dir := t.TempDir()
+	relPath := "test.md"
+	absPath := filepath.Join(dir, relPath)
+	original := "---\nestado: bloqueado\nbloqueador: \"some reason\"\n---\n\n# Title\n"
+	mustWriteFile(t, absPath, []byte(original))
+
+	rec := &extract.Record{
+		Path:        relPath,
+		Frontmatter: map[string]any{"estado": "bloqueado", "bloqueador": "some reason"},
+	}
+
+	report := &proposal.Report{
+		Version: 1,
+		Kind:    "rootline/proposals",
+		Proposals: []proposal.Proposal{
+			{
+				Type:  proposal.SetField,
+				Field: "estado",
+				Value: "listo-para-implementar",
+				Paths: []string{relPath},
+			},
+			{
+				Type:  proposal.SetField,
+				Field: "bloqueador",
+				Value: "",
+				Paths: []string{relPath},
+			},
+		},
+	}
+
+	err := ApplyProposals(context.Background(), report, dir, []*extract.Record{rec})
+	if err != nil {
+		t.Fatalf("ApplyProposals: %v", err)
+	}
+
+	data, _ := os.ReadFile(absPath)
+	content := string(data)
+	if !strings.Contains(content, "estado: listo-para-implementar") {
+		t.Errorf("estado not updated in:\n%s", content)
+	}
+}
+
 // --- helper ---
 
 func mustWriteFile(t *testing.T, path string, content []byte) {
