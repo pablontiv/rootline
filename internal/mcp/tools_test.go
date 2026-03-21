@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -76,14 +77,14 @@ func TestToolsRegistration_ListTools(t *testing.T) {
 		names[tool.Name] = true
 	}
 
-	expected := []string{"query", "validate", "describe", "tree", "stats", "explain", "fix", "graph"}
+	expected := []string{"query", "validate", "describe", "tree", "stats", "explain", "fix", "graph", "set"}
 	for _, name := range expected {
 		if !names[name] {
 			t.Errorf("expected tool %q not found in list", name)
 		}
 	}
-	if len(result.Tools) != 8 {
-		t.Errorf("tool count = %d, want 8", len(result.Tools))
+	if len(result.Tools) != 9 {
+		t.Errorf("tool count = %d, want 9", len(result.Tools))
 	}
 }
 
@@ -381,5 +382,104 @@ func TestTool_Graph(t *testing.T) {
 	edges := gr["edges"].([]any)
 	if len(edges) == 0 {
 		t.Error("expected at least one edge from wiki-link")
+	}
+}
+
+func TestTool_Set(t *testing.T) {
+	root := setupTestProject(t)
+
+	s := NewServer("test", "v0.1.0")
+	RegisterTools(s)
+	cs := connectTestSession(t, s)
+
+	filePath := filepath.Join(root, "a.md")
+
+	// Call set tool: change estado from Pending to Completed.
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "set",
+		Arguments: map[string]any{
+			"path":   filePath,
+			"fields": map[string]any{"estado": "Completed"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("call tool: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error in result: %v", result.Content)
+	}
+
+	text := result.Content[0].(*mcp.TextContent)
+	var sr map[string]any
+	if err := json.Unmarshal([]byte(text.Text), &sr); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if sr["kind"] != "rootline/set" {
+		t.Errorf("kind = %v, want rootline/set", sr["kind"])
+	}
+
+	applied := sr["applied"].([]any)
+	if len(applied) == 0 {
+		t.Error("expected at least one applied change")
+	}
+
+	// Verify the file was actually modified.
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("reading modified file: %v", err)
+	}
+	if !strings.Contains(string(data), "estado: Completed") {
+		t.Errorf("expected file to contain 'estado: Completed', got:\n%s", string(data))
+	}
+}
+
+func TestTool_Set_DryRun(t *testing.T) {
+	root := setupTestProject(t)
+
+	s := NewServer("test", "v0.1.0")
+	RegisterTools(s)
+	cs := connectTestSession(t, s)
+
+	filePath := filepath.Join(root, "a.md")
+	originalData, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "set",
+		Arguments: map[string]any{
+			"path":    filePath,
+			"fields":  map[string]any{"estado": "Completed"},
+			"dry_run": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("call tool: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error in result: %v", result.Content)
+	}
+
+	text := result.Content[0].(*mcp.TextContent)
+	var sr map[string]any
+	if err := json.Unmarshal([]byte(text.Text), &sr); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if sr["dry_run"] != true {
+		t.Errorf("dry_run = %v, want true", sr["dry_run"])
+	}
+	previews := sr["previews"].([]any)
+	if len(previews) == 0 {
+		t.Error("expected at least one preview")
+	}
+
+	// File must not have been modified.
+	afterData, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(afterData) != string(originalData) {
+		t.Error("dry_run=true must not modify the file")
 	}
 }

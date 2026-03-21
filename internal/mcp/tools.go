@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fix"
 	"github.com/pablontiv/rootline/internal/graph"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/proposal"
@@ -60,6 +61,11 @@ func RegisterTools(s *Server) {
 		Name:        "graph",
 		Description: "Build dependency graph from wiki-links with cycle detection and broken link analysis",
 	}, handleGraph)
+
+	mcp.AddTool(s.Inner(), &mcp.Tool{
+		Name:        "set",
+		Description: "Set field values on a document (frontmatter or body sections). Validates against .stem schema.",
+	}, handleSet)
 }
 
 // Tool input types
@@ -112,6 +118,15 @@ type GraphInput struct {
 	Path   string `json:"path" jsonschema:"directory to scan (absolute path)"`
 	Check  bool   `json:"check,omitempty" jsonschema:"validate only (cycles + broken links)"`
 	Format string `json:"format,omitempty" jsonschema:"output format: dot or mermaid (default: json)"`
+}
+
+// SetInput is the input for the set tool.
+type SetInput struct {
+	Path           string            `json:"path" jsonschema:"absolute path to document file"`
+	Fields         map[string]string `json:"fields" jsonschema:"field name to value mapping (replaces existing)"`
+	AppendFields   map[string]string `json:"append_fields,omitempty" jsonschema:"fields to append content to (section fields only)"`
+	CreateSections bool              `json:"create_sections,omitempty" jsonschema:"create body sections that do not exist"`
+	DryRun         bool              `json:"dry_run,omitempty" jsonschema:"show changes without applying"`
 }
 
 func handleQuery(ctx context.Context, _ *mcp.CallToolRequest, input QueryInput) (*mcp.CallToolResult, any, error) {
@@ -496,6 +511,266 @@ func handleGraph(ctx context.Context, _ *mcp.CallToolRequest, input GraphInput) 
 		BrokenLinks: broken,
 	}
 	return jsonResult(result)
+}
+
+// setResult is the versioned JSON output for the set tool.
+type setResult struct {
+	Version  int      `json:"version"`
+	Kind     string   `json:"kind"`
+	Applied  []string `json:"applied"`
+	DryRun   bool     `json:"dry_run,omitempty"`
+	Previews []string `json:"previews,omitempty"`
+}
+
+func handleSet(ctx context.Context, _ *mcp.CallToolRequest, input SetInput) (*mcp.CallToolResult, any, error) {
+	absPath, err := filepath.Abs(input.Path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolving path: %w", err)
+	}
+
+	if _, err := os.Stat(absPath); err != nil {
+		return nil, nil, fmt.Errorf("file not found: %s", input.Path)
+	}
+
+	// Read file.
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading %s: %w", input.Path, err)
+	}
+
+	// Find git root for schema resolution and relative path computation.
+	dir := filepath.Dir(absPath)
+	gitRoot, err := findGitRoot(dir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("finding git root: %w", err)
+	}
+
+	relPath, err := filepath.Rel(gitRoot, absPath)
+	if err != nil {
+		relPath = absPath
+	}
+
+	// Extract record with AST enabled (required for section mutations).
+	parseAST := true
+	ext := &extract.MarkdownExtractor{ParseAST: &parseAST}
+	record, err := ext.Extract(relPath, content)
+	if err != nil {
+		return nil, nil, fmt.Errorf("extracting %s: %w", input.Path, err)
+	}
+
+	// Load effective schema.
+	effective, err := rules.ResolveForRecord(dir, absPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolving .stem for %s: %w", input.Path, err)
+	}
+
+	// Build fieldOps from Fields (replace) and AppendFields (append).
+	type fieldOp struct {
+		Field  string
+		Value  string
+		Append bool
+	}
+	var ops []fieldOp
+	// Stable iteration order: sort keys.
+	fieldKeys := make([]string, 0, len(input.Fields))
+	for k := range input.Fields {
+		fieldKeys = append(fieldKeys, k)
+	}
+	sort.Strings(fieldKeys)
+	for _, k := range fieldKeys {
+		ops = append(ops, fieldOp{Field: k, Value: input.Fields[k], Append: false})
+	}
+	appendKeys := make([]string, 0, len(input.AppendFields))
+	for k := range input.AppendFields {
+		appendKeys = append(appendKeys, k)
+	}
+	sort.Strings(appendKeys)
+	for _, k := range appendKeys {
+		ops = append(ops, fieldOp{Field: k, Value: input.AppendFields[k], Append: true})
+	}
+
+	if len(ops) == 0 {
+		return nil, nil, fmt.Errorf("no fields specified: provide fields or append_fields")
+	}
+
+	// Build proposals.
+	var proposals []proposal.Proposal
+	for _, op := range ops {
+		p, pErr := buildSetProposal(op.Field, op.Value, op.Append, relPath, effective, input.CreateSections)
+		if pErr != nil {
+			return nil, nil, pErr
+		}
+		proposals = append(proposals, p)
+	}
+
+	// Pre-validate enum constraints (same as CLI set command).
+	if effective != nil {
+		for _, op := range ops {
+			if op.Append {
+				continue
+			}
+			sf, ok := effective.Schema[op.Field]
+			if !ok {
+				continue
+			}
+			if sf.Type == "section" {
+				continue
+			}
+			if sf.Type == "enum" && len(sf.Values) > 0 && op.Value != "" {
+				valid := false
+				for _, v := range sf.Values {
+					if v == op.Value {
+						valid = true
+						break
+					}
+				}
+				if !valid {
+					return nil, nil, fmt.Errorf("value %q not in allowed values for %s: [%s]",
+						op.Value, op.Field, strings.Join(sf.Values, ", "))
+				}
+			}
+		}
+	}
+
+	// Dry-run mode: return previews without modifying files.
+	if input.DryRun {
+		var previews []string
+		for _, p := range proposals {
+			switch p.Type {
+			case proposal.SetField:
+				previews = append(previews, fmt.Sprintf("would set %s = %q", p.Field, p.Value))
+			case proposal.SetSection:
+				mode := p.Mode
+				if mode == "" {
+					mode = "replace"
+				}
+				previews = append(previews, fmt.Sprintf("would %s section %s (%s)", mode, p.Heading, p.Field))
+			}
+		}
+		result := &setResult{
+			Version:  1,
+			Kind:     "rootline/set",
+			DryRun:   true,
+			Previews: previews,
+		}
+		return jsonResult(result)
+	}
+
+	// Save original content for rollback.
+	originalContent := make([]byte, len(content))
+	copy(originalContent, content)
+
+	// Apply proposals via fix.ApplyProposals.
+	report := &proposal.Report{
+		Version:   1,
+		Kind:      "rootline/proposals",
+		Proposals: proposals,
+	}
+	recordMap := []*extract.Record{record}
+	if err := fix.ApplyProposals(ctx, report, gitRoot, recordMap); err != nil {
+		return nil, nil, fmt.Errorf("applying changes: %w", err)
+	}
+
+	// Post-validate: re-read, re-extract, validate; rollback on failure.
+	newContent, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("re-reading %s after mutation: %w", input.Path, err)
+	}
+	newRecord, err := ext.Extract(absPath, newContent)
+	if err != nil {
+		_ = os.WriteFile(absPath, originalContent, 0o644)
+		return nil, nil, fmt.Errorf("re-extracting %s after mutation (rolled back): %w", input.Path, err)
+	}
+	freshEffective, freshErr := rules.ResolveForRecord(dir, absPath)
+	if freshErr != nil {
+		freshEffective = effective
+	}
+	if freshEffective != nil {
+		valErrs := rules.Validate(ctx, newRecord, freshEffective)
+		if len(valErrs) > 0 {
+			_ = os.WriteFile(absPath, originalContent, 0o644)
+			var msgs []string
+			for _, e := range valErrs {
+				msgs = append(msgs, fmt.Sprintf("%s: %s", e.Field, e.Message))
+			}
+			return nil, nil, fmt.Errorf("post-mutation validation failed (rolled back): %s", strings.Join(msgs, "; "))
+		}
+	}
+
+	// Build summary of applied changes.
+	var applied []string
+	for _, p := range report.Proposals {
+		switch p.Type {
+		case proposal.SetField:
+			applied = append(applied, fmt.Sprintf("set %s = %q", p.Field, p.Value))
+		case proposal.SetSection:
+			mode := p.Mode
+			if mode == "" {
+				mode = "replace"
+			}
+			applied = append(applied, fmt.Sprintf("%s section %s", mode, p.Heading))
+		}
+	}
+
+	result := &setResult{
+		Version: 1,
+		Kind:    "rootline/set",
+		Applied: applied,
+	}
+	return jsonResult(result)
+}
+
+// buildSetProposal creates a Proposal for the set tool, consulting the schema to determine type.
+func buildSetProposal(field, value string, appendMode bool, relPath string, effective *rules.StemFile, createSections bool) (proposal.Proposal, error) {
+	if effective != nil {
+		if sf, ok := effective.Schema[field]; ok && sf.Type == "section" {
+			heading := sf.Heading
+			if heading == "" {
+				heading = "## " + field
+			}
+			mode := "replace"
+			if appendMode {
+				mode = "append"
+			} else if createSections {
+				mode = "create"
+			}
+			return proposal.Proposal{
+				Type:    proposal.SetSection,
+				Field:   field,
+				Heading: heading,
+				Value:   value,
+				Mode:    mode,
+				Paths:   []string{relPath},
+			}, nil
+		}
+	}
+
+	if appendMode {
+		return proposal.Proposal{}, fmt.Errorf("append is only supported for section fields; %q is not a section", field)
+	}
+
+	return proposal.Proposal{
+		Type:        proposal.SetField,
+		Field:       field,
+		Value:       value,
+		Paths:       []string{relPath},
+		Description: fmt.Sprintf("set %s to %q", field, value),
+	}, nil
+}
+
+// findGitRoot walks up from dir looking for a .git directory.
+func findGitRoot(dir string) (string, error) {
+	current := dir
+	for {
+		if _, err := os.Stat(filepath.Join(current, ".git")); err == nil {
+			return current, nil
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", fmt.Errorf("no .git directory found above %s", dir)
+		}
+		current = parent
+	}
 }
 
 // Helpers
