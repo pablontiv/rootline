@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	migrateDryRun bool
-	migrateFrom   string
-	migrateRename string
-	migrateSplit  bool
+	migrateDryRun   bool
+	migrateFrom     string
+	migrateRename   string
+	migrateSplit    bool
+	migrateScaffold bool
 )
 
 var migrateCmd = &cobra.Command{
@@ -40,6 +41,7 @@ func init() {
 	migrateCmd.Flags().StringVar(&migrateFrom, "from", "", "compare against specified .stem file instead of git HEAD")
 	migrateCmd.Flags().StringVar(&migrateRename, "rename", "", "rename a field: old_field=new_field")
 	migrateCmd.Flags().BoolVar(&migrateSplit, "split", false, "split a flat .stem into hierarchical .stem files per level")
+	migrateCmd.Flags().BoolVar(&migrateScaffold, "scaffold", false, "scaffold missing required section fields in documents")
 	rootCmd.AddCommand(migrateCmd)
 }
 
@@ -49,6 +51,9 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 	}
 	if migrateRename != "" {
 		return runMigrateRename(cmd, args)
+	}
+	if migrateScaffold {
+		return runMigrateScaffold(cmd, args)
 	}
 	return runMigrateDiff(cmd, args)
 }
@@ -317,6 +322,70 @@ func renderMigrateBatchTable(cmd *cobra.Command, batch *MigrateBatchResult) erro
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Summary: %d stems checked, %d changes (%d breaking)\n",
 		batch.Summary.StemsChecked, batch.Summary.TotalChanges, batch.Summary.BreakingCount)
+	return nil
+}
+
+// --- Scaffold operation ---
+
+func runMigrateScaffold(cmd *cobra.Command, args []string) error {
+	rootPath := "."
+	if len(args) > 0 {
+		rootPath = args[0]
+	}
+
+	absPath, err := filepath.Abs(rootPath)
+	if err != nil {
+		return fmt.Errorf("resolving path: %w", err)
+	}
+
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", rootPath, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("--scaffold requires a directory path, got: %s", rootPath)
+	}
+
+	op := &migrate.ScaffoldOperation{
+		RootPath: absPath,
+		DryRun:   migrateDryRun,
+	}
+
+	result, err := op.Execute()
+	if err != nil {
+		return fmt.Errorf("scaffolding sections: %w", err)
+	}
+
+	if outputFormat != "table" {
+		return outputJSON(cmd, result, false)
+	}
+	return renderMigrateScaffoldTable(cmd, result)
+}
+
+func renderMigrateScaffoldTable(cmd *cobra.Command, result *migrate.ScaffoldResult) error {
+	w := cmd.OutOrStdout()
+
+	if result.SectionsAdded == 0 {
+		_, _ = fmt.Fprintln(w, "no missing required sections found")
+		return nil
+	}
+
+	prefix := ""
+	if migrateDryRun {
+		prefix = "would "
+	}
+
+	_, _ = fmt.Fprintf(w, "Sections %sadded:\n\n", prefix)
+
+	headers := []string{"File", "Heading"}
+	var rows [][]string
+	for _, d := range result.Details {
+		rows = append(rows, []string{d.File, d.Heading})
+	}
+	renderTable(w, headers, rows)
+
+	_, _ = fmt.Fprintf(w, "\nSummary: %d section(s) %sadded to %d file(s)\n",
+		result.SectionsAdded, prefix, result.FilesScaffolded)
 	return nil
 }
 
