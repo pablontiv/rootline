@@ -739,3 +739,35 @@ func TestDetectCorrectValue_NoSuggestionWhenTooFar(t *testing.T) {
 		t.Errorf("got %d proposals, want 0 (value too far from any candidate)", len(proposals))
 	}
 }
+
+func TestProposal_SetFieldType(t *testing.T) {
+	p := Proposal{
+		Type:  SetField,
+		Field: "estado",
+		Value: "listo-para-implementar",
+		Paths: []string{"backlog/B023.md"},
+	}
+	if p.Type != "set_field" {
+		t.Errorf("type = %q, want set_field", p.Type)
+	}
+}
+
+func TestProposal_SetSectionType(t *testing.T) {
+	p := Proposal{
+		Type:    SetSection,
+		Field:   "investigacion",
+		Value:   "Decision: GO\nEvidence: ...",
+		Heading: "## Investigación",
+		Mode:    "replace",
+		Paths:   []string{"backlog/B023.md"},
+	}
+	if p.Type != "set_section" {
+		t.Errorf("type = %q, want set_section", p.Type)
+	}
+	if p.Heading != "## Investigación" {
+		t.Errorf("heading = %q", p.Heading)
+	}
+	if p.Mode != "replace" {
+		t.Errorf("mode = %q", p.Mode)
+	}
+}
