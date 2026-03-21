@@ -282,6 +282,45 @@ func TestScanBodyFields_ValueWithParens(t *testing.T) {
 	}
 }
 
+func TestMarkdownExtractor_SectionsField(t *testing.T) {
+	content := `---
+estado: bloqueado
+---
+
+# Title
+
+## Contexto
+
+Some context here.
+
+## Desbloqueo
+
+What needs to happen.
+
+## Investigación
+
+Evidence found.
+`
+	parseAST := true
+	ext := &MarkdownExtractor{ParseAST: &parseAST}
+	rec, err := ext.Extract("test.md", []byte(content))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if len(rec.Sections) == 0 {
+		t.Fatal("expected Sections to be populated")
+	}
+	if got := rec.Sections["## Contexto"]; got == "" {
+		t.Error("missing section '## Contexto'")
+	}
+	if !strings.Contains(rec.Sections["## Contexto"], "Some context here.") {
+		t.Errorf("section content = %q", rec.Sections["## Contexto"])
+	}
+	if got := rec.Sections["## Desbloqueo"]; !strings.Contains(got, "What needs to happen.") {
+		t.Errorf("desbloqueo content = %q", got)
+	}
+}
+
 // generateMarkdown creates a markdown document with frontmatter and n body lines.
 func generateMarkdown(n int) []byte {
 	var b strings.Builder

@@ -31,6 +31,7 @@ type Record struct {
 	Type        string            `json:"type"`
 	Frontmatter map[string]any    `json:"frontmatter"`
 	Body        string            `json:"body"`
+	Sections    map[string]string `json:"sections,omitempty"`
 	AST         ast.Node          `json:"-"`
 	Links       []Link            `json:"links,omitempty"`
 	Derived     map[string]any    `json:"derived,omitempty"`
@@ -83,9 +84,20 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 		record.Body = text
 		record.Links = ParseLinks(record.Body)
 		if record.Body != "" && m.shouldParseAST() {
-			reader := gmtext.NewReader([]byte(record.Body))
+			source := []byte(record.Body)
+			reader := gmtext.NewReader(source)
 			parser := goldmark.DefaultParser()
 			record.AST = parser.Parse(reader)
+			sections := ExtractSections(record.AST, source)
+			if len(sections) > 0 {
+				record.Sections = make(map[string]string, len(sections))
+				for _, sec := range sections {
+					if sec.Level > 0 {
+						key := strings.Repeat("#", sec.Level) + " " + sec.Heading
+						record.Sections[key] = strings.TrimSpace(sec.Content)
+					}
+				}
+			}
 		}
 		return record, nil
 	}
@@ -123,9 +135,20 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 
 	// Parse body into AST if non-empty and enabled.
 	if record.Body != "" && m.shouldParseAST() {
-		reader := gmtext.NewReader([]byte(record.Body))
+		source := []byte(record.Body)
+		reader := gmtext.NewReader(source)
 		parser := goldmark.DefaultParser()
 		record.AST = parser.Parse(reader)
+		sections := ExtractSections(record.AST, source)
+		if len(sections) > 0 {
+			record.Sections = make(map[string]string, len(sections))
+			for _, sec := range sections {
+				if sec.Level > 0 {
+					key := strings.Repeat("#", sec.Level) + " " + sec.Heading
+					record.Sections[key] = strings.TrimSpace(sec.Content)
+				}
+			}
+		}
 	}
 
 	return record, nil
