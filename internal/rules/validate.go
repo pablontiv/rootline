@@ -40,6 +40,27 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 			continue
 		}
 
+		// section type: validate heading presence in record.Sections, not frontmatter
+		if field.Type == "section" {
+			if field.Required {
+				heading := field.Heading
+				if record.Sections == nil || record.Sections[heading] == "" {
+					severity := field.Severity
+					if severity == "" {
+						severity = "error"
+					}
+					errs = append(errs, ValidationError{
+						Rule:     "required",
+						Field:    name,
+						Message:  fmt.Sprintf("required section %q (%s) is missing", heading, name),
+						Source:   record.Path,
+						Severity: severity,
+					})
+				}
+			}
+			continue // section fields don't need enum/string frontmatter validation
+		}
+
 		// required: true → field must exist
 		if field.Required && !exists {
 			// Layer 1: Skip for aggregate-computed fields on index files.
