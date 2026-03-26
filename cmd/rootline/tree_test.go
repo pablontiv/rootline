@@ -271,7 +271,7 @@ func TestBuildTree_Basic(t *testing.T) {
 		{Path: "doc2.md", Frontmatter: map[string]any{"estado": "Pending"}},
 	}
 
-	root := buildTree(records, "project")
+	root := buildTree(records, "project", "estado")
 	if root.Name != "project" {
 		t.Errorf("root name = %q, want project", root.Name)
 	}
@@ -293,7 +293,7 @@ func TestBuildTree_WithSubdirs(t *testing.T) {
 		{Path: "other/c.md", Frontmatter: map[string]any{"estado": "Pending"}},
 	}
 
-	root := buildTree(records, "root")
+	root := buildTree(records, "root", "estado")
 	if root.Total != 3 {
 		t.Errorf("total = %d, want 3", root.Total)
 	}
@@ -318,7 +318,7 @@ func TestBuildTree_NoEstado(t *testing.T) {
 		{Path: "doc.md", Frontmatter: map[string]any{"title": "Hello"}},
 	}
 
-	root := buildTree(records, "root")
+	root := buildTree(records, "root", "estado")
 	if root.Total != 1 {
 		t.Errorf("total = %d, want 1", root.Total)
 	}
@@ -328,7 +328,7 @@ func TestBuildTree_NoEstado(t *testing.T) {
 }
 
 func TestBuildTree_EmptyRecords(t *testing.T) {
-	root := buildTree(nil, "empty")
+	root := buildTree(nil, "empty", "estado")
 	if root.Total != 0 {
 		t.Errorf("total = %d, want 0", root.Total)
 	}

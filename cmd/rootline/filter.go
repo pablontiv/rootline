@@ -30,7 +30,7 @@ func filterRecords(ctx context.Context, records []*extract.Record, wheres []stri
 
 	var filtered []*extract.Record
 	for _, rec := range records {
-		match, err := query.MatchRecord(ctx, program, rec)
+		match, err := query.MatchRecord(ctx, program, rec, nil)
 		if err != nil {
 			return nil, err
 		}

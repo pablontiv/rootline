@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var byDomainFlag string
+
 var describeCmd = &cobra.Command{
 	Use:   "describe <path>",
 	Short: "Show effective schema for a directory",
@@ -20,6 +22,7 @@ var describeCmd = &cobra.Command{
 }
 
 func init() {
+	describeCmd.Flags().StringVar(&byDomainFlag, "by-domain", "", "filter output to fields matching a domain")
 	rootCmd.AddCommand(describeCmd)
 }
 
@@ -59,6 +62,17 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 
 	result := rules.NewDescribeResult(relPath, entries, effective)
 
+	// Filter by domain if requested
+	if byDomainFlag != "" {
+		filtered := make(map[string]rules.SchemaField)
+		for name, field := range result.Schema {
+			if field.Domain == byDomainFlag {
+				filtered[name] = field
+			}
+		}
+		result.Schema = filtered
+	}
+
 	// Add hint when no schema is found
 	if effective == nil || len(effective.Schema) == 0 {
 		result.Hints = append(result.Hints, "No .stem schema found. Run 'rootline init <path>' to infer schema from existing files.")
@@ -90,7 +104,11 @@ func renderDescribeTable(cmd *cobra.Command, r *rules.DescribeResult) error {
 		if len(f.Values) > 0 {
 			vals = strings.Join(f.Values, ", ")
 		}
-		rows = append(rows, []string{k, f.Type, req, vals, f.Source})
+		typeStr := f.Type
+		if f.Domain != "" {
+			typeStr = fmt.Sprintf("%s (%s)", f.Type, f.Domain)
+		}
+		rows = append(rows, []string{k, typeStr, req, vals, f.Source})
 	}
 
 	renderTable(cmd.OutOrStdout(), headers, rows)

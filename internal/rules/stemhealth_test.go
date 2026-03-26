@@ -559,3 +559,180 @@ schema:
 		t.Errorf("expected 2 yaml-valid pass checks, got %d", yamlChecks)
 	}
 }
+
+func TestStemHealth_DomainTypeCompat(t *testing.T) {
+	dir := t.TempDir()
+	// lifecycle_state expects enum, but field declares integer
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  ciclos:
+    type: integer
+    domain: lifecycle_state
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, c := range result.Checks {
+		if c.Name == "domain-type-compat" && c.Status == "warn" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected domain-type-compat warning for lifecycle_state on integer field")
+	}
+}
+
+func TestStemHealth_DomainTypeCompat_Compatible(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: enum
+    domain: lifecycle_state
+    values: [draft, active]
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, c := range result.Checks {
+		if c.Name == "domain-type-compat" {
+			t.Errorf("unexpected domain-type-compat check: %s", c.Message)
+		}
+	}
+}
+
+func TestStemHealth_DomainMissingAttrs(t *testing.T) {
+	dir := t.TempDir()
+	// lifecycle_state requires "values" but none declared
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    domain: lifecycle_state
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, c := range result.Checks {
+		if c.Name == "domain-missing-attrs" && c.Status == "warn" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected domain-missing-attrs warning for lifecycle_state without values")
+	}
+}
+
+func TestStemHealth_DomainCustomNoType(t *testing.T) {
+	dir := t.TempDir()
+	// Custom domain without explicit type
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  velocity:
+    domain: acme/sprint_velocity
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, c := range result.Checks {
+		if c.Name == "domain-custom-no-type" && c.Status == "fail" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected domain-custom-no-type error for custom domain without type")
+	}
+}
+
+func TestStemHealth_DomainCustomWithType(t *testing.T) {
+	dir := t.TempDir()
+	// Custom domain WITH explicit type — should be fine
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  velocity:
+    domain: acme/sprint_velocity
+    type: integer
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, c := range result.Checks {
+		if c.Name == "domain-custom-no-type" {
+			t.Errorf("unexpected domain-custom-no-type check: %s", c.Message)
+		}
+	}
+}
+
+func TestStemHealth_DomainDuplicateScope(t *testing.T) {
+	dir := t.TempDir()
+	// Two fields with same domain, both global (no match)
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  estado1:
+    type: enum
+    domain: lifecycle_state
+    values: [a, b]
+  estado2:
+    type: enum
+    domain: lifecycle_state
+    values: [c, d]
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, c := range result.Checks {
+		if c.Name == "domain-duplicate-scope" && c.Status == "fail" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected domain-duplicate-scope error for two global fields with same domain")
+	}
+}
+
+func TestStemHealth_DomainDuplicateScope_DisjointMatch(t *testing.T) {
+	dir := t.TempDir()
+	// Two fields with same domain but disjoint match patterns — should be OK
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  estado_epic:
+    type: enum
+    domain: lifecycle_state
+    values: [a, b]
+    match: "E*"
+  estado_feature:
+    type: enum
+    domain: lifecycle_state
+    values: [c, d]
+    match: "F*"
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, c := range result.Checks {
+		if c.Name == "domain-duplicate-scope" {
+			t.Errorf("unexpected domain-duplicate-scope check: %s", c.Message)
+		}
+	}
+}

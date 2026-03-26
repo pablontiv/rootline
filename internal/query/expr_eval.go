@@ -23,7 +23,9 @@ func CompileWhere(whereExpr string) (*vm.Program, error) {
 // BuildEnv constructs an expr environment from a Record.
 // Frontmatter fields are promoted to top-level keys alongside path, body, and type.
 // Derived fields override frontmatter (no prefix).
-func BuildEnv(rec *extract.Record) map[string]any {
+// If domainAliases is non-nil, each domain name is added as an alias
+// pointing to the value of the corresponding field.
+func BuildEnv(rec *extract.Record, domainAliases map[string]string) map[string]any {
 	env := map[string]any{
 		"path": rec.Path,
 		"body": rec.Body,
@@ -38,13 +40,23 @@ func BuildEnv(rec *extract.Record) map[string]any {
 	if rec.Sections != nil {
 		env["sections"] = rec.Sections
 	}
+	// Inject domain aliases: domain_name → field_value
+	for domain, fieldName := range domainAliases {
+		if _, exists := env[domain]; exists {
+			continue // don't shadow existing fields
+		}
+		if val, ok := env[fieldName]; ok {
+			env[domain] = val
+		}
+	}
 	return env
 }
 
 // MatchRecord evaluates a compiled where expression against a record.
 // Returns true if the record matches the expression.
-func MatchRecord(_ context.Context, program *vm.Program, rec *extract.Record) (bool, error) {
-	env := BuildEnv(rec)
+// domainAliases maps domain names to field names for virtual alias resolution.
+func MatchRecord(_ context.Context, program *vm.Program, rec *extract.Record, domainAliases map[string]string) (bool, error) {
+	env := BuildEnv(rec, domainAliases)
 	output, err := expr.Run(program, env)
 	if err != nil {
 		// Undefined variable access returns false (no match), not error
@@ -78,7 +90,7 @@ func ExecuteExpr(ctx context.Context, records []*extract.Record, whereExpr strin
 			filtered = append(filtered, rec)
 			continue
 		}
-		match, err := MatchRecord(ctx, program, rec)
+		match, err := MatchRecord(ctx, program, rec, nil)
 		if err != nil {
 			return nil, err
 		}

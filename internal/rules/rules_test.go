@@ -628,6 +628,59 @@ schema:
 	}
 }
 
+func TestParseStem_Domain(t *testing.T) {
+	content := []byte(`
+version: 2
+schema:
+  estado:
+    type: enum
+    domain: lifecycle_state
+    values: [draft, active, closed]
+  titulo:
+    type: string
+    domain: title
+  custom_field:
+    type: integer
+    domain: acme/sprint_velocity
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	estado := stem.Schema["estado"]
+	if estado.Domain != "lifecycle_state" {
+		t.Errorf("estado.Domain = %q, want %q", estado.Domain, "lifecycle_state")
+	}
+	titulo := stem.Schema["titulo"]
+	if titulo.Domain != "title" {
+		t.Errorf("titulo.Domain = %q, want %q", titulo.Domain, "title")
+	}
+	custom := stem.Schema["custom_field"]
+	if custom.Domain != "acme/sprint_velocity" {
+		t.Errorf("custom_field.Domain = %q, want %q", custom.Domain, "acme/sprint_velocity")
+	}
+}
+
+func TestParseStem_DomainAbsent(t *testing.T) {
+	content := []byte(`
+version: 2
+schema:
+  estado:
+    type: enum
+    values: [draft, active, closed]
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	estado := stem.Schema["estado"]
+	if estado.Domain != "" {
+		t.Errorf("estado.Domain = %q, want empty", estado.Domain)
+	}
+}
+
 func TestParseStem_NoStructural(t *testing.T) {
 	content := []byte("version: 2\n")
 	dir := t.TempDir()

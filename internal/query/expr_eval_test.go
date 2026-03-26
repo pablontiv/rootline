@@ -38,7 +38,7 @@ func TestMatchRecord_Eq(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestMatchRecord_Ne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestMatchRecord_In(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestMatchRecord_And(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestMatchRecord_Or(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestMatchRecord_Contains(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestMatchRecord_NoMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestMatchRecord_UndefinedField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestMatchRecord_NilCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestMatchRecord_TypeMismatch_NumericFieldStringCompare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatalf("expected no error on type mismatch, got: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestMatchRecord_BooleanLiteral_True(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestMatchRecord_BooleanLiteral_False(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestMatchRecord_FieldAbsent_NilCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestMatchRecord_FieldAbsent_EqCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -361,7 +361,7 @@ func TestMatchRecord_IsIndex_True(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +380,7 @@ func TestMatchRecord_IsIndex_False(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -399,11 +399,64 @@ func TestMatchRecord_SectionField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompileWhere: %v", err)
 	}
-	match, err := MatchRecord(context.Background(), prog, rec)
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
 	if err != nil {
 		t.Fatalf("MatchRecord: %v", err)
 	}
 	if !match {
 		t.Error("expected match for section containing 'API key'")
+	}
+}
+
+func TestMatchRecord_DomainAlias(t *testing.T) {
+	rec := makeExprRecords()[0] // estado: "Pending"
+	prog, err := CompileWhere("lifecycle_state == 'Pending'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliases := map[string]string{"lifecycle_state": "estado"}
+	match, err := MatchRecord(context.Background(), prog, rec, aliases)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !match {
+		t.Error("expected match: lifecycle_state should resolve to estado")
+	}
+}
+
+func TestMatchRecord_DomainAlias_NoShadow(t *testing.T) {
+	// A domain name that matches an existing field should NOT shadow it
+	rec := &extract.Record{
+		Path:        "test.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"estado": "Pending", "lifecycle_state": "custom_value"},
+	}
+	prog, err := CompileWhere("lifecycle_state == 'custom_value'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliases := map[string]string{"lifecycle_state": "estado"}
+	match, err := MatchRecord(context.Background(), prog, rec, aliases)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !match {
+		t.Error("expected match: existing field should not be shadowed by domain alias")
+	}
+}
+
+func TestMatchRecord_DomainAlias_NilAliases(t *testing.T) {
+	rec := makeExprRecords()[0]
+	prog, err := CompileWhere("estado == 'Pending'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// nil aliases = backward compatible behavior
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !match {
+		t.Error("expected match with nil aliases")
 	}
 }

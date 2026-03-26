@@ -82,7 +82,18 @@ func runTree(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("filtering records: %w", err)
 	}
 
-	root := buildTree(records, filepath.Base(absRoot))
+	// Resolve lifecycle field via domain lookup with fallback
+	estadoField := "estado"
+	entries, walkErr := rules.WalkUp(absRoot)
+	if walkErr == nil {
+		if eff := rules.MergeStemFiles(entries); eff != nil {
+			if name, found := rules.FindFieldByDomain(eff.Schema, "lifecycle_state", absRoot); found {
+				estadoField = name
+			}
+		}
+	}
+
+	root := buildTree(records, filepath.Base(absRoot), estadoField)
 
 	if outputFormat == "json" {
 		result := &TreeResult{Version: 1, Kind: "rootline/tree", Root: root}
@@ -97,7 +108,7 @@ func runTree(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func buildTree(records []*extract.Record, rootName string) *treeNode {
+func buildTree(records []*extract.Record, rootName string, estadoField string) *treeNode {
 	root := &treeNode{Name: rootName, Path: rootName}
 
 	for _, rec := range records {
@@ -116,7 +127,7 @@ func buildTree(records []*extract.Record, rootName string) *treeNode {
 
 		// Create leaf node for the file
 		estado := ""
-		if e, ok := rec.EffectiveField("estado"); ok {
+		if e, ok := rec.EffectiveField(estadoField); ok {
 			estado = fmt.Sprintf("%v", e)
 		}
 		leaf := &treeNode{

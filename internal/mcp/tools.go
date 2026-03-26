@@ -86,7 +86,8 @@ type ValidateInput struct {
 
 // DescribeInput is the input for the describe tool.
 type DescribeInput struct {
-	Path string `json:"path" jsonschema:"directory to describe (absolute path)"`
+	Path   string `json:"path" jsonschema:"directory to describe (absolute path)"`
+	Domain string `json:"domain,omitempty" jsonschema:"filter output to fields matching this domain (e.g. lifecycle_state)"`
 }
 
 // TreeInput is the input for the tree tool.
@@ -215,6 +216,18 @@ func handleDescribe(ctx context.Context, _ *mcp.CallToolRequest, input DescribeI
 
 	effective := rules.MergeStemFiles(entries)
 	result := rules.NewDescribeResult(input.Path, entries, effective)
+
+	// Filter by domain if requested
+	if input.Domain != "" {
+		filtered := make(map[string]rules.SchemaField)
+		for name, field := range result.Schema {
+			if field.Domain == input.Domain {
+				filtered[name] = field
+			}
+		}
+		result.Schema = filtered
+	}
+
 	return jsonResult(result)
 }
 
@@ -264,7 +277,18 @@ func handleTree(ctx context.Context, _ *mcp.CallToolRequest, input TreeInput) (*
 		return nil, nil, err
 	}
 
-	root := buildTree(filtered, filepath.Base(absRoot))
+	// Resolve lifecycle field via domain lookup with fallback
+	estadoField := "estado"
+	stemEntries, walkErr := rules.WalkUp(absRoot)
+	if walkErr == nil {
+		if eff := rules.MergeStemFiles(stemEntries); eff != nil {
+			if name, found := rules.FindFieldByDomain(eff.Schema, "lifecycle_state", absRoot); found {
+				estadoField = name
+			}
+		}
+	}
+
+	root := buildTree(filtered, filepath.Base(absRoot), estadoField)
 	result := &treeResult{Version: 1, Kind: "rootline/tree", Root: root}
 	return jsonResult(result)
 }
@@ -298,13 +322,28 @@ func handleStats(ctx context.Context, _ *mcp.CallToolRequest, input StatsInput) 
 		return nil, nil, err
 	}
 
+	// Resolve field names via domain lookup with fallback
+	estadoField := "estado"
+	tipoField := "tipo"
+	entries, walkErr := rules.WalkUp(absRoot)
+	if walkErr == nil {
+		if eff := rules.MergeStemFiles(entries); eff != nil {
+			if name, found := rules.FindFieldByDomain(eff.Schema, "lifecycle_state", absRoot); found {
+				estadoField = name
+			}
+			if name, found := rules.FindFieldByDomain(eff.Schema, "record_type", absRoot); found {
+				tipoField = name
+			}
+		}
+	}
+
 	byEstado := make(map[string]int)
 	byTipo := make(map[string]int)
 	for _, rec := range filtered {
-		if v, ok := rec.EffectiveField("estado"); ok {
+		if v, ok := rec.EffectiveField(estadoField); ok {
 			byEstado[fmt.Sprintf("%v", v)]++
 		}
-		if v, ok := rec.EffectiveField("tipo"); ok {
+		if v, ok := rec.EffectiveField(tipoField); ok {
 			byTipo[fmt.Sprintf("%v", v)]++
 		}
 	}
@@ -794,7 +833,7 @@ func filterWhere(ctx context.Context, records []*extract.Record, wheres []string
 
 	var filtered []*extract.Record
 	for _, rec := range records {
-		match, matchErr := query.MatchRecord(ctx, program, rec)
+		match, matchErr := query.MatchRecord(ctx, program, rec, nil)
 		if matchErr != nil {
 			continue
 		}
@@ -815,7 +854,7 @@ func jsonResult(v any) (*mcp.CallToolResult, any, error) {
 	}, nil, nil
 }
 
-func buildTree(records []*extract.Record, rootName string) *treeNode {
+func buildTree(records []*extract.Record, rootName string, estadoField string) *treeNode {
 	root := &treeNode{Name: rootName, Path: rootName}
 
 	for _, rec := range records {
@@ -832,7 +871,7 @@ func buildTree(records []*extract.Record, rootName string) *treeNode {
 		}
 
 		estado := ""
-		if e, ok := rec.EffectiveField("estado"); ok {
+		if e, ok := rec.EffectiveField(estadoField); ok {
 			estado = fmt.Sprintf("%v", e)
 		}
 		leaf := &treeNode{
