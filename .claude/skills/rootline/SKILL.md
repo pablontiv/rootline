@@ -113,11 +113,12 @@ Inspect effective schemas and scaffold new documents.
 ```bash
 rootline describe <path> --output json              # Show merged schema
 rootline describe <dir> --field schema.id.next      # Get next auto-ID
+rootline describe <dir> --by-domain lifecycle_state # Filter by semantic domain
 rootline new <filepath> --dry-run                   # Preview scaffold
 rootline new <filepath>                             # Create document
 ```
 
-Key flags: `--field` (extraction), `--dry-run`, `--force`
+Key flags: `--field` (extraction), `--by-domain` (filter by domain), `--dry-run`, `--force`
 
 **Procedure**: For describe — show schema as table with field/type/required/values/source. For new — get next ID via describe, preview with dry-run, create, then validate.
 

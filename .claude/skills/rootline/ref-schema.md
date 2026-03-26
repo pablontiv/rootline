@@ -9,6 +9,7 @@ rootline describe <path> --output json              # Full schema
 rootline describe <path> --output table             # Human-readable table
 rootline describe <dir> --field schema.id.next      # Extract next auto-ID
 rootline describe <dir> --field schema.estado.values # Extract enum values
+rootline describe <dir> --by-domain lifecycle_state # Filter by semantic domain
 ```
 
 ### Procedure
