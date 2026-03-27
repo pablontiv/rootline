@@ -1,6 +1,7 @@
 package infer
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -132,5 +133,52 @@ func TestDetectStructural_EmptyDir(t *testing.T) {
 
 	if len(inferences) != 0 {
 		t.Errorf("expected no inferences for empty dir, got: %v", inferences)
+	}
+}
+
+func TestDetectStructural_NamingInconsistency(t *testing.T) {
+	root := t.TempDir()
+	for i := 1; i <= 8; i++ {
+		name := fmt.Sprintf("E%02d-feature-%d", i, i)
+		mkDir(t, root, []string{name}, nil)
+	}
+	mkDir(t, root, []string{"notes"}, nil)
+	mkDir(t, root, []string{"archive"}, nil)
+
+	got := DetectStructural(root)
+	found := false
+	for _, inf := range got {
+		if inf.Type == "naming_inconsistency" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected naming_inconsistency inference for outliers")
+	}
+}
+
+func TestDetectStructural_NoNamingInconsistency_AllMatch(t *testing.T) {
+	root := t.TempDir()
+	for i := 1; i <= 5; i++ {
+		name := fmt.Sprintf("E%02d-feature-%d", i, i)
+		mkDir(t, root, []string{name}, nil)
+	}
+	got := DetectStructural(root)
+	for _, inf := range got {
+		if inf.Type == "naming_inconsistency" {
+			t.Error("should not flag when all children match")
+		}
+	}
+}
+
+func TestDetectStructural_NoNamingInconsistency_NoPattern(t *testing.T) {
+	root := t.TempDir()
+	mkDir(t, root, []string{"alpha", "beta", "gamma", "delta"}, nil)
+	got := DetectStructural(root)
+	for _, inf := range got {
+		if inf.Type == "naming_inconsistency" {
+			t.Error("should not flag when no dominant pattern exists")
+		}
 	}
 }

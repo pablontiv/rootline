@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 )
 
 const (
@@ -12,7 +13,62 @@ const (
 	structuralIndexThreshold   = 0.90
 	structuralChildPaddingDown = 0.8
 	structuralChildPaddingUp   = 1.2
+	namingConsistencyThreshold = 0.70
 )
+
+var namingPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`^[A-Z]\d{2,3}-.+$`), // E01-foo, F02-bar, S001-baz
+	regexp.MustCompile(`^\d{2,3}-.+$`),      // 01-foo, 001-bar
+}
+
+func detectNamingInconsistencies(dir string, children []os.DirEntry) []Inference {
+	if len(children) < 3 {
+		return nil
+	}
+
+	type patternResult struct {
+		pattern  *regexp.Regexp
+		matches  []string
+		outliers []string
+	}
+
+	var best *patternResult
+	for _, pat := range namingPatterns {
+		pr := &patternResult{pattern: pat}
+		for _, c := range children {
+			if !c.IsDir() || (len(c.Name()) > 0 && c.Name()[0] == '.') {
+				continue
+			}
+			if pat.MatchString(c.Name()) {
+				pr.matches = append(pr.matches, c.Name())
+			} else {
+				pr.outliers = append(pr.outliers, c.Name())
+			}
+		}
+		total := len(pr.matches) + len(pr.outliers)
+		if total < 3 {
+			continue
+		}
+		ratio := float64(len(pr.matches)) / float64(total)
+		if ratio >= namingConsistencyThreshold && len(pr.outliers) > 0 {
+			if best == nil || len(pr.matches) > len(best.matches) {
+				best = pr
+			}
+		}
+	}
+
+	if best == nil {
+		return nil
+	}
+
+	total := len(best.matches) + len(best.outliers)
+	return []Inference{{
+		Type:    "naming_inconsistency",
+		Source:  dir,
+		Value:   best.pattern.String(),
+		Message: fmt.Sprintf("%d/%d children match pattern; outliers: %v", len(best.matches), total, best.outliers),
+	}}
+}
 
 // DetectStructural analyzes directory structure under scanRoot.
 // Returns []Inference with type "add_structural_rule".
@@ -35,8 +91,28 @@ func DetectStructural(scanRoot string) []Inference {
 		subdirs = append(subdirs, name)
 	}
 
-	if len(subdirs) < structuralMinSampleSize {
+	// Full-depth naming consistency check — runs before min sample size gate
+	// so deeper directories still get checked even if root has few children.
+	var namingInfs []Inference
+	//nolint:errcheck // walk errors are handled inside the callback; overall walk errors are non-fatal
+	_ = filepath.WalkDir(scanRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil || !d.IsDir() {
+			return nil
+		}
+		name := d.Name()
+		if len(name) > 0 && name[0] == '.' {
+			return filepath.SkipDir
+		}
+		children, readErr := os.ReadDir(path)
+		if readErr != nil {
+			return nil
+		}
+		namingInfs = append(namingInfs, detectNamingInconsistencies(path, children)...)
 		return nil
+	})
+
+	if len(subdirs) < structuralMinSampleSize {
+		return namingInfs
 	}
 
 	var result []Inference
@@ -116,5 +192,6 @@ func DetectStructural(scanRoot string) []Inference {
 		})
 	}
 
+	result = append(result, namingInfs...)
 	return result
 }
