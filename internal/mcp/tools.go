@@ -81,6 +81,7 @@ type QueryInput struct {
 	Where []string `json:"where,omitempty" jsonschema:"filter expressions (expr-lang syntax)"`
 	Count bool     `json:"count,omitempty" jsonschema:"return count instead of records"`
 	Limit int      `json:"limit,omitempty" jsonschema:"limit number of results (0 = unlimited)"`
+	Sort  string   `json:"sort,omitempty" jsonschema:"sort by fields (e.g. prioridad:asc,impact_score:desc)"`
 }
 
 // ValidateInput is the input for the validate tool.
@@ -149,6 +150,12 @@ func handleQuery(ctx context.Context, _ *mcp.CallToolRequest, input QueryInput) 
 		return nil, nil, fmt.Errorf("resolving path: %w", err)
 	}
 
+	// Parse sort keys early to fail fast.
+	sortKeys, err := query.ParseSortKeys(input.Sort)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parsing sort: %w", err)
+	}
+
 	reg := extract.NewRegistry()
 	records, err := index.Scan(ctx, absRoot, reg)
 	if err != nil {
@@ -161,6 +168,17 @@ func handleQuery(ctx context.Context, _ *mcp.CallToolRequest, input QueryInput) 
 	filtered, err := filterWhere(ctx, records, input.Where)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	// Sort after filtering, before limit.
+	if len(sortKeys) > 0 {
+		var schema map[string]rules.SchemaField
+		entries, walkErr := rules.WalkUp(absRoot)
+		if walkErr == nil && len(entries) > 0 {
+			merged := rules.MergeStemFiles(entries)
+			schema = merged.Schema
+		}
+		query.SortRecords(filtered, sortKeys, schema)
 	}
 
 	q := &query.Query{Count: input.Count, Limit: input.Limit}
