@@ -11,6 +11,8 @@ rootline query --where "tipo == 'task'" --where "estado == 'Pending'"  # AND
 rootline query --count                                    # Count only
 rootline query --limit 10                                 # Limit results
 rootline query --from docs/epics/                         # Scope to subtree
+rootline query --sort "prioridad:asc,impact_score:desc"   # Multi-key sort
+rootline query --where "estado == 'Pending'" --sort "prioridad:asc"  # Filter + sort
 ```
 
 ### Flags
@@ -21,6 +23,18 @@ rootline query --from docs/epics/                         # Scope to subtree
 | `--count` | Return count instead of records |
 | `--limit N` | Limit number of results (0 = unlimited) |
 | `--from <path>` | Root path to scan (default: `.`) |
+| `--sort "spec"` | Sort by fields (e.g. `"prioridad:asc,impact_score:desc"`) |
+
+### Sort specification
+
+The `--sort` flag accepts comma-separated `field:direction` pairs. Direction defaults to `asc`:
+
+- **Enum fields**: Sorted by index position in `.stem` schema `values` list
+- **Numeric fields**: Sorted numerically (int, float, or numeric strings)
+- **String fields**: Sorted lexicographically
+- **Missing values**: Always sort last regardless of direction
+
+Sort applies after `--where` filtering and before `--limit`.
 
 ### Expression syntax
 

@@ -16,6 +16,22 @@ rootline query --where 'status == "published"'
 rootline query --where 'tipo in ["lxc", "vm"]' --where 'estado not in ["Completed"]'
 ```
 
+### Sorting
+
+The `--sort` flag accepts a comma-separated list of `field:direction` pairs. Direction defaults to `asc` if omitted:
+
+```bash
+rootline query --sort "prioridad:asc,impact_score:desc"
+rootline query --where 'estado == "Pending"' --sort "prioridad:asc"
+```
+
+Sort type detection per field:
+1. **Enum fields**: If the field has a `.stem` schema with `type: enum` and `values: [...]`, sorts by index position in the values list.
+2. **Numeric fields**: If both values parse as float64, sorts numerically.
+3. **String fields**: Fallback to lexicographic comparison.
+
+Missing/nil values always sort last, regardless of direction. Sort applies after filtering and before limit.
+
 ### Queryable Fields
 
 | Field | Type | Description |
