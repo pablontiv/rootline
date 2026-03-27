@@ -178,6 +178,128 @@ func (g *Graph) BrokenLinks() []BrokenLink {
 	return broken
 }
 
+// TraceOptions controls trace traversal behavior.
+type TraceOptions struct {
+	Reverse  bool   // follow incoming edges instead of outgoing
+	MaxDepth int    // 0 = unlimited
+	EdgeType string // filter by edge type (field name); empty = all
+}
+
+// TraceNode represents a node discovered during trace traversal.
+type TraceNode struct {
+	Path   string `json:"path"`
+	Estado string `json:"estado,omitempty"`
+	Depth  int    `json:"depth"`
+	Via    string `json:"via,omitempty"`  // edge type that led here
+	From   string `json:"from,omitempty"` // source record path
+}
+
+// TraceResult is the output of a trace traversal.
+type TraceResult struct {
+	Version int         `json:"version"`
+	Kind    string      `json:"kind"`
+	Start   string      `json:"start"`
+	Nodes   []TraceNode `json:"nodes"`
+}
+
+// Trace performs BFS through the graph from a starting node,
+// following outgoing edges (or incoming if Reverse is true).
+func (g *Graph) Trace(start string, opts TraceOptions) *TraceResult {
+	result := &TraceResult{
+		Version: 1,
+		Kind:    "rootline/trace",
+		Start:   start,
+	}
+
+	if _, exists := g.Nodes[start]; !exists {
+		return result
+	}
+
+	// Build reverse edge index if needed.
+	var reverseEdges map[string][]Edge
+	if opts.Reverse {
+		reverseEdges = make(map[string][]Edge)
+		for src, edges := range g.Edges {
+			for _, e := range edges {
+				if _, ok := g.Nodes[e.Target]; ok {
+					reverseEdges[e.Target] = append(reverseEdges[e.Target], Edge{
+						Source: e.Target,
+						Target: src,
+						Type:   e.Type,
+						Line:   e.Line,
+					})
+				}
+			}
+		}
+	}
+
+	type queueItem struct {
+		path  string
+		depth int
+		via   string
+		from  string
+	}
+
+	visited := map[string]bool{start: true}
+	queue := []queueItem{{path: start, depth: 0}}
+
+	for len(queue) > 0 {
+		item := queue[0]
+		queue = queue[1:]
+
+		// Add to result (skip start node itself).
+		if item.depth > 0 {
+			node := TraceNode{
+				Path:  item.path,
+				Depth: item.depth,
+				Via:   item.via,
+				From:  item.from,
+			}
+			if rec, ok := g.Nodes[item.path]; ok {
+				if estado, ok := rec.EffectiveField("estado"); ok {
+					node.Estado, _ = estado.(string)
+				}
+			}
+			result.Nodes = append(result.Nodes, node)
+		}
+
+		// Check depth limit.
+		if opts.MaxDepth > 0 && item.depth >= opts.MaxDepth {
+			continue
+		}
+
+		// Get edges to follow.
+		var edges []Edge
+		if opts.Reverse {
+			edges = reverseEdges[item.path]
+		} else {
+			edges = g.Edges[item.path]
+		}
+
+		for _, e := range edges {
+			target := e.Target
+			if _, ok := g.Nodes[target]; !ok {
+				continue // skip broken links
+			}
+			if opts.EdgeType != "" && e.Type != opts.EdgeType {
+				continue
+			}
+			if visited[target] {
+				continue
+			}
+			visited[target] = true
+			queue = append(queue, queueItem{
+				path:  target,
+				depth: item.depth + 1,
+				via:   e.Type,
+				from:  item.path,
+			})
+		}
+	}
+
+	return result
+}
+
 // resolveTarget resolves a link target relative to the source record's directory.
 // If the target already looks like a path (contains / or .), it's resolved
 // relative to the source's directory. Otherwise it's used as-is.
