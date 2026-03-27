@@ -118,3 +118,61 @@ func TestFilterCoveredInferences_UnknownTypePassesThrough(t *testing.T) {
 		t.Errorf("expected unknown type to pass through, got %d", len(deltas))
 	}
 }
+
+func TestIsCovered_MissingDomain(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Domain: "lifecycle_state"},
+		},
+	}
+	if !isCovered(Inference{Type: "missing_domain", Field: "estado"}, stem) {
+		t.Error("missing_domain should be covered when field has domain")
+	}
+	if isCovered(Inference{Type: "missing_domain", Field: "titulo"}, stem) {
+		t.Error("missing_domain should not be covered for unknown field")
+	}
+}
+
+func TestIsCovered_EnumWithoutValues(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"draft", "active"}},
+		},
+	}
+	if !isCovered(Inference{Type: "enum_without_values", Field: "estado"}, stem) {
+		t.Error("enum_without_values should be covered when field has values")
+	}
+}
+
+func TestIsCovered_UntypedField(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"titulo": {Type: "string"},
+		},
+	}
+	if !isCovered(Inference{Type: "untyped_field", Field: "titulo"}, stem) {
+		t.Error("untyped_field should be covered when field has type")
+	}
+}
+
+func TestIsCovered_SequenceIncomplete(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"id": {Type: "sequence", Prefix: "T", Digits: 3},
+		},
+	}
+	if !isCovered(Inference{Type: "sequence_incomplete", Field: "id"}, stem) {
+		t.Error("sequence_incomplete should be covered when prefix and digits set")
+	}
+}
+
+func TestIsCovered_RequiredUnderstatement(t *testing.T) {
+	stem := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"tipo": {Type: "string", Required: true},
+		},
+	}
+	if !isCovered(Inference{Type: "required_understatement", Field: "tipo"}, stem) {
+		t.Error("required_understatement should be covered when field is required")
+	}
+}
