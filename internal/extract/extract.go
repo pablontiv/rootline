@@ -130,8 +130,12 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 		record.Body = strings.TrimLeft(text[bodyStart:], "\r\n")
 	}
 
-	// Extract wiki-links from body.
+	// Extract wiki-links from body and frontmatter.
 	record.Links = ParseLinks(record.Body)
+	fmLinks := ParseFrontmatterLinks(record.Frontmatter)
+	if len(fmLinks) > 0 {
+		record.Links = append(fmLinks, record.Links...)
+	}
 
 	// Parse body into AST if non-empty and enabled.
 	if record.Body != "" && m.shouldParseAST() {

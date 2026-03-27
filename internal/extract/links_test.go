@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -109,6 +110,43 @@ func TestParseLinks_EmptyBody(t *testing.T) {
 	links := ParseLinks("")
 	if len(links) != 0 {
 		t.Errorf("expected 0 links for empty body, got %d", len(links))
+	}
+}
+
+func TestExtract_FrontmatterLinks(t *testing.T) {
+	content := []byte(`---
+spec: "[[specs/my-design]]"
+backlog_ids:
+  - "[[B039-velero]]"
+  - "[[B040-probe]]"
+---
+# Title
+
+Body with [[body-link]].
+`)
+	ext := &MarkdownExtractor{}
+	rec, err := ext.Extract("test.md", content)
+	if err != nil {
+		t.Fatalf("Extract error: %v", err)
+	}
+	if len(rec.Links) != 4 {
+		t.Fatalf("expected 4 links, got %d: %+v", len(rec.Links), rec.Links)
+	}
+
+	fmLinks := 0
+	bodyLinks := 0
+	for _, l := range rec.Links {
+		if strings.HasPrefix(l.Source, "frontmatter:") {
+			fmLinks++
+		} else if l.Source == "body" {
+			bodyLinks++
+		}
+	}
+	if fmLinks != 3 {
+		t.Errorf("expected 3 frontmatter links, got %d", fmLinks)
+	}
+	if bodyLinks != 1 {
+		t.Errorf("expected 1 body link, got %d", bodyLinks)
 	}
 }
 
