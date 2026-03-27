@@ -37,7 +37,7 @@ rootline graph --where "tipo == 'feature'"  # Filtered
 
 - **DOT**: Graphviz digraph syntax (`rankdir=LR`)
 - **Mermaid**: `graph TD` syntax with sanitized node IDs
-- **Check mode**: Text report of cycles and broken links, exit code 1 if problems found
+- **Check mode**: Text report of cycles and broken links, exit code 1 if problems found. Broken links include fuzzy suggestions ("did you mean: X?") when targets are close to existing nodes.
 
 Links are filtered by schema — only structurally relevant link types are included.
 

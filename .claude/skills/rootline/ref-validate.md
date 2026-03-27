@@ -54,7 +54,7 @@ rootline validate --strict                               # Warnings → errors
 }
 ```
 
-Each error/warning has: `rule`, `field`, `message`, `source` (.stem path), `severity`.
+Each error/warning has: `rule`, `field`, `message`, `source` (.stem path), `severity`, `suggestion` (optional — fuzzy "did you mean?" hint for enum typos and similar field names).
 
 4. **Present results**:
 
