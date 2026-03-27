@@ -383,6 +383,53 @@ func TestApplySchemaInferences_EnumNoValuesKey(t *testing.T) {
 	}
 }
 
+func TestApplySchemaInferences_UntypedField(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	if err := os.WriteFile(stemPath, []byte("version: 2\nschema:\n  mystery:\n    required: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ApplySchemaInferences(stemPath, []ReportInference{
+		{Type: "untyped_field", Field: "mystery", Value: "string"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Applied) == 0 {
+		t.Fatal("expected applied changes")
+	}
+
+	data, _ := os.ReadFile(stemPath)
+	if !strings.Contains(string(data), "type: string") {
+		t.Errorf("expected type: string in stem, got:\n%s", data)
+	}
+}
+
+func TestApplySchemaInferences_SequenceIncomplete(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	if err := os.WriteFile(stemPath, []byte("version: 2\nschema:\n  id:\n    type: sequence\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ApplySchemaInferences(stemPath, []ReportInference{
+		{Type: "sequence_incomplete", Field: "id", Value: "T:3"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Applied) == 0 {
+		t.Fatal("expected applied changes")
+	}
+
+	data, _ := os.ReadFile(stemPath)
+	content := string(data)
+	if !strings.Contains(content, "prefix:") || !strings.Contains(content, "digits:") {
+		t.Errorf("expected prefix and digits in stem, got:\n%s", content)
+	}
+}
+
 func TestApplySchemaInferences_EnumNoField(t *testing.T) {
 	dir := t.TempDir()
 	stemPath := filepath.Join(dir, ".stem")
@@ -952,5 +999,44 @@ func TestParseFrontmatter(t *testing.T) {
 				t.Errorf("parseFrontmatter(%q) returned %v, want non-nil=%v", tt.content, fm, tt.want)
 			}
 		})
+	}
+}
+
+func TestScaffoldSchema(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "doc1.md"), []byte("---\ntitle: Hello\nestado: draft\n---\n# Doc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "doc2.md"), []byte("---\ntitle: World\n---\n# Doc 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := ScaffoldSchema(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stemPath := filepath.Join(dir, ".stem")
+	data, readErr := os.ReadFile(stemPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	content := string(data)
+	if !strings.Contains(content, "version: 2") {
+		t.Error("expected version: 2")
+	}
+	if !strings.Contains(content, "estado:") {
+		t.Error("expected estado field")
+	}
+	if !strings.Contains(content, "title:") {
+		t.Error("expected title field")
+	}
+}
+
+func TestScaffoldSchema_NoMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	err := ScaffoldSchema(dir)
+	if err == nil {
+		t.Error("expected error when no markdown files found")
 	}
 }

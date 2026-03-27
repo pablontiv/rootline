@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/rules"
@@ -75,6 +76,18 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference) (*Appl
 		case "field_type":
 			if applyFieldTypeNode(&doc, stem, inf) {
 				result.Applied = append(result.Applied, fmt.Sprintf("set_type: %s=%s", inf.Field, inf.Value))
+				modified = true
+			}
+
+		case "untyped_field":
+			if applyFieldTypeNode(&doc, stem, inf) {
+				result.Applied = append(result.Applied, fmt.Sprintf("set_type: %s=%s", inf.Field, inf.Value))
+				modified = true
+			}
+
+		case "sequence_incomplete":
+			if applySequenceCompleteNode(&doc, inf) {
+				result.Applied = append(result.Applied, fmt.Sprintf("sequence: %s completed", inf.Field))
 				modified = true
 			}
 		}
@@ -419,4 +432,26 @@ func parseValueList(s string) []string {
 		return nil
 	}
 	return strings.Fields(s)
+}
+
+func applySequenceCompleteNode(doc *yaml.Node, inf ReportInference) bool {
+	parts := strings.SplitN(inf.Value, ":", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	prefix := parts[0]
+	digits, err := strconv.Atoi(parts[1])
+	if err != nil || digits <= 0 {
+		return false
+	}
+
+	fieldNode := findSchemaFieldNode(doc, inf.Field)
+	if fieldNode == nil {
+		return false
+	}
+
+	// setFieldProperty adds the key-value pair if missing, or updates if present.
+	setFieldProperty(fieldNode, "prefix", prefix)
+	setFieldProperty(fieldNode, "digits", strconv.Itoa(digits))
+	return true
 }
