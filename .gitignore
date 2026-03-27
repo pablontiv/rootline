@@ -29,6 +29,7 @@ dist/
 
 # Claude Code skill workspaces
 *-workspace/
+.worktrees/
 
 # OS
 .DS_Store
