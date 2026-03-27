@@ -116,9 +116,20 @@ After v1.0: `feat` bumps minor, breaking bumps major (standard semver).
 
 ## Release Flow
 
-Releases are fully automated via CI. On push to `master`, the `auto-tag` job analyzes conventional commits since the last tag, creates version tags, and triggers goreleaser to build multi-platform binaries. Smoke tests verify `--version` and `--help` before creating GitHub Releases. Version is injected at build time via `-ldflags -X main.version={{.Version}}`.
+Releases are fully automated via CI. On push to `master`, the `go-release` reusable workflow (from `pablontiv/crossbeam@v1`) analyzes conventional commits since the last tag, creates version tags, and triggers goreleaser to build multi-platform binaries. Smoke tests verify `--version` and `--help` before creating GitHub Releases. Version is injected at build time via `-ldflags -X main.version={{.Version}}`.
 
-No manual release steps are needed — just push to master with conventional commit messages. The Justfile contains only development recipes (`check`, `test`, `fmt`, `validate`). Release logic lives exclusively in CI to avoid duplication.
+No manual release steps are needed — just push to master with conventional commit messages. The Justfile contains only development recipes (`check`, `test`, `fmt`, `validate`). Release logic lives in crossbeam shared workflows.
+
+## CI Workflows
+
+CI/CD uses shared reusable workflows from `pablontiv/crossbeam@v1`:
+- `go-ci.yml` — build, test (with 85% coverage threshold), tidy, lint, vuln
+- `gitleaks.yml` — secret scanning
+- `go-release.yml` — auto-tag + goreleaser release
+- `codeql.yml` — CodeQL security scanning (Go)
+- `scorecard.yml` — OpenSSF Scorecard
+
+`docs-validate` is repo-specific (runs `rootline validate --all docs/epics/`) and stays inline in `ci.yml`.
 
 ## Module Path
 

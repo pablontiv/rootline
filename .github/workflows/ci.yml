@@ -6,228 +6,34 @@ on:
   pull_request:
     branches: [main, master]
 
-permissions:
-  contents: read
-
 jobs:
-  build:
-    name: Build (Go ${{ matrix.go-version }})
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ["1.25", "stable"]
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
-        with:
-          go-version: ${{ matrix.go-version }}
-
-      - run: go build ./...
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
-        with:
-          go-version: stable
-
-      - run: go test ./... -race -coverprofile=coverage.out
-
-      - name: Check coverage threshold
-        env:
-          COVERAGE_THRESHOLD: 85
-        run: |
-          COVERAGE=$(go tool cover -func coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-          echo "Coverage: ${COVERAGE}%"
-          if [ "$(echo "$COVERAGE < $COVERAGE_THRESHOLD" | bc -l)" -eq 1 ]; then
-            echo "::error::Coverage ${COVERAGE}% is below threshold ${COVERAGE_THRESHOLD}%"
-            exit 1
-          fi
-
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: coverage
-          path: coverage.out
-
-  tidy:
-    name: Go Mod Tidy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
-        with:
-          go-version: stable
-
-      - run: go mod tidy
-
-      - name: Check for uncommitted changes
-        run: |
-          if ! git diff --exit-code go.mod go.sum; then
-            echo "::error::go.mod or go.sum is not tidy. Run 'go mod tidy' and commit the changes."
-            exit 1
-          fi
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
-        with:
-          go-version: stable
-
-      - uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
-        with:
-          version: v2.10.1
-
-  vuln:
-    name: Vulnerability Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
-        with:
-          go-version: stable
-
-      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
-
-      - run: govulncheck ./...
-
-  docs-validate:
-    name: Docs Validate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
-        with:
-          go-version: stable
-
-      - run: go build -o rootline ./cmd/rootline/
-
-      - run: ./rootline validate --all docs/epics/
+  ci:
+    uses: pablontiv/crossbeam/.github/workflows/go-ci.yml@v1
+    with:
+      go-version-file: go.mod
+      coverage-threshold: 85
 
   gitleaks:
-    name: Secret Scanning
+    uses: pablontiv/crossbeam/.github/workflows/gitleaks.yml@v1
+
+  docs-validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417
         with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          go-version-file: go.mod
+      - run: go build -o rootline ./cmd/rootline/
+      - run: ./rootline validate --all docs/epics/
 
-  auto-tag:
-    name: Auto Tag & Release
-    needs: [build, test, tidy, lint, vuln, docs-validate, gitleaks]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
+  release:
+    uses: pablontiv/crossbeam/.github/workflows/go-release.yml@v1
+    needs: [ci, gitleaks, docs-validate]
+    if: github.event_name == 'push'
+    with:
+      quality-gate-jobs: '["ci","gitleaks","docs-validate"]'
+      binary-name: rootline
     permissions:
       contents: write
       id-token: write
       attestations: write
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-
-      - name: Tag untagged commits
-        id: tag
-        run: |
-          set -e
-
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then
-            COMMITS=$(git rev-list --reverse HEAD)
-            LAST_TAG="v0.0.0"
-          else
-            COMMITS=$(git rev-list --reverse "${LAST_TAG}..HEAD")
-          fi
-
-          LATEST_TAG=""
-          for COMMIT in $COMMITS; do
-            # Skip already-tagged commits
-            EXISTING=$(git tag --points-at "$COMMIT" 2>/dev/null | head -1)
-            if [ -n "$EXISTING" ]; then
-              LAST_TAG="$EXISTING"
-              continue
-            fi
-
-            MSG=$(git log -1 --format=%s "$COMMIT")
-
-            # Determine bump type from conventional commit prefix
-            BUMP=""
-            case "$MSG" in
-              feat\!*|fix\!*|refactor\!*|perf\!*)  BUMP="breaking" ;;
-              feat*)                                 BUMP="feat" ;;
-              fix*|perf*)                            BUMP="fix" ;;
-            esac
-            [ -z "$BUMP" ] && continue
-
-            # Parse current version
-            MAJOR=$(echo "$LAST_TAG" | sed 's/^v//' | cut -d. -f1)
-            MINOR=$(echo "$LAST_TAG" | sed 's/^v//' | cut -d. -f2)
-            PATCH=$(echo "$LAST_TAG" | sed 's/^v//' | cut -d. -f3)
-
-            # Apply pre-1.0 vs post-1.0 strategy
-            if [ "$MAJOR" -eq 0 ]; then
-              # Pre-1.0: feat=patch, fix=patch, breaking=minor
-              case "$BUMP" in
-                breaking)  MINOR=$((MINOR + 1)); PATCH=0 ;;
-                *)         PATCH=$((PATCH + 1)) ;;
-              esac
-            else
-              # Post-1.0: feat=minor, fix=patch, breaking=major
-              case "$BUMP" in
-                breaking)  MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-                feat)      MINOR=$((MINOR + 1)); PATCH=0 ;;
-                *)         PATCH=$((PATCH + 1)) ;;
-              esac
-            fi
-
-            NEXT="v${MAJOR}.${MINOR}.${PATCH}"
-            echo "Bump: $COMMIT (${MSG%%:*}) -> $NEXT"
-            LAST_TAG="$NEXT"
-            LATEST_TAG="$NEXT"
-          done
-
-          # Tag HEAD (avoids workflow-file permission issue on older commits)
-          if [ -n "$LATEST_TAG" ]; then
-            echo "Tagging HEAD as $LATEST_TAG"
-            git tag "$LATEST_TAG" HEAD
-            git push origin "$LATEST_TAG"
-          fi
-
-          echo "latest=${LATEST_TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Release
-        if: steps.tag.outputs.latest != ''
-        uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
-        with:
-          version: "~> v2"
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ steps.tag.outputs.latest }}
-
-      - name: Smoke Test
-        if: steps.tag.outputs.latest != ''
-        run: |
-          EXPECTED="$(echo ${{ steps.tag.outputs.latest }} | sed 's/^v//')"
-          BINARY="$(find dist -name 'rootline' -type f -path '*linux_amd64*' | head -1)"
-          "$BINARY" --version | grep -q "$EXPECTED" || { echo "Version mismatch: expected $EXPECTED"; exit 1; }
-          "$BINARY" --help
-
-      - name: Attest Build Provenance
-        if: steps.tag.outputs.latest != ''
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
-        with:
-          subject-path: dist/checksums.txt
