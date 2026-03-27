@@ -112,6 +112,81 @@ func TestParseLinks_EmptyBody(t *testing.T) {
 	}
 }
 
+func TestParseFrontmatterLinks_StringValue(t *testing.T) {
+	fm := map[string]any{
+		"spec": "[[specs/2026-03-17-backup-design]]",
+	}
+	links := ParseFrontmatterLinks(fm)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if links[0].Target != "specs/2026-03-17-backup-design" {
+		t.Errorf("expected target 'specs/2026-03-17-backup-design', got %q", links[0].Target)
+	}
+	if links[0].Type != "reference" {
+		t.Errorf("expected type 'reference', got %q", links[0].Type)
+	}
+	if links[0].Source != "frontmatter:spec" {
+		t.Errorf("expected source 'frontmatter:spec', got %q", links[0].Source)
+	}
+}
+
+func TestParseFrontmatterLinks_SliceValue(t *testing.T) {
+	fm := map[string]any{
+		"backlog_ids": []any{
+			"[[B039-velero-backup]]",
+			"[[B040-probe-failure]]",
+		},
+	}
+	links := ParseFrontmatterLinks(fm)
+	if len(links) != 2 {
+		t.Fatalf("expected 2 links, got %d", len(links))
+	}
+	if links[0].Target != "B039-velero-backup" {
+		t.Errorf("expected target 'B039-velero-backup', got %q", links[0].Target)
+	}
+	if links[0].Source != "frontmatter:backlog_ids" {
+		t.Errorf("expected source 'frontmatter:backlog_ids', got %q", links[0].Source)
+	}
+	if links[1].Target != "B040-probe-failure" {
+		t.Errorf("expected target 'B040-probe-failure', got %q", links[1].Target)
+	}
+}
+
+func TestParseFrontmatterLinks_TypedLink(t *testing.T) {
+	fm := map[string]any{
+		"depends": "[[blocks:other-feature]]",
+	}
+	links := ParseFrontmatterLinks(fm)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if links[0].Type != "blocks" {
+		t.Errorf("expected type 'blocks', got %q", links[0].Type)
+	}
+	if links[0].Target != "other-feature" {
+		t.Errorf("expected target 'other-feature', got %q", links[0].Target)
+	}
+}
+
+func TestParseFrontmatterLinks_NoLinks(t *testing.T) {
+	fm := map[string]any{
+		"tipo":   "plan",
+		"estado": "pendiente",
+	}
+	links := ParseFrontmatterLinks(fm)
+	if len(links) != 0 {
+		t.Fatalf("expected 0 links, got %d", len(links))
+	}
+}
+
+func TestParseFrontmatterLinks_NilMap(t *testing.T) {
+	links := ParseFrontmatterLinks(nil)
+	if len(links) != 0 {
+		t.Fatalf("expected 0 links, got %d", len(links))
+	}
+}
+
 func TestParseLinks_SourceIsBody(t *testing.T) {
 	links := ParseLinks("see [[T003]]")
 	if len(links) != 1 {
