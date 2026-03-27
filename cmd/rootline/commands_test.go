@@ -47,6 +47,7 @@ func resetFlags() {
 	queryLimit = 0
 	queryFrom = "."
 	queryWhere = nil
+	querySort = ""
 	validateAll = false
 	validateStrict = false
 	validateStaged = false
@@ -102,6 +103,10 @@ func resetFlags() {
 		f.Changed = false
 	}
 	if f := queryCmd.Flags().Lookup("where"); f != nil {
+		_ = f.Value.Set("")
+		f.Changed = false
+	}
+	if f := queryCmd.Flags().Lookup("sort"); f != nil {
 		_ = f.Value.Set("")
 		f.Changed = false
 	}
@@ -748,4 +753,123 @@ func TestExplainFieldExtraction(t *testing.T) {
 	if !strings.Contains(out, "rootline/explain") {
 		t.Errorf("expected rootline/explain in field output, got: %s", out)
 	}
+}
+
+// --- Sort tests ---
+
+func TestQuerySort_SingleKey(t *testing.T) {
+	dir := setupSortTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--sort", "prioridad:asc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	rows := result["rows"].([]any)
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// alta=0 should be first
+	row0 := rows[0].(map[string]any)
+	fm0 := row0["frontmatter"].(map[string]any)
+	if fm0["prioridad"] != "alta" {
+		t.Errorf("row 0 prioridad = %v, want alta", fm0["prioridad"])
+	}
+}
+
+func TestQuerySort_MultiKey(t *testing.T) {
+	dir := setupSortTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--sort", "prioridad:asc,impact_score:desc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	rows := result["rows"].([]any)
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %d", len(rows))
+	}
+	// alta with higher impact_score (8) should come before alta with lower (3)
+	row0 := rows[0].(map[string]any)
+	row1 := rows[1].(map[string]any)
+	fm0 := row0["frontmatter"].(map[string]any)
+	fm1 := row1["frontmatter"].(map[string]any)
+	if fm0["prioridad"] != "alta" || fm1["prioridad"] != "alta" {
+		t.Errorf("first two rows should be alta, got %v and %v", fm0["prioridad"], fm1["prioridad"])
+	}
+	// impact_score desc: 8 before 3
+	score0, _ := fm0["impact_score"].(float64) // JSON numbers are float64
+	score1, _ := fm1["impact_score"].(float64)
+	if score0 < score1 {
+		t.Errorf("expected impact_score desc: got %.0f before %.0f", score0, score1)
+	}
+}
+
+func TestQuerySort_WithWhere(t *testing.T) {
+	dir := setupSortTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--where", "prioridad == 'alta'", "--sort", "impact_score:desc")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	rows := result["rows"].([]any)
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 alta rows, got %d", len(rows))
+	}
+}
+
+func TestQuerySort_InvalidSort(t *testing.T) {
+	dir := setupSortTestDir(t)
+	_, err := runCmd(t, "query", "--from", dir, "--sort", "field:invalid_dir")
+	if err == nil {
+		t.Fatal("expected error for invalid sort direction")
+	}
+}
+
+func TestQuerySort_Table(t *testing.T) {
+	dir := setupSortTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--sort", "prioridad:asc", "-o", "table")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "Path") {
+		t.Errorf("expected table output, got: %s", out)
+	}
+}
+
+// setupSortTestDir creates a test directory with enum schema and records for sort testing.
+func setupSortTestDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stemContent := `version: 2
+scope:
+  match: "*.md"
+schema:
+  prioridad:
+    type: enum
+    required: true
+    values: [alta, media, baja]
+  impact_score:
+    type: number
+    required: false
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+
+	mustWriteFile(t, filepath.Join(dir, "item1.md"), []byte("---\nprioridad: media\nimpact_score: 5\n---\n# Item 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "item2.md"), []byte("---\nprioridad: alta\nimpact_score: 8\n---\n# Item 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "item3.md"), []byte("---\nprioridad: alta\nimpact_score: 3\n---\n# Item 3\n"), 0644)
+
+	return dir
 }

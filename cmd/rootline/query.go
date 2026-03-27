@@ -9,6 +9,7 @@ import (
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/query"
+	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
 )
 
@@ -25,6 +26,7 @@ var (
 	queryCount bool
 	queryLimit int
 	queryFrom  string
+	querySort  string
 )
 
 var queryCmd = &cobra.Command{
@@ -40,6 +42,7 @@ func init() {
 	queryCmd.Flags().BoolVar(&queryCount, "count", false, "return count instead of records")
 	queryCmd.Flags().IntVar(&queryLimit, "limit", 0, "limit number of results (0 = unlimited)")
 	queryCmd.Flags().StringVar(&queryFrom, "from", ".", "root path to scan")
+	queryCmd.Flags().StringVar(&querySort, "sort", "", `sort by fields (e.g. "prioridad:asc,impact_score:desc")`)
 	rootCmd.AddCommand(queryCmd)
 }
 
@@ -55,6 +58,12 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	absRoot, err := filepath.Abs(scanRoot)
 	if err != nil {
 		return fmt.Errorf("resolving path: %w", err)
+	}
+
+	// Parse sort keys early to fail fast on invalid input.
+	sortKeys, err := query.ParseSortKeys(querySort)
+	if err != nil {
+		return fmt.Errorf("parsing --sort: %w", err)
 	}
 
 	// Scan records
@@ -79,7 +88,18 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("filtering records: %w", err)
 	}
 
-	// Execute query (count/limit) on filtered records.
+	// Sort AFTER filtering, BEFORE limit/output.
+	if len(sortKeys) > 0 {
+		var schema map[string]rules.SchemaField
+		entries, walkErr := rules.WalkUp(absRoot)
+		if walkErr == nil && len(entries) > 0 {
+			merged := rules.MergeStemFiles(entries)
+			schema = merged.Schema
+		}
+		query.SortRecords(filtered, sortKeys, schema)
+	}
+
+	// Execute query (count/limit) on sorted records.
 	result, err := query.ExecuteExpr(ctx, filtered, "", q)
 	if err != nil {
 		return fmt.Errorf("executing query: %w", err)
