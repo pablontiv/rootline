@@ -270,6 +270,51 @@ func TestBuild_EmptyGraph(t *testing.T) {
 	}
 }
 
+func TestBuild_FrontmatterLinks(t *testing.T) {
+	records := []*extract.Record{
+		{
+			Path:        "plans/my-plan.md",
+			Frontmatter: map[string]any{"tipo": "plan"},
+			Links: []extract.Link{
+				{Target: "my-design", Type: "reference", Source: "frontmatter:spec"},
+			},
+		},
+		{
+			Path:        "specs/my-design.md",
+			Frontmatter: map[string]any{"tipo": "spec"},
+			Links: []extract.Link{
+				{Target: "B039-velero", Type: "reference", Source: "frontmatter:backlog_ids"},
+			},
+		},
+		{
+			Path:        "B039-velero.md",
+			Frontmatter: map[string]any{"tipo": "deferred-item"},
+		},
+	}
+	g := Build(context.Background(), records)
+
+	// plans/my-plan.md should have edge to specs/my-design.md (via basename fallback)
+	edges := g.Edges["plans/my-plan.md"]
+	if len(edges) != 1 {
+		t.Fatalf("expected 1 edge from plan, got %d", len(edges))
+	}
+	if edges[0].Target != "specs/my-design.md" {
+		t.Errorf("expected target 'specs/my-design.md', got %q", edges[0].Target)
+	}
+
+	// specs/my-design.md should have edge to B039-velero.md
+	edges2 := g.Edges["specs/my-design.md"]
+	if len(edges2) != 1 {
+		t.Fatalf("expected 1 edge from spec, got %d", len(edges2))
+	}
+
+	// No broken links
+	broken := g.BrokenLinks()
+	if len(broken) != 0 {
+		t.Errorf("expected 0 broken links, got %d: %+v", len(broken), broken)
+	}
+}
+
 func TestBuild_NoLinks(t *testing.T) {
 	records := []*extract.Record{
 		makeRecord("a.md", nil),
