@@ -35,6 +35,12 @@ func init() {
 var agentRequiredTypes = map[string]bool{
 	"informal_dependency_candidate": true,
 	"unverified_traceability":       true,
+	// Governance detectors
+	"missing_domain":          true,
+	"implicit_schema":         true,
+	"naming_inconsistency":    true,
+	"enum_without_values":     true,
+	"required_understatement": true,
 }
 
 func runAnalyze(cmd *cobra.Command, args []string) error {
@@ -76,6 +82,16 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 
 	// Build report.
 	report := infer.NewAnalyzeReport(scanRoot)
+
+	// Load stem for governance detectors and incremental filtering.
+	var stem *rules.StemFile
+	entries, walkErr := rules.WalkUp(root)
+	if walkErr == nil && len(entries) > 0 {
+		stem = rules.MergeStemFiles(entries)
+	}
+	if analyzeIncremental {
+		report.Incremental = true
+	}
 
 	// Run all detectors, catching panics per-category.
 	type category struct {
@@ -124,16 +140,23 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		{"structural", "Structural Rule Detection", func() []infer.Inference {
 			return infer.DetectStructural(root)
 		}},
-	}
-
-	// Load stem for incremental filtering.
-	var stem *rules.StemFile
-	if analyzeIncremental {
-		entries, walkErr := rules.WalkUp(root)
-		if walkErr == nil && len(entries) > 0 {
-			stem = rules.MergeStemFiles(entries)
-		}
-		report.Incremental = true
+		{"domain_coverage", "Domain Coverage", func() []infer.Inference {
+			return infer.DetectMissingDomains(stem)
+		}},
+		{"schema_coverage", "Schema Coverage", func() []infer.Inference {
+			return infer.DetectMissingSchemata(root)
+		}},
+		{"validation_gaps", "Validation Gaps", func() []infer.Inference {
+			var prior []infer.Inference
+			for _, cat := range report.Categories {
+				for _, inf := range cat.Inferences {
+					prior = append(prior, infer.Inference{
+						Type: inf.Type, Field: inf.Field, Value: inf.Value,
+					})
+				}
+			}
+			return infer.DetectValidationGaps(stem, records, prior)
+		}},
 	}
 
 	for _, cat := range categories {
