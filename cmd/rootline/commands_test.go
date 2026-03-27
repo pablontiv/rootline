@@ -79,6 +79,10 @@ func resetFlags() {
 	setDryRun = false
 	setCreate = false
 	setNoValidate = false
+	traceReverse = false
+	traceDepth = 0
+	traceType = ""
+	traceFormat = "tree"
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
 	if f := treeCmd.Flags().Lookup("where"); f != nil {

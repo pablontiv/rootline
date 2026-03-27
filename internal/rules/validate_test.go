@@ -958,3 +958,87 @@ func TestValidate_RequiredSectionPresent(t *testing.T) {
 		}
 	}
 }
+
+func TestValidate_LinkFieldWithoutWikilink(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"spec": {Type: "link", Required: false, Severity: "warn"},
+		},
+	}
+	rec := &extract.Record{
+		Path:        "test.md",
+		Frontmatter: map[string]any{"spec": "plain-text-no-brackets"},
+	}
+	errs := Validate(context.Background(), rec, stem)
+	found := false
+	for _, e := range errs {
+		if e.Rule == "link-format" && e.Field == "spec" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected link-format warning for plain text in link field")
+	}
+}
+
+func TestValidate_LinkFieldWithWikilink(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"spec": {Type: "link", Required: false, Severity: "warn"},
+		},
+	}
+	rec := &extract.Record{
+		Path:        "test.md",
+		Frontmatter: map[string]any{"spec": "[[specs/my-design]]"},
+	}
+	errs := Validate(context.Background(), rec, stem)
+	for _, e := range errs {
+		if e.Rule == "link-format" {
+			t.Errorf("unexpected link-format error: %s", e.Message)
+		}
+	}
+}
+
+func TestValidate_LinkFieldWithSlice(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"backlog_ids": {Type: "link", Required: false, Severity: "warn"},
+		},
+	}
+	rec := &extract.Record{
+		Path: "test.md",
+		Frontmatter: map[string]any{
+			"backlog_ids": []any{"[[B039]]", "[[B040]]"},
+		},
+	}
+	errs := Validate(context.Background(), rec, stem)
+	for _, e := range errs {
+		if e.Rule == "link-format" {
+			t.Errorf("unexpected link-format error: %s", e.Message)
+		}
+	}
+}
+
+func TestValidate_RequiredLinkFieldMissing(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"spec": {Type: "link", Required: true, Severity: "error"},
+		},
+	}
+	rec := &extract.Record{
+		Path:        "test.md",
+		Frontmatter: map[string]any{},
+	}
+	errs := Validate(context.Background(), rec, stem)
+	found := false
+	for _, e := range errs {
+		if e.Rule == "required" && e.Field == "spec" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected required error for missing link field")
+	}
+}
