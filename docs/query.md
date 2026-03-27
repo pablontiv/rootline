@@ -39,6 +39,8 @@ The heading key must match the heading text exactly, including the `#` prefix an
 
 > **Universal Filtering**: The `--where` flag is not limited to `query`. It is also available on **`tree`**, **`stats`**, **`graph`**, and **`validate --all`**. All transversal commands share the same expr-lang syntax.
 
+> **Field Warnings**: Unknown field names in `--where` expressions emit warnings to stderr with fuzzy suggestions (e.g., `warning: unknown field "estdo" in where expression (did you mean "estado"?)`). Queries still execute — warnings are informational only.
+
 ## Operators
 
 Standard expr-lang operators apply:

@@ -66,7 +66,7 @@ Returns exit code 1 if cycles or broken links are found:
   "kind": "rootline/graph-check",
   "cycles": [["T001", "T003", "T001"]],
   "broken_links": [
-    {"source": "T002-task.md", "target": "T999-nonexistent", "type": "blocks", "line": 7}
+    {"source": "T002-task.md", "target": "T999-nonexistent", "type": "blocks", "line": 7, "suggestions": ["T001-setup-database.md", "T005-deploy.md"]}
   ]
 }
 ```

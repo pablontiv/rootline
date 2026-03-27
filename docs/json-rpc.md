@@ -163,7 +163,7 @@ Build dependency graph from `[[wiki-links]]` with cycle detection and broken lin
 | `check` | bool | no | Validate only (cycles + broken links) |
 | `format` | string | no | Output format: `dot` or `mermaid` (default: JSON) |
 
-**Returns**: `rootline/graph` — nodes, edges, cycles, and broken links. Or DOT/Mermaid text if `format` is set.
+**Returns**: `rootline/graph` — nodes, edges, cycles, and broken links (with fuzzy `suggestions` for close matches). Or DOT/Mermaid text if `format` is set.
 
 ---
 

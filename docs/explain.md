@@ -65,7 +65,8 @@ For documents with derived and aggregated fields, each field shows its expressio
       "field": "tipo",
       "message": "invalid value \"unknown\"",
       "source": "docs/epics/.stem",
-      "severity": "error"
+      "severity": "error",
+      "suggestion": "task"
     }
   ]
 }

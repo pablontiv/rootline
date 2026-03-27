@@ -47,7 +47,7 @@ Batch validation runs four phases in order:
 }
 ```
 
-When validation fails, errors include the rule, field, message, source `.stem`, and severity:
+When validation fails, errors include the rule, field, message, source `.stem`, severity, and an optional `suggestion` (fuzzy "did you mean?" hint):
 
 ```json
 {
@@ -57,11 +57,12 @@ When validation fails, errors include the rule, field, message, source `.stem`, 
   "valid": false,
   "errors": [
     {
-      "rule": "required",
+      "rule": "enum",
       "field": "estado",
-      "message": "required field \"estado\" is missing",
+      "message": "value Peding is not in allowed values: [Pending, Completed] (did you mean \"Pending\"?)",
       "source": "docs/.stem",
-      "severity": "error"
+      "severity": "error",
+      "suggestion": "Pending"
     }
   ],
   "warnings": []
