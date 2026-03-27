@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fuzzy"
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
@@ -703,21 +704,21 @@ func TestAnalyze_MigrateValueSuppressesExtendAndCorrect(t *testing.T) {
 }
 
 func TestClosestMatch_NoCloseMatch(t *testing.T) {
-	got := closestMatch("xyz", []string{"Pending", "Completed"})
+	got := fuzzy.Match("xyz", []string{"Pending", "Completed"})
 	if got != "" {
-		t.Errorf("closestMatch(\"xyz\", ...) = %q, want \"\" (too far from any candidate)", got)
+		t.Errorf("fuzzy.Match(\"xyz\", ...) = %q, want \"\" (too far from any candidate)", got)
 	}
 }
 
 func TestClosestMatch_CloseMatch(t *testing.T) {
-	got := closestMatch("Completo", []string{"Pending", "Completed"})
+	got := fuzzy.Match("Completo", []string{"Pending", "Completed"})
 	if got != "Completed" {
-		t.Errorf("closestMatch(\"Completo\", ...) = %q, want \"Completed\"", got)
+		t.Errorf("fuzzy.Match(\"Completo\", ...) = %q, want \"Completed\"", got)
 	}
 }
 
 func TestClosestMatch_EmptyCandidates(t *testing.T) {
-	got := closestMatch("anything", []string{})
+	got := fuzzy.Match("anything", []string{})
 	if got != "" {
 		t.Errorf("closestMatch with empty candidates = %q, want \"\"", got)
 	}

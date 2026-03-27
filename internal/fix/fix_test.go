@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fuzzy"
 	"github.com/pablontiv/rootline/internal/proposal"
 	"github.com/pablontiv/rootline/internal/rules"
 	"gopkg.in/yaml.v3"
 )
 
-// --- levenshtein ---
+// --- levenshtein (via fuzzy package) ---
 
 func TestLevenshtein(t *testing.T) {
 	tests := []struct {
@@ -28,9 +29,9 @@ func TestLevenshtein(t *testing.T) {
 		{"same", "same", 0},
 	}
 	for _, tt := range tests {
-		got := levenshtein(tt.a, tt.b)
+		got := fuzzy.Distance(tt.a, tt.b)
 		if got != tt.want {
-			t.Errorf("levenshtein(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+			t.Errorf("fuzzy.Distance(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
 		}
 	}
 }

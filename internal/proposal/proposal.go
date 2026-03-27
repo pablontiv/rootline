@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fuzzy"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/migrate"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -283,7 +284,7 @@ func detectMigrateValue(effective *rules.StemFile, errs map[string][]rules.Valid
 			}
 
 			// Find the closest valid enum value for the base.
-			newValue := closestMatch(base, sf.Values)
+			newValue := fuzzy.Match(base, sf.Values)
 			if newValue == "" {
 				newValue = base // preserve original base if no close match
 			}
@@ -344,7 +345,7 @@ func detectCorrectValue(effective *rules.StemFile, errs map[string][]rules.Valid
 			if val == "" {
 				continue
 			}
-			closest := closestMatch(val, sf.Values)
+			closest := fuzzy.Match(val, sf.Values)
 			if closest != "" && closest != val {
 				proposals = append(proposals, Proposal{
 					Type:        CorrectValue,
@@ -406,7 +407,7 @@ func detectExtractBody(records []*extract.Record, effective *rules.StemFile, err
 				}
 				if !valid {
 					// Try closest match.
-					mapped = closestMatch(mapped, sf.Values)
+					mapped = fuzzy.Match(mapped, sf.Values)
 				}
 			}
 
@@ -526,9 +527,21 @@ func detectAddField(effective *rules.StemFile, errs map[string][]rules.Validatio
 }
 
 // extractEnumValue extracts the invalid value from a validation error message.
-// Supports both quoted (value "X" ...) and unquoted (value X ...) formats.
+// Supports both unquoted (value X is not in ...) and quoted (value "X" ...) formats.
+// Unquoted is tried first because the "did you mean" suffix adds quoted strings
+// that would confuse the quoted parser.
 func extractEnumValue(msg string, _ []string) string {
-	// Try quoted format first: value "X" not in allowed values
+	// Try unquoted format first: value X is not in allowed values
+	const prefix = "value "
+	if strings.HasPrefix(msg, prefix) {
+		rest := msg[len(prefix):]
+		end := strings.Index(rest, " is not in allowed")
+		if end > 0 {
+			return rest[:end]
+		}
+	}
+
+	// Fallback: quoted format value "X" not in allowed values
 	start := strings.Index(msg, `"`)
 	if start >= 0 {
 		end := strings.Index(msg[start+1:], `"`)
@@ -536,70 +549,7 @@ func extractEnumValue(msg string, _ []string) string {
 			return msg[start+1 : start+1+end]
 		}
 	}
-
-	// Try unquoted format: value X is not in allowed values
-	const prefix = "value "
-	if !strings.HasPrefix(msg, prefix) {
-		return ""
-	}
-	rest := msg[len(prefix):]
-	end := strings.Index(rest, " is not in allowed")
-	if end < 0 {
-		return ""
-	}
-	return rest[:end]
-}
-
-// closestMatch finds the closest string by Levenshtein distance.
-// Returns "" if no candidate is within the adaptive threshold max(2, len(s)/3).
-func closestMatch(s string, candidates []string) string {
-	if len(candidates) == 0 {
-		return ""
-	}
-
-	threshold := max(2, len(s)/3)
-	best := ""
-	bestDist := threshold + 1
-
-	for _, c := range candidates {
-		d := levenshtein(strings.ToLower(s), strings.ToLower(c))
-		if d < bestDist {
-			bestDist = d
-			best = c
-		}
-	}
-	return best
-}
-
-// levenshtein computes the edit distance between two strings.
-func levenshtein(a, b string) int {
-	la, lb := len(a), len(b)
-	if la == 0 {
-		return lb
-	}
-	if lb == 0 {
-		return la
-	}
-
-	prev := make([]int, lb+1)
-	curr := make([]int, lb+1)
-
-	for j := 0; j <= lb; j++ {
-		prev[j] = j
-	}
-
-	for i := 1; i <= la; i++ {
-		curr[0] = i
-		for j := 1; j <= lb; j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			curr[j] = min(curr[j-1]+1, min(prev[j]+1, prev[j-1]+cost))
-		}
-		prev, curr = curr, prev
-	}
-	return prev[lb]
+	return ""
 }
 
 // detectCorrectLink finds link_target errors and proposes fixes.

@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fuzzy"
 	"github.com/pablontiv/rootline/internal/proposal"
 	"github.com/pablontiv/rootline/internal/rules"
 	"gopkg.in/yaml.v3"
@@ -154,8 +155,8 @@ func ApplyFixes(_ context.Context, record *extract.Record, effective *rules.Stem
 			// Correct invalid enum value to closest match
 			if currentVal, ok := record.Frontmatter[field]; ok {
 				current := fmt.Sprintf("%v", currentVal)
-				closest := ClosestMatch(current, sf.Values)
-				if closest != "" {
+				closest := fuzzy.Match(current, sf.Values)
+				if closest != "" && closest != current {
 					record.Frontmatter[field] = closest
 					corrected = append(corrected, fmt.Sprintf("%s: %q -> %q", field, current, closest))
 				}
@@ -224,23 +225,10 @@ func WriteFrontmatterFields(b *strings.Builder, fm map[string]any) {
 	}
 }
 
-// ClosestMatch finds the closest string by Levenshtein distance.
+// ClosestMatch finds the closest string by Levenshtein distance within an adaptive threshold.
+// Returns "" if no candidate is close enough.
 func ClosestMatch(s string, candidates []string) string {
-	if len(candidates) == 0 {
-		return ""
-	}
-
-	best := candidates[0]
-	bestDist := levenshtein(strings.ToLower(s), strings.ToLower(best))
-
-	for _, c := range candidates[1:] {
-		d := levenshtein(strings.ToLower(s), strings.ToLower(c))
-		if d < bestDist {
-			bestDist = d
-			best = c
-		}
-	}
-	return best
+	return fuzzy.Match(s, candidates)
 }
 
 // InsertWikiLinksBeforeHeading inserts wiki-links before the first ## heading.
@@ -253,37 +241,6 @@ func InsertWikiLinksBeforeHeading(content string, links []string) string {
 	}
 	// If no ## heading, append at end.
 	return content + "\n" + linkBlock
-}
-
-// levenshtein computes the edit distance between two strings.
-func levenshtein(a, b string) int {
-	la, lb := len(a), len(b)
-	if la == 0 {
-		return lb
-	}
-	if lb == 0 {
-		return la
-	}
-
-	prev := make([]int, lb+1)
-	curr := make([]int, lb+1)
-
-	for j := 0; j <= lb; j++ {
-		prev[j] = j
-	}
-
-	for i := 1; i <= la; i++ {
-		curr[0] = i
-		for j := 1; j <= lb; j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			curr[j] = min(curr[j-1]+1, min(prev[j]+1, prev[j-1]+cost))
-		}
-		prev, curr = curr, prev
-	}
-	return prev[lb]
 }
 
 func applyExtendEnum(p proposal.Proposal, root string) error {

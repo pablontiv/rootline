@@ -8,16 +8,18 @@ import (
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fuzzy"
 )
 
 // ValidationError represents a single validation failure with full
 // traceability to the .stem file that defined the rule.
 type ValidationError struct {
-	Rule     string `json:"rule"`
-	Field    string `json:"field"`
-	Message  string `json:"message"`
-	Source   string `json:"source"`
-	Severity string `json:"severity"`
+	Rule       string `json:"rule"`
+	Field      string `json:"field"`
+	Message    string `json:"message"`
+	Source     string `json:"source"`
+	Severity   string `json:"severity"`
+	Suggestion string `json:"suggestion,omitempty"`
 }
 
 // Validate checks a Record's frontmatter against the effective StemFile.
@@ -73,12 +75,23 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 					continue
 				}
 			}
+			msg := fmt.Sprintf("required field %q is missing", name)
+			suggestion := ""
+			fmKeys := make([]string, 0, len(record.Frontmatter))
+			for k := range record.Frontmatter {
+				fmKeys = append(fmKeys, k)
+			}
+			if match := fuzzy.Match(name, fmKeys); match != "" {
+				suggestion = match
+				msg += fmt.Sprintf(" (found similar: %q)", match)
+			}
 			errs = append(errs, ValidationError{
-				Rule:     "required",
-				Field:    name,
-				Message:  fmt.Sprintf("required field %q is missing", name),
-				Source:   field.Source,
-				Severity: field.Severity,
+				Rule:       "required",
+				Field:      name,
+				Message:    msg,
+				Source:     field.Source,
+				Severity:   field.Severity,
+				Suggestion: suggestion,
 			})
 			continue
 		}
@@ -86,12 +99,19 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 		// enum: if values defined and field exists, value must be in list
 		if exists && len(field.Values) > 0 {
 			if !enumContains(field.Values, val) {
+				valStr := fmt.Sprintf("%v", val)
+				msg := fmt.Sprintf("value %v is not in allowed values: [%s]", val, strings.Join(field.Values, ", "))
+				suggestion := fuzzy.Match(valStr, field.Values)
+				if suggestion != "" && suggestion != valStr {
+					msg += fmt.Sprintf(" (did you mean %q?)", suggestion)
+				}
 				errs = append(errs, ValidationError{
-					Rule:     "enum",
-					Field:    name,
-					Message:  fmt.Sprintf("value %v is not in allowed values: [%s]", val, strings.Join(field.Values, ", ")),
-					Source:   field.Source,
-					Severity: field.Severity,
+					Rule:       "enum",
+					Field:      name,
+					Message:    msg,
+					Source:     field.Source,
+					Severity:   field.Severity,
+					Suggestion: suggestion,
 				})
 			}
 		}
@@ -229,11 +249,18 @@ func checkEnum(record *extract.Record, rule ValidationRule, effective *StemFile)
 		return nil
 	}
 	if !enumContains(field.Values, val) {
+		valStr := fmt.Sprintf("%v", val)
+		msg := fmt.Sprintf("value %v is not in allowed values: [%s]", val, strings.Join(field.Values, ", "))
+		suggestion := fuzzy.Match(valStr, field.Values)
+		if suggestion != "" && suggestion != valStr {
+			msg += fmt.Sprintf(" (did you mean %q?)", suggestion)
+		}
 		return []ValidationError{{
-			Rule:    "enum",
-			Field:   rule.Field,
-			Message: fmt.Sprintf("value %v is not in allowed values: [%s]", val, strings.Join(field.Values, ", ")),
-			Source:  rule.Source,
+			Rule:       "enum",
+			Field:      rule.Field,
+			Message:    msg,
+			Source:     rule.Source,
+			Suggestion: suggestion,
 		}}
 	}
 	return nil

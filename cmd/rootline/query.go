@@ -74,7 +74,7 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	}
 
 	// Filter records using shared helper.
-	filtered, err := filterRecords(ctx, records, queryWhere)
+	filtered, err := filterRecords(ctx, records, queryWhere, nil)
 	if err != nil {
 		return fmt.Errorf("filtering records: %w", err)
 	}

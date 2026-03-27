@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -10,7 +12,8 @@ import (
 
 // filterRecords applies where expressions to records, returning only those that match.
 // Multiple wheres are combined with AND. Empty wheres returns all records (passthrough).
-func filterRecords(ctx context.Context, records []*extract.Record, wheres []string) ([]*extract.Record, error) {
+// If knownFields is non-nil, unknown field names in the expression emit warnings to stderr.
+func filterRecords(ctx context.Context, records []*extract.Record, wheres []string, knownFields []string) ([]*extract.Record, error) {
 	// Filter empty strings — StringArrayVar may produce [""] on cobra re-execution.
 	var cleaned []string
 	for _, w := range wheres {
@@ -23,6 +26,14 @@ func filterRecords(ctx context.Context, records []*extract.Record, wheres []stri
 	}
 
 	whereExpr := strings.Join(cleaned, " && ")
+
+	if len(knownFields) > 0 {
+		warnings := query.CheckFieldNames(whereExpr, knownFields)
+		for _, w := range warnings {
+			fmt.Fprintf(os.Stderr, "warning: %s\n", w.Message)
+		}
+	}
+
 	program, err := query.CompileWhere(whereExpr)
 	if err != nil {
 		return nil, err

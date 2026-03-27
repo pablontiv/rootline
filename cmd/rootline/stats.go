@@ -64,7 +64,7 @@ func runStats(cmd *cobra.Command, args []string) error {
 	derive.AggregateAllSimple(ctx, records, absRoot)
 
 	// Apply --where filter.
-	records, err = filterRecords(ctx, records, statsWhere)
+	records, err = filterRecords(ctx, records, statsWhere, nil)
 	if err != nil {
 		return fmt.Errorf("filtering records: %w", err)
 	}

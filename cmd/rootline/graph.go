@@ -77,7 +77,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	derive.EnrichBuiltinsSimple(ctx, records, absRoot)
 
 	// Apply --where filter.
-	records, err = filterRecords(ctx, records, graphWhere)
+	records, err = filterRecords(ctx, records, graphWhere, nil)
 	if err != nil {
 		return fmt.Errorf("filtering records: %w", err)
 	}
@@ -107,7 +107,11 @@ func runGraph(cmd *cobra.Command, args []string) error {
 		if len(broken) > 0 {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Broken links: %d\n", len(broken))
 			for _, b := range broken {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s:%d → %s (%s)\n", b.Source, b.Line, b.Target, b.Type)
+				msg := fmt.Sprintf("  %s:%d → %s (%s)", b.Source, b.Line, b.Target, b.Type)
+				if len(b.Suggestions) > 0 {
+					msg += fmt.Sprintf(" — did you mean: %s?", strings.Join(b.Suggestions, ", "))
+				}
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), msg)
 			}
 		}
 		if !hasProblems {

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fuzzy"
 )
 
 // Graph represents a directed graph of document links.
@@ -28,10 +29,11 @@ type Edge struct {
 
 // BrokenLink represents a link whose target doesn't match any record.
 type BrokenLink struct {
-	Source string `json:"source"`
-	Target string `json:"target"`
-	Type   string `json:"type"`
-	Line   int    `json:"line"`
+	Source      string   `json:"source"`
+	Target      string   `json:"target"`
+	Type        string   `json:"type"`
+	Line        int      `json:"line"`
+	Suggestions []string `json:"suggestions,omitempty"`
 }
 
 // Build constructs a Graph from a slice of records.
@@ -151,11 +153,25 @@ func (g *Graph) DetectCycles() [][]string {
 
 // BrokenLinks returns links whose targets don't match any record in the graph.
 func (g *Graph) BrokenLinks() []BrokenLink {
+	nodeNames := make([]string, 0, len(g.Nodes))
+	for name := range g.Nodes {
+		nodeNames = append(nodeNames, name)
+	}
+
 	var broken []BrokenLink
 	for _, edges := range g.Edges {
 		for _, edge := range edges {
 			if _, exists := g.Nodes[edge.Target]; !exists {
-				broken = append(broken, BrokenLink(edge))
+				bl := BrokenLink{
+					Source: edge.Source,
+					Target: edge.Target,
+					Type:   edge.Type,
+					Line:   edge.Line,
+				}
+				if suggestions := fuzzy.MatchN(edge.Target, nodeNames, 3); len(suggestions) > 0 {
+					bl.Suggestions = suggestions
+				}
+				broken = append(broken, bl)
 			}
 		}
 	}
