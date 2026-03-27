@@ -52,6 +52,20 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving path: %w", err)
 	}
 
+	// Pre-phase: scaffold .stem for directories that have none.
+	for _, cat := range report.Categories {
+		for _, inf := range cat.Inferences {
+			if inf.Type != "missing_schema" || inf.RequiresAgent {
+				continue
+			}
+			if scaffoldErr := infer.ScaffoldSchema(inf.Source); scaffoldErr != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "scaffold %s: %v\n", inf.Source, scaffoldErr)
+			} else {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "scaffolded %s/.stem\n", inf.Source)
+			}
+		}
+	}
+
 	entries, walkErr := rules.WalkUp(root)
 	if walkErr != nil || len(entries) == 0 {
 		return fmt.Errorf("no .stem found for %s", report.Path)
