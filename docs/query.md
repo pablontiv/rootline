@@ -13,7 +13,7 @@ The `--where` flag accepts [expr-lang/expr](https://expr-lang.org/) expressions.
 
 ```bash
 rootline query --where 'status == "published"'
-rootline query --where 'tipo in ["lxc", "vm"]' --where 'estado != "Completed"'
+rootline query --where 'tipo in ["lxc", "vm"]' --where 'estado not in ["Completed"]'
 ```
 
 ### Queryable Fields
@@ -50,6 +50,7 @@ Standard expr-lang operators apply:
 | `==` | Equals | `status == "published"` |
 | `!=` | Not equals | `status != "draft"` |
 | `in` | One of | `tipo in ["lxc", "vm"]` |
+| `not in` | Not one of | `estado not in ["draft", "obsoleto"]` |
 | `contains` | Substring match | `body contains "migration"` |
 | `!= nil` | Field exists | `tags != nil` |
 | `&&` | AND | `tipo == "lxc" && estado == "Pending"` |
@@ -110,3 +111,37 @@ Rows include `derived` when the effective `.stem` defines `derive:` or `aggregat
   "count": 12
 }
 ```
+
+## AI Agent Compatibility
+
+Some AI coding agents (notably Claude Code's Bash tool) pre-escape the `!` character to `\!` in command strings before shell processing. This breaks `!=` expressions at the expr-lang parser level with error `unrecognized character U+005C '\'`.
+
+**Affected operators**: `!=`, `!= nil`, and any expression containing `!`.
+
+**Workarounds** (in order of preference):
+
+1. **`not in` operator** — Direct replacement for `!=` negation:
+   ```bash
+   # Instead of:
+   rootline query --where 'estado != "draft"'
+   # Use:
+   rootline query --where 'estado not in ["draft"]'
+   ```
+
+2. **`in` with positive list** — Enumerate accepted values:
+   ```bash
+   rootline query --where 'estado in ["pendiente", "parcial"]'
+   ```
+
+3. **JSON + jq pipeline** — Query all, filter externally:
+   ```bash
+   rootline query -o json | jq '.rows[] | select(.estado != "draft")'
+   ```
+
+**Field existence check** (`!= nil`): There is no `not in` equivalent for field existence. Use the JSON pipeline approach:
+
+```bash
+rootline query -o json | jq '.rows[] | select(.tags != null)'
+```
+
+This issue is not specific to rootline — it affects any CLI tool whose query syntax uses `!` when invoked through agents with this escaping behavior.
