@@ -39,6 +39,11 @@ func runAnalyze(t *testing.T, root string) *infer.AnalyzeReport {
 	agentTypes := map[string]bool{
 		"informal_dependency_candidate": true,
 		"unverified_traceability":       true,
+		"missing_domain":                true,
+		"implicit_schema":               true,
+		"naming_inconsistency":          true,
+		"enum_without_values":           true,
+		"required_understatement":       true,
 	}
 
 	report := infer.NewAnalyzeReport(root)
@@ -55,6 +60,25 @@ func runAnalyze(t *testing.T, root string) *infer.AnalyzeReport {
 	report.AddCategory("link_types", "Link Types", infer.DetectLinkTypes(records, rules.LinkSchema{}), agentTypes)
 	report.AddCategory("back_refs", "Back References", infer.DetectMissingBackReferences(g), agentTypes)
 	report.AddCategory("cross_refs", "Cross References", infer.DetectCrossReferences(records, root), agentTypes)
+
+	// Governance detectors.
+	var stem *rules.StemFile
+	stemEntries, walkErr := rules.WalkUp(root)
+	if walkErr == nil && len(stemEntries) > 0 {
+		stem = rules.MergeStemFiles(stemEntries)
+	}
+
+	report.AddCategory("domain_coverage", "Domain Coverage", infer.DetectMissingDomains(stem), agentTypes)
+	report.AddCategory("schema_coverage", "Schema Coverage", infer.DetectMissingSchemata(root), agentTypes)
+
+	// Collect prior inferences for deduplication.
+	var priorInfs []infer.Inference
+	for _, cat := range report.Categories {
+		for _, ri := range cat.Inferences {
+			priorInfs = append(priorInfs, infer.Inference{Type: ri.Type, Field: ri.Field, Value: ri.Value})
+		}
+	}
+	report.AddCategory("validation_gaps", "Validation Gaps", infer.DetectValidationGaps(stem, records, priorInfs), agentTypes)
 
 	report.Finalize()
 	return report
@@ -102,8 +126,10 @@ func TestAnalyze_JSONReport(t *testing.T) {
 }
 
 func TestAnalyze_EmptyDirectory(t *testing.T) {
+	// Use a domain-annotated field so governance detectors produce no inferences.
+	// The test intent is: no documents → no data inferences.
 	root := setupProject(t, map[string]string{
-		".stem": "version: 2\nschema:\n  estado:\n    type: string\n",
+		".stem": "version: 2\nschema:\n  estado:\n    type: string\n    domain: lifecycle\n",
 	})
 
 	report := runAnalyze(t, root)
