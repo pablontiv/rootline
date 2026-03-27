@@ -85,8 +85,8 @@ func TestToolsRegistration_ListTools(t *testing.T) {
 			t.Errorf("expected tool %q not found in list", name)
 		}
 	}
-	if len(result.Tools) != 9 {
-		t.Errorf("tool count = %d, want 9", len(result.Tools))
+	if len(result.Tools) != 10 {
+		t.Errorf("tool count = %d, want 10", len(result.Tools))
 	}
 }
 

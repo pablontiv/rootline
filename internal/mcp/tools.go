@@ -66,6 +66,11 @@ func RegisterTools(s *Server) {
 		Name:        "set",
 		Description: "Set field values on a document (frontmatter or body sections). Validates against .stem schema.",
 	}, handleSet)
+
+	mcp.AddTool(s.Inner(), &mcp.Tool{
+		Name:        "trace",
+		Description: "Follow reference chains through the document graph via BFS traversal. Shows connected documents and their estado.",
+	}, handleTrace)
 }
 
 // Tool input types
@@ -119,6 +124,14 @@ type GraphInput struct {
 	Path   string `json:"path" jsonschema:"directory to scan (absolute path)"`
 	Check  bool   `json:"check,omitempty" jsonschema:"validate only (cycles + broken links)"`
 	Format string `json:"format,omitempty" jsonschema:"output format: dot or mermaid (default: json)"`
+}
+
+// TraceInput is the input for the trace tool.
+type TraceInput struct {
+	Path     string `json:"path" jsonschema:"absolute path to the starting file"`
+	Reverse  bool   `json:"reverse,omitempty" jsonschema:"follow incoming references instead of outgoing"`
+	Depth    int    `json:"depth,omitempty" jsonschema:"max traversal depth (0 = unlimited)"`
+	EdgeType string `json:"edge_type,omitempty" jsonschema:"filter by edge type (field name)"`
 }
 
 // SetInput is the input for the set tool.
@@ -842,6 +855,48 @@ func filterWhere(ctx context.Context, records []*extract.Record, wheres []string
 		}
 	}
 	return filtered, nil
+}
+
+func handleTrace(ctx context.Context, _ *mcp.CallToolRequest, input TraceInput) (*mcp.CallToolResult, any, error) {
+	absFile, err := filepath.Abs(input.Path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolving path: %w", err)
+	}
+
+	// Walk up to find .git root
+	absRoot := filepath.Dir(absFile)
+	for {
+		if _, err := os.Stat(filepath.Join(absRoot, ".git")); err == nil {
+			break
+		}
+		parent := filepath.Dir(absRoot)
+		if parent == absRoot {
+			return nil, nil, fmt.Errorf("no .git directory found above %s", input.Path)
+		}
+		absRoot = parent
+	}
+
+	relFile, err := filepath.Rel(absRoot, absFile)
+	if err != nil {
+		return nil, nil, fmt.Errorf("computing relative path: %w", err)
+	}
+
+	reg := extract.NewRegistry()
+	records, err := index.Scan(ctx, absRoot, reg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("scanning: %w", err)
+	}
+
+	derive.EnrichBuiltinsSimple(ctx, records, absRoot)
+	g := graph.Build(ctx, records)
+
+	result := g.Trace(relFile, graph.TraceOptions{
+		Reverse:  input.Reverse,
+		MaxDepth: input.Depth,
+		EdgeType: input.EdgeType,
+	})
+
+	return jsonResult(result)
 }
 
 func jsonResult(v any) (*mcp.CallToolResult, any, error) {
