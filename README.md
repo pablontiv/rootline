@@ -4,11 +4,18 @@
 [![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue)](LICENSE)
 
-A **file-based database and constraint engine** for structured documentation.
+A **file-based database and constraint engine** for structured documentation. `.stem` files are the **DDL** — they define what valid documents look like, just as SQL defines what valid rows look like.
 
-Rootline treats the filesystem as a database: directories are tables, files are records, metadata comes from YAML frontmatter, and structure is inherited via `.stem` files.
+| Database concept | Rootline equivalent |
+|-----------------|---------------------|
+| Table | Directory |
+| Row / Record | Markdown file |
+| Columns | Frontmatter fields |
+| DDL Schema | `.stem` file |
+| Constraint | Validation rule (`required`, `enum`, `exists`) |
+| Domain type | `domain:` property (semantic type) |
 
-> **Status**: Engine and MCP server complete — all CLI commands and 9 MCP tools functional.
+> **Status**: Engine and MCP server complete — all CLI commands and 9 MCP tools functional. 16 inference detectors (13 data + 3 governance).
 
 ---
 
@@ -89,9 +96,9 @@ Rootline does not render documentation. It **models** it.
 
 ---
 
-## The `.stem` File
+## The `.stem` File — Your DDL
 
-A `.stem` file may appear in any directory. Rootline resolves configuration using **walk-up discovery + top-down merge**:
+A `.stem` file is the DDL schema for a directory. It defines what fields exist, what types they have, which are required, and how values are validated. Rootline resolves schemas using **walk-up discovery + top-down merge**:
 
 1. From the target path, walk **up** collecting `.stem` files until `.git` root
 2. Merge them **top-down** (parent → child)
@@ -111,8 +118,11 @@ A `.stem` file may appear in any directory. Rootline resolves configuration usin
 version: 2
 
 schema:
-  title: { type: string, required: true }
-  status: { type: enum, values: [draft, review, published], default: draft }
+  title: { type: string, required: true, domain: title }
+  status:
+    domain: lifecycle_state          # semantic type — implies type: enum
+    values: [draft, review, published]
+    default: draft
   ejecutable_en: { type: string, required: true, match: "T*" }
   "## Summary": { type: section, required: true }
   "## Changelog": { type: section, default: "<!-- TODO -->" }
@@ -125,6 +135,29 @@ links:
 ```
 
 > Sections (`type: section`) are first-class schema fields — validated, defaulted, and queryable alongside frontmatter.
+
+### Domain Types
+
+Fields can declare a `domain:` — a semantic type that says what a field **means**, independent of its name. This is the rootline equivalent of SQL `DOMAIN` or JSON Schema `format`.
+
+```yaml
+schema:
+  mi_estado:
+    domain: lifecycle_state        # "this field IS the lifecycle state"
+    values: [borrador, activo, cerrado]
+  id:
+    domain: identifier             # implies type: sequence
+    prefix: "T"
+    digits: 3
+```
+
+**12 core domains**: `lifecycle_state`, `record_type`, `identifier`, `title`, `created_date`, `due_date`, `owner`, `parent_ref`, `priority`, `description`, `confidence`, `source`. Custom domains use namespaced format: `acme/sprint_velocity`.
+
+**Why domains matter**:
+- **Type inference**: `domain: lifecycle_state` implies `type: enum` — no need to declare both
+- **Virtual aliases**: `rootline query --where 'lifecycle_state == "activo"'` works regardless of the field's actual name
+- **Consumer tools**: AI agents and MCP clients resolve fields by domain, not by name — works across projects with different naming conventions
+- **Governance**: `rootline analyze` flags fields without domains as governance gaps
 
 ---
 
@@ -151,7 +184,7 @@ rootline set <file> field=value [...]     # Mutate frontmatter and sections with
 rootline fix [file|--all]                 # Auto-repair: add fields, fix enums, propose changes
 rootline validate --all --where 'expr'   # Validate only records matching filter
 rootline migrate [path]                   # Detect schema changes, rename, split, --to-v2, --from-levels
-rootline analyze [path] [--incremental]   # Run inference detectors, produce report
+rootline analyze [path] [--incremental]   # Run 16 detectors (data + governance), produce report
 rootline apply [file] [--dry-run]         # Apply inference results to .stem and docs
 
 # Tooling

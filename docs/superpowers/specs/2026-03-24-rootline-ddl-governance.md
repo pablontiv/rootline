@@ -1,8 +1,16 @@
-# Spec: Rootline DDL Governance Detectors
+# Spec: Rootline as a DDL and Governance Layer
+
+## Status
+
+| Objective | Status | Implementation |
+|-----------|--------|----------------|
+| 1.1 Documentation | **Implemented** | README.md updated with DDL metaphor, database mapping table, domain types section |
+| 1.2 Semantic Tagging | **Implemented** | `domain` property on `.stem` fields — see `2026-03-26-stem-domain-types-design.md` |
+| 1.3 Governance Detectors | **Implemented** | 4 detectors in `analyze` pipeline: domain coverage, schema coverage, validation gaps, naming inconsistency |
 
 ## Context
 
-Rootline is the DDL for the filesystem-based database ecosystem. `.stem` files define schemas (tables → directories, columns → frontmatter fields, DDL → `.stem`). The `analyze` → `apply` pipeline already runs 13 inference detectors that suggest schema improvements — but they focus on **data inference** (what types and values exist?), not **governance** (is the schema itself well-defined?).
+Rootline is the **Data Definition Language (DDL)** for the filesystem-based database ecosystem. `.stem` files define schemas (tables → directories, columns → frontmatter fields, DDL → `.stem`). The `analyze` → `apply` pipeline runs 16 inference detectors (13 data + 3 governance) that suggest schema improvements and enforce DDL best practices.
 
 Empirical evidence from 200+ sessions and the project's own documentation tree reveals concrete governance gaps:
 
