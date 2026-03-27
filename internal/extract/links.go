@@ -5,11 +5,12 @@ import (
 	"strings"
 )
 
-// Link represents a wiki-link extracted from document body text.
+// Link represents a wiki-link extracted from document text.
 type Link struct {
 	Target string `json:"target"`
 	Type   string `json:"type"`
 	Line   int    `json:"line"`
+	Source string `json:"source,omitempty"` // "body" or "frontmatter:<fieldname>"
 }
 
 var wikilinkRe = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
@@ -40,7 +41,7 @@ func ParseLinks(body string) []Link {
 
 		for _, match := range wikilinkRe.FindAllStringSubmatch(cleaned, -1) {
 			inner := match[1]
-			link := Link{Line: lineNum}
+			link := Link{Line: lineNum, Source: "body"}
 			if idx := strings.Index(inner, ":"); idx > 0 {
 				link.Type = inner[:idx]
 				link.Target = inner[idx+1:]

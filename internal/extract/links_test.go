@@ -111,3 +111,13 @@ func TestParseLinks_EmptyBody(t *testing.T) {
 		t.Errorf("expected 0 links for empty body, got %d", len(links))
 	}
 }
+
+func TestParseLinks_SourceIsBody(t *testing.T) {
+	links := ParseLinks("see [[T003]]")
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if links[0].Source != "body" {
+		t.Errorf("expected Source='body', got %q", links[0].Source)
+	}
+}
