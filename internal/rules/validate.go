@@ -115,6 +115,37 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 				})
 			}
 		}
+
+		// link: if type is "link" and field exists, value must contain [[target]] syntax
+		if exists && field.Type == "link" {
+			valid := false
+			switch v := val.(type) {
+			case string:
+				valid = extract.ContainsWikilink(v)
+			case []any:
+				valid = true
+				for _, item := range v {
+					s, ok := item.(string)
+					if !ok || !extract.ContainsWikilink(s) {
+						valid = false
+						break
+					}
+				}
+			}
+			if !valid {
+				sev := field.Severity
+				if sev == "" {
+					sev = "warn"
+				}
+				errs = append(errs, ValidationError{
+					Rule:     "link-format",
+					Field:    name,
+					Message:  fmt.Sprintf("field %q should contain wiki-link syntax [[target]]", name),
+					Source:   "schema",
+					Severity: sev,
+				})
+			}
+		}
 	}
 
 	// Phase 1b: Aggregate consistency — if a field has an aggregate expression
