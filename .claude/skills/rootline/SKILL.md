@@ -172,7 +172,7 @@ rootline analyze <directory> --field summary         # Extract summary only
 
 Key flags: `--incremental` (filter inferences covered by .stem)
 
-**Procedure**: Scans directory, extracts records, runs 13 detector categories (field types, required fields, enums, constants, link types, back-refs, cross-refs, section patterns, invariants, sub-schemas, dependencies, traceability, structural rules). Produces AnalyzeReport JSON with `version: 1`. With `--incremental`, filters out inferences already covered by the existing `.stem` schema.
+**Procedure**: Scans directory, extracts records, runs 16 detector categories — 13 data inference (field types, required fields, enums, constants, link types, back-refs, cross-refs, section patterns, invariants, sub-schemas, dependencies, traceability, structural rules) + 3 governance (domain coverage, schema coverage, validation gaps). Produces AnalyzeReport JSON with `version: 1`. With `--incremental`, filters out inferences already covered by the existing `.stem` schema. Governance detectors flag DDL-level gaps: fields without `domain`, directories without `.stem`, and fields with insufficient validation rules.
 
 ### Apply (apply)
 
@@ -187,7 +187,7 @@ rootline apply report.json --dry-run                          # Preview changes
 
 Key flags: `--dry-run` (show changes without applying)
 
-**Procedure**: Reads an analyze report, applies schema-modifying inferences (extend_enum, add_required, add_default, set_type) to the closest `.stem` file and data corrections (migrate_value, correct_value, add_field) to document frontmatter. Inferences with `requires_agent: true` are skipped with warnings.
+**Procedure**: Reads an analyze report. Pre-phase: scaffolds `.stem` files for `missing_schema` inferences (creates minimal version-2 schema from observed frontmatter). Then applies schema-modifying inferences (extend_enum, add_required, add_default, set_type, untyped_field, sequence_incomplete) to the closest `.stem` file and data corrections (migrate_value, correct_value, add_field) to document frontmatter. Inferences with `requires_agent: true` are skipped with warnings.
 
 ### Advanced Operations (graph + migrate + init)
 
