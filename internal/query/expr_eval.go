@@ -10,14 +10,12 @@ import (
 	"github.com/pablontiv/rootline/internal/extract"
 )
 
+var exprCache = NewExprCache(64)
+
 // CompileWhere compiles a where expression string into an expr program.
 // The expression uses standard operators: ==, !=, in, contains, &&, ||.
 func CompileWhere(whereExpr string) (*vm.Program, error) {
-	program, err := expr.Compile(whereExpr, expr.AsBool(), expr.AllowUndefinedVariables())
-	if err != nil {
-		return nil, fmt.Errorf("compiling where expression: %w", err)
-	}
-	return program, nil
+	return exprCache.Compile(whereExpr)
 }
 
 // BuildEnv constructs an expr environment from a Record.
