@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -122,6 +124,48 @@ func TestServer_ToolNotFound(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for nonexistent tool")
+	}
+}
+
+func TestServer_RunHTTP_ListensAndResponds(t *testing.T) {
+	s := NewServer("test-server", "v0.1.0")
+
+	// Register a simple echo tool.
+	mcp.AddTool(s.Inner(), &mcp.Tool{
+		Name:        "echo",
+		Description: "echo a message",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input echoInput) (*mcp.CallToolResult, any, error) {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: input.Message}},
+		}, nil, nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	addrCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.RunHTTP(ctx, "127.0.0.1:0", addrCh)
+	}()
+
+	addr := <-addrCh
+
+	// Hit the health endpoint.
+	resp, err := http.Get("http://" + addr + "/health")
+	if err != nil {
+		t.Fatalf("GET /health: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	// Cancel context and verify clean shutdown.
+	cancel()
+	if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunHTTP returned unexpected error: %v", err)
 	}
 }
 
