@@ -71,6 +71,14 @@ func RegisterTools(s *Server) {
 		Name:        "trace",
 		Description: "Follow reference chains through the document graph via BFS traversal. Shows connected documents and their estado.",
 	}, handleTrace)
+
+	// Store server reference for health tool.
+	serverRef = s
+
+	mcp.AddTool(s.Inner(), &mcp.Tool{
+		Name:        "health",
+		Description: "Return server health status: version, uptime, goroutines",
+	}, handleHealth)
 }
 
 // Tool input types
