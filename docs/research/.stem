@@ -1,7 +1,0 @@
-version: 2
-schema:
-    fecha:
-        type: string
-        required: true
-    metodo:
-        type: string
