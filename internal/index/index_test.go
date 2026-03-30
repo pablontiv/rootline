@@ -2,6 +2,7 @@ package index
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -273,6 +274,40 @@ func TestParseStemignore(t *testing.T) {
 	}
 	if patterns[0] != "*.log" || patterns[1] != "draft.md" {
 		t.Errorf("patterns = %v, want [*.log draft.md]", patterns)
+	}
+}
+
+func TestScan_ParallelProducesSameResults(t *testing.T) {
+	files := make(map[string]string, 50)
+	for i := 0; i < 50; i++ {
+		path := fmt.Sprintf("docs/doc%03d.md", i)
+		files[path] = fmt.Sprintf("---\ntitle: Doc %d\n---\n# Doc %d\n\nBody of doc %d.", i, i, i)
+	}
+
+	root := setupScanTree(t, files)
+	reg := extract.NewRegistry()
+
+	records, err := Scan(context.Background(), root, reg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(records) != 50 {
+		t.Fatalf("got %d records, want 50", len(records))
+	}
+
+	// Verify all titles are present.
+	titles := make(map[string]bool, 50)
+	for _, r := range records {
+		if title, ok := r.Frontmatter["title"].(string); ok {
+			titles[title] = true
+		}
+	}
+	for i := 0; i < 50; i++ {
+		expected := fmt.Sprintf("Doc %d", i)
+		if !titles[expected] {
+			t.Errorf("missing record with title %q", expected)
+		}
 	}
 }
 

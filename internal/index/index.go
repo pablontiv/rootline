@@ -8,11 +8,19 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/rules"
 )
+
+// fileEntry holds paths collected during Phase 1 discovery.
+type fileEntry struct {
+	absPath string
+	relPath string
+}
 
 // ScanOption configures optional Scan behavior.
 type ScanOption func(*scanConfig)
@@ -44,12 +52,11 @@ func Scan(ctx context.Context, rootPath string, registry *extract.Registry, opts
 		return nil, err
 	}
 
-	var records []*extract.Record
+	// Phase 1: Sequential discovery — walk the tree collecting file paths.
+	var files []fileEntry
 
-	// ignoreStack tracks .stemignore patterns per directory depth.
 	var ignoreStack []ignoreEntry
 
-	// scopeCache avoids repeated resolver calls for the same directory.
 	var scopeCache map[string]*rules.StemFile
 	if cfg.scopeResolver != nil {
 		scopeCache = make(map[string]*rules.StemFile)
@@ -60,7 +67,6 @@ func Scan(ctx context.Context, rootPath string, registry *extract.Registry, opts
 			return err
 		}
 
-		// Check for context cancellation on each directory.
 		if d.IsDir() {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -69,12 +75,10 @@ func Scan(ctx context.Context, rootPath string, registry *extract.Registry, opts
 
 		rel, _ := filepath.Rel(absRoot, path)
 
-		// Always skip .git directories.
 		if d.IsDir() && d.Name() == ".git" {
 			return filepath.SkipDir
 		}
 
-		// On entering a directory, check for .stemignore.
 		if d.IsDir() {
 			stemignorePath := filepath.Join(path, ".stemignore")
 			if patterns, loadErr := parseStemignore(stemignorePath); loadErr == nil {
@@ -86,17 +90,14 @@ func Scan(ctx context.Context, rootPath string, registry *extract.Registry, opts
 			return nil
 		}
 
-		// Skip .stemignore files themselves.
 		if d.Name() == ".stemignore" {
 			return nil
 		}
 
-		// Check if file is ignored.
 		if isIgnored(path, ignoreStack) {
 			return nil
 		}
 
-		// Apply scope filtering if resolver is configured.
 		if cfg.scopeResolver != nil {
 			dir := filepath.Dir(path)
 			stem, cached := scopeCache[dir]
@@ -104,8 +105,6 @@ func Scan(ctx context.Context, rootPath string, registry *extract.Registry, opts
 				stem = cfg.scopeResolver(dir)
 				scopeCache[dir] = stem
 			}
-			// If the resolver returned nil, no .stem governs this
-			// directory — exclude the file from scoped results.
 			if stem == nil {
 				return nil
 			}
@@ -114,28 +113,83 @@ func Scan(ctx context.Context, rootPath string, registry *extract.Registry, opts
 			}
 		}
 
-		// Check registry for extractor.
-		ext := registry.ForFile(path, "")
-		if ext == nil {
+		if registry.ForFile(path, "") == nil {
 			return nil
 		}
 
-		// Read and extract.
-		content, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
-		}
-
-		record, extractErr := ext.Extract(rel, content)
-		if extractErr != nil {
-			return extractErr
-		}
-
-		records = append(records, record)
+		files = append(files, fileEntry{absPath: path, relPath: rel})
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
-	return records, err
+	if len(files) == 0 {
+		return nil, nil
+	}
+
+	// Phase 2: Parallel extraction via worker pool.
+	type result struct {
+		record *extract.Record
+		err    error
+	}
+
+	numWorkers := runtime.NumCPU()
+	if numWorkers > len(files) {
+		numWorkers = len(files)
+	}
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+
+	results := make([]result, len(files))
+	var wg sync.WaitGroup
+	work := make(chan int, len(files))
+
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range work {
+				if ctx.Err() != nil {
+					results[i] = result{err: ctx.Err()}
+					continue
+				}
+				f := files[i]
+				content, readErr := os.ReadFile(f.absPath)
+				if readErr != nil {
+					results[i] = result{err: readErr}
+					continue
+				}
+				ext := registry.ForFile(f.absPath, "")
+				rec, extractErr := ext.Extract(f.relPath, content)
+				if extractErr != nil {
+					results[i] = result{err: extractErr}
+					continue
+				}
+				results[i] = result{record: rec}
+			}
+		}()
+	}
+
+	for i := range files {
+		work <- i
+	}
+	close(work)
+	wg.Wait()
+
+	// Collect results preserving discovery order.
+	records := make([]*extract.Record, 0, len(files))
+	for _, r := range results {
+		if r.err != nil {
+			return nil, r.err
+		}
+		if r.record != nil {
+			records = append(records, r.record)
+		}
+	}
+
+	return records, nil
 }
 
 // ignoreEntry holds patterns from a single .stemignore file.
