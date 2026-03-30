@@ -876,9 +876,9 @@ schema:
 
 func TestQuerySort_IntegrationBacklog(t *testing.T) {
 	// Skip if the homeserver backlog directory doesn't exist (CI environments).
-	backlogDir := "/opt/homeserver/backlog"
+	backlogDir := "/opt/factory/homeserver/backlog"
 	if _, err := os.Stat(backlogDir); os.IsNotExist(err) {
-		t.Skip("skipping integration test: /opt/homeserver/backlog not found")
+		t.Skip("skipping integration test: /opt/factory/homeserver/backlog not found")
 	}
 
 	out, err := runCmd(t, "query", backlogDir, "--sort", "prioridad:asc,impact_score:desc", "-o", "json")
