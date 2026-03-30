@@ -3,11 +3,16 @@ estado: Completed
 ---
 # MCP Server
 
-Rootline exposes its engine via the **Model Context Protocol (MCP)** over JSON-RPC 2.0 stdio transport.
+Rootline exposes its engine via the **Model Context Protocol (MCP)** over JSON-RPC 2.0.
 
-```bash
-rootline serve
-```
+Two transport modes:
+
+| Mode | Command | Use case |
+|------|---------|----------|
+| **HTTP** (default) | `rootline serve --addr 127.0.0.1:9200` | Multi-consumer: kedral, hooks, dashboards |
+| **Stdio** (legacy) | `rootline serve --stdio` | Claude Code MCP client config |
+
+HTTP mode uses **Streamable HTTP** (stateless) — each POST to `/mcp` is an independent MCP session. A `/health` endpoint returns server status.
 
 AI assistants call the same contracts as the CLI — no separate API layer.
 
@@ -15,7 +20,7 @@ AI assistants call the same contracts as the CLI — no separate API layer.
 
 ## Setup
 
-### Claude Desktop
+### Claude Desktop (stdio)
 
 Add to your Claude Desktop configuration (`~/.claude/mcp.json` or project `.mcp.json`):
 
@@ -24,15 +29,25 @@ Add to your Claude Desktop configuration (`~/.claude/mcp.json` or project `.mcp.
   "mcpServers": {
     "rootline": {
       "command": "rootline",
-      "args": ["serve"]
+      "args": ["serve", "--stdio"]
     }
   }
 }
 ```
 
+### HTTP daemon
+
+```bash
+rootline serve --addr 127.0.0.1:9200
+# Health check: curl http://127.0.0.1:9200/health
+# MCP endpoint: POST http://127.0.0.1:9200/mcp
+```
+
 ### Any MCP Client
 
-The server communicates over **stdio** using JSON-RPC 2.0. Connect to `rootline serve` as a subprocess.
+**Stdio:** Connect to `rootline serve --stdio` as a subprocess (JSON-RPC 2.0 over stdin/stdout).
+
+**HTTP:** POST JSON-RPC requests to `http://<addr>/mcp`. Requires MCP initialize handshake. Responses use SSE format (`text/event-stream`).
 
 ---
 

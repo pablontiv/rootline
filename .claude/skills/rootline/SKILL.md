@@ -211,3 +211,12 @@ These commands are used less frequently. For detailed procedures, see [ref-advan
 3. Use `--output table` when displaying results directly to the user
 4. Use `--field` for extracting specific values (e.g., `--field schema.id.next`)
 5. Use `just validate` / `just fix-docs` as shortcuts for batch operations
+
+## MCP Server
+
+Rootline exposes all tools via MCP (Model Context Protocol). Two transport modes:
+
+- **HTTP** (default): `rootline serve --addr 127.0.0.1:9200` — multi-consumer, stateless Streamable HTTP
+- **Stdio** (legacy): `rootline serve --stdio` — single consumer, for Claude Code MCP config
+
+HTTP mode serves `/mcp` (MCP Streamable HTTP) and `/health` (JSON status). Health tool (#11) is also available via MCP protocol.
