@@ -35,7 +35,9 @@ func runApply(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		data, err = os.ReadFile(args[0])
 	} else {
-		data, err = io.ReadAll(os.Stdin)
+		// Use cmd.InOrStdin() to allow testing.
+		// Wrap with LimitReader to prevent unbounded read.
+		data, err = io.ReadAll(io.LimitReader(cmd.InOrStdin(), 10*1024*1024))
 	}
 	if err != nil {
 		return fmt.Errorf("reading report: %w", err)
