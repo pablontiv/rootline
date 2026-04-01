@@ -13,6 +13,7 @@ import (
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/internal/validation"
 	"github.com/spf13/cobra"
 )
 
@@ -124,102 +125,12 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		scanRoot = args[0]
 	}
-	root, err := filepath.Abs(scanRoot)
+
+	batch, err := validation.ValidateAll(ctx, scanRoot, validateWhere)
 	if err != nil {
 		return err
 	}
 
-	// Phase 1: Stem health checks.
-	var results []*rules.ValidationResult
-	stemHealth, stemErr := rules.ValidateStemHealth(ctx, root)
-	if stemErr == nil {
-		results = append(results, stemHealthToResults(stemHealth)...)
-	}
-
-	// Phase 2: Document validation.
-	reg := extract.NewRegistry()
-	resolver := func(dir string) *rules.StemFile {
-		entries, err := rules.WalkUp(dir)
-		if err != nil || len(entries) == 0 {
-			return nil
-		}
-		return rules.MergeStemFiles(entries)
-	}
-
-	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver))
-	if err != nil {
-		return fmt.Errorf("scanning: %w", err)
-	}
-
-	derive.DeriveAllSimple(ctx, records, root)
-	derive.EnrichBuiltinsSimple(ctx, records, root)
-	derive.AggregateAllSimple(ctx, records, root)
-
-	// Apply --where filter.
-	records, err = filterRecords(ctx, records, validateWhere, nil)
-	if err != nil {
-		return fmt.Errorf("filtering records: %w", err)
-	}
-
-	visitedDirs := make(map[string]bool)
-
-	for _, rec := range records {
-		absPath := filepath.Join(root, rec.Path)
-		dir := filepath.Dir(absPath)
-		effective, resolveErr := rules.ResolveForRecord(dir, rec.Path)
-		if resolveErr != nil {
-			continue
-		}
-		errs := rules.Validate(ctx, rec, effective)
-
-		results = append(results, rules.NewValidationResult(rec.Path, errs))
-
-		// Track directories for structural validation.
-		if !visitedDirs[dir] {
-			visitedDirs[dir] = true
-		}
-	}
-
-	// Structural directory validation.
-	for dir := range visitedDirs {
-		entries, walkErr := rules.WalkUp(dir)
-		if walkErr != nil {
-			continue
-		}
-		effective := rules.MergeStemFiles(entries)
-		if effective.Structural.IsEmpty() {
-			continue
-		}
-
-		structErrs := rules.ValidateDirectory(ctx, dir, effective)
-		relDir, _ := filepath.Rel(root, dir)
-		if relDir == "" || relDir == "." {
-			relDir = ""
-		}
-		dirPath := relDir + "/"
-		results = append(results, rules.NewValidationResult(dirPath, structErrs))
-	}
-
-	// Drift detection: group records by parent directory and detect drift
-	// for each index file against its direct children.
-	var driftWarnings []rules.DriftWarning
-	parentChildren := groupByParentDir(records, root)
-	for dir, group := range parentChildren {
-		if group.parent == nil {
-			continue
-		}
-		entries, walkErr := rules.WalkUp(dir)
-		if walkErr != nil || len(entries) == 0 {
-			continue
-		}
-		effective := rules.MergeStemFiles(entries)
-		if effective == nil {
-			continue
-		}
-		driftWarnings = append(driftWarnings, rules.DetectDrift(*group.parent, group.children, effective.Schema)...)
-	}
-
-	batch := rules.NewBatchValidationResultWithDrift(results, driftWarnings)
 	if outputFormat == "table" {
 		return renderValidateTable(cmd, batch)
 	}
@@ -269,33 +180,6 @@ func validateHasFailure(batch *rules.BatchValidationResult) bool {
 		return true
 	}
 	return false
-}
-
-// stemHealthToResults converts stem-health checks into ValidationResults.
-func stemHealthToResults(result *rules.StemHealthResult) []*rules.ValidationResult {
-	var results []*rules.ValidationResult
-	for _, c := range result.Checks {
-		if c.Status == "pass" {
-			continue
-		}
-		severity := "warn"
-		if c.Status == "fail" {
-			severity = "error"
-		}
-		path := c.Path
-		if path == "" {
-			path = ".stem"
-		}
-		errs := []rules.ValidationError{{
-			Rule:     c.Name,
-			Field:    c.Field,
-			Message:  c.Message,
-			Source:   "stem-health",
-			Severity: severity,
-		}}
-		results = append(results, rules.NewValidationResult(path, errs))
-	}
-	return results
 }
 
 func renderValidateTable(cmd *cobra.Command, batch *rules.BatchValidationResult) error {
@@ -392,36 +276,6 @@ func extractField(data []byte, path string) ([]byte, error) {
 	}
 
 	return json.Marshal(current)
-}
-
-// parentChildGroup holds an index file and its direct children for drift detection.
-type parentChildGroup struct {
-	parent   *extract.Record
-	children []extract.Record
-}
-
-// groupByParentDir groups records by their parent directory.
-// For each directory, identifies the index file (README.md) as parent
-// and other files as children.
-func groupByParentDir(records []*extract.Record, root string) map[string]*parentChildGroup {
-	groups := make(map[string]*parentChildGroup)
-
-	for _, rec := range records {
-		absPath := filepath.Join(root, rec.Path)
-		dir := filepath.Dir(absPath)
-
-		if groups[dir] == nil {
-			groups[dir] = &parentChildGroup{}
-		}
-
-		if filepath.Base(rec.Path) == "README.md" {
-			groups[dir].parent = rec
-		} else {
-			groups[dir].children = append(groups[dir].children, *rec)
-		}
-	}
-
-	return groups
 }
 
 // splitDotPath splits a dot-separated path into parts.

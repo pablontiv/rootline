@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/pablontiv/rootline/internal/extract"
 )
@@ -86,6 +87,36 @@ func unanimousValue(vals []any) (any, bool) {
 		}
 	}
 	return first, true
+}
+
+// ParentChildGroup holds an index file and its direct children for drift detection.
+type ParentChildGroup struct {
+	Parent   *extract.Record
+	Children []extract.Record
+}
+
+// GroupByParentDir groups records by their parent directory.
+// For each directory, identifies the index file (README.md) as parent
+// and other files as children.
+func GroupByParentDir(records []*extract.Record, root string) map[string]*ParentChildGroup {
+	groups := make(map[string]*ParentChildGroup)
+
+	for _, rec := range records {
+		absPath := filepath.Join(root, rec.Path)
+		dir := filepath.Dir(absPath)
+
+		if groups[dir] == nil {
+			groups[dir] = &ParentChildGroup{}
+		}
+
+		if filepath.Base(rec.Path) == "README.md" {
+			groups[dir].Parent = rec
+		} else {
+			groups[dir].Children = append(groups[dir].Children, *rec)
+		}
+	}
+
+	return groups
 }
 
 // valuesEqual compares two frontmatter values using string representation.

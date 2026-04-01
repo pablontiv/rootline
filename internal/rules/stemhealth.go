@@ -399,6 +399,33 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 	return &StemHealthResult{Checks: checks}, nil
 }
 
+// StemHealthToResults converts stem-health checks into ValidationResults.
+func StemHealthToResults(result *StemHealthResult) []*ValidationResult {
+	var results []*ValidationResult
+	for _, c := range result.Checks {
+		if c.Status == "pass" {
+			continue
+		}
+		severity := "warn"
+		if c.Status == "fail" {
+			severity = "error"
+		}
+		path := c.Path
+		if path == "" {
+			path = ".stem"
+		}
+		errs := []ValidationError{{
+			Rule:     c.Name,
+			Field:    c.Field,
+			Message:  c.Message,
+			Source:   "stem-health",
+			Severity: severity,
+		}}
+		results = append(results, NewValidationResult(path, errs))
+	}
+	return results
+}
+
 // fieldHasAttr checks if a SchemaField has a given attribute set.
 func fieldHasAttr(f SchemaField, attr string) bool {
 	switch attr {

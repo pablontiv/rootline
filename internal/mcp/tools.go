@@ -18,6 +18,7 @@ import (
 	"github.com/pablontiv/rootline/internal/proposal"
 	"github.com/pablontiv/rootline/internal/query"
 	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/internal/validation"
 )
 
 // RegisterTools registers all rootline MCP tools on the server.
@@ -199,46 +200,10 @@ func handleQuery(ctx context.Context, _ *mcp.CallToolRequest, input QueryInput) 
 }
 
 func handleValidate(ctx context.Context, _ *mcp.CallToolRequest, input ValidateInput) (*mcp.CallToolResult, any, error) {
-	absRoot, err := filepath.Abs(input.Path)
-	if err != nil {
-		return nil, nil, fmt.Errorf("resolving path: %w", err)
-	}
-
-	reg := extract.NewRegistry()
-	resolver := func(dir string) *rules.StemFile {
-		entries, err := rules.WalkUp(dir)
-		if err != nil || len(entries) == 0 {
-			return nil
-		}
-		return rules.MergeStemFiles(entries)
-	}
-
-	records, err := index.Scan(ctx, absRoot, reg, index.WithScopeResolver(resolver))
-	if err != nil {
-		return nil, nil, fmt.Errorf("scanning: %w", err)
-	}
-
-	derive.DeriveAllSimple(ctx, records, absRoot)
-	derive.AggregateAllSimple(ctx, records, absRoot)
-
-	filtered, err := filterWhere(ctx, records, input.Where)
+	batch, err := validation.ValidateAll(ctx, input.Path, input.Where)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	var results []*rules.ValidationResult
-	for _, rec := range filtered {
-		absPath := filepath.Join(absRoot, rec.Path)
-		dir := filepath.Dir(absPath)
-		effective, resolveErr := rules.ResolveForRecord(dir, rec.Path)
-		if resolveErr != nil {
-			continue
-		}
-		errs := rules.Validate(ctx, rec, effective)
-		results = append(results, rules.NewValidationResult(rec.Path, errs))
-	}
-
-	batch := rules.NewBatchValidationResult(results)
 	return jsonResult(batch)
 }
 
