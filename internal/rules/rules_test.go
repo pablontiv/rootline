@@ -600,7 +600,7 @@ schema:
         type: section
         heading: "## Investigación"
         required: false
-        default: "<!-- TODO -->"
+        default: "<!-- TODO: Describa los hallazgos de la investigación -->"
 `
 	stem, err := ParseStem("test.stem", []byte(raw))
 	if err != nil {
@@ -623,7 +623,7 @@ schema:
 	if inv.Required {
 		t.Error("investigacion should not be required")
 	}
-	if inv.Default != "<!-- TODO -->" {
+	if inv.Default != "<!-- TODO: Describa los hallazgos de la investigación -->" {
 		t.Errorf("investigacion default = %q", inv.Default)
 	}
 }
