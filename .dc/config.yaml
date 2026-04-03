@@ -1,0 +1,27 @@
+# Configuración del Proyecto Don Cheli
+proyecto:
+  nombre: "rootline"
+  tipo: "libreria"  # producto|cli|app|libreria|servicio|refactor|correccion|poc
+  descripcion: "File-based database and constraint engine with .stem schemas"
+  version: "0.1.0"
+
+# Modelos de IA
+modelos:
+  default: sonnet
+  agentes:
+    planificador: opus
+    arquitecto: opus
+    ejecutor: sonnet
+    revisor: opus
+    tester: sonnet
+    documentador: haiku
+    estimador: opus
+
+# Historial de sesiones
+historial:
+  habilitado: true
+  maxSesiones: 10
+  autoGuardar: true
+
+# Idioma
+idioma: "es"
