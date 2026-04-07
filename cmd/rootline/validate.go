@@ -96,8 +96,13 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 			return fmt.Errorf("resolving .stem for %s: %w", file, err)
 		}
 
+		// Structural integrity check: detect multiple YAML documents.
+		structErrs := rules.ValidateStructure(content, file)
+		var errs []rules.ValidationError
+
 		// Validate
-		errs := rules.Validate(ctx, record, effective)
+		errs = append(errs, rules.Validate(ctx, record, effective)...)
+		errs = append(errs, structErrs...)
 
 		results = append(results, rules.NewValidationResult(file, errs))
 	}

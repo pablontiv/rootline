@@ -428,6 +428,33 @@ func IsIndexFile(path string, stem *StemFile) bool {
 	return filepath.Base(path) == indexName
 }
 
+// ValidateStructure checks structural integrity rules that don't require a .stem file.
+// It validates that a file contains exactly one YAML document (not multiple).
+// Returns errors for violations, nil for valid single-document files.
+func ValidateStructure(content []byte, path string) []ValidationError {
+	text := string(content)
+
+	// Only applies to files that start with YAML frontmatter delimiter.
+	if !strings.HasPrefix(text, "---\n") && !strings.HasPrefix(text, "---\r\n") {
+		return nil
+	}
+
+	// Count --- lines. Single doc: exactly 2 (opening + closing).
+	// Multi-doc: 3 or more (opening + closing + 1 or more intra-doc separators).
+	count := strings.Count(text, "\n---")
+	if count > 2 {
+		return []ValidationError{{
+			Rule:     "multiple_yaml_documents",
+			Field:    "_document",
+			Message:  fmt.Sprintf("file contains %d YAML documents; expected exactly 1", count-1),
+			Source:   path,
+			Severity: "error",
+		}}
+	}
+
+	return nil
+}
+
 // formatCondition renders a condition map as a readable string.
 func formatCondition(cond map[string]any) string {
 	parts := make([]string, 0, len(cond))
