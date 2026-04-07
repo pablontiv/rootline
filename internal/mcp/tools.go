@@ -18,6 +18,8 @@ import (
 	"github.com/pablontiv/rootline/internal/proposal"
 	"github.com/pablontiv/rootline/internal/query"
 	"github.com/pablontiv/rootline/internal/rules"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // RegisterTools registers all rootline MCP tools on the server.
@@ -71,6 +73,11 @@ func RegisterTools(s *Server) {
 		Name:        "trace",
 		Description: "Follow reference chains through the document graph via BFS traversal. Shows connected documents and their estado.",
 	}, handleTrace)
+
+	mcp.AddTool(s.Inner(), &mcp.Tool{
+		Name:        "new",
+		Description: "Create a new document with frontmatter scaffolded from the effective .stem schema of the target directory",
+	}, handleNew)
 
 	// Store server reference for health tool.
 	serverRef = s
@@ -150,6 +157,14 @@ type SetInput struct {
 	AppendFields   map[string]string `json:"append_fields,omitempty" jsonschema:"fields to append content to (section fields only)"`
 	CreateSections bool              `json:"create_sections,omitempty" jsonschema:"create body sections that do not exist"`
 	DryRun         bool              `json:"dry_run,omitempty" jsonschema:"show changes without applying"`
+}
+
+// NewInput is the input for the new tool.
+type NewInput struct {
+	Path    string `json:"path" jsonschema:"absolute path to the new document file"`
+	Content string `json:"content,omitempty" jsonschema:"full document content (frontmatter + body); if provided, used directly instead of generating from schema"`
+	Force   bool   `json:"force,omitempty" jsonschema:"overwrite existing file"`
+	DryRun  bool   `json:"dry_run,omitempty" jsonschema:"show generated content without writing file"`
 }
 
 func handleQuery(ctx context.Context, _ *mcp.CallToolRequest, input QueryInput) (*mcp.CallToolResult, any, error) {
@@ -798,7 +813,108 @@ func handleSet(ctx context.Context, _ *mcp.CallToolRequest, input SetInput) (*mc
 	return jsonResult(result)
 }
 
-// buildSetProposal creates a Proposal for the set tool, consulting the schema to determine type.
+func handleNew(ctx context.Context, _ *mcp.CallToolRequest, input NewInput) (*mcp.CallToolResult, any, error) {
+	absTarget, err := filepath.Abs(input.Path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolving path: %w", err)
+	}
+
+	// Check if file exists
+	if !input.Force {
+		if _, err := os.Stat(absTarget); err == nil {
+			return nil, nil, fmt.Errorf("file already exists: %s (use force to overwrite)", input.Path)
+		}
+	}
+
+	// Resolve effective schema from parent directory
+	dir := filepath.Dir(absTarget)
+	entries, err := rules.WalkUp(dir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("discovering .stem files: %w", err)
+	}
+
+	effective := rules.MergeStemFiles(entries)
+	if effective == nil || len(effective.Schema) == 0 {
+		return nil, nil, fmt.Errorf("no .stem schema found for %s", dir)
+	}
+
+	// Generate markdown content using the same logic as the CLI new command
+	var content string
+	if input.Content != "" {
+		content = input.Content
+	} else {
+		content = generateNewMarkdown(absTarget, effective)
+	}
+
+	if input.DryRun {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: content}},
+		}, nil, nil
+	}
+
+	// Ensure parent directory exists
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, nil, fmt.Errorf("creating directory: %w", err)
+	}
+
+	if err := os.WriteFile(absTarget, []byte(content), 0644); err != nil {
+		return nil, nil, fmt.Errorf("writing file: %w", err)
+	}
+
+	result := map[string]string{"path": input.Path, "status": "created"}
+	return jsonResult(result)
+}
+
+// generateNewMarkdown creates the frontmatter scaffold for a new document.
+// This mirrors the logic from cmd/rootline/new.go.
+func generateNewMarkdown(absPath string, effective *rules.StemFile) string {
+	var b strings.Builder
+	b.WriteString("---\n")
+
+	// Sort fields for deterministic output
+	keys := make([]string, 0, len(effective.Schema))
+	for k := range effective.Schema {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, name := range keys {
+		field := effective.Schema[name]
+
+		// Skip section fields (they go in the body, not frontmatter)
+		if field.Type == "section" {
+			continue
+		}
+
+		// Determine default value
+		value := ""
+		if field.Default != "" {
+			value = field.Default
+		} else if field.Type == "enum" && len(field.Values) > 0 {
+			value = field.Values[0]
+		}
+
+		switch {
+		case len(field.Values) > 0 && field.Type == "enum":
+			fmt.Fprintf(&b, "%s: %s # [%s]\n", name, value, strings.Join(field.Values, ", "))
+		case value != "":
+			fmt.Fprintf(&b, "%s: %s\n", name, value)
+		case field.Required:
+			fmt.Fprintf(&b, "%s: \n", name)
+		}
+	}
+
+	b.WriteString("---\n")
+
+	// Title from filename
+	base := filepath.Base(absPath)
+	title := strings.TrimSuffix(base, filepath.Ext(base))
+	title = strings.ReplaceAll(title, "-", " ")
+	title = strings.ReplaceAll(title, "_", " ")
+	fmt.Fprintf(&b, "# %s\n", cases.Title(language.Und).String(title))
+
+	return b.String()
+}
 func buildSetProposal(field, value string, appendMode bool, relPath string, effective *rules.StemFile, createSections bool) (proposal.Proposal, error) {
 	if effective != nil {
 		if sf, ok := effective.Schema[field]; ok && sf.Type == "section" {

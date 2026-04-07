@@ -79,14 +79,14 @@ func TestToolsRegistration_ListTools(t *testing.T) {
 		names[tool.Name] = true
 	}
 
-	expected := []string{"query", "validate", "describe", "tree", "stats", "explain", "fix", "graph", "set", "health"}
+	expected := []string{"query", "validate", "describe", "tree", "stats", "explain", "fix", "graph", "set", "trace", "health", "new"}
 	for _, name := range expected {
 		if !names[name] {
 			t.Errorf("expected tool %q not found in list", name)
 		}
 	}
-	if len(result.Tools) != 11 {
-		t.Errorf("tool count = %d, want 11", len(result.Tools))
+	if len(result.Tools) != 12 {
+		t.Errorf("tool count = %d, want 12", len(result.Tools))
 	}
 }
 
