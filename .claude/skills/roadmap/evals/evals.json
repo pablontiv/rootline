@@ -1,0 +1,101 @@
+{
+  "skill_name": "roadmap",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Vengo de una investigación con /hypothesize sobre gestión de paquetes en Arch Linux. Los resultados fueron:\n\n- Hipótesis H-03: metapac puede sincronizar paquetes declarativamente (Go — validada)\n- Premisa empírica CAP-07: hooks de pacman permiten triggers post-install (Go)\n- Mecanismo M6: sincronización bidireccional entre archivo declarativo y sistema\n- Categoría CD-04: gestión de estado del sistema operativo\n- Línea de investigación LI-02: reproducibilidad de configuración en Arch\n\nEl veredicto final fue Go. Quiero crear un roadmap para implementar un sistema de gestión declarativa de paquetes usando metapac, con hooks de pacman para triggers automáticos y un archivo YAML central que defina el estado deseado del sistema.\n\nEl proyecto tiene: un repo git en ~/dotfiles, metapac ya instalado, pacman hooks en /etc/pacman.d/hooks/. No existe roadmap previo ni .claude/roadmap.local.md.\n\nNOTA: rootline no está instalado en este ambiente. Quiero que generes SOLO el plan de descomposición (árbol jerárquico + constraint map) para mi aprobación. NO intentes ejecutar comandos de rootline ni crear archivos.",
+      "expected_output": "Clean implementation vocabulary, roadmap.local.md bootstrap, good granularity, constraint map",
+      "files": [],
+      "assertions": [
+        {"name": "no-research-codes", "check": "No artifact name contains H-03, CAP-07, M6, CD-04, LI-02"},
+        {"name": "implementation-vocabulary", "check": "Names use implementation terms, not research terms"},
+        {"name": "roadmap-local-bootstrap", "check": "Mentions creating roadmap.local.md first"},
+        {"name": "constraint-map-present", "check": "Includes Constraint Map with postconditions"}
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Necesito un roadmap para configurar un laptop ASUS TUF Gaming (FX517ZR) con EndeavourOS. Ya tengo el sistema instalado con lo básico. Falta:\n- NVIDIA power management (D3cold, kernel params, modprobe, udev rules)\n- Stack ASUS Linux (asusctl, rog-control-center, linux-g14 kernel)\n- WiFi/BT estabilidad post-suspend (firmware reload, powersave)\n- Todo esto automatizado con Ansible (scaffold, roles, site.yml)\n\nEl repo ya tiene docs/endeavouros-dual-boot-fx517zr.md con toda la guía.\nYa existe .claude/roadmap.local.md con roadmap-root: docs/epics.\n\nNOTA: rootline no está instalado. Quiero SOLO el plan de descomposición. NO ejecutar comandos. La última vez que hice esto, el roadmap creó 3 features con 1 sola story cada uno (F01-nvidia 1 story, F02-asus 1 story, F03-wireless 1 story). Eso viola la regla de que un Feature con 1 Story debería absorberse. Necesito una estructura con mejor granularidad.",
+      "expected_output": "Better granularity than original asus-linux E01, no single-story features, scale criteria met",
+      "files": [],
+      "assertions": [
+        {"name": "no-single-story-features", "check": "No Feature has exactly 1 Story"},
+        {"name": "scale-criteria-met", "check": "3-5 Features/Epic, 1-4 Stories/Feature, 1-5 Tasks/Story"},
+        {"name": "reaches-task-level", "check": "All Stories have Tasks listed"},
+        {"name": "not-hardware-per-feature", "check": "Does NOT create 1 Feature per hardware subsystem with 1 Story each"}
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Crear roadmap para un CLI tool en Rust que convierte Markdown a PDF. Funcionalidades: parsing de MD con soporte GFM, renderizado a PDF con wkhtmltopdf, templates de estilo (academic, resume, blog), watch mode para live preview, y publicación a GitHub Pages. El proyecto es nuevo, no existe nada todavía.\n\nNo existe .claude/roadmap.local.md ni estructura de roadmap previa.\n\nEste proyecto usa Rust con cargo, y los tasks de tipo 'implementation' deberían tener especificación técnica con: crate principal, traits/structs, error handling strategy. Esa información debería ir en roadmap.local.md, no en el skill de roadmap.\n\nNOTA: rootline no está instalado. Solo generar el plan de descomposición.",
+      "expected_output": "Bootstrap roadmap.local.md, type specs in local, 1-2 epics, grouped by milestone",
+      "files": [],
+      "assertions": [
+        {"name": "roadmap-local-bootstrap", "check": "Creates or mentions creating roadmap.local.md as a first step, BEFORE decomposition"},
+        {"name": "type-specs-in-local", "check": "Rust type specs go in roadmap.local.md"},
+        {"name": "epic-substance-test", "check": "Every Epic has >= 6 Tasks total. If an Epic has < 3 Features, each Feature has >= 2 Stories. No thin Epics (2 Features × 1 Story each)."},
+        {"name": "postconditions-observable", "check": "Every Epic postcondition includes a verification command or observable check, not vague statements like 'produces a valid PDF'"}
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "/roadmap plan\n\nContexto de la conversacion: acabamos de diseñar un plan para auto-sincronizar un repo con origin. El plan aprobado es:\n\nT1: Crear .githooks/post-merge hook\n- Script bash que tras git pull con cambios: sincroniza skills (cp -r), rebuild binario (go build)\n- chmod +x\n\nT2: Crear systemd user units\n- rootline-sync.service: Type=oneshot, ExecStart=git pull --ff-only\n- rootline-sync.timer: OnBootSec=1min, OnUnitActiveSec=5min\n\nT3: Activar y verificar\n- git config core.hooksPath .githooks\n- systemctl --user enable --now rootline-sync.timer\n- Verificar con systemctl y journalctl\n\nYa existe .claude/roadmap.local.md con roadmap-root: docs/epics.\nYa existe docs/epics/E05-repo-best-practices/ con F01-F03.\nrootline está instalado.\n\nEl usuario aprobó este plan. Ahora materialízalo como archivos del roadmap.\n\nIMPORTANTE: Este test verifica que /roadmap plan SOLO crea archivos .md del roadmap (Feature READMEs, Story READMEs, Task .md files) dentro de docs/epics/. NO debe crear .githooks/post-merge, NO debe crear archivos en ~/.config/systemd/, NO debe escribir scripts bash, NO debe ejecutar systemctl. Solo documentos de planificación.",
+      "expected_output": "Only roadmap .md files created inside docs/epics/, no implementation files written",
+      "files": [],
+      "assertions": [
+        {"name": "no-implementation-files", "check": "Does NOT create .githooks/post-merge, systemd unit files, bash scripts, or any file outside docs/epics/"},
+        {"name": "creates-roadmap-docs", "check": "Creates Feature README, Story README, and Task .md files inside docs/epics/"},
+        {"name": "tasks-describe-not-execute", "check": "Task .md files DESCRIBE what to build (post-merge hook, systemd units) but do NOT contain the actual implementation code as file output"},
+        {"name": "stops-after-materialization", "check": "After creating roadmap docs, stops and tells user to run /roadmap loop for implementation. Does NOT start implementing."}
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "/roadmap loop --pr --max 1\n\nContexto: Ya existe .claude/roadmap.local.md con roadmap-root: docs/epics y pr-merge-strategy: squash. rootline esta instalado. El repo tiene remote origin con branch main. gh CLI esta instalado y autenticado.\n\ndocs/epics/ tiene un Epic E01 con Feature F01, Story S001 con 2 tasks: T001-create-config (estado: Pending) y T002-validate-schema (estado: Pending, blocks: T001). Ambos tasks son tipo 'implementation' con ACs simples (archivo existe, comando retorna 0).\n\nNOTA: Este es un test de comportamiento. Verificar que el loop con --pr: (1) detecta base branch, (2) crea feature branch feat/S001-*, (3) ejecuta solo T001 (--max 1), (4) commits pero does NOT push en Step 8, (5) no crea PR todavia (solo 1 task, loop parado por --max). Verificar que T002 fue correctamente identificado como bloqueado por T001.",
+      "expected_output": "Creates feature branch, executes T001, commits without pushing, identifies T002 as blocked",
+      "files": [],
+      "assertions": [
+        {"name": "detects-base-branch", "check": "Attempts to detect base branch via git symbolic-ref or origin/main check"},
+        {"name": "creates-feature-branch", "check": "Creates branch named feat/S001-* from base branch"},
+        {"name": "no-push-in-step-8", "check": "Does NOT run git push after commit in the per-task step"},
+        {"name": "blocked-task-detected", "check": "Reports T002 as blocked by T001 dependency"}
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "/roadmap loop --max 2\n\nContexto: Ya existe .claude/roadmap.local.md con roadmap-root: docs/epics. rootline esta instalado. El repo tiene remote origin. gh CLI NO esta instalado.\n\ndocs/epics/ tiene E01/F01/S001 con 2 tasks independientes (sin dependencias entre si): T001-add-readme (estado: Pending, tipo: docs) y T002-add-license (estado: Pending, tipo: docs). Ambos tienen ACs simples (archivo existe).\n\nNOTA: Verificar que el loop default (sin --pr): (1) Fase 2.5 es skipped enteramente, (2) NO intenta crear feature branch, (3) cada task hace commit + push inmediato (git push despues de cada commit), (4) NO intenta crear PR, (5) resumen final no tiene seccion Pull Requests.",
+      "expected_output": "Skips branch detection, pushes after each commit, no PR creation",
+      "files": [],
+      "assertions": [
+        {"name": "skips-branch-detection", "check": "Does NOT run git symbolic-ref or gh auth status"},
+        {"name": "no-feature-branch", "check": "Does NOT create a feat/* branch"},
+        {"name": "push-after-each-commit", "check": "Runs git push after each task's commit, not deferred"},
+        {"name": "no-pr-creation", "check": "Does NOT run gh pr create"}
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "/roadmap loop --pr --max 3\n\nContexto: Ya existe .claude/roadmap.local.md con roadmap-root: docs/epics, pr-merge-strategy: squash. rootline esta instalado. gh CLI esta instalado y autenticado. Remote origin con branch main.\n\ndocs/epics/E01/F01/ tiene dos Stories:\n- S001-init-config/ con 2 tasks: T001 (Pending), T002 (Pending). Ambos sin dependencias.\n- S002-add-validation/ con 1 task: T003 (Pending). Sin dependencias.\n\nNOTA: Verificar que con --pr: (1) T001 y T002 se ejecutan en feat/S001-init-config branch, (2) al detectar que T003 pertenece a S002, se activa Story PR para S001 ANTES de empezar S002, (3) despues del Story PR se crea nuevo branch feat/S002-add-validation, (4) el PR body incluye lista de commits de la Story.",
+      "expected_output": "Story boundary triggers PR creation before switching to new story branch",
+      "files": [],
+      "assertions": [
+        {"name": "story-pr-on-boundary", "check": "Creates PR for S001 when detecting context switch to S002"},
+        {"name": "new-branch-for-s002", "check": "Creates feat/S002-add-validation branch after S001 PR"},
+        {"name": "pr-body-has-commits", "check": "PR body lists the commits/tasks completed for the Story"},
+        {"name": "post-merge-checkout-base", "check": "After PR merge, checks out base branch and pulls before creating new branch"}
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "/roadmap pending\n\nContexto: Ya existe .claude/roadmap.local.md con:\n---\nroadmap-root: docs/epics\ndone-statuses: ['Completado', 'Obsoleto']\nactive-statuses: ['Pending', 'Specified', 'In Progress']\nleaf-filter: 'isIndex == false'\n---\n\nrootline esta instalado. docs/epics/ tiene E01 con F01 (3 tasks Completado, 2 tasks Pending) y F02 (1 task Pending). Hay 15 READMEs (index files) de Epic, Feature y Story.\n\nNOTA: Este test verifica que /roadmap pending: (1) imprime los helpers computados del bootstrap, (2) usa isIndex == false en la query rootline, (3) reporta conteos basados en tasks reales (leaves) no inflados con index files, (4) usa los done-statuses del proyecto (Completado/Obsoleto en español, no Completed/Obsolete).",
+      "expected_output": "Prints computed helpers, uses isIndex == false, correct leaf-only counts, Spanish done-statuses",
+      "files": [],
+      "assertions": [
+        {"name": "prints-bootstrap-helpers", "check": "Output includes the computed helper expressions with actual values before running any query"},
+        {"name": "uses-isIndex-false", "check": "The rootline command includes isIndex == false in --where clause"},
+        {"name": "uses-project-done-statuses", "check": "Uses Completado/Obsoleto (from project config), not Completed/Obsolete (defaults)"},
+        {"name": "no-inflated-counts", "check": "Reported counts reflect leaf tasks only, not index files. Should show ~3 pending tasks, not 15+"}
+      ]
+    }
+  ]
+}
