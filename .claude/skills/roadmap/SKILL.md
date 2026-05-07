@@ -88,7 +88,7 @@ Después del checkpoint, continuar al **Routing por Subcomando** con `<repos>` d
    - Preguntar al usuario: ¿Dónde vive el roadmap? (ej: `docs/epics`)
    - Crear `.claude/roadmap.local.md` con el frontmatter mínimo (ver template abajo)
 2. Extraer `roadmap-root` del frontmatter. Si falta → preguntar y actualizar el archivo.
-3. Extraer filtros (ver tabla). Si faltan → usar defaults, NO preguntar.
+3. Extraer filtros y valores operacionales (ver tablas). Si faltan → usar defaults, NO preguntar.
 4. Pre-computar expresiones helper (una vez, reusar en todos los comandos).
 
 **Template mínimo** (crear si no existe):
@@ -98,6 +98,13 @@ Después del checkpoint, continuar al **Routing por Subcomando** con `<repos>` d
 roadmap-root: # preguntar al usuario
 done-statuses: ['Completed', 'Obsolete']
 active-statuses: ['Pending', 'Specified', 'In Progress']
+status-values:
+  pending: 'Pending'
+  specified: 'Specified'
+  in-progress: 'In Progress'
+  completed: 'Completed'
+  blocked: 'Blocked'
+  obsolete: 'Obsolete'
 leaf-filter: 'isIndex == false'
 story-close-verify: []
 pr-merge-strategy: 'squash'
@@ -114,11 +121,21 @@ En todo este documento, `<roadmap-root>` se refiere al valor configurado.
 |------------|---------|-------------|
 | `done-statuses` | `['Completed', 'Obsolete']` | `<done-statuses>` |
 | `active-statuses` | `['Pending', 'Specified', 'In Progress']` | `<active-statuses>` |
+| `status-values.pending` | `'Pending'` | `<status-pending>` |
+| `status-values.specified` | `'Specified'` | `<status-specified>` |
+| `status-values.in-progress` | `'In Progress'` | `<status-in-progress>` |
+| `status-values.completed` | `'Completed'` | `<status-completed>` |
+| `status-values.blocked` | `'Blocked'` | `<status-blocked>` |
+| `status-values.obsolete` | `'Obsolete'` | `<status-obsolete>` |
 | `leaf-filter` | `'isIndex == false'` | `<leaf-filter>` |
 | `story-close-verify` | `[]` | `<story-close-cmds>` |
 | `pr-merge-strategy` | `'squash'` | `<pr-merge-strategy>` |
 | `commit-style` | `'conventional'` | `<commit-style>` |
 | `auto-push` | `true` | `<auto-push>` |
+
+Semántica:
+- `done-statuses` y `active-statuses` son **predicados de lectura** para queries y dependencias.
+- `status-values.*` son **valores canónicos de escritura**. Al mutar frontmatter, NUNCA hardcodear `Completed`/`Blocked`; usar `<status-completed>`, `<status-blocked>`, etc.
 
 Expresiones helper (pre-computar una vez, reusar en todos los comandos):
 
