@@ -1,91 +1,84 @@
 # /roadmap plan
 
-> **Pre-requisito**: Leer [common-logic.md](common-logic.md) para auto-numbering, cascading links y comandos rootline.
+> Pre-requisito: leer [common-logic.md](common-logic.md).
 
-Tomar el plan de la conversacion actual y descomponerlo en estructura de roadmap.
+Materializa el plan de la conversación como archivos `.md` del roadmap. No implementa código.
 
-**Cuando usar**: Despues de que una sesion produce un plan tecnico (investigacion, analisis, fix propuesto, etc.) y se quiere estructurar como roadmap.
+## Fuente del plan
 
-**Fuente del plan** (orden de prioridad):
-1. Contexto de la conversacion actual (preferido)
-2. Fallback: plan file de `~/.claude/plans/${CLAUDE_SESSION_ID}.md`
-   (plan files son globales — usar `${CLAUDE_SESSION_ID}` para garantizar que sea de esta sesion)
+1. Contexto actual de conversación.
+2. Fallback: `~/.claude/plans/${CLAUDE_SESSION_ID}.md`.
+
+Si no hay plan, informar: “No hay plan en esta conversación. Primero planificar, luego ejecutar `/roadmap plan`.” y parar.
 
 ## Workspace mode
 
-En workspace mode, determinar el repo target antes de descomponer:
-1. Si `--repo` fue dado → usar ese repo
-2. Si el plan en conversación menciona un nombre que matchea un repo en `<repos>` → usar ese
-3. Si ambiguo → `AskUserQuestion`: "En qué repo se materializa este plan?"
+Resolver repo target:
 
-Una vez resuelto, usar `<abs-roadmap-root>` y `<repo-path>` de ese repo.
-Paso 7 (Commit+Push): `git -C <repo-path> add/commit/push`.
+1. `--repo <name>` si fue dado.
+2. Repo mencionado en el plan.
+3. Si ambiguo, preguntar.
 
-## Fase 1: Descomposicion
+Usar `<abs-roadmap-root>` y `git -C <repo-path>`.
 
-1. Identificar el plan mas reciente:
-   a. Buscar en el contexto de conversacion actual (plan tecnico, analisis, propuesta, etc.)
-   b. Si la conversacion fue compactada o no tiene plan visible → leer plan file de
-      `~/.claude/plans/${CLAUDE_SESSION_ID}.md`
-   c. Si no hay plan en ninguna fuente → informar: "No hay plan en esta conversacion.
-      Primero investigar/planificar, luego ejecutar `/roadmap plan`." → STOP
-3. Absorber contexto: leer documentacion existente del area afectada en `<roadmap-root>/`
-4. Aplicar framework de descomposicion (mismos criterios que Modo Autonomo):
-   - Leer [framework-reference.md](framework-reference.md)
-   - Criterios de escala: 3-5 Features/Epic, 1-4 Stories/Feature, 1-5 Tasks/Story
-   - Constraint Map (postcondiciones + invariantes)
-   - Validacion de completitud (Paso 4.5 del Modo Autonomo en [autonomous-mode.md](autonomous-mode.md))
-5. **OBLIGATORIO**: Descomposicion DEBE llegar hasta nivel Task para TODOS los Stories.
-   Cada Task con: nombre, tipo, descripcion de 1 linea.
+## Fase 1: Descomposición
 
-## Fase 2: Presentacion para aprobacion
+1. Identificar el plan más reciente.
+2. Leer contexto existente relacionado bajo `<roadmap-root>/`.
+3. Aplicar [framework-reference.md](framework-reference.md): máximo Outcome + Tasks.
+4. Producir:
+   - tasks directas, o
+   - Outcome(s) + tasks.
+5. Cada task debe tener nombre, descripción, dependencias `blocked_by` y ACs principales.
 
-6. Presentar arbol jerarquico completo + Constraint Map
-7. Pedir aprobacion con `AskUserQuestion` (NO usar `ExitPlanMode` — ese es para plan mode
-   del sistema, no para aprobaciones internas de un skill)
-8. **STOP y esperar aprobacion. NO crear archivos sin aprobacion.**
+## Fase 2: Aprobación
 
-## Fase 3: Materializacion (post-aprobacion)
+Presentar árbol completo y pedir aprobación con `AskUserQuestion`.
 
-**MATERIALIZAR ≠ IMPLEMENTAR.** En esta fase se crean SOLAMENTE archivos `.md` del roadmap
-dentro de `<roadmap-root>/` (Feature READMEs, Story READMEs, Task .md files).
-Estos archivos DESCRIBEN el trabajo a realizar — NO lo ejecutan.
-NUNCA escribir codigo, scripts, configs, hooks, ni ningun archivo fuera de `<roadmap-root>/`.
-La implementacion ocurre despues via `/roadmap loop`.
+STOP hasta aprobación. No crear archivos antes.
 
-### Paso 1: Bootstrap .stem raiz
+## Fase 3: Materialización
 
-Si `<roadmap-root>/` no tiene `.stem`:
-- **Con archivos .md existentes** → `rootline init <roadmap-root>/` infiere el schema
-- **Greenfield (sin archivos)** → crear un unico `.stem` raiz usando la plantilla canónica abajo. NO buscar una referencia variable en otro proyecto.
+**MATERIALIZAR ≠ IMPLEMENTAR.** Crear solo archivos `.md` y `.stem` dentro de `<roadmap-root>/`.
 
-Plantilla canónica greenfield:
+### Paso 1: Bootstrap `.stem` base
+
+Si `<roadmap-root>/.stem` no existe, copiar el template canónico [base.stem](base.stem) como `<roadmap-root>/.stem`.
+
+Contenido de referencia:
 
 ```yaml
 version: 2
 scope:
   match: "*.md"
+
 schema:
   estado:
     type: enum
-    required: true
+    required:
+      match: ["O*", "T*"]
+    match: ["O*", "T*"]
     values: [Pending, Specified, In Progress, Completed, Blocked, On Hold, Obsolete]
+
   tipo:
     type: enum
-    required: true
-    values: [feature, story, task, implementation, test, docs, ci, chore, refactor]
+    required:
+      match: ["O*", "T*"]
+    match: ["O*", "T*"]
+    values: [outcome, task]
+
   id:
     type: sequence
     match:
-      "E*": { prefix: E, digits: 2 }
-      "F*": { prefix: F, digits: 2 }
-      "S*": { prefix: S, digits: 3 }
+      "O*": { prefix: O, digits: 2 }
       "T*": { prefix: T, digits: 3 }
-  ejecutable_en:
-    type: string
-    required:
-      match: "T*"
-    match: "T*"
+
+links:
+  blocked_by:
+    target: ".*"
+  reference:
+    target: ".*"
+
 validate:
   - field: estado
     rule: non_empty
@@ -93,67 +86,65 @@ validate:
     rule: non_empty
 ```
 
-El `.stem` raiz es el **unico** que se crea manualmente. Los `.stem` en subdirectorios
-(E→F→S→T) solo redefinen `id.prefix` para el nivel inferior, con contenido minimo:
+No crear `.stem` por subnivel salvo necesidad excepcional del proyecto.
 
-```yaml
-version: 2
-schema:
-    id:
-        type: sequence
-        prefix: X  # F, S, o T segun nivel
-        digits: N  # 2 para F, 3 para S y T
-```
+### Paso 2: Crear Outcomes
 
-### Paso 2: Descubrir schema con rootline describe
-
-Antes de crear archivos en un directorio, ejecutar:
+Para cada Outcome:
 
 ```bash
-rootline describe <directorio>/
+find <roadmap-root>/ -maxdepth 1 -type d -name 'O[0-9][0-9]-*' -printf '%f\n' | sort
+# tomar el mayor OXX y sumar 1; si no hay ninguno, usar O01
+mkdir -p <roadmap-root>/OXX-slug
+rootline new <roadmap-root>/OXX-slug/README.md
 ```
 
-Esto muestra el schema efectivo (merged de `.stem` raiz + padres), incluyendo campos
-requeridos, tipos, y `schema.id.next` (proximo ID disponible). Usar esta informacion
-para llenar el frontmatter correctamente — no adivinar campos ni valores.
+Editar el README usando [outcome-guide.md](outcome-guide.md).
 
-### Paso 3: Scaffolding con rootline new
+### Paso 3: Crear Tasks
 
-Para cada artefacto (README de Epic/Feature/Story, archivo de Task):
+Tasks dentro de Outcome:
 
 ```bash
-rootline new <path-al-archivo.md>
+rootline describe <roadmap-root>/OXX-slug/ --field schema.id.next
+rootline new <roadmap-root>/OXX-slug/TXXX-task.md
 ```
 
-Esto genera el frontmatter correcto segun el `.stem` efectivo del directorio destino.
-Luego editar el contenido (body del .md) con los templates de:
-- [epic-guide.md](epic-guide.md) para READMEs de Epic y Feature
-- [story-guide.md](story-guide.md) para READMEs de Story
-- [task-guide.md](task-guide.md) para archivos de Task
+Tasks directas:
 
-### Paso 4: Validar
+```bash
+find <roadmap-root>/ -maxdepth 1 -type f -name 'T[0-9][0-9][0-9]-*.md' -printf '%f\n' | sort
+# tomar el mayor TXXX y sumar 1; si no hay ninguno, usar T001
+rootline new <roadmap-root>/TXXX-task.md
+```
 
-Despues de cada Write: `rootline validate <path>`. Si falla → `rootline fix <path>`.
+Editar cada task usando [task-guide.md](task-guide.md).
 
-### Paso 5: Cascading links
+### Paso 4: Cascading links
 
-Actualizar tablas en READMEs padre (ver seccion "Cascading Links" en SKILL.md).
+Si la task pertenece a un Outcome, agregarla en la tabla `## Tasks` del README del Outcome.
 
-### Paso 6: Validacion batch final
+### Paso 5: Validar
+
+Después de cada write:
+
+```bash
+rootline validate <path>
+```
+
+Al final:
 
 ```bash
 rootline validate --all <roadmap-root>/
+rootline graph <roadmap-root>/ --check
 ```
-Si hay errores → `rootline fix --all <roadmap-root>/`. Reportar resultado al usuario.
 
-### Paso 7: Commit+Push
+Si hay errores corregibles, usar `rootline fix` con criterio conservador. Un warning `scope.match "*.md" matches no files in directory` es aceptable cuando la raíz solo contiene directorios `OXX-*` y ninguna task directa.
 
-- `git add` archivos .md y .stem creados (especificos, no `git add .`)
-- `git commit` con mensaje: `chore(roadmap): create {descripcion breve} planning docs`
-- `git push`
+### Paso 6: Commit + push
 
-**STOP OBLIGATORIO**: Despues de commit+push, DETENERSE COMPLETAMENTE.
-Informar: "Archivos de planificacion creados. Ejecutar `/roadmap loop` cuando este listo
-para implementar."
-NO continuar. NO invocar `/roadmap loop`. NO leer tasks para implementar.
-NO escribir archivos de implementacion (codigo, scripts, configs, hooks, units, etc.).
+- `git add` solo archivos `.md` y `.stem` creados/modificados del roadmap.
+- `git commit -m "chore(roadmap): create planning docs"`
+- `git push` si `<auto-push>` es true.
+
+STOP obligatorio. Informar: “Archivos de planificación creados. Ejecutar `/roadmap loop` cuando esté listo para implementar.”

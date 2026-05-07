@@ -3,15 +3,12 @@ source: pablontiv/praxis
 name: roadmap
 description: |
   Usar cuando el usuario sabe QUÉ construir y necesita planificar CÓMO —
-  descomponiendo un proyecto en epics, features, stories y tasks con specs,
-  criterios de aceptación y dependencias. También para ver progreso, trabajo
-  pendiente, o ejecutar tareas en secuencia. Usar este skill siempre que el
-  usuario describa features a construir, pregunte "cómo estructuro este
-  proyecto", liste requerimientos o componentes, quiera ver progreso, o diga
-  "que falta" / "pendientes" / "next task" / "planificar" / "descomponer" —
-  incluso si no dice "roadmap" ni "decompose", e incluso si solo dice
-  "necesito construir X" sin pedir explícitamente un plan.
-  (No para: evaluar SI algo vale la pena = hypothesize, explorar ideas = discover.)
+  descomponiendo trabajo en Outcomes opcionales y Tasks ejecutables por agentes,
+  con criterios de aceptación, dependencias y validación. También para ver
+  progreso, trabajo pendiente o ejecutar tasks en secuencia. Usar si el usuario
+  describe capacidades a construir, pregunta "cómo estructuro esto", lista
+  requerimientos, quiere ver pendientes/progreso, o dice "next task",
+  "planificar" o "descomponer".
 argument-hint: "<texto libre> | [pending|loop|plan] [args]"
 allowed-tools:
   - Write
@@ -34,64 +31,49 @@ hooks:
       timeout: 60
 ---
 
-**Evaluates against**: .claude/rules/doc-conventions.md
+# /roadmap — Planificación AI-Native Simple
 
-# /roadmap — Framework de Planificación AI-Native
+Modelo canónico:
 
-## Configuración del Proyecto — Bootstrap Obligatorio
-
-**PRIMER PASO de CUALQUIER operación** (pending, loop, plan, sin argumentos, modo autónomo). Ejecutar SIEMPRE, ANTES de cualquier otra acción — incluyendo antes del gate check de rootline. Este paso NO requiere rootline.
-
-### Paso 0: Detección de Modo
-
-1. `test -d .git` en el directorio actual
-   - **SI** → **single-repo mode**. Continuar a Paso 1.
-   - **NO** → **workspace mode**. Continuar a Paso 0.1.
-
-### Paso 0.1: Workspace Discovery
-
-El workspace mode permite coordinar múltiples repos desde un directorio padre (ej: `/opt/` con backscroll, rootline, forge como subdirectorios). Cada repo mantiene su propio `roadmap.local.md` y `<roadmap-root>` — el workspace los agrega.
-
-1. Si existe `.claude/roadmap.local.md` en cwd con `mode: workspace` en frontmatter:
-   - Leer `repos:` map como base (para repos con paths atípicos, ej: `.git` nested)
-2. Escanear subdirectorios inmediatos buscando `.git` + `.claude/roadmap.local.md`:
-   ```bash
-   for d in */; do
-     test -d "$d/.git" && test -f "$d/.claude/roadmap.local.md" && echo "$d"
-   done
-   ```
-3. Para cada repo encontrado (auto-discovered + workspace config):
-   - Leer su `.claude/roadmap.local.md` → extraer `roadmap-root`
-   - Computar `abs-roadmap-root` = `<cwd>/<repo-path>/<roadmap-root>`
-   - Computar sus propios helpers (`<where-not-done>`, `<where-active>`, `<where-leaf>`)
-     usando la config de ese repo (o defaults si faltan)
-4. Construir tabla `<repos>` = `[{name, repo-path, abs-roadmap-root, config}]`
-5. Imprimir checkpoint workspace:
-
-```
-Bootstrap (workspace mode):
-  repos detectados: N
-  ┌─────────────┬───────────────────────────────┬──────────┐
-  │ Repo        │ roadmap-root                  │ Source   │
-  ├─────────────┼───────────────────────────────┼──────────┤
-  │ backscroll  │ /opt/backscroll/docs/epics    │ auto     │
-  │ rootline    │ /opt/rootline/docs/epics      │ auto     │
-  │ homeserver  │ /opt/homeserver/auto.../epics │ ws-cfg   │
-  └─────────────┴───────────────────────────────┴──────────┘
+```text
+Outcome/Objetivo  (opcional)
+└── Task          (unidad ejecutable)
 ```
 
-Después del checkpoint, continuar al **Routing por Subcomando** con `<repos>` disponible.
+Para trabajo chico, usar solo tasks. No crear Epic/Feature/Story en roadmaps nuevos.
 
-### Paso 1: Single-repo Bootstrap (sin cambios si viene de Paso 0)
+## Bootstrap obligatorio
 
-1. Leer `.claude/roadmap.local.md`. Si no existe:
-   - Preguntar al usuario: ¿Dónde vive el roadmap? (ej: `docs/epics`)
-   - Crear `.claude/roadmap.local.md` con el frontmatter mínimo (ver template abajo)
-2. Extraer `roadmap-root` del frontmatter. Si falta → preguntar y actualizar el archivo.
-3. Extraer filtros y valores operacionales (ver tablas). Si faltan → usar defaults, NO preguntar.
-4. Pre-computar expresiones helper (una vez, reusar en todos los comandos).
+Ejecutar SIEMPRE antes de cualquier operación.
 
-**Template mínimo** (crear si no existe):
+### Paso 0: Detectar modo
+
+```bash
+test -d .git
+```
+
+- Sí → single-repo mode.
+- No → workspace mode.
+
+### Workspace mode
+
+1. Si existe `.claude/roadmap.local.md` en cwd con `mode: workspace`, leer `repos:` como base.
+2. Escanear subdirectorios inmediatos con `.git` + `.claude/roadmap.local.md`.
+3. Para cada repo, leer `roadmap-root` y calcular:
+   - `<repo-path>`
+   - `<abs-roadmap-root>`
+   - helpers `<where-leaf>`, `<where-not-done>`, `<where-active>`
+4. Imprimir checkpoint con repos detectados.
+
+### Single-repo mode
+
+1. Leer `.claude/roadmap.local.md`.
+2. Si no existe, preguntar dónde vive el roadmap y crearlo.
+3. Extraer `roadmap-root`; si falta, preguntar y actualizar.
+4. Extraer config operacional; si falta, usar defaults.
+5. Pre-computar helpers.
+
+Template mínimo:
 
 ```yaml
 ---
@@ -106,16 +88,14 @@ status-values:
   blocked: 'Blocked'
   obsolete: 'Obsolete'
 leaf-filter: 'isIndex == false'
-story-close-verify: []
+outcome-close-verify: []
 pr-merge-strategy: 'squash'
 commit-style: 'conventional'
 auto-push: true
 ---
 ```
 
-En todo este documento, `<roadmap-root>` se refiere al valor configurado.
-
-### Configuración de Filtros
+## Configuración
 
 | Config key | Default | Placeholder |
 |------------|---------|-------------|
@@ -127,135 +107,96 @@ En todo este documento, `<roadmap-root>` se refiere al valor configurado.
 | `status-values.completed` | `'Completed'` | `<status-completed>` |
 | `status-values.blocked` | `'Blocked'` | `<status-blocked>` |
 | `status-values.obsolete` | `'Obsolete'` | `<status-obsolete>` |
-| `leaf-filter` | `'isIndex == false'` | `<leaf-filter>` |
-| `story-close-verify` | `[]` | `<story-close-cmds>` |
+| `leaf-filter` | `'isIndex == false'` | `<where-leaf>` |
+| `outcome-close-verify` | `[]` | `<outcome-close-cmds>` |
 | `pr-merge-strategy` | `'squash'` | `<pr-merge-strategy>` |
 | `commit-style` | `'conventional'` | `<commit-style>` |
 | `auto-push` | `true` | `<auto-push>` |
 
-Semántica:
-- `done-statuses` y `active-statuses` son **predicados de lectura** para queries y dependencias.
-- `status-values.*` son **valores canónicos de escritura**. Al mutar frontmatter, NUNCA hardcodear `Completed`/`Blocked`; usar `<status-completed>`, `<status-blocked>`, etc.
-
-Expresiones helper (pre-computar una vez, reusar en todos los comandos):
+Helpers:
 
 - `<where-not-done>`: `not (estado in <done-statuses>)`
 - `<where-active>`: `estado in <active-statuses>`
-- `<where-leaf>`: `<leaf-filter>`
+- `<where-leaf>`: valor de `leaf-filter`
 
-### Validación de Configuración Local
+Checkpoint obligatorio:
 
-Si `command -v rootline` retorna 0 y existe `.claude/.stem`, validar la configuración operacional antes de usarla:
-
-```bash
-rootline validate .claude/roadmap.local.md
-```
-
-Luego, si `<roadmap-root>` existe, verificar consistencia semántica contra el schema real del roadmap:
-
-```bash
-rootline describe <roadmap-root>/ --field schema.estado
-```
-
-Checks obligatorios:
-- Todo valor de `done-statuses` y `active-statuses` existe en `schema.estado.values`.
-- Todo `status-values.*` existe en `schema.estado.values`.
-- `<status-completed>` pertenece a `<done-statuses>`.
-- `<status-in-progress>` pertenece a `<active-statuses>`.
-- `<status-blocked>` NO pertenece a `<done-statuses>` salvo que el proyecto trate bloqueado como cierre explícito.
-
-Si rootline no está disponible, omitir esta validación y continuar solo en modos que no ejecutan rootline (ver gate check).
-
-**Checkpoint obligatorio**: Imprimir los helpers computados antes de ejecutar cualquier query. Ejemplo para un proyecto con `done-statuses: ['Completed', 'Obsolete']`:
-
-```
+```text
 Bootstrap:
-  roadmap-root: docs/epics
+  roadmap-root: docs/roadmap
   <where-leaf>:     isIndex == false
   <where-not-done>: not (estado in ["Completed", "Obsolete"])
   <where-active>:   estado in ["Pending", "Specified", "In Progress"]
 ```
 
-**Query de referencia** (con helpers ya sustituidos):
+## Validación de configuración
+
+Si `rootline` existe y `.claude/.stem` existe:
 
 ```bash
-rootline tree docs/epics/ --where 'isIndex == false && not (estado in ["Completed", "Obsolete"])' --output table
+rootline validate .claude/roadmap.local.md
 ```
 
-**Anti-patrón**: Ejecutar `rootline tree/query/stats` sin incluir `isIndex == false` en `--where`. Sin este filtro, los resultados mezclan index files (READMEs de Epic, Feature, Story) con tasks reales, inflando conteos. Toda query que reporta trabajo pendiente o progreso debe incluir `<where-leaf>`.
+Si `<roadmap-root>` existe:
 
----
+```bash
+rootline describe <roadmap-root>/ --field schema.estado
+```
+
+Verificar que los status configurados existan en el schema.
 
 ## Dependencia: rootline CLI
 
-**Requerida para materialización y queries** (`pending`, `loop`, `plan` post-aprobación). NO requerida para generar planes de descomposición.
+Requerido para materializar, consultar y ejecutar roadmaps.
 
-Instalación:
-```bash
-curl -fsSL https://raw.githubusercontent.com/pablontiv/rootline/master/install.sh | bash
-```
+Gate antes de ejecutar rootline:
 
-**Gate check**: Antes de ejecutar comandos `rootline` (crear archivos, queries, validación), verificar:
 ```bash
 command -v rootline
 ```
-Si no está disponible → informar al usuario:
-> `rootline` no está instalado. Es requerido para materializar el roadmap.
-> Instalar con: `curl -fsSL https://raw.githubusercontent.com/pablontiv/rootline/master/install.sh | bash`
 
-**Alcance del gate**: Solo bloquea operaciones que ejecutan rootline (scaffolding, validate, query, tree, graph). La generación de planes de descomposición (modo autónomo, Paso 1-6) NO requiere rootline y puede proceder normalmente.
+Si no está disponible, informar:
 
----
+```text
+`rootline` no está instalado. Es requerido para materializar/consultar el roadmap.
+Instalar con: curl -fsSL https://raw.githubusercontent.com/pablontiv/rootline/master/install.sh | bash
+```
 
-## Modo de Operación
+La generación conceptual de planes puede continuar sin rootline.
 
-Este skill es **plan-mode aware**. Cuando `defaultMode: "plan"` está activo:
+## Routing por subcomando
 
-### Fase 1: Planificación (automática en plan mode)
-1. Parsear `$ARGUMENTS` para determinar subcomando
-2. Leer el guide file correspondiente
-3. Ejecutar discovery y generar contenido completo en el plan file
-4. Llamar `ExitPlanMode` para aprobación
+Después del bootstrap:
 
-### Fase 2: Post-aprobación
+| `$ARGUMENTS` | Archivo | Descripción |
+|--------------|---------|-------------|
+| `pending` | [pending-subcommand.md](pending-subcommand.md) | Trabajo pendiente |
+| `plan` | [plan-subcommand.md](plan-subcommand.md) | Materializar plan como `.md` |
+| *(sin argumentos)* | [decision-tree-subcommand.md](decision-tree-subcommand.md) | Priorizar qué ejecutar |
+| `loop [--filter] [--max] [--pr]` | [loop-subcommand.md](loop-subcommand.md) | Ejecutar tasks pendientes |
+| *(texto libre)* | [autonomous-mode.md](autonomous-mode.md) | Descomponer en Outcome/Tasks |
 
-Después de que el usuario aprueba el plan, informarle que puede ejecutar `/roadmap plan` para crear los archivos del roadmap.
+## Flag global `--repo`
 
----
+Solo workspace mode:
 
-## Routing por Subcomando
+- `--repo <name>` resuelve un único repo y remueve el flag antes del dispatch.
+- En single-repo mode se ignora.
 
-Una vez completado el bootstrap, determinar el modo según `$ARGUMENTS` y leer el archivo correspondiente:
+## Regla de dispatch
 
-| $ARGUMENTS | Archivo | Descripción |
-|------------|---------|-------------|
-| `pending` | [pending-subcommand.md](pending-subcommand.md) | Vista jerárquica de trabajo pendiente |
-| `plan` | [plan-subcommand.md](plan-subcommand.md) | Materializar plan de conversación en archivos .md |
-| *(sin argumentos)* | [decision-tree-subcommand.md](decision-tree-subcommand.md) | Árbol de decisión para priorizar ramas |
-| `loop [--filter] [--max] [--pr]` | [loop-subcommand.md](loop-subcommand.md) | Ejecutar tasks pendientes en loop con confirmación |
-| *(texto libre)* | [autonomous-mode.md](autonomous-mode.md) | Descomposición autónoma de proyecto |
+1. Si empieza con `pending`, `loop`, `plan` → subcomando directo.
+2. Si vacío → decision tree.
+3. Si pide estado/progreso/pendientes → `pending`.
+4. Si describe algo a construir o descomponer → modo autónomo.
 
-**Flag global `--repo`** (solo workspace mode):
-- Si `$ARGUMENTS` contiene `--repo <name>`: resolver a un solo repo de `<repos>`,
-  establecer sus variables (`<roadmap-root>`, helpers) como si fuera single-repo,
-  y proceder normalmente. Remover `--repo <name>` de `$ARGUMENTS` antes del dispatch.
-- Ejemplo: `/roadmap pending --repo backscroll` → pending filtrado a backscroll.
-- En single-repo mode, `--repo` se ignora silenciosamente.
+## Lógica común
 
-**Regla de dispatch**:
-1. Si `$ARGUMENTS` empieza con `pending`, `loop`, o `plan` → subcomando directo.
-2. Si está vacío → decision tree.
-3. Si pide **ver estado, progreso, o resumen** (ej: "ver pendientes", "status", "overview", "que falta", "ver roadmaps") → tratar como `pending`.
-4. Si describe **features a construir** o pide descomposición → modo autónomo.
-
----
-
-## Lógica Común (materialización y ejecución)
-
-→ Leer [common-logic.md](common-logic.md) cuando se crean/modifican archivos del roadmap (`plan`, `loop`).
-Contiene: auto-numbering, verificación de padre, cascading links, comandos rootline de referencia.
+Leer [common-logic.md](common-logic.md) cuando se crean/modifican archivos del roadmap o se ejecuta loop.
 
 ## Referencia
 
-- Ver [framework-reference.md](framework-reference.md) para el documento completo del marco de trabajo
-- Templates canónicos: primer Epic materializado en `<roadmap-root>/`
+- Modelo completo: [framework-reference.md](framework-reference.md)
+- Outcomes: [outcome-guide.md](outcome-guide.md)
+- Tasks: [task-guide.md](task-guide.md)
+- `.stem` base: [base.stem](base.stem)

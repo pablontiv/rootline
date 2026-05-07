@@ -2,179 +2,134 @@
 
 ## Workflow
 
-### Paso 1: Parsear Argumentos
+### Paso 1: Parsear argumentos
 
-De `$ARGUMENTS`, extraer:
-- **story-path**: ruta a la Story padre (ej: `E01/F13/S001`)
-- **task-name**: slug kebab-case (ej: `add-k8s-phase`)
-- **descripción**: qué debe hacer el agente AI
+Extraer:
 
-### Paso 2: Determinar Tipo de Task
+- **task-name**: slug kebab-case, ej. `add-k8s-phase`.
+- **descripción**: qué debe hacer el agente.
+- **outcome-path opcional**: directorio `OXX-*` si la task pertenece a un Outcome.
 
-Descubrir los tipos válidos dinámicamente desde el schema del proyecto:
+### Paso 2: Determinar destino
 
-```bash
-rootline describe <story-dir> --field schema.tipo
-```
+- Si pertenece a un Outcome: `<roadmap-root>/OXX-name/TXXX-task-name.md`.
+- Si es directa: `<roadmap-root>/TXXX-task-name.md`.
 
-Esto retorna los valores de enum válidos para el campo `tipo` en el directorio de la Story. Seleccionar el tipo que mejor describe el trabajo del Task.
-
-Todos los tipos pueden incluir `## Especificacion Tecnica` cuando se beneficien de una spec estructurada. Buscar templates del proyecto en `.claude/roadmap.local.md` primero; si no existe, usar los genéricos de [type-specs.md](type-specs.md). Si no hay template para el tipo, usar un bloque libre.
-
-### Paso 3: Verificar Story Padre
+Verificar el directorio destino con:
 
 ```bash
-# Resolver path real
-rootline describe <roadmap-root>/EXX-*/FXX-*/SXXX-*/
+rootline describe <directorio>/
 ```
 
-Si no existe → informar al usuario. Sugerir crear con `/roadmap story` primero.
+### Paso 3: Auto-numbering
 
-Si existe → leer el README de la Story para:
-- Entender la capacidad objetivo
-- Extraer contexto relevante para el Task
-- Ver Tasks existentes (evitar duplicación)
-
-### Paso 4: Auto-numbering
+Si la task va dentro de un Outcome:
 
 ```bash
-# Detectar próximo TXXX en la Story (requiere .stem con id: {type: sequence, prefix: T, digits: 3})
-rootline describe <story-dir> --field schema.id.next
+rootline describe <outcome-dir>/ --field schema.id.next
 ```
 
-El comando retorna directamente el próximo identificador (ej: `"T004"`). Requiere que el directorio padre tenga un `.stem` con `id: {type: sequence}` configurado.
-
-### Paso 5: Generar Task File
-
-**5.1**: Crear el archivo con frontmatter correcto usando `rootline new`:
+Si la task va directa en la raíz del roadmap:
 
 ```bash
-rootline new <story-dir>/TXXX-task-name.md
+find <roadmap-root>/ -maxdepth 1 -type f -name 'T[0-9][0-9][0-9]-*.md' -printf '%f\n' | sort
 ```
 
-Esto genera el frontmatter según el `.stem` del directorio, con valores de enum correctos y comentados. El agente edita el contenido del task (contexto, alcance, ACs) pero NO modifica el schema del frontmatter — solo selecciona el valor correcto de cada enum.
+Tomar el mayor `TXXX` y sumar 1; si no hay ninguno, usar `T001`.
 
-**5.2**: Editar el contenido con toda la información necesaria para que un agente AI lo ejecute sin contexto adicional.
+### Paso 4: Crear archivo
 
-**CRÍTICO**: El Task debe ser auto-contenido. Un agente que lea SOLO este archivo debe poder ejecutar el trabajo completo.
+```bash
+rootline new <directorio>/TXXX-task-name.md
+```
 
-### Paso 6: Actualizar Story README
+Editar el contenido sin inventar campos fuera del `.stem` efectivo.
 
-Agregar fila en la tabla "Tasks" del Story README padre:
+### Paso 5: Actualizar README padre si existe
+
+Si la task pertenece a un Outcome, agregar fila en `OXX-*/README.md`:
 
 ```markdown
 | [TXXX](TXXX-task-name.md) | Descripción breve |
 ```
 
-**Nota**: NO incluir columna Estado en la tabla. El estado se lee del YAML frontmatter del Task file. `/roadmap view` lo deriva automáticamente.
+## Dependencias
 
----
+Usar `blocked_by` en la task bloqueada:
+
+```markdown
+[[blocked_by:T001-prerequisite]]
+```
+
+Significa: la task actual no puede ejecutarse hasta que `T001-prerequisite` esté completada.
+
+No usar `[[blocks:...]]` en tasks nuevas.
 
 ## Template: Task File
 
-**Notas sobre el template**:
-- **Wiki-links de dependencia**: Si el Task depende de otro, agregar `[[blocks:TXXX-name]]` debajo del link a la Story. `rootline graph` lee estos links automaticamente para detectar ciclos y resolver orden de ejecucion. Omitir si no hay dependencias.
-- **Especificacion Tecnica**: Incluir cuando el Task se beneficie de una especificacion estructurada — aplica a cualquier tipo (IaC, software, ci-cd, etc.). Omitir solo si el Task es puramente textual (ej: documentation sin componente tecnico). Usar el bloque YAML correspondiente al tipo, o un bloque libre si no hay template predefinido.
-
 ```markdown
 ---
-estado: Pending
-tipo: # descubrir via rootline describe <story-dir> --field schema.tipo
-ejecutable_en: 1 sesion
+estado: Specified
+tipo: task
 ---
-# TXXX: [Descripción accionable del task]
+# TXXX: [Descripción accionable]
 
-**Story**: [SXXX Story Name](README.md)
-**Contribuye a**: [criterio específico de la Story]
+**Outcome**: [OXX Nombre](README.md) <!-- omitir si es task directa -->
+**Contribuye a**: [criterio de éxito del Outcome o resultado directo esperado]
 
-[[blocks:TXXX-prerequisite-task]]
+[[blocked_by:TXXX-prerequisite]] <!-- omitir si no hay dependencia -->
 
 ## Preserva
 
-- INV1: [invariante de la Story a mantener]
+- INV1: [invariante a mantener]
   - Verificar: [comando o procedimiento]
 
 ## Contexto
 
-[Párrafo breve explicando el contexto necesario. Extraído de la Story padre pero auto-contenido. El agente no necesita leer otro archivo para entender qué hacer.]
-
-## Especificacion Tecnica
-
-Buscar templates del proyecto en `.claude/roadmap.local.md` primero; si no existe, usar los genéricos de [type-specs.md](type-specs.md). Usar el bloque YAML correspondiente al tipo seleccionado, o un bloque libre si no hay template predefinido.
-
-## Dependencias
-
-> Contexto humano complementario. Las dependencias machine-readable se declaran arriba con `[[blocks:TXXX-name]]`.
-
-- [Task/componente que debe existir antes de ejecutar este Task — contexto adicional]
-- [Servicio, módulo o config que este Task requiere]
+[Contexto suficiente para que un agente ejecute esta task leyendo solo este archivo.]
 
 ## Alcance
 
-**In**: [Lista específica de lo que el agente DEBE hacer]
-1. [Acción concreta 1]
-2. [Acción concreta 2]
+**In**:
+1. [acción concreta]
+2. [acción concreta]
 
-**Out**: [Lo que NO debe hacer — límites explícitos]
+**Out**:
+- [límite explícito]
 
 ## Estado inicial esperado
 
-- [Prerrequisito 1 que debe existir antes de ejecutar]
-- [Prerrequisito 2]
+- [precondición observable]
 
-## Criterios de Aceptacion
+## Criterios de Aceptación
 
-- [Criterio binario 1 — comando o check específico con resultado esperado]
-- [Criterio binario 2 — observable, automático, pass/fail]
-- [Criterio binario 3 — sin términos vagos]
+- [AC binario con comando/check esperado]
+- [AC binario con comando/check esperado]
 
 ## Fuente de verdad
 
-- [Path a código/config que el agente necesita leer/modificar]
-- [Path a documentación de referencia]
+- [paths a leer/modificar]
 ```
 
----
+## Estados
 
-## Estados del Task
+| Estado | Cuándo |
+|--------|--------|
+| Pending | Task creada, aún no especificada completamente |
+| Specified | Lista para implementar |
+| In Progress | Ejecución en curso |
+| Completed | Ejecutada y verificada |
+| Blocked | Bloqueada por dependencia o condición externa |
+| On Hold | Diferida intencionalmente |
+| Obsolete | Ya no aplica |
 
-Los valores por defecto son los listados abajo. Si tu proyecto usa etiquetas diferentes (ej: "Completado" en vez de "Completed"), configurarlos en `.claude/roadmap.local.md` (campos `done-statuses`, `active-statuses`).
+## Checklist
 
-| Estado | Emoji | Cuándo |
-|--------|-------|--------|
-| Pending | - | Task creado, sin especificación técnica |
-| Specified | 📋 | Especificación técnica completa, listo para implementar |
-| In Progress | 🔄 | Ejecución en curso por un agente |
-| Completed | ✅ | Ejecutado y verificado exitosamente |
-| Blocked | 🚫 | Bloqueado por dependencia externa o task previo |
-| On Hold | ⏸️ | Diferido intencionalmente, se retomará después |
+Antes de finalizar una task, verificar:
 
----
-
-## Checklist de Validación (8 Condiciones)
-
-Antes de finalizar el Task, verificar mentalmente:
-
-| # | Condición | Pregunta de validación |
-|---|-----------|----------------------|
-| 1 | Sesión única | ¿Un agente puede completar esto en una sesión? |
-| 2 | Sin memoria | ¿El archivo contiene TODO el contexto necesario? |
-| 3 | Criterios binarios | ¿Cada criterio es pass/fail sin interpretación? |
-| 4 | Verificable | ¿Los criterios referencian comandos/checks reales? |
-| 5 | Idempotente | ¿Se puede re-ejecutar sin daño? |
-| 6 | I/O explícitos | ¿Estado inicial, resultado y fuentes están declarados? |
-| 7 | Contribuye a | ¿Tiene campo "Contribuye a" que traza a un criterio de la Story padre? |
-| 8 | Cierre de Story | Si es el último task de la Story: ¿al menos un AC verifica el outcome de la Story (estado del sistema), no solo artefactos? |
-
-**Nota**: Estas condiciones se validan manualmente al revisar el Task. No hay hooks automáticos configurados actualmente.
-
----
-
-## Anti-patrones a Evitar
-
-- **Criterio vago**: "Servicio configurado correctamente" → Usar: "`systemctl is-active service` retorna active"
-- **Scope inflado**: Task que toca 5 archivos en 3 capas → Dividir en Tasks más pequeños
-- **Dependencia implícita**: "Después de configurar X..." → Declarar en "Estado inicial esperado"
-- **Sin fuente de verdad**: Agente no sabe qué archivos mirar → Siempre listar paths
-- **Vocabulario de investigación en slug**: "cat-5-link-validation" → Usar: "link-validation". Los slugs y títulos de Tasks deben usar vocabulario del dominio de implementación, no del proceso de investigación o clasificación interna. Si un término solo tiene sentido leyendo otro documento, no es autodescriptivo.
-- **AC de solo-artefacto en task final**: `ansible-playbook --syntax-check` como único AC del último task → El AC debe probar ejecución real (ej: `ansible-playbook site.yml --check` que simula ejecución completa, no solo syntax)
+1. ¿Cabe en una sesión?
+2. ¿Contiene todo el contexto?
+3. ¿Los ACs son pass/fail?
+4. ¿Declara dependencias con `blocked_by`?
+5. ¿Lista fuentes de verdad?
+6. ¿Preserva invariantes relevantes?

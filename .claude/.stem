@@ -17,7 +17,7 @@ schema:
   leaf-filter:
     type: string
     required: true
-  story-close-verify:
+  outcome-close-verify:
     type: list
     required: false
   pr-merge-strategy:

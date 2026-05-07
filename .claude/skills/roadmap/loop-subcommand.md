@@ -1,207 +1,136 @@
 # /roadmap loop [--filter PATTERN] [--max N] [--pr]
 
-> **Pre-requisito**: Leer [common-logic.md](common-logic.md) para auto-numbering, cascading links y comandos rootline.
+> Pre-requisito: leer [common-logic.md](common-logic.md).
 
-Ejecutar Tasks pendientes en loop con confirmacion entre cada uno.
+Ejecutar tasks pendientes en loop con confirmación entre cada una.
 
-**Opciones**:
-- `--filter PATTERN`: Filtrar por path (ej: `E02/F04`, `E01`)
-- `--max N`: Limitar a N tasks
-- `--checkpoint-interval N`: Intervalo de tasks entre checkpoints de calidad (default 5)
-- `--skip-reviews`: Desactivar quality gates (security review y checkpoint review)
-- `--pr`: Crear feature branch por Story y PR por Story (requiere `gh` CLI). Sin este flag, push depende de `<auto-push>` config.
+## Opciones
+
+- `--filter PATTERN`: filtrar por path (`O01`, `T003`, slug, etc.).
+- `--max N`: limitar a N tasks.
+- `--checkpoint-interval N`: checkpoint de calidad cada N tasks (default 5).
+- `--skip-reviews`: desactivar quality gates.
+- `--pr`: crear branch/PR por Outcome o grupo de tasks directas.
 
 ## Workspace mode
 
-En workspace mode, el loop opera en **un solo repo a la vez** (default).
+El loop opera en un repo a la vez.
 
-- **Con `--repo <name>`** (o ya resuelto en bootstrap): proceder como single-repo
-  usando `<abs-roadmap-root>` y `<repo-path>` de ese repo. Todos los `git` commands
-  usan `git -C <repo-path>` (ej: `git -C /opt/backscroll add ...`).
-
-- **Sin `--repo`**: ejecutar discovery rápida y pedir selección:
-  1. Para cada repo en `<repos>`, ejecutar en paralelo:
-     `rootline tree <abs-roadmap-root>/ --where '<where-leaf> && <where-not-done>' --output json`
-  2. Contar pendientes por repo desde JSON (NO parsear tablas)
-  3. Pedir selección con `AskUserQuestion`:
-     "En qué repo querés ejecutar el loop?"
-     Opciones: repos con pendientes > 0 (mostrar conteo)
-  4. Una vez seleccionado → proceder como single-repo con ese repo
+- Con `--repo <name>`: usar ese repo.
+- Sin `--repo`: contar pendientes por repo con `rootline tree ... --output json` y pedir selección.
 
 ## Fase 1: Discovery
 
-1. Ejecutar `rootline graph <roadmap-root>/ --where "<where-leaf>" --output json` para cargar dependencias antes de empezar.
-   - Si `cycles.length > 0` → reportar ciclos y **parar** (dependencias circulares impiden ejecucion).
-   - Si `broken_links.length > 0` → reportar warning (pueden ser tasks aun no creados). No bloquear salvo que afecten el task actual.
-   - Construir `dependency_map` desde `edges[]` con `type == "blocks"`. Convención: si `source` contiene `[[blocks:target]]`, entonces `source` depende de `target`; `target` debe ejecutarse antes que `source`.
-2. Ejecutar `rootline query <roadmap-root>/ --where "<where-leaf>" --where "<where-active>" --output json` para obtener tasks pendientes
-3. Si `--filter PATTERN` proporcionado, filtrar rows por Epic/Feature path match
-4. Ordenar rows de forma determinista con topological sort sobre `dependency_map`; desempate por `path` ascendente y luego `id` ascendente si existe
-5. Si `--max N`, tomar solo los primeros N rows ya ordenados
-6. Renderizar una tabla para el usuario desde JSON (NO parsear output table para decisiones)
-7. **Si 0 tasks encontradas** → informar:
-   "No hay tasks materializadas en `<roadmap-root>/`.
-   Ejecutar `/roadmap plan` para crear los archivos de task primero."
-   → **STOP**. NO implementar desde el contexto de conversación.
+1. Cargar dependencias:
+   ```bash
+   rootline graph <roadmap-root>/ --where "<where-leaf>" --output json
+   ```
+   - Si hay ciclos: reportar y parar.
+   - Si hay broken links: warning; bloquear solo si afectan la task actual.
+   - Construir `dependency_map` desde edges `type == "blocked_by"`.
+   - Compatibilidad: aceptar `type == "blocks"` como dependencia source → target para roadmaps viejos.
+2. Obtener tasks activas:
+   ```bash
+   rootline query <roadmap-root>/ --where '<where-leaf>' --where '<where-active>' --where 'tipo == "task"' --output json
+   ```
+3. Aplicar `--filter` por path si existe.
+4. Ordenar con topological sort sobre `dependency_map`; desempate por `path`, luego `id`.
+5. Aplicar `--max`.
+6. Renderizar tabla desde JSON.
+7. Si no hay tasks: informar y parar.
 
-## Fase 2: TodoList Setup
+## Fase 2: TodoList
 
-Para cada task encontrada, crear entrada con `TaskCreate`:
-- **subject**: `TXXX: titulo`
-- **description**: `Path: <filepath> | Tipo: <tipo>`
-- **activeForm**: `Implementando TXXX`
+Para cada task:
 
-Mostrar TodoList con `TaskList`.
+- subject: `TXXX: título`
+- description: `Path: <filepath>`
+- activeForm: `Implementando TXXX`
 
-## Fase 2.5: Branch & PR Setup
+Mostrar `TaskList`.
 
-Solo si `--pr`. Sin este flag → skip esta fase entera (push depende de `<auto-push>`).
+## Fase 2.5: PR mode
 
-Si `--pr` → leer [pr-workflow.md](pr-workflow.md) y ejecutar **Branch & PR Detection**.
+Si `--pr`, leer [pr-workflow.md](pr-workflow.md) y ejecutar Branch & PR Detection.
 
-## Fase 3: Loop de Ejecucion
+## Fase 3: Loop
 
-**Variables de estado del loop:**
-- `checkpoint_commit`: SHA del ultimo checkpoint (inicializar con HEAD al inicio)
-- `checkpoint_task_count`: Contador de tasks desde ultimo checkpoint (inicializar en 0)
-- `current_story_path`: Path de la Story actual (para detectar cambio de contexto)
-- `checkpoint_interval`: Intervalo entre checkpoints (default 5, configurable con --checkpoint-interval)
+Variables:
 
-### Story context change (trigger: cambio de Story)
+- `checkpoint_commit`: HEAD inicial.
+- `checkpoint_task_count`: 0.
+- `current_scope`: Outcome actual o `direct-tasks`.
+- `checkpoint_interval`: default 5.
 
-Al detectar que el task actual pertenece a una Story diferente a `current_story_path`:
+Para cada task ordenada:
 
-- **Default (sin `--pr`)**: Solo actualizar `current_story_path`, continuar normalmente.
-- **`--pr` mode**: Ejecutar **Story Setup** de [pr-workflow.md](pr-workflow.md).
+1. **Verificar dependencias**
+   - Usar `dependency_map`; no grep.
+   - Cada dependencia debe tener `estado` en `<done-statuses>`.
+   - Si no: skip con `Bloqueado por: TXXX (estado: X)`.
 
----
+2. **Scope change**
+   - Si cambia Outcome/direct scope y `--pr`, cerrar PR anterior si corresponde y ejecutar Outcome Setup.
+   - Sin `--pr`, solo actualizar `current_scope`.
 
-Para cada task en orden:
+3. **Marcar inicio**
+   ```bash
+   rootline set <task.md> "estado=<status-in-progress>"
+   rootline validate <task.md>
+   ```
+   Actualizar UI con `TaskUpdate`.
 
-1. **Verificar dependencias**: usar `dependency_map` construido desde `rootline graph --output json` (NO buscar `[[blocks:]]` con grep/manual parsing).
-   Para cada dependencia del task actual:
-   - Buscar el task referenciado en los rows JSON y verificar que su frontmatter `estado` tiene valor en `<done-statuses>`.
-   - Si alguna dependencia no esta en `<done-statuses>` → **skip** con mensaje: `Bloqueado por: TXXX (estado: <valor>)`.
-   - Si la dependencia es un broken link que afecta al task actual → reportar y **skip** hasta que el link se corrija.
-   - Tasks bloqueados se reintentaran al final de la cola.
+4. **Leer task**
+   Leer el archivo completo. La task debe ser suficiente para implementar.
 
-2. **Marcar inicio**:
-   - `TaskUpdate` → status: `in_progress` (solo UI del agente)
-   - Actualizar fuente de verdad del roadmap con el valor configurado:
-     ```bash
-     rootline set <task.md> "estado=<status-in-progress>"
-     rootline validate <task.md>
-     ```
+5. **Implementar**
+   Ejecutar exactamente el alcance de la task. Si hay una sección `## Especificación Técnica`, seguirla.
 
-3. **Leer Task**: `Read` del archivo .md completo para entender que pide
+6. **Verificar ACs e invariantes**
+   - Ejecutar cada AC.
+   - Ejecutar cada verificación en `## Preserva` si existe.
+   - Si falla algo: parar y reportar.
 
-3.5. **Prior attempts** (opcional, si `command -v backscroll >/dev/null 2>&1`):
-   `backscroll search "TASK_TITLE_KEYWORDS" --robot --max-tokens 1000`
-   Si este task fue intentado antes y revertido/bloqueado, surfacear ese contexto.
+7. **Outcome close check**
+   Si es la última task pendiente del Outcome, ejecutar comandos de `<outcome-close-cmds>` si existen. Warning informativo, no bloqueo automático.
 
-4. **Implementar**:
-   - Si el Task tiene `tipo:` en frontmatter que corresponde a un skill
-     conocido del proyecto, invocarlo via `Skill` tool
-   - Si no tiene skill asociado, implementar directamente siguiendo
-     las instrucciones del Task
-   - Consultar `.claude/roadmap.local.md` (si existe) para templates de
-     especificacion tecnica del proyecto, o [type-specs.md](type-specs.md) como fallback
+8. **Security review selectivo**
+   Si se tocaron archivos sensibles (`secret`, `credentials`, `.env`, `auth`, `crypto`) o la task lo pide, ejecutar review de seguridad. Findings HIGH bloquean.
 
-5. **Verificar ACs**:
-   - Leer seccion "Criterios de Aceptacion" del Task .md
-   - Ejecutar CADA verificacion documentada (comandos, checks, observables)
-   - Reportar resultado por AC: PASS / FAIL
-   - Si algun AC falla → reportar y **parar** (bug encontrado)
-   - Leer seccion "Preserva" del Task .md (si existe)
-   - Para cada invariante listado en Preserva: ejecutar su comando/procedimiento de verificacion
-   - Reportar resultado: INV1 HOLDS / INV2 VIOLATED
-   - Si algun invariante se viola → **parar** (igual que AC fail)
+9. **Commit**
+   ```bash
+   rootline set <task.md> "estado=<status-completed>"
+   rootline validate <task.md>
+   ```
+   `git add` específico, commit según `<commit-style>`, push según `<auto-push>` y `--pr`.
 
-6. **Verificacion de cierre de Story** (si es el ultimo task de la Story):
-   - Determinar si es el ultimo task: no quedan tasks pendientes en la misma Story (todas las demas estan en `<done-statuses>`)
-   - Leer criterios semanticos (seccion "Criterios de Aceptacion" o "Despues") del README.md de la Story padre
-   - Ejecutar `<story-close-cmds>` de `roadmap.local.md` (si existen)
-   - Reportar resultado por comando: PASS / FAIL
-   - **Warning informativo, no bloquea** el loop — el usuario decide si actuar
+10. **Actualizar UI y resumen**
+   Marcar completed y mostrar resultado de iteración.
 
-7. **Security Review** (selectivo, post-ACs, pre-commit):
-   - Aplica si: archivos modificados incluyen patterns sensibles (`**/secret*`, `**/*credentials*`, `**/.env*`, `**/auth*`, `**/crypto*`) O si el tipo de task lo requiere
-   - Si aplica: ejecutar `/security-review` sobre archivos modificados
-   - Si findings HIGH → **parar** (vulnerabilidad pre-push). Reportar findings y detener loop
-   - Si findings MEDIUM → warning informativo, continuar
-   - Si nada o no aplica → continuar silenciosamente
+11. **Checkpoint**
+   Activar si:
+   - `checkpoint_task_count >= checkpoint_interval`,
+   - cambia scope,
+   - usuario decide parar.
 
-8. **Commit** (centralizado, NO delegado a skills hijos):
-   - Antes de preparar el commit, marcar el task como completado en la fuente de verdad usando el valor configurado:
-     ```bash
-     rootline set <task.md> "estado=<status-completed>"
-     rootline validate <task.md>
-     ```
-   - Identificar archivos modificados/creados por la implementacion, incluyendo el `.md` del task actualizado.
-   - `git add` archivos relevantes (especificos, no `git add .`)
-   - **Formato del mensaje** (segun `<commit-style>`):
-     - **`conventional`** (default): `type(scope): description`
-       - Elegir `type` segun el contenido del task: `feat` (nueva funcionalidad), `fix` (correccion), `test` (tests), `docs` (documentacion), `refactor` (reestructuracion), `ci` (CI/CD), `chore` (mantenimiento), `perf` (rendimiento), `style` (formato)
-       - El hook `.githooks/commit-msg` rechazara mensajes que no sigan el formato
-     - **`terse`**: descripcion corta en minusculas, sin type ni scope. Ej: `add user validation`, `fix retry logic on timeout`. Maximo ~50 caracteres.
-   - **Push policy** (segun `<auto-push>` y `--pr`):
-     - **`<auto-push>: true` (default), sin `--pr`**: Push inmediato tras commit: `git push`
-     - **`<auto-push>: false`, sin `--pr`**: NO push. Los commits se acumulan localmente.
-     - **`--pr` mode** (independiente de `<auto-push>`): NO push aqui. Push ocurre en Story PR ([pr-workflow.md](pr-workflow.md)).
+   Revisar diff acumulado, reportar findings informativos y resetear checkpoint.
 
-9. **Marcar completado en UI**: `TaskUpdate` → status: `completed`. La fuente de verdad ya fue actualizada con `rootline set` en el paso de commit.
+12. **Confirmar continuación**
+   Preguntar: continuar, saltar siguiente, o parar.
 
-10. **Resumen de iteracion**:
-    ```
-    ITERACION N/TOTAL
-    ├─ Task: TXXX - titulo
-    ├─ Resultado: PASS/FAIL
-    ├─ ACs: N/M passed
-    ├─ Commit: hash
-    └─ Siguiente: TXXX+1 - titulo
-    ```
+13. **Reintentar bloqueadas**
+   Al final, reintentar tasks cuyas dependencias pasaron a done. Si no progresa ninguna, parar por deadlock.
 
-11. **Checkpoint Detection** (post-resumen, pre-confirmacion):
-    - Incrementar `checkpoint_task_count`
-    - Triggers (OR — cualquiera activa el checkpoint):
-      a) **Story context change**: siguiente task pertenece a otra Story — si `--pr`, triggers Story Setup + Story PR ([pr-workflow.md](pr-workflow.md))
-      b) **Safety net**: `checkpoint_task_count >= checkpoint_interval` (default 5)
-      c) **Loop interrumpido**: usuario elige "Parar" en la confirmacion
-    - Al activar checkpoint:
-      1. Calcular diff acumulado: `git diff <checkpoint_commit>..HEAD`
-      2. Ejecutar `/review` sobre el diff acumulado
-      3. Reportar findings (informativos, **no bloquean** el loop)
-      4. Registrar nuevo checkpoint: `checkpoint_commit = HEAD`, `checkpoint_task_count = 0`
-      5. Si trigger fue Story context change y `--pr` → ejecutar **Story PR** de [pr-workflow.md](pr-workflow.md) antes de continuar
+## Fase 4: Resumen final
 
-> **Al terminar el loop** (todos los tasks procesados o usuario dice "Parar"): si `--pr` y hay commits pendientes en el feature branch actual → ejecutar **Story PR** de [pr-workflow.md](pr-workflow.md).
-
-12. **Confirmar**: `AskUserQuestion` con opciones:
-    - Si, continuar (Recommended)
-    - Saltar siguiente y continuar
-    - Parar aqui
-
-13. **Reintentar bloqueados**: Al terminar la cola, si quedan tasks que fueron skipped por dependencias bloqueadas y ahora sus dependencias estan en `<done-statuses>` → reintentar. Si ningun task progreso en la pasada → parar (deadlock de dependencias). Solo si se decide persistir el bloqueo en el roadmap, usar el valor configurado:
-    ```bash
-    rootline set <task.md> "estado=<status-blocked>"
-    rootline validate <task.md>
-    ```
-
-## Fase 4: Resumen Final
-
-Al terminar todas las tasks o al parar:
-
-```
+```text
 RESUMEN LOOP
 ├─ Tasks completadas: N/TOTAL
 ├─ Tasks saltadas: M
-├─ ACs: total passed / total
-├─ Security reviews: N ejecutados, M findings (H: X, M: Y)
-├─ Quality checkpoints: N ejecutados, M findings
-├─ Pull Requests: (solo --pr)
-│  ├─ #42 S043-multi-path-config — MERGED
-│  ├─ #43 S044-directory-discovery — MERGED
-│  └─ #44 S045-resume-subcommand — OPEN (CI pending)
-├─ Commits: lista de hashes
-└─ Tasks restantes: lista (si las hay)
+├─ ACs: passed/total
+├─ Security reviews: N
+├─ Quality checkpoints: N
+├─ PRs: ... (si --pr)
+├─ Commits: ...
+└─ Tasks restantes: ...
 ```
