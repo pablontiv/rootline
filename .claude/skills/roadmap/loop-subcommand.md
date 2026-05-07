@@ -30,12 +30,13 @@ En workspace mode, el loop opera en **un solo repo a la vez** (default).
 
 ## Fase 1: Discovery
 
-1. Ejecutar `rootline graph --check <roadmap-root>/` para validar dependencias antes de empezar
-   - Si hay ciclos → reportar y **parar** (dependencias circulares impiden ejecucion)
-   - Si hay broken links → reportar como warning (pueden ser tasks aun no creados)
+1. Ejecutar `rootline graph <roadmap-root>/ --where "<where-leaf>" --output json` para cargar dependencias antes de empezar.
+   - Si `cycles.length > 0` → reportar ciclos y **parar** (dependencias circulares impiden ejecucion).
+   - Si `broken_links.length > 0` → reportar warning (pueden ser tasks aun no creados). No bloquear salvo que afecten el task actual.
+   - Construir `dependency_map` desde `edges[]` con `type == "blocks"`. Convención: si `source` contiene `[[blocks:target]]`, entonces `source` depende de `target`; `target` debe ejecutarse antes que `source`.
 2. Ejecutar `rootline query <roadmap-root>/ --where "<where-leaf>" --where "<where-active>" --output json` para obtener tasks pendientes
-3. Ordenar rows de forma determinista por `path` ascendente (desempate por `id` ascendente si existe)
-4. Si `--filter PATTERN` proporcionado, filtrar rows por Epic/Feature path match
+3. Si `--filter PATTERN` proporcionado, filtrar rows por Epic/Feature path match
+4. Ordenar rows de forma determinista con topological sort sobre `dependency_map`; desempate por `path` ascendente y luego `id` ascendente si existe
 5. Si `--max N`, tomar solo los primeros N rows ya ordenados
 6. Renderizar una tabla para el usuario desde JSON (NO parsear output table para decisiones)
 7. **Si 0 tasks encontradas** → informar:
@@ -77,11 +78,12 @@ Al detectar que el task actual pertenece a una Story diferente a `current_story_
 
 Para cada task en orden:
 
-1. **Verificar dependencias**: Leer el archivo .md del task y buscar `[[blocks:TXXX-name]]` en el body.
-   Para cada dependencia encontrada:
-   - Buscar el task referenciado y verificar que su frontmatter tiene `estado` con valor en `<done-statuses>`
-   - Si alguna dependencia no esta en `<done-statuses>` → **skip** con mensaje: `Bloqueado por: TXXX (estado: <valor>)`
-   - Tasks bloqueados se reintentaran al final de la cola
+1. **Verificar dependencias**: usar `dependency_map` construido desde `rootline graph --output json` (NO buscar `[[blocks:]]` con grep/manual parsing).
+   Para cada dependencia del task actual:
+   - Buscar el task referenciado en los rows JSON y verificar que su frontmatter `estado` tiene valor en `<done-statuses>`.
+   - Si alguna dependencia no esta en `<done-statuses>` → **skip** con mensaje: `Bloqueado por: TXXX (estado: <valor>)`.
+   - Si la dependencia es un broken link que afecta al task actual → reportar y **skip** hasta que el link se corrija.
+   - Tasks bloqueados se reintentaran al final de la cola.
 
 2. **Marcar inicio**:
    - `TaskUpdate` → status: `in_progress` (solo UI del agente)
