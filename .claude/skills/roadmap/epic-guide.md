@@ -29,7 +29,7 @@ Un epic debe partirse cuando:
 - No existe un "done" unificado — cada feature tiene su propio "done" independiente
 - Stakeholder no puede explicar qué cambia cuando el epic está "completo"
 
-> **Tip**: Usa `rootline tree <roadmap-root>/<epic>/ --where "<where-not-done>" -o table` para ver solo el trabajo pendiente de un epic, sin necesidad de query + filtrado manual. (Ver "Configuración de Filtros" en SKILL.md para los placeholders.)
+> **Tip**: Usa `rootline tree <roadmap-root>/<epic>/ --where "<where-leaf> && <where-not-done>" --output table` para ver solo el trabajo pendiente real de un epic, sin index files ni filtrado manual. (Ver "Configuración de Filtros" en SKILL.md para los placeholders.)
 
 ## Tamaño
 

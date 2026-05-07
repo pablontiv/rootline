@@ -151,7 +151,7 @@ Los valores por defecto son los listados abajo. Si tu proyecto usa etiquetas dif
 
 ---
 
-## Checklist de Validación (7 Condiciones)
+## Checklist de Validación (8 Condiciones)
 
 Antes de finalizar el Task, verificar mentalmente:
 

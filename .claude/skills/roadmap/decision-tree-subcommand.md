@@ -12,8 +12,8 @@ En Paso 5, agregar criterio: "Focalizarme en un solo proyecto? → `/roadmap --r
 ## Paso 1: Recopilar datos (3 comandos en paralelo, por repo)
 
 Para cada repo (o el unico repo en single-repo mode), ejecutar en paralelo:
-1. `rootline tree <abs-roadmap-root>/ --where "<where-leaf> and <where-not-done>" --output json` — arbol jerarquico con paths, estados y conteos completed/total (~2 KB, reemplaza stats + query)
-2. `rootline graph <abs-roadmap-root>/ --where "<where-leaf> and <where-not-done>" --output json` — grafo de dependencias entre pendientes (~3 KB)
+1. `rootline tree <abs-roadmap-root>/ --where "<where-leaf> && <where-not-done>" --output json` — arbol jerarquico con paths, estados y conteos completed/total (~2 KB, reemplaza stats + query)
+2. `rootline graph <abs-roadmap-root>/ --where "<where-leaf> && <where-not-done>" --output json` — grafo de dependencias entre pendientes (~3 KB)
 3. `git -C <repo-path> log -5 --format='%h %s'` — ultimos commits para proximidad (en single-repo: `git log` sin `-C`)
 4. (Opcional) Si `command -v backscroll >/dev/null 2>&1`: `backscroll search "blocked" --robot --max-tokens 1000` — sesiones previas pueden explicar por qué tasks fueron bloqueadas o diferidas
 

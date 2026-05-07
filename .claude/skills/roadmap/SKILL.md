@@ -35,15 +35,6 @@ hooks:
 ---
 
 **Evaluates against**: .claude/rules/doc-conventions.md
-  - Bash
-  - TaskCreate
-  - TaskList
-  - TaskUpdate
-  - TaskGet
-  - Skill
-  - AskUserQuestion
-  - ExitPlanMode
----
 
 # /roadmap — Framework de Planificación AI-Native
 
@@ -148,7 +139,7 @@ Bootstrap:
 **Query de referencia** (con helpers ya sustituidos):
 
 ```bash
-rootline tree docs/epics/ --where 'isIndex == false and not (estado in ["Completed", "Obsolete"])' --output table
+rootline tree docs/epics/ --where 'isIndex == false && not (estado in ["Completed", "Obsolete"])' --output table
 ```
 
 **Anti-patrón**: Ejecutar `rootline tree/query/stats` sin incluir `isIndex == false` en `--where`. Sin este filtro, los resultados mezclan index files (READMEs de Epic, Feature, Story) con tasks reales, inflando conteos. Toda query que reporta trabajo pendiente o progreso debe incluir `<where-leaf>`.
