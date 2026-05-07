@@ -83,7 +83,13 @@ Para cada task en orden:
    - Si alguna dependencia no esta en `<done-statuses>` → **skip** con mensaje: `Bloqueado por: TXXX (estado: <valor>)`
    - Tasks bloqueados se reintentaran al final de la cola
 
-2. **Marcar inicio**: `TaskUpdate` → status: `in_progress`
+2. **Marcar inicio**:
+   - `TaskUpdate` → status: `in_progress` (solo UI del agente)
+   - Actualizar fuente de verdad del roadmap con el valor configurado:
+     ```bash
+     rootline set <task.md> "estado=<status-in-progress>"
+     rootline validate <task.md>
+     ```
 
 3. **Leer Task**: `Read` del archivo .md completo para entender que pide
 
@@ -124,7 +130,12 @@ Para cada task en orden:
    - Si nada o no aplica → continuar silenciosamente
 
 8. **Commit** (centralizado, NO delegado a skills hijos):
-   - Identificar archivos modificados/creados por la implementacion
+   - Antes de preparar el commit, marcar el task como completado en la fuente de verdad usando el valor configurado:
+     ```bash
+     rootline set <task.md> "estado=<status-completed>"
+     rootline validate <task.md>
+     ```
+   - Identificar archivos modificados/creados por la implementacion, incluyendo el `.md` del task actualizado.
    - `git add` archivos relevantes (especificos, no `git add .`)
    - **Formato del mensaje** (segun `<commit-style>`):
      - **`conventional`** (default): `type(scope): description`
@@ -136,7 +147,7 @@ Para cada task en orden:
      - **`<auto-push>: false`, sin `--pr`**: NO push. Los commits se acumulan localmente.
      - **`--pr` mode** (independiente de `<auto-push>`): NO push aqui. Push ocurre en Story PR ([pr-workflow.md](pr-workflow.md)).
 
-9. **Marcar completado**: `TaskUpdate` → status: `completed`
+9. **Marcar completado en UI**: `TaskUpdate` → status: `completed`. La fuente de verdad ya fue actualizada con `rootline set` en el paso de commit.
 
 10. **Resumen de iteracion**:
     ```
@@ -168,7 +179,11 @@ Para cada task en orden:
     - Saltar siguiente y continuar
     - Parar aqui
 
-13. **Reintentar bloqueados**: Al terminar la cola, si quedan tasks que fueron skipped por dependencias bloqueadas y ahora sus dependencias estan Completadas → reintentar. Si ningun task progreso en la pasada → parar (deadlock de dependencias).
+13. **Reintentar bloqueados**: Al terminar la cola, si quedan tasks que fueron skipped por dependencias bloqueadas y ahora sus dependencias estan en `<done-statuses>` → reintentar. Si ningun task progreso en la pasada → parar (deadlock de dependencias). Solo si se decide persistir el bloqueo en el roadmap, usar el valor configurado:
+    ```bash
+    rootline set <task.md> "estado=<status-blocked>"
+    rootline validate <task.md>
+    ```
 
 ## Fase 4: Resumen Final
 
