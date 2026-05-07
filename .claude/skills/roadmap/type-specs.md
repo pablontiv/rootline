@@ -5,7 +5,7 @@
 Los tipos válidos se descubren dinámicamente desde el schema del proyecto:
 
 ```bash
-rootline describe <task-dir> --field schema.tipo
+rootline describe <story-dir> --field schema.tipo
 ```
 
 ## Templates de especificación
@@ -33,11 +33,12 @@ campo2: # descripción
 \```
 ```
 
-### Si no existe roadmap.local.md
+### Si no existe roadmap.local.md o no define templates
 
-1. Ejecutar `rootline describe <task-dir>` para obtener los tipos válidos del schema
-2. Inferir la estructura de especificación técnica del contexto del proyecto (lenguaje, stack, convenciones)
-3. No presuponer categorías ni enums — descubrirlos del código y configuración existentes
+1. Ejecutar `rootline describe <story-dir>` para obtener los tipos válidos del schema efectivo donde se creará el Task.
+2. NO inferir una estructura compleja por stack/lenguaje.
+3. Usar un bloque libre mínimo bajo `## Especificacion Tecnica` con `objetivo`, `archivos`, `cambios`, `verificacion`; o preguntar al usuario si el tipo requiere una plantilla estricta.
+4. No presuponer categorías ni enums — descubrirlos del schema con rootline.
 
 ## Tipos que no requieren especificación técnica
 

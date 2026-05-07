@@ -14,7 +14,7 @@ En Paso 5, agregar criterio: "Focalizarme en un solo proyecto? → `/roadmap --r
 Para cada repo (o el unico repo en single-repo mode), ejecutar en paralelo:
 1. `rootline tree <abs-roadmap-root>/ --where "<where-leaf> && <where-not-done>" --output json` — arbol jerarquico con paths, estados y conteos completed/total (~2 KB, reemplaza stats + query)
 2. `rootline graph <abs-roadmap-root>/ --where "<where-leaf> && <where-not-done>" --output json` — grafo de dependencias entre pendientes (~3 KB)
-3. `git -C <repo-path> log -5 --format='%h %s'` — ultimos commits para proximidad (en single-repo: `git log` sin `-C`)
+3. `git -C <repo-path> log -5 --name-only --format='%h %s'` — ultimos commits y paths para scoring (en single-repo: `git log` sin `-C`)
 4. (Opcional) Si `command -v backscroll >/dev/null 2>&1`: `backscroll search "blocked" --robot --max-tokens 1000` — sesiones previas pueden explicar por qué tasks fueron bloqueadas o diferidas
 
 **IMPORTANTE**: Despues de Paso 1, NO ejecutar mas comandos bash. Los Pasos 2-5 procesan los JSONs obtenidos.
@@ -38,6 +38,21 @@ Usando `estado` de cada hoja del tree JSON (cmd 1):
 - **Bloqueadas**: al menos una task tiene `estado: Blocked` o dependencia cross-feature con estado no en `<done-statuses>`
 
 Dentro de ejecutables, identificar **quick wins** (ramas con 1 solo task).
+
+### Scoring determinista de ramas
+
+Calcular `score` por rama ejecutable antes de renderizar:
+
+```text
+score = 0
+      + 50 si algun path de la rama aparece en `git log -5 --name-only` o el commit subject menciona su slug
+      + 10 por cada task externa que la rama desbloquea (out-degree hacia otras ramas)
+      + 5  si contiene una task `In Progress`
+      - 3  por cada task pendiente en la rama
+      - 100 si tiene dependencia insatisfecha o estado Blocked
+```
+
+Orden final: `score desc`, luego `pending_count asc`, luego `feature_path asc`.
 
 ## Anti-patrones de eficiencia
 
@@ -83,7 +98,7 @@ Reglas de renderizado:
 - `↓ desbloquea` entre tasks con dependencia `[[blocks:]]`
 - `↓ CIERRA [capacidad]` en el ultimo task de la rama (extraer del nombre del nodo Feature en el tree JSON)
 - Marcar tasks cuya dependencia ya esta en `<done-statuses>` pero siguen en Blocked como `[stale?]`
-- Ordenar ramas ejecutables por proximidad al ultimo commit (extraer de `git log` del Paso 1)
+- Ordenar ramas ejecutables por `score desc`, luego `pending_count asc`, luego `feature_path asc` (ver scoring determinista).
 
 ## Paso 5: Renderizar criterios de decision
 
@@ -103,7 +118,7 @@ CRITERIOS DE DECISION
 │  └─ NO ↓
 ├─ Quiero progreso rapido?
 │  ├─ SI → Quick win o rama mas corta
-│  └─ NO → Rama con mayor impacto arquitectural
+│  └─ NO → Rama con mayor score determinista
 ```
 
 Adaptar el flowchart al estado real (referenciar ramas concretas en cada hoja).

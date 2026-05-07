@@ -20,12 +20,16 @@ Leer `$ARGUMENTS` y determinar:
 
 ## Paso 2: Absorber Contexto del Proyecto
 
-Leer TODA la documentacion disponible del proyecto mencionado:
-- READMEs, intent docs, research docs
-- Codigo existente (para dimensionar scope real)
-- Dependencias y relaciones
+Discovery determinista (orden lexicografico, sin exploracion abierta):
 
-Esto es fundamental — sin entender el proyecto completo, la descomposicion sera artificial.
+1. Leer `.claude/roadmap.local.md` del repo target.
+2. Leer `README*` en la raiz del repo target (max 3 archivos).
+3. Buscar docs cuyo path o nombre matchee keywords de `$ARGUMENTS` (max 8 archivos, preferir `docs/`, `research/`, `intent/`).
+4. Leer READMEs existentes bajo `<roadmap-root>/` relacionados por keyword (max 8 archivos) para evitar overlap.
+5. Si el scope menciona codigo existente, leer manifests y entrypoints relevantes (max 10 archivos): `go.mod`, `package.json`, `Cargo.toml`, `pyproject.toml`, `justfile`, `Makefile`, `cmd/**`, `src/**` segun aplique.
+6. Si despues de esos limites falta una decision critica, usar `AskUserQuestion` con opciones concretas; no seguir inventando contexto.
+
+No usar loops no acotados ni "leer toda la documentacion disponible". El objetivo es suficiente contexto reproducible, no exhaustividad variable.
 
 ## Paso 2.5: Filtro de Vocabulario (obligatorio)
 

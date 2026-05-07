@@ -57,9 +57,41 @@ La implementacion ocurre despues via `/roadmap loop`.
 
 Si `<roadmap-root>/` no tiene `.stem`:
 - **Con archivos .md existentes** → `rootline init <roadmap-root>/` infiere el schema
-- **Greenfield (sin archivos)** → crear un unico `.stem` raiz con el schema completo
-  (id sequence, tipo enum, estado, aggregate, derive, links, validate).
-  Usar como referencia un proyecto rootline existente del ecosistema del usuario.
+- **Greenfield (sin archivos)** → crear un unico `.stem` raiz usando la plantilla canónica abajo. NO buscar una referencia variable en otro proyecto.
+
+Plantilla canónica greenfield:
+
+```yaml
+version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Specified, In Progress, Completed, Blocked, On Hold, Obsolete]
+  tipo:
+    type: enum
+    required: true
+    values: [feature, story, task, implementation, test, docs, ci, chore, refactor]
+  id:
+    type: sequence
+    match:
+      "E*": { prefix: E, digits: 2 }
+      "F*": { prefix: F, digits: 2 }
+      "S*": { prefix: S, digits: 3 }
+      "T*": { prefix: T, digits: 3 }
+  ejecutable_en:
+    type: string
+    required:
+      match: "T*"
+    match: "T*"
+validate:
+  - field: estado
+    rule: non_empty
+  - field: tipo
+    rule: non_empty
+```
 
 El `.stem` raiz es el **unico** que se crea manualmente. Los `.stem` en subdirectorios
 (E→F→S→T) solo redefinen `id.prefix` para el nivel inferior, con contenido minimo:
