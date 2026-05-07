@@ -34,3 +34,6 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Skill evals (local only)
+.claude/skills/*/evals/
