@@ -7,10 +7,22 @@
       "expected_output": "Clean implementation vocabulary, roadmap.local.md bootstrap, good granularity, constraint map",
       "files": [],
       "assertions": [
-        {"name": "no-research-codes", "check": "No artifact name contains H-03, CAP-07, M6, CD-04, LI-02"},
-        {"name": "implementation-vocabulary", "check": "Names use implementation terms, not research terms"},
-        {"name": "roadmap-local-bootstrap", "check": "Mentions creating roadmap.local.md first"},
-        {"name": "constraint-map-present", "check": "Includes Constraint Map with postconditions"}
+        {
+          "name": "no-research-codes",
+          "check": "No artifact name contains H-03, CAP-07, M6, CD-04, LI-02"
+        },
+        {
+          "name": "implementation-vocabulary",
+          "check": "Names use implementation terms, not research terms"
+        },
+        {
+          "name": "roadmap-local-bootstrap",
+          "check": "Mentions creating roadmap.local.md first"
+        },
+        {
+          "name": "constraint-map-present",
+          "check": "Includes Constraint Map with postconditions"
+        }
       ]
     },
     {
@@ -19,10 +31,22 @@
       "expected_output": "Better granularity than original asus-linux E01, no single-story features, scale criteria met",
       "files": [],
       "assertions": [
-        {"name": "no-single-story-features", "check": "No Feature has exactly 1 Story"},
-        {"name": "scale-criteria-met", "check": "3-5 Features/Epic, 1-4 Stories/Feature, 1-5 Tasks/Story"},
-        {"name": "reaches-task-level", "check": "All Stories have Tasks listed"},
-        {"name": "not-hardware-per-feature", "check": "Does NOT create 1 Feature per hardware subsystem with 1 Story each"}
+        {
+          "name": "no-single-story-features",
+          "check": "No Feature has exactly 1 Story"
+        },
+        {
+          "name": "scale-criteria-met",
+          "check": "3-5 Features/Epic, 1-4 Stories/Feature, 1-5 Tasks/Story"
+        },
+        {
+          "name": "reaches-task-level",
+          "check": "All Stories have Tasks listed"
+        },
+        {
+          "name": "not-hardware-per-feature",
+          "check": "Does NOT create 1 Feature per hardware subsystem with 1 Story each"
+        }
       ]
     },
     {
@@ -31,10 +55,22 @@
       "expected_output": "Bootstrap roadmap.local.md, type specs in local, 1-2 epics, grouped by milestone",
       "files": [],
       "assertions": [
-        {"name": "roadmap-local-bootstrap", "check": "Creates or mentions creating roadmap.local.md as a first step, BEFORE decomposition"},
-        {"name": "type-specs-in-local", "check": "Rust type specs go in roadmap.local.md"},
-        {"name": "epic-substance-test", "check": "Every Epic has >= 6 Tasks total. If an Epic has < 3 Features, each Feature has >= 2 Stories. No thin Epics (2 Features × 1 Story each)."},
-        {"name": "postconditions-observable", "check": "Every Epic postcondition includes a verification command or observable check, not vague statements like 'produces a valid PDF'"}
+        {
+          "name": "roadmap-local-bootstrap",
+          "check": "Creates or mentions creating roadmap.local.md as a first step, BEFORE decomposition"
+        },
+        {
+          "name": "type-specs-in-local",
+          "check": "Rust type specs go in roadmap.local.md"
+        },
+        {
+          "name": "epic-substance-test",
+          "check": "Every Epic has >= 6 Tasks total. If an Epic has < 3 Features, each Feature has >= 2 Stories. No thin Epics (2 Features × 1 Story each)."
+        },
+        {
+          "name": "postconditions-observable",
+          "check": "Every Epic postcondition includes a verification command or observable check, not vague statements like 'produces a valid PDF'"
+        }
       ]
     },
     {
@@ -43,10 +79,22 @@
       "expected_output": "Only roadmap .md files created inside docs/epics/, no implementation files written",
       "files": [],
       "assertions": [
-        {"name": "no-implementation-files", "check": "Does NOT create .githooks/post-merge, systemd unit files, bash scripts, or any file outside docs/epics/"},
-        {"name": "creates-roadmap-docs", "check": "Creates Feature README, Story README, and Task .md files inside docs/epics/"},
-        {"name": "tasks-describe-not-execute", "check": "Task .md files DESCRIBE what to build (post-merge hook, systemd units) but do NOT contain the actual implementation code as file output"},
-        {"name": "stops-after-materialization", "check": "After creating roadmap docs, stops and tells user to run /roadmap loop for implementation. Does NOT start implementing."}
+        {
+          "name": "no-implementation-files",
+          "check": "Does NOT create .githooks/post-merge, systemd unit files, bash scripts, or any file outside docs/epics/"
+        },
+        {
+          "name": "creates-roadmap-docs",
+          "check": "Creates Feature README, Story README, and Task .md files inside docs/epics/"
+        },
+        {
+          "name": "tasks-describe-not-execute",
+          "check": "Task .md files DESCRIBE what to build (post-merge hook, systemd units) but do NOT contain the actual implementation code as file output"
+        },
+        {
+          "name": "stops-after-materialization",
+          "check": "After creating roadmap docs, stops and tells user to run /roadmap loop for implementation. Does NOT start implementing."
+        }
       ]
     },
     {
@@ -55,10 +103,22 @@
       "expected_output": "Creates feature branch, executes T001, commits without pushing, identifies T002 as blocked",
       "files": [],
       "assertions": [
-        {"name": "detects-base-branch", "check": "Attempts to detect base branch via git symbolic-ref or origin/main check"},
-        {"name": "creates-feature-branch", "check": "Creates branch named feat/S001-* from base branch"},
-        {"name": "no-push-in-step-8", "check": "Does NOT run git push after commit in the per-task step"},
-        {"name": "blocked-task-detected", "check": "Reports T002 as blocked by T001 dependency"}
+        {
+          "name": "detects-base-branch",
+          "check": "Attempts to detect base branch via git symbolic-ref or origin/main check"
+        },
+        {
+          "name": "creates-feature-branch",
+          "check": "Creates branch named feat/S001-* from base branch"
+        },
+        {
+          "name": "no-push-in-step-8",
+          "check": "Does NOT run git push after commit in the per-task step"
+        },
+        {
+          "name": "blocked-task-detected",
+          "check": "Reports T002 as blocked by T001 dependency"
+        }
       ]
     },
     {
@@ -67,10 +127,22 @@
       "expected_output": "Skips branch detection, pushes after each commit, no PR creation",
       "files": [],
       "assertions": [
-        {"name": "skips-branch-detection", "check": "Does NOT run git symbolic-ref or gh auth status"},
-        {"name": "no-feature-branch", "check": "Does NOT create a feat/* branch"},
-        {"name": "push-after-each-commit", "check": "Runs git push after each task's commit, not deferred"},
-        {"name": "no-pr-creation", "check": "Does NOT run gh pr create"}
+        {
+          "name": "skips-branch-detection",
+          "check": "Does NOT run git symbolic-ref or gh auth status"
+        },
+        {
+          "name": "no-feature-branch",
+          "check": "Does NOT create a feat/* branch"
+        },
+        {
+          "name": "push-after-each-commit",
+          "check": "Runs git push after each task's commit, not deferred"
+        },
+        {
+          "name": "no-pr-creation",
+          "check": "Does NOT run gh pr create"
+        }
       ]
     },
     {
@@ -79,10 +151,22 @@
       "expected_output": "Story boundary triggers PR creation before switching to new story branch",
       "files": [],
       "assertions": [
-        {"name": "story-pr-on-boundary", "check": "Creates PR for S001 when detecting context switch to S002"},
-        {"name": "new-branch-for-s002", "check": "Creates feat/S002-add-validation branch after S001 PR"},
-        {"name": "pr-body-has-commits", "check": "PR body lists the commits/tasks completed for the Story"},
-        {"name": "post-merge-checkout-base", "check": "After PR merge, checks out base branch and pulls before creating new branch"}
+        {
+          "name": "story-pr-on-boundary",
+          "check": "Creates PR for S001 when detecting context switch to S002"
+        },
+        {
+          "name": "new-branch-for-s002",
+          "check": "Creates feat/S002-add-validation branch after S001 PR"
+        },
+        {
+          "name": "pr-body-has-commits",
+          "check": "PR body lists the commits/tasks completed for the Story"
+        },
+        {
+          "name": "post-merge-checkout-base",
+          "check": "After PR merge, checks out base branch and pulls before creating new branch"
+        }
       ]
     },
     {
@@ -91,10 +175,106 @@
       "expected_output": "Prints computed helpers, uses isIndex == false, correct leaf-only counts, Spanish done-statuses",
       "files": [],
       "assertions": [
-        {"name": "prints-bootstrap-helpers", "check": "Output includes the computed helper expressions with actual values before running any query"},
-        {"name": "uses-isIndex-false", "check": "The rootline command includes isIndex == false in --where clause"},
-        {"name": "uses-project-done-statuses", "check": "Uses Completado/Obsoleto (from project config), not Completed/Obsolete (defaults)"},
-        {"name": "no-inflated-counts", "check": "Reported counts reflect leaf tasks only, not index files. Should show ~3 pending tasks, not 15+"}
+        {
+          "name": "prints-bootstrap-helpers",
+          "check": "Output includes the computed helper expressions with actual values before running any query"
+        },
+        {
+          "name": "uses-isIndex-false",
+          "check": "The rootline command includes isIndex == false in --where clause"
+        },
+        {
+          "name": "uses-project-done-statuses",
+          "check": "Uses Completado/Obsoleto (from project config), not Completed/Obsolete (defaults)"
+        },
+        {
+          "name": "no-inflated-counts",
+          "check": "Reported counts reflect leaf tasks only, not index files. Should show ~3 pending tasks, not 15+"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "/roadmap loop --max 1\n\nContexto: .claude/roadmap.local.md define roadmap-root: docs/epics, done-statuses: ['Completado', 'Obsoleto'], active-statuses: ['Pendiente', 'Especificado', 'En progreso'], status-values.completed: 'Completado', status-values.in-progress: 'En progreso', status-values.blocked: 'Bloqueado'. rootline esta instalado y schema.estado contiene esos valores. Hay una task Pendiente con ACs que pasan.",
+      "expected_output": "Loop writes localized configured status values via rootline set",
+      "files": [],
+      "assertions": [
+        {
+          "name": "uses-configured-in-progress",
+          "check": "Runs rootline set <task.md> estado='En progreso' or equivalent from status-values.in-progress, not hardcoded 'In Progress'"
+        },
+        {
+          "name": "uses-configured-completed",
+          "check": "Runs rootline set <task.md> estado='Completado' from status-values.completed, not hardcoded 'Completed'"
+        },
+        {
+          "name": "taskupdate-ui-only",
+          "check": "Treats TaskUpdate as UI only; roadmap source of truth is updated through rootline set"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "/roadmap pending\n\nContexto: roadmap.local.md existe. rootline instalado. docs/epics contiene READMEs index y tasks leaf. Verificar comportamiento, no contenido.",
+      "expected_output": "Pending uses rootline tree JSON and leaf filter for counts",
+      "files": [],
+      "assertions": [
+        {
+          "name": "tree-json",
+          "check": "Runs rootline tree with --output json"
+        },
+        {
+          "name": "leaf-filter",
+          "check": "The --where clause includes <where-leaf> / isIndex == false"
+        },
+        {
+          "name": "no-table-parse",
+          "check": "Does not parse table output to compute totals"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "/roadmap loop\n\nContexto: rootline instalado. Hay tasks con links [[blocks:...]], un broken link no relacionado, y no hay ciclos.",
+      "expected_output": "Loop resolves dependencies from graph JSON",
+      "files": [],
+      "assertions": [
+        {
+          "name": "graph-json",
+          "check": "Runs rootline graph <roadmap-root>/ --where <where-leaf> --output json"
+        },
+        {
+          "name": "cycles-block",
+          "check": "Stops only if cycles.length > 0"
+        },
+        {
+          "name": "broken-link-warning",
+          "check": "Reports unrelated broken_links as warning, not fatal"
+        },
+        {
+          "name": "no-grep-blocks",
+          "check": "Does not grep/read task bodies solely to parse [[blocks:]] dependencies"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Crear roadmap para un proyecto greenfield sin .stem ni roadmap previo. rootline instalado. Quiero materializar docs del roadmap, no implementar codigo.",
+      "expected_output": "Greenfield planning uses canonical .stem and deterministic discovery",
+      "files": [],
+      "assertions": [
+        {
+          "name": "canonical-stem",
+          "check": "Uses the canonical greenfield .stem template from plan-subcommand.md instead of copying an arbitrary existing project"
+        },
+        {
+          "name": "bounded-discovery",
+          "check": "Uses bounded deterministic discovery limits rather than 'read all available documentation'"
+        },
+        {
+          "name": "no-type-spec-inference",
+          "check": "If roadmap.local.md lacks type templates, uses a minimal free-form technical spec or asks, instead of inventing stack-specific schema"
+        }
       ]
     }
   ]
