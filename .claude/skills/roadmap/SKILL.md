@@ -143,6 +143,29 @@ Expresiones helper (pre-computar una vez, reusar en todos los comandos):
 - `<where-active>`: `estado in <active-statuses>`
 - `<where-leaf>`: `<leaf-filter>`
 
+### Validación de Configuración Local
+
+Si `command -v rootline` retorna 0 y existe `.claude/.stem`, validar la configuración operacional antes de usarla:
+
+```bash
+rootline validate .claude/roadmap.local.md
+```
+
+Luego, si `<roadmap-root>` existe, verificar consistencia semántica contra el schema real del roadmap:
+
+```bash
+rootline describe <roadmap-root>/ --field schema.estado
+```
+
+Checks obligatorios:
+- Todo valor de `done-statuses` y `active-statuses` existe en `schema.estado.values`.
+- Todo `status-values.*` existe en `schema.estado.values`.
+- `<status-completed>` pertenece a `<done-statuses>`.
+- `<status-in-progress>` pertenece a `<active-statuses>`.
+- `<status-blocked>` NO pertenece a `<done-statuses>` salvo que el proyecto trate bloqueado como cierre explícito.
+
+Si rootline no está disponible, omitir esta validación y continuar solo en modos que no ejecutan rootline (ver gate check).
+
 **Checkpoint obligatorio**: Imprimir los helpers computados antes de ejecutar cualquier query. Ejemplo para un proyecto con `done-statuses: ['Completed', 'Obsolete']`:
 
 ```

@@ -1,0 +1,42 @@
+version: 2
+scope:
+  match: roadmap.local.md
+schema:
+  roadmap-root:
+    type: string
+    required: true
+  done-statuses:
+    type: list
+    required: true
+  active-statuses:
+    type: list
+    required: true
+  status-values:
+    type: map
+    required: true
+  leaf-filter:
+    type: string
+    required: true
+  story-close-verify:
+    type: list
+    required: false
+  pr-merge-strategy:
+    type: enum
+    values: [squash, merge, rebase]
+    required: true
+  commit-style:
+    type: enum
+    values: [conventional, terse]
+    required: true
+  auto-push:
+    type: bool
+    required: true
+validate:
+  - field: roadmap-root
+    rule: non_empty
+  - field: done-statuses
+    rule: non_empty
+  - field: active-statuses
+    rule: non_empty
+  - field: status-values
+    rule: non_empty
