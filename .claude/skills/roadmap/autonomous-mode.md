@@ -8,6 +8,8 @@ Ejecutar primero el bootstrap de `SKILL.md`. Leer o crear `.claude/roadmap.local
 
 ## Paso 1: Resolver intención
 
+> **Razonamiento profundo**: Para proyectos complejos (>3 Outcomes anticipados o área técnica poco familiar), activar máximo razonamiento antes de descomponer: incluir `ultrathink` en el análisis inicial o configurar `planning-effort: xhigh` en `roadmap.local.md` (default). El effort se puede subir a `max` con `/effort max` si el scope es muy grande.
+
 Determinar desde `$ARGUMENTS`:
 
 - objetivo/capacidad a construir,

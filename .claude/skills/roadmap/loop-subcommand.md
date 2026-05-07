@@ -11,6 +11,9 @@ Ejecutar tasks pendientes en loop con confirmación entre cada una.
 - `--checkpoint-interval N`: checkpoint de calidad cada N tasks (default 5).
 - `--skip-reviews`: desactivar quality gates.
 - `--pr`: crear branch/PR por Outcome o grupo de tasks directas.
+- `--worktree`: crear git worktree aislado por Outcome via `EnterWorktree`/`ExitWorktree`. Al iniciar cada Outcome nuevo se crea un worktree; al cerrar se limpia con `ExitWorktree`. Requiere que el repo soporte worktrees.
+- `--self-pace`: usar `ScheduleWakeup` entre tasks para loops de larga duración. Mantiene el cache caliente (delay ~270s) sin bloquear la sesión.
+- `--parallel`: ejecutar tasks independientes dentro de un Outcome en paralelo via `Agent` tool usando `<execution-model>`.
 
 ## Workspace mode
 
@@ -53,6 +56,15 @@ Mostrar `TaskList`.
 
 Si `--pr`, leer [pr-workflow.md](pr-workflow.md) y ejecutar Branch & PR Detection.
 
+## Fase 2.6: Worktree setup
+
+Solo si `--worktree` (o `worktree-per-outcome: true` en config). Sin este flag → skip.
+
+Al detectar un Outcome nuevo en el loop:
+- `EnterWorktree` con nombre derivado del Outcome ID (ej: `outcome-O01`).
+- Todos los commits de ese Outcome ocurren dentro del worktree.
+- Al cerrar el Outcome (última task completada, o loop interrumpido): `ExitWorktree`.
+
 ## Fase 3: Loop
 
 Variables:
@@ -86,6 +98,9 @@ Para cada task ordenada:
 5. **Implementar**
    Ejecutar exactamente el alcance de la task. Si hay una sección `## Especificación Técnica`, seguirla.
 
+5.5. **Paralelismo** (solo si `--parallel`):
+   Si hay múltiples tasks en el Outcome actual sin dependencias entre sí (ningún `blocked_by` entre ellas), invocarlas como subagentes en paralelo via `Agent` tool con `model: <execution-model>`. Consolidar resultados antes de continuar a verificación de ACs.
+
 6. **Verificar ACs e invariantes**
    - Ejecutar cada AC.
    - Ejecutar cada verificación en `## Preserva` si existe.
@@ -105,7 +120,18 @@ Para cada task ordenada:
    `git add` específico, commit según `<commit-style>`, push según `<auto-push>` y `--pr`.
 
 10. **Actualizar UI y resumen**
-   Marcar completed y mostrar resultado de iteración.
+   ```bash
+   TaskUpdate <id> status: completed
+   TaskOutput <id> "ACs: N/M passed | Commit: <hash>"
+   ```
+   Mostrar resultado de iteración.
+
+10.5. **Self-pace** (solo si `--self-pace`):
+   Si quedan más de 3 tasks en la cola:
+   ```
+   ScheduleWakeup(delaySeconds: 270, reason: "loop roadmap: <N> tasks restantes — <siguiente task>")
+   ```
+   Mantiene el cache caliente (< 5 min TTL) entre iteraciones largas.
 
 11. **Checkpoint**
    Activar si:

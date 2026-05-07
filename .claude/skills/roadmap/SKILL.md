@@ -24,6 +24,7 @@ allowed-tools:
   - AskUserQuestion
   - ExitPlanMode
   - Agent
+effort: xhigh
 hooks:
   Stop:
     - type: agent
@@ -92,6 +93,10 @@ outcome-close-verify: []
 pr-merge-strategy: 'squash'
 commit-style: 'conventional'
 auto-push: true
+worktree-per-outcome: false
+parallel-independent-tasks: false
+planning-effort: xhigh
+execution-model: sonnet
 ---
 ```
 
@@ -112,6 +117,10 @@ auto-push: true
 | `pr-merge-strategy` | `'squash'` | `<pr-merge-strategy>` |
 | `commit-style` | `'conventional'` | `<commit-style>` |
 | `auto-push` | `true` | `<auto-push>` |
+| `worktree-per-outcome` | `false` | `<worktree-per-outcome>` |
+| `parallel-independent-tasks` | `false` | `<parallel-tasks>` |
+| `planning-effort` | `xhigh` | `<planning-effort>` |
+| `execution-model` | `sonnet` | `<execution-model>` |
 
 Helpers:
 
