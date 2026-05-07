@@ -21,8 +21,8 @@ En workspace mode, el loop opera en **un solo repo a la vez** (default).
 
 - **Sin `--repo`**: ejecutar discovery rápida y pedir selección:
   1. Para cada repo en `<repos>`, ejecutar en paralelo:
-     `rootline tree <abs-roadmap-root>/ --where '<where-leaf> && <where-not-done>' --output table`
-  2. Contar pendientes por repo
+     `rootline tree <abs-roadmap-root>/ --where '<where-leaf> && <where-not-done>' --output json`
+  2. Contar pendientes por repo desde JSON (NO parsear tablas)
   3. Pedir selección con `AskUserQuestion`:
      "En qué repo querés ejecutar el loop?"
      Opciones: repos con pendientes > 0 (mostrar conteo)
@@ -33,11 +33,12 @@ En workspace mode, el loop opera en **un solo repo a la vez** (default).
 1. Ejecutar `rootline graph --check <roadmap-root>/` para validar dependencias antes de empezar
    - Si hay ciclos → reportar y **parar** (dependencias circulares impiden ejecucion)
    - Si hay broken links → reportar como warning (pueden ser tasks aun no creados)
-2. Ejecutar `rootline query <roadmap-root>/ --where "<where-leaf>" --where "<where-active>" --output table` para obtener tasks pendientes
-3. Si `--filter PATTERN` proporcionado, filtrar resultados por Epic/Feature path match
-4. Si `--max N`, tomar solo los primeros N tasks
-5. Mostrar tabla de tasks encontradas al usuario
-6. **Si 0 tasks encontradas** → informar:
+2. Ejecutar `rootline query <roadmap-root>/ --where "<where-leaf>" --where "<where-active>" --output json` para obtener tasks pendientes
+3. Ordenar rows de forma determinista por `path` ascendente (desempate por `id` ascendente si existe)
+4. Si `--filter PATTERN` proporcionado, filtrar rows por Epic/Feature path match
+5. Si `--max N`, tomar solo los primeros N rows ya ordenados
+6. Renderizar una tabla para el usuario desde JSON (NO parsear output table para decisiones)
+7. **Si 0 tasks encontradas** → informar:
    "No hay tasks materializadas en `<roadmap-root>/`.
    Ejecutar `/roadmap plan` para crear los archivos de task primero."
    → **STOP**. NO implementar desde el contexto de conversación.
