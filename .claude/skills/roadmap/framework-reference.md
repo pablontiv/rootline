@@ -62,17 +62,23 @@ Si no cumple una condición, dividirla o convertirla en Outcome + tasks.
 La convención canónica es:
 
 ```markdown
-[[blocked_by:T001-setup]]
+[[blocked_by:./T001-setup.md]]
 ```
 
 Semántica:
 
 ```text
-Task actual depende de T001-setup.
-T001-setup desbloquea la task actual.
+Task actual depende de ./T001-setup.md.
+./T001-setup.md desbloquea la task actual.
 ```
 
-No usar `[[blocks:...]]` en documentos nuevos. `blocks` solo existe como compatibilidad con roadmaps viejos.
+Para dependencias entre Outcomes, usar path relativo explícito:
+
+```markdown
+[[blocked_by:../O01-setup/T001-setup.md]]
+```
+
+No usar targets bare como `[[blocked_by:T001-setup]]`: rootline solo puede resolverlos por basename único y se rompen si hay duplicados.
 
 ## Criterios de aceptación
 

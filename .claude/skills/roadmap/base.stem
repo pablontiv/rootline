@@ -25,7 +25,7 @@ schema:
 
 links:
   blocked_by:
-    target: ".*"
+    target: '^(\./|\.\./|.*/)T[0-9]{3}-[^/]+\.md$'
   reference:
     target: ".*"
 

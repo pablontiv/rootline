@@ -72,4 +72,4 @@ tipo: outcome
 
 - La tabla de tasks no incluye estado; el estado vive en el frontmatter de cada task.
 - No crear subniveles bajo Outcome.
-- Las dependencias entre tasks se declaran con `[[blocked_by:...]]` en la task bloqueada.
+- Las dependencias entre tasks se declaran con `[[blocked_by:./TXXX-name.md]]` en la task bloqueada.

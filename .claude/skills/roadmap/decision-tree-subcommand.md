@@ -20,8 +20,7 @@ Después de este paso, no ejecutar más comandos; procesar los JSON obtenidos.
 ## Paso 2: Construir ramas
 
 - Ramas = Outcomes con pending > 0 + tasks directas pendientes.
-- Dependencias = edges del graph con `type == "blocked_by"`.
-- Compatibilidad: también reconocer `type == "blocks"` en roadmaps viejos, interpretándolo como dependencia del source hacia target.
+- Dependencias = edges del graph con `type == "blocked_by"`; usar los `target` ya resueltos por `rootline graph`, no el texto crudo del wikilink.
 - Estado = frontmatter de cada hoja del tree.
 
 ## Paso 3: Clasificar
@@ -62,7 +61,7 @@ Qué objetivo priorizar?
     T011 nombre [estado]
 
 BLOQUEADAS
-└── T012 nombre [blocked_by: T003]
+└── T012 nombre [blocked_by: O01-setup/T003-name.md]
 ```
 
 Reglas:

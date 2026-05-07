@@ -8,7 +8,7 @@ Ejecutar primero el bootstrap de `SKILL.md`. Leer o crear `.claude/roadmap.local
 
 ## Paso 1: Resolver intención
 
-> **Razonamiento profundo**: Para proyectos complejos (>3 Outcomes anticipados o área técnica poco familiar), activar máximo razonamiento antes de descomponer: incluir `ultrathink` en el análisis inicial o configurar `planning-effort: xhigh` en `roadmap.local.md` (default). El effort se puede subir a `max` con `/effort max` si el scope es muy grande.
+> **Razonamiento profundo**: Para proyectos complejos (>3 Outcomes anticipados o área técnica poco familiar), usar el `effort: xhigh` declarado en el frontmatter del skill. El effort se puede subir a `max` con `/effort max` si el scope es muy grande.
 
 Determinar desde `$ARGUMENTS`:
 
@@ -96,7 +96,7 @@ Verificar:
 3. No hay tasks duplicadas.
 4. Dependencias no forman ciclos evidentes.
 5. Cada task cabe en una sesión.
-6. No se introdujeron niveles Epic/Feature/Story.
+6. La propuesta usa únicamente Outcomes y Tasks.
 
 ## Paso 7: Presentar para aprobación
 

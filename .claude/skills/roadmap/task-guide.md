@@ -55,15 +55,21 @@ Si la task pertenece a un Outcome, agregar fila en `OXX-*/README.md`:
 
 ## Dependencias
 
-Usar `blocked_by` en la task bloqueada:
+Usar `blocked_by` en la task bloqueada, siempre con path relativo explícito:
 
 ```markdown
-[[blocked_by:T001-prerequisite]]
+[[blocked_by:./T001-prerequisite.md]]
 ```
 
-Significa: la task actual no puede ejecutarse hasta que `T001-prerequisite` esté completada.
+Si la dependencia está en otro Outcome:
 
-No usar `[[blocks:...]]` en tasks nuevas.
+```markdown
+[[blocked_by:../O01-setup/T001-prerequisite.md]]
+```
+
+Significa: la task actual no puede ejecutarse hasta que esa task esté completada.
+
+No usar targets bare como `[[blocked_by:T001-prerequisite]]`: rootline solo puede resolverlos por basename único y se rompen si hay duplicados.
 
 ## Template: Task File
 
@@ -77,7 +83,7 @@ tipo: task
 **Outcome**: [OXX Nombre](README.md) <!-- omitir si es task directa -->
 **Contribuye a**: [criterio de éxito del Outcome o resultado directo esperado]
 
-[[blocked_by:TXXX-prerequisite]] <!-- omitir si no hay dependencia -->
+[[blocked_by:./TXXX-prerequisite.md]] <!-- omitir si no hay dependencia -->
 
 ## Preserva
 
@@ -130,6 +136,6 @@ Antes de finalizar una task, verificar:
 1. ¿Cabe en una sesión?
 2. ¿Contiene todo el contexto?
 3. ¿Los ACs son pass/fail?
-4. ¿Declara dependencias con `blocked_by`?
+4. ¿Declara dependencias con `blocked_by` y path relativo explícito?
 5. ¿Lista fuentes de verdad?
 6. ¿Preserva invariantes relevantes?

@@ -29,7 +29,7 @@ Usar `<abs-roadmap-root>` y `git -C <repo-path>`.
 4. Producir:
    - tasks directas, o
    - Outcome(s) + tasks.
-5. Cada task debe tener nombre, descripción, dependencias `blocked_by` y ACs principales.
+5. Cada task debe tener nombre, descripción, dependencias `blocked_by` con paths relativos explícitos y ACs principales.
 
 ## Fase 2: Aprobación
 
@@ -75,7 +75,7 @@ schema:
 
 links:
   blocked_by:
-    target: ".*"
+    target: '^(\./|\.\./|.*/)T[0-9]{3}-[^/]+\.md$'
   reference:
     target: ".*"
 
@@ -118,7 +118,7 @@ find <roadmap-root>/ -maxdepth 1 -type f -name 'T[0-9][0-9][0-9]-*.md' -printf '
 rootline new <roadmap-root>/TXXX-task.md
 ```
 
-Editar cada task usando [task-guide.md](task-guide.md).
+Editar cada task usando [task-guide.md](task-guide.md). Si una task depende de otra, escribir el link con path relativo explícito: `[[blocked_by:./T001-name.md]]` dentro del mismo Outcome o `[[blocked_by:../O01-name/T001-name.md]]` entre Outcomes.
 
 ### Paso 4: Cascading links
 

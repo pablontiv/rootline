@@ -25,6 +25,9 @@ allowed-tools:
   - ExitPlanMode
   - Agent
 effort: xhigh
+execution-model: sonnet
+worktree-per-outcome: false
+parallel-independent-tasks: false
 hooks:
   Stop:
     - type: agent
@@ -41,7 +44,7 @@ Outcome/Objetivo  (opcional)
 └── Task          (unidad ejecutable)
 ```
 
-Para trabajo chico, usar solo tasks. No crear Epic/Feature/Story en roadmaps nuevos.
+Para trabajo chico, usar solo tasks. El skill produce únicamente Outcomes y Tasks.
 
 ## Bootstrap obligatorio
 
@@ -93,10 +96,6 @@ outcome-close-verify: []
 pr-merge-strategy: 'squash'
 commit-style: 'conventional'
 auto-push: true
-worktree-per-outcome: false
-parallel-independent-tasks: false
-planning-effort: xhigh
-execution-model: sonnet
 ---
 ```
 
@@ -117,10 +116,6 @@ execution-model: sonnet
 | `pr-merge-strategy` | `'squash'` | `<pr-merge-strategy>` |
 | `commit-style` | `'conventional'` | `<commit-style>` |
 | `auto-push` | `true` | `<auto-push>` |
-| `worktree-per-outcome` | `false` | `<worktree-per-outcome>` |
-| `parallel-independent-tasks` | `false` | `<parallel-tasks>` |
-| `planning-effort` | `xhigh` | `<planning-effort>` |
-| `execution-model` | `sonnet` | `<execution-model>` |
 
 Helpers:
 

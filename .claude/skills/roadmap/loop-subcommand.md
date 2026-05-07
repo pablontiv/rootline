@@ -11,9 +11,9 @@ Ejecutar tasks pendientes en loop con confirmación entre cada una.
 - `--checkpoint-interval N`: checkpoint de calidad cada N tasks (default 5).
 - `--skip-reviews`: desactivar quality gates.
 - `--pr`: crear branch/PR por Outcome o grupo de tasks directas.
-- `--worktree`: crear git worktree aislado por Outcome via `EnterWorktree`/`ExitWorktree`. Al iniciar cada Outcome nuevo se crea un worktree; al cerrar se limpia con `ExitWorktree`. Requiere que el repo soporte worktrees.
-- `--self-pace`: usar `ScheduleWakeup` entre tasks para loops de larga duración. Mantiene el cache caliente (delay ~270s) sin bloquear la sesión.
-- `--parallel`: ejecutar tasks independientes dentro de un Outcome en paralelo via `Agent` tool usando `<execution-model>`.
+- `--worktree`: crear git worktree aislado por Outcome via `EnterWorktree`/`ExitWorktree` si esas tools están disponibles. Al entrar a un Outcome se crea un worktree; al cerrar se limpia con `ExitWorktree`. Requiere que el repo soporte worktrees.
+- `--self-pace`: usar `ScheduleWakeup` si está disponible entre tasks para loops de larga duración. Mantiene el cache caliente (delay ~270s) sin bloquear la sesión.
+- `--parallel`: ejecutar tasks independientes dentro de un Outcome en paralelo via `Agent` tool usando el `execution-model` declarado en el frontmatter del skill.
 
 ## Workspace mode
 
@@ -29,9 +29,9 @@ El loop opera en un repo a la vez.
    rootline graph <roadmap-root>/ --where "<where-leaf>" --output json
    ```
    - Si hay ciclos: reportar y parar.
-   - Si hay broken links: warning; bloquear solo si afectan la task actual.
-   - Construir `dependency_map` desde edges `type == "blocked_by"`.
-   - Compatibilidad: aceptar `type == "blocks"` como dependencia source → target para roadmaps viejos.
+   - Si hay broken links de tipo `blocked_by`: bloquear la task fuente afectada hasta corregir el link.
+   - Si hay otros broken links: warning.
+   - Construir `dependency_map` desde edges `type == "blocked_by"`; usar los targets ya resueltos por `rootline graph`.
 2. Obtener tasks activas:
    ```bash
    rootline query <roadmap-root>/ --where '<where-leaf>' --where '<where-active>' --where 'tipo == "task"' --output json
@@ -58,9 +58,9 @@ Si `--pr`, leer [pr-workflow.md](pr-workflow.md) y ejecutar Branch & PR Detectio
 
 ## Fase 2.6: Worktree setup
 
-Solo si `--worktree` (o `worktree-per-outcome: true` en config). Sin este flag → skip.
+Solo si `--worktree` (o `worktree-per-outcome: true` en el frontmatter del skill). Sin este flag → skip.
 
-Al detectar un Outcome nuevo en el loop:
+Al entrar a un Outcome en el loop:
 - `EnterWorktree` con nombre derivado del Outcome ID (ej: `outcome-O01`).
 - Todos los commits de ese Outcome ocurren dentro del worktree.
 - Al cerrar el Outcome (última task completada, o loop interrumpido): `ExitWorktree`.
@@ -99,7 +99,13 @@ Para cada task ordenada:
    Ejecutar exactamente el alcance de la task. Si hay una sección `## Especificación Técnica`, seguirla.
 
 5.5. **Paralelismo** (solo si `--parallel`):
-   Si hay múltiples tasks en el Outcome actual sin dependencias entre sí (ningún `blocked_by` entre ellas), invocarlas como subagentes en paralelo via `Agent` tool con `model: <execution-model>`. Consolidar resultados antes de continuar a verificación de ACs.
+   Solo paralelizar si se puede probar que las tasks son independientes:
+   - no hay dependencia `blocked_by` entre ellas,
+   - sus secciones `## Fuente de verdad` no solapan paths,
+   - ninguna toca archivos globales/sensibles,
+   - cada subagente trabaja en worktree aislado o en archivos disjuntos.
+
+   Si cualquiera de esas condiciones no puede probarse, ejecutar secuencialmente. Si procede, invocarlas como subagentes en paralelo via `Agent` tool con `model` igual al `execution-model` del frontmatter del skill. Consolidar resultados antes de continuar a verificación de ACs.
 
 6. **Verificar ACs e invariantes**
    - Ejecutar cada AC.

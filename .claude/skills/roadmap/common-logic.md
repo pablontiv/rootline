@@ -4,7 +4,7 @@
 
 ## Modelo
 
-Roadmaps nuevos usan máximo dos niveles:
+El roadmap usa máximo dos niveles:
 
 ```text
 <roadmap-root>/
@@ -53,8 +53,11 @@ No agregar columna Estado; el estado se lee desde frontmatter.
 
 ## Dependencias
 
-- Nueva convención: `[[blocked_by:T001-prerequisite]]` en la task bloqueada.
-- Compatibilidad lectura-only: roadmaps viejos pueden contener `[[blocks:...]]`.
+Declarar `blocked_by` en la task bloqueada, con path relativo explícito.
+
+- Misma carpeta/Outcome: `[[blocked_by:./T001-prerequisite.md]]`
+- Otro Outcome: `[[blocked_by:../O01-setup/T001-prerequisite.md]]`
+- No usar targets bare como `[[blocked_by:T001-prerequisite]]`; rootline solo los resuelve por basename único y pueden romperse con duplicados.
 
 ## Comandos Rootline de Referencia
 
