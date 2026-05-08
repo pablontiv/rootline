@@ -65,9 +65,34 @@ for skill in roadmap rootline; do
 done
 
 # Rebuild rootline binary so the installed version matches the pushed code
+ROOTLINE_BIN="${ROOTLINE_BIN:-/usr/local/bin/rootline}"
+
+install_rootline_binary() {
+  local version tmp
+  version="$(git describe --tags 2>/dev/null || echo dev)"
+  tmp="$(mktemp)"
+
+  if ! go build -ldflags "-X main.version=$version" -o "$tmp" ./cmd/rootline/ 2>&1; then
+    rm -f "$tmp"
+    return 1
+  fi
+
+  if [ -w "$ROOTLINE_BIN" ] || { [ ! -e "$ROOTLINE_BIN" ] && [ -w "$(dirname "$ROOTLINE_BIN")" ]; }; then
+    install -m 0755 "$tmp" "$ROOTLINE_BIN"
+  elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    sudo install -m 0755 "$tmp" "$ROOTLINE_BIN"
+  else
+    echo "Warning: $ROOTLINE_BIN is not writable and passwordless sudo is unavailable"
+    rm -f "$tmp"
+    return 1
+  fi
+
+  rm -f "$tmp"
+}
+
 echo "Rebuilding rootline binary..."
-if go build -ldflags "-X main.version=$(git describe --tags 2>/dev/null || echo dev)" -o /usr/local/bin/rootline ./cmd/rootline/ 2>&1; then
-  echo "rootline rebuilt: $(rootline --version)"
+if install_rootline_binary; then
+  echo "rootline rebuilt: $("$ROOTLINE_BIN" --version)"
 else
   echo "Warning: rootline rebuild failed (push continues)"
 fi
