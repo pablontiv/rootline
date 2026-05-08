@@ -1,0 +1,169 @@
+# Advanced Rootline Operations Reference
+
+## graph
+
+Use `graph` for repository-level wiki-link topology, cycle checks, and broken-link checks.
+
+### Usage
+
+```bash
+rootline graph <dir> -o json
+rootline graph <dir> --check
+rootline graph <dir> -o table --format dot
+rootline graph <dir> -o table --format mermaid
+rootline graph <dir> --open --format mermaid
+rootline graph <dir> --where "tipo == 'feature'" -o json
+```
+
+Default global output is JSON, so `--format dot|mermaid` only produces diagram text when paired with `-o table`. `--open` requires `--format mermaid` and cannot be used with `--check`.
+
+### Flags
+
+| Flag | Use |
+|---|---|
+| `--format dot|mermaid` | diagram syntax when output is table |
+| `--check` | report cycles and broken links, exit non-zero on problems |
+| `--open` | render Mermaid HTML and open browser |
+| `--where "expr"` | filter records before graph construction |
+
+### JSON Shape
+
+```json
+{
+  "version": 1,
+  "kind": "rootline/graph",
+  "nodes": [],
+  "edges": [],
+  "cycles": [],
+  "broken_links": []
+}
+```
+
+## migrate
+
+Use `migrate` for schema diff reports and explicit schema/data migration operations.
+
+### Usage
+
+```bash
+rootline migrate <path> -o json
+rootline migrate <path> --from old.stem -o json
+rootline migrate <path> --rename old_field=new_field --dry-run
+rootline migrate <path> --rename old_field=new_field
+rootline migrate <path> --split --dry-run
+rootline migrate <path> --split
+rootline migrate <path> --scaffold --dry-run
+rootline migrate <path> --scaffold
+```
+
+Plain `migrate` reports differences. Writes require `--rename`, `--split`, or `--scaffold` without `--dry-run`.
+
+### Flags
+
+| Flag | Use |
+|---|---|
+| `--dry-run` | report planned changes without writing for migrate modes |
+| `--from <file>` | compare the target `.stem` against a specified file |
+| `--rename old=new` | rename a field across documents and `.stem` files |
+| `--split` | split a flat `.stem` into per-level `.stem` files |
+| `--scaffold` | add missing required section headings to documents |
+
+## init
+
+Use `init` only when a directory has Markdown documents and needs a `.stem` schema inferred or fetched from a template.
+
+### Usage
+
+```bash
+rootline init <dir> --dry-run
+rootline init <dir>
+rootline init <dir> --force
+rootline init <dir> --template owner/repo
+rootline init <dir> --template owner/repo@tag
+```
+
+`init --dry-run` prints YAML, not Rootline JSON.
+
+### Required Bootstrap Loop
+
+```bash
+rootline init <dir> --dry-run
+rootline init <dir>
+rootline describe <dir> -o table
+rootline validate --all <dir> -o json
+rootline fix --all <dir> --dry-run -o json
+rootline fix --all <dir>
+rootline validate --all <dir> -o json
+git diff -- <dir>
+```
+
+Apply this loop only when the user asks to create or infer schema. Do not run it for simple validation or querying.
+
+## analyze
+
+Use `analyze` to produce inference reports from existing documents.
+
+```bash
+rootline analyze <dir> -o json
+rootline analyze <dir> --incremental -o json
+rootline analyze <dir> --threshold 0.80 -o json
+```
+
+Flags:
+
+| Flag | Use |
+|---|---|
+| `--incremental` | include only inferences not covered by the target `.stem` |
+| `--threshold <0..1>` | section pattern detection threshold |
+
+Use `--field summary` only after confirming the analyze JSON contains that path.
+
+## apply
+
+Use `apply` to modify `.stem` and document frontmatter from an analyze report.
+
+```bash
+rootline analyze <dir> -o json > report.json
+rootline apply report.json
+rootline apply report.json -o table
+```
+
+Safety rule: treat `apply` as mutating even with `--dry-run`, because schema-application paths can write `.stem` files before data-correction dry-run handling. To preview, inspect the analyze report and `cmd/rootline/apply.go` instead of executing `apply --dry-run` as a guarantee.
+
+After `apply`, always run:
+
+```bash
+rootline validate --all <dir> -o json
+git diff -- <dir>
+```
+
+## serve and MCP
+
+Use `serve` to expose Rootline through MCP.
+
+```bash
+rootline serve --addr 127.0.0.1:9200
+rootline serve --stdio
+```
+
+- HTTP serves MCP at `/mcp` and health at `/health`.
+- Stdio is for clients that launch Rootline as a subprocess.
+- The MCP tool catalog is defined in `internal/mcp/tools.go`.
+
+Registered MCP tools: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`, `trace`, `new`, `health`.
+
+CLI commands without MCP tools: `init`, `analyze`, `apply`, `migrate`, `hooks`, `completion`, `serve`.
+
+## hooks and completion
+
+Use only when the user asks for shell or repository integration.
+
+```bash
+rootline hooks status
+rootline hooks install
+rootline hooks uninstall
+rootline completion bash
+rootline completion zsh
+rootline completion fish
+rootline completion powershell
+```

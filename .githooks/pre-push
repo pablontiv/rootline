@@ -54,12 +54,15 @@ while read local_ref local_sha remote_ref remote_sha; do
 
 done
 
-# Sync rootline skills to ~/.claude/skills/
+# Install project skills to the Claude user scope.
+# Pi is configured by .pi/settings.json to discover ~/.claude/skills.
 SKILLS_DEST="$HOME/.claude/skills"
 mkdir -p "$SKILLS_DEST"
-rm -rf "${SKILLS_DEST:?}/rootline"
-cp -r "$REPO_ROOT/.claude/skills/rootline" "$SKILLS_DEST/rootline"
-echo "rootline: synced skills → $SKILLS_DEST/rootline"
+for skill in roadmap rootline; do
+  rm -rf "${SKILLS_DEST:?}/$skill"
+  cp -r "$REPO_ROOT/.claude/skills/$skill" "$SKILLS_DEST/$skill"
+  echo "rootline: installed $skill skill → $SKILLS_DEST/$skill"
+done
 
 # Rebuild rootline binary so the installed version matches the pushed code
 echo "Rebuilding rootline binary..."
