@@ -14,6 +14,23 @@ El roadmap usa máximo dos niveles:
 └── T001-task-directa.md
 ```
 
+## Prohibición de fallback
+
+Nunca representar múltiples tasks como una lista dentro de un único archivo:
+
+```text
+<roadmap-root>/algo-tasks.md
+```
+
+Eso no es una materialización válida del roadmap.
+
+Si una operación pretende crear N tasks, debe crear N archivos `TXXX-*.md`.
+Si las tasks pertenecen a un Outcome, debe existir también el README del Outcome.
+
+Si falta schema, `.stem`, `rootline`, permisos o estructura para crear archivos
+canónicos, detenerse. No usar `Write` directo para inventar una estructura
+alternativa.
+
 ## Auto-numbering
 
 La raíz permite dos secuencias (`OXX` para Outcomes y `TXXX` para tasks directas), por eso no usar un único `schema.id.next` en la raíz cuando puede haber mezcla.
@@ -40,6 +57,10 @@ rootline describe <directorio>/
 ```
 
 Si no existe, informar al usuario y no crear archivos fuera del roadmap.
+
+Excepción permitida: `plan-subcommand.md` puede crear `<roadmap-root>/` y
+`<roadmap-root>/.stem` durante su bootstrap explícito. Fuera de ese flujo, no
+crear directorios ad-hoc.
 
 ## Cascading links
 

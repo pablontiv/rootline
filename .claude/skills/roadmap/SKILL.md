@@ -46,6 +46,27 @@ Outcome/Objetivo  (opcional)
 
 Para trabajo chico, usar solo tasks. El skill produce únicamente Outcomes y Tasks.
 
+## Invariante de materialización
+
+Cuando el usuario pide crear, generar o materializar tareas, el resultado NO puede
+ser un único archivo resumen tipo `*-tasks.md`.
+
+Materializar tareas significa crear archivos canónicos:
+
+```text
+<roadmap-root>/OXX-slug/README.md
+<roadmap-root>/OXX-slug/TXXX-task.md
+```
+
+o tasks directas:
+
+```text
+<roadmap-root>/TXXX-task.md
+```
+
+Si no se puede crear esa estructura, detenerse y explicar el bloqueo. No hacer
+fallback a markdown libre.
+
 ## Bootstrap obligatorio
 
 Ejecutar SIEMPRE antes de cualquier operación.
@@ -192,7 +213,15 @@ Solo workspace mode:
 1. Si empieza con `pending`, `loop`, `plan` → subcomando directo.
 2. Si vacío → decision tree.
 3. Si pide estado/progreso/pendientes → `pending`.
-4. Si describe algo a construir o descomponer → modo autónomo.
+4. Si dice "crea las tareas", "materializa", "genera los archivos",
+   "pasalo al roadmap", "crea el roadmap" o equivalente → `plan`.
+5. Si describe algo a construir o descomponer sin pedir archivos → modo autónomo.
+
+Ambigüedad crítica:
+
+- "descompón/planifica" = proponer estructura, no escribir archivos.
+- "crea/materializa/genera tareas" = `plan-subcommand.md`.
+- Si no hay plan previo suficiente para materializar, preguntar antes de escribir.
 
 ## Lógica común
 

@@ -4,6 +4,9 @@
 
 Materializa el plan de la conversación como archivos `.md` del roadmap. No implementa código.
 
+Materializar es una operación estructural. Está prohibido crear un único archivo
+con una lista de tareas. Cada task debe tener su propio archivo `TXXX-*.md`.
+
 ## Fuente del plan
 
 1. Contexto actual de conversación.
@@ -41,7 +44,18 @@ STOP hasta aprobación. No crear archivos antes.
 
 **MATERIALIZAR ≠ IMPLEMENTAR.** Crear solo archivos `.md` y `.stem` dentro de `<roadmap-root>/`.
 
+Guardrail obligatorio antes de escribir:
+
+1. Confirmar que se va a crear una de estas formas:
+   - Outcome + tasks: `OXX-slug/README.md` + `OXX-slug/TXXX-*.md`
+   - Tasks directas: `TXXX-*.md` en la raíz del roadmap.
+2. Si el plan contiene varias tasks, no escribirlas en un archivo único.
+3. Si no hay información suficiente para nombrar/separar tasks, preguntar.
+4. Si falta `rootline` y no se puede crear estructura canónica, detenerse.
+
 ### Paso 1: Bootstrap `.stem` base
+
+Si `<roadmap-root>/` no existe, crear el directorio.
 
 Si `<roadmap-root>/.stem` no existe, copiar el template canónico [base.stem](base.stem) como `<roadmap-root>/.stem`.
 
@@ -119,6 +133,11 @@ rootline new <roadmap-root>/TXXX-task.md
 ```
 
 Editar cada task usando [task-guide.md](task-guide.md). Si una task depende de otra, escribir el link con path relativo explícito: `[[blocked_by:./T001-name.md]]` dentro del mismo Outcome o `[[blocked_by:../O01-name/T001-name.md]]` entre Outcomes.
+
+Validación anti-regresión:
+
+Antes de continuar, comprobar que cada task del plan corresponde a un archivo
+`TXXX-*.md`. Si no, corregir antes de responder.
 
 ### Paso 4: Cascading links
 
