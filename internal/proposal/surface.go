@@ -37,8 +37,8 @@ func (p *Proposal) Surface() ProposalSurface {
 	case CorrectValue, AddField, ExtractBody, InferFromChildren, InferFromSiblings, CorrectOutlier, CorrectLink:
 		return SurfaceRepair
 
-	// Migration proposals: migrate value to different field or type
-	case MigrateValue:
+	// Migration proposals: migrate value to different field or type, and schema evolution operations
+	case MigrateValue, SchemaEvolution, RemoveField, LooseRequired, ChangeType, ReplaceEnumValues, LoosenSeverity:
 		return SurfaceMigration
 
 	// Aggregate propagation is a repair operation (updates frontmatter)

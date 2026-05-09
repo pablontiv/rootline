@@ -225,6 +225,12 @@ func TestAllProposalTypesCovered(t *testing.T) {
 		PropagateAggregate,
 		SetField,
 		SetSection,
+		SchemaEvolution,
+		RemoveField,
+		LooseRequired,
+		ChangeType,
+		ReplaceEnumValues,
+		LoosenSeverity,
 	}
 
 	for _, typ := range types {
@@ -366,5 +372,120 @@ func TestSurfaceClassificationMigration(t *testing.T) {
 	}
 	if surface := p.Surface(); surface != SurfaceMigration {
 		t.Errorf("MigrateValue should be migration, got %q", surface)
+	}
+}
+
+func TestSurfaceClassificationSchemaEvolution(t *testing.T) {
+	// Test matrix of schema evolution proposals (migration surface, not schema surface)
+	evolutionTypes := []Type{
+		SchemaEvolution,
+		RemoveField,
+		LooseRequired,
+		ChangeType,
+		ReplaceEnumValues,
+		LoosenSeverity,
+	}
+
+	for _, typ := range evolutionTypes {
+		p := &Proposal{
+			Type:  typ,
+			Field: "test",
+			Paths: []string{".stem"},
+		}
+		if surface := p.Surface(); surface != SurfaceMigration {
+			t.Errorf("type %q should be migration, got %q", typ, surface)
+		}
+	}
+}
+
+func TestProposalSurface_SchemaEvolution(t *testing.T) {
+	p := &Proposal{
+		Type:          SchemaEvolution,
+		Field:         "legacy_field",
+		Description:   "explicit schema evolution: remove deprecated field",
+		Paths:         []string{".stem"},
+		MigrationNote: "field superseded by new_field, migration complete",
+	}
+	got := p.Surface()
+	if got != SurfaceMigration {
+		t.Errorf("SchemaEvolution.Surface() = %q, want migration", got)
+	}
+}
+
+func TestProposalSurface_RemoveField(t *testing.T) {
+	p := &Proposal{
+		Type:          RemoveField,
+		Field:         "deprecated_status",
+		Description:   "remove field from schema",
+		Paths:         []string{".stem"},
+		MigrationNote: "deprecated field no longer used",
+	}
+	got := p.Surface()
+	if got != SurfaceMigration {
+		t.Errorf("RemoveField.Surface() = %q, want migration", got)
+	}
+}
+
+func TestProposalSurface_LooseRequired(t *testing.T) {
+	p := &Proposal{
+		Type:          LooseRequired,
+		Field:         "old_status",
+		Description:   "loosen required constraint",
+		Paths:         []string{".stem"},
+		From:          "true",
+		To:            "false",
+		MigrationNote: "field becoming optional to support legacy records",
+	}
+	got := p.Surface()
+	if got != SurfaceMigration {
+		t.Errorf("LooseRequired.Surface() = %q, want migration", got)
+	}
+}
+
+func TestProposalSurface_ChangeType(t *testing.T) {
+	p := &Proposal{
+		Type:          ChangeType,
+		Field:         "priority",
+		Description:   "change field type",
+		Paths:         []string{".stem"},
+		From:          "enum",
+		To:            "integer",
+		MigrationNote: "numeric priority system replacing enum",
+	}
+	got := p.Surface()
+	if got != SurfaceMigration {
+		t.Errorf("ChangeType.Surface() = %q, want migration", got)
+	}
+}
+
+func TestProposalSurface_ReplaceEnumValues(t *testing.T) {
+	p := &Proposal{
+		Type:          ReplaceEnumValues,
+		Field:         "estado",
+		Description:   "replace enum values",
+		Paths:         []string{".stem"},
+		From:          "pending,active,done",
+		To:            "queued,running,finished",
+		MigrationNote: "replacing legacy state names with new standard",
+	}
+	got := p.Surface()
+	if got != SurfaceMigration {
+		t.Errorf("ReplaceEnumValues.Surface() = %q, want migration", got)
+	}
+}
+
+func TestProposalSurface_LoosenSeverity(t *testing.T) {
+	p := &Proposal{
+		Type:          LoosenSeverity,
+		Field:         "critical_status",
+		Description:   "reduce severity level",
+		Paths:         []string{".stem"},
+		From:          "critical",
+		To:            "warning",
+		MigrationNote: "field no longer critical in current workflows",
+	}
+	got := p.Surface()
+	if got != SurfaceMigration {
+		t.Errorf("LoosenSeverity.Surface() = %q, want migration", got)
 	}
 }

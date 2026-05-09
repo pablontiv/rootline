@@ -149,3 +149,42 @@ Running `rootline migrate --scaffold` on a file missing both sections produces:
 ```
 
 Sections are inserted at the end of the document body. Use `--dry-run` to review insertions before applying.
+
+## Schema Evolution
+
+When running under monotonic constraints (O10), some destructive schema changes are rejected as violations:
+- Remove a field from schema
+- Loosen a required constraint
+- Change a field type incompatibly
+- Remove enum values
+- Reduce severity levels
+
+These changes can still be legitimate during migrations (e.g., field deprecation, schema redesigns). Schema evolution proposals represent these breaking changes as explicit, reviewable operations with migration rationale.
+
+### Evolution Proposal Types
+
+| Type | Surface | Meaning |
+|------|---------|---------|
+| `remove_field` | migration | Field explicitly removed from schema (may require data repair) |
+| `loosen_required` | migration | Required constraint loosened (may accept legacy records) |
+| `change_type` | migration | Field type changed incompatibly (may require data migration) |
+| `replace_enum_values` | migration | Enum values replaced (affected records need repair or mapping) |
+| `loosen_severity` | migration | Validation severity reduced (formerly critical now warning) |
+| `schema_evolution` | migration | Generic evolution marker for unlisted breaking changes |
+
+### Using Evolution Proposals
+
+1. **Detect breaking changes**: `rootline migrate [path] --output json` shows breaking changes
+2. **Convert to proposals**: Breaking changes can be converted to schema evolution proposals for explicit approval
+3. **Apply with care**: Evolution proposals surface as `migration` class, not `schema` class — they require explicit review and approval, not automatic application
+
+Example workflow:
+```bash
+# Detect breaking changes in .stem
+rootline migrate docs/roadmap/ --output json | jq '.changes[] | select(.breaking == true)'
+
+# These breaking changes can be represented as schema_evolution proposals
+# and reviewed for explicit approval before application
+```
+
+**Key principle**: Never silently apply schema evolution changes — they should be reviewed, tested, and documented with migration notes explaining the rationale.

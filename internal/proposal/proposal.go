@@ -37,6 +37,13 @@ const (
 	PropagateAggregate Type = "propagate_aggregate"
 	SetField           Type = "set_field"
 	SetSection         Type = "set_section"
+	// Schema evolution proposals (explicit destructive changes during migrations)
+	SchemaEvolution   Type = "schema_evolution"    // marks a change as explicit evolution
+	RemoveField       Type = "remove_field"        // explicit field removal from schema
+	LooseRequired     Type = "loosen_required"     // explicit required→optional
+	ChangeType        Type = "change_type"         // incompatible type change
+	ReplaceEnumValues Type = "replace_enum_values" // replace all enum values
+	LoosenSeverity    Type = "loosen_severity"     // explicit severity reduction
 )
 
 // Proposal represents a suggested fix for one or more validation errors.
@@ -50,6 +57,7 @@ type Proposal struct {
 	To            string   `json:"to,omitempty"`
 	WikiLinks     []string `json:"wiki_links,omitempty"`
 	AggregateExpr string   `json:"aggregate_expr,omitempty"`
+	MigrationNote string   `json:"migration_note,omitempty"` // rationale for schema evolution proposals
 	// set_section fields
 	Heading string `json:"heading,omitempty"`
 	Mode    string `json:"mode,omitempty"` // "replace" (default) or "append"
@@ -79,6 +87,13 @@ type Summary struct {
 	AddAggregate       int `json:"add_aggregate"`
 	RemoveStemField    int `json:"remove_stem_field"`
 	PropagateAggregate int `json:"propagate_aggregate"`
+	// Schema evolution types
+	SchemaEvolution   int `json:"schema_evolution"`
+	RemoveField       int `json:"remove_field"`
+	LooseRequired     int `json:"loosen_required"`
+	ChangeType        int `json:"change_type"`
+	ReplaceEnumValues int `json:"replace_enum_values"`
+	LoosenSeverity    int `json:"loosen_severity"`
 }
 
 // Analyze runs all detectors against validation errors and returns a Report.
@@ -201,6 +216,18 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 			summary.RemoveStemField++
 		case PropagateAggregate:
 			summary.PropagateAggregate++
+		case SchemaEvolution:
+			summary.SchemaEvolution++
+		case RemoveField:
+			summary.RemoveField++
+		case LooseRequired:
+			summary.LooseRequired++
+		case ChangeType:
+			summary.ChangeType++
+		case ReplaceEnumValues:
+			summary.ReplaceEnumValues++
+		case LoosenSeverity:
+			summary.LoosenSeverity++
 		}
 	}
 
