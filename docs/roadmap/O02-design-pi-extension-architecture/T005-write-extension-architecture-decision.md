@@ -46,4 +46,4 @@ Esta task forma parte de O02 y debe ejecutarse leyendo este archivo, el README d
 
 ## ADR Location
 
-See [ADR.md](ADR.md) in this directory.
+See [T006-architecture-decision-record.md](T006-architecture-decision-record.md) in this directory.
