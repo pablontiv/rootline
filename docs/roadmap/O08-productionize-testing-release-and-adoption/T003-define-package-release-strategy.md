@@ -1,5 +1,5 @@
 ---
-estado: Completed
+estado: Obsolete
 tipo: task
 ---
 # T003: Define release strategy for integrations/pi versus separate package.
