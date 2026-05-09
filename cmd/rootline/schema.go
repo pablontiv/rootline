@@ -100,7 +100,7 @@ func init() {
 	schemaCmd.AddCommand(schemaProposeCmd)
 
 	schemaApplyCmd.Flags().StringVar(&schemaApplyReport, "report", "", "path to schema proposals report JSON file (required)")
-	schemaApplyCmd.MarkFlagRequired("report")
+	_ = schemaApplyCmd.MarkFlagRequired("report")
 	schemaApplyCmd.Flags().BoolVar(&schemaApplyDryRun, "dry-run", false, "show changes without applying them")
 	schemaCmd.AddCommand(schemaApplyCmd)
 
