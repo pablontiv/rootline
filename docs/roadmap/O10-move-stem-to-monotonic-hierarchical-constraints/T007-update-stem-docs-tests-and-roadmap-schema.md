@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T007: Update stem docs tests and roadmap schema
