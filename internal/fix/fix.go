@@ -19,10 +19,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ApplyProposals applies all proposals from a report to the filesystem.
-// It modifies .stem files for extend_enum proposals and record files for
-// data-level proposals. The report's Proposals slice is updated to reflect
-// only the proposals that were actually applied.
+// ApplyProposals applies repair-surface proposals from a report to the filesystem.
+// Schema-surface proposals (extend_enum, add_aggregate, remove_stem_field) are
+// already separated into SchemaSuggestions by the caller and are not processed here.
+// The report's Proposals slice is updated to reflect only the proposals that were
+// actually applied.
 func ApplyProposals(_ context.Context, report *proposal.Report, root string, records []*extract.Record) error {
 	// Build record map for quick lookup.
 	recordMap := make(map[string]*extract.Record)
@@ -30,52 +31,17 @@ func ApplyProposals(_ context.Context, report *proposal.Report, root string, rec
 		recordMap[rec.Path] = rec
 	}
 
-	// Apply extend_enum proposals first (they modify .stem).
-	for _, p := range report.Proposals {
-		if p.Type != proposal.ExtendEnum {
-			continue
-		}
-		if err := applyExtendEnum(p, root); err != nil {
-			return fmt.Errorf("extend_enum %s: %w", p.Field, err)
-		}
-	}
-
-	// Re-read stem after extend_enum to get updated enum values.
-	var freshStem *rules.StemFile
-	freshEntries, freshErr := rules.WalkUp(root)
-	if freshErr == nil {
-		freshStem = rules.MergeStemFiles(freshEntries)
-	}
-
-	// Apply data-level proposals (modify frontmatter/body of individual files).
-	// Track which proposals are actually applied so reporting is accurate.
+	// Apply only data-level proposals (pre-separated from schema proposals).
 	var applied []proposal.Proposal
+
 	for _, p := range report.Proposals {
 		switch p.Type {
-		case proposal.ExtendEnum:
-			applied = append(applied, p) // already applied above
-			continue
 		case proposal.MigrateValue:
 			if err := applyMigrateValue(p, root, recordMap); err != nil {
 				return fmt.Errorf("migrate_value %s: %w", p.Paths[0], err)
 			}
 			applied = append(applied, p)
 		case proposal.CorrectValue:
-			// Skip if extend_enum made the original value valid.
-			if freshStem != nil {
-				if sf, ok := freshStem.Schema[p.Field]; ok && sf.Type == "enum" {
-					nowValid := false
-					for _, v := range sf.Values {
-						if v == p.From {
-							nowValid = true
-							break
-						}
-					}
-					if nowValid {
-						continue
-					}
-				}
-			}
 			if err := applyCorrectValue(p, root, recordMap); err != nil {
 				return fmt.Errorf("correct_value %s: %w", p.Paths[0], err)
 			}
@@ -105,26 +71,12 @@ func ApplyProposals(_ context.Context, report *proposal.Report, root string, rec
 				return fmt.Errorf("correct_link %s: %w", p.Paths[0], err)
 			}
 			applied = append(applied, p)
-		case proposal.AddAggregate:
-			if len(p.Paths) > 0 {
-				if err := addAggregateToStem(p.Paths[0], p.Field, p.AggregateExpr); err != nil {
-					return fmt.Errorf("add_aggregate %s: %w", p.Field, err)
-				}
-			}
-			applied = append(applied, p)
-		case proposal.RemoveStemField:
-			if len(p.Paths) > 0 {
-				stemPath := filepath.Join(root, p.Paths[0])
-				if err := removeStemSchemaField(stemPath, p.Field); err != nil {
-					return fmt.Errorf("remove_stem_field %s in %s: %w", p.Field, p.Paths[0], err)
-				}
-			}
-			applied = append(applied, p)
 		}
 	}
 
 	// Update report to reflect only applied proposals.
 	report.Proposals = applied
+
 	return nil
 }
 

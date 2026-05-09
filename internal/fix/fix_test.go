@@ -763,15 +763,15 @@ func TestApplyProposals_ExtendEnum(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Check .stem was updated.
+	// Check .stem was NOT updated — extend_enum is a schema proposal and is now skipped.
 	content, _ := os.ReadFile(filepath.Join(dir, ".stem"))
-	if !strings.Contains(string(content), "Obsoleto") {
-		t.Errorf("expected Obsoleto in .stem, got:\n%s", string(content))
+	if strings.Contains(string(content), "Obsoleto") {
+		t.Errorf("extend_enum should NOT have been applied (schema proposal), got:\n%s", string(content))
 	}
 
-	// Report should have the extend_enum proposal.
-	if len(report.Proposals) != 1 {
-		t.Errorf("expected 1 applied proposal, got %d", len(report.Proposals))
+	// Report should have no applied proposals (schema proposals are skipped).
+	if len(report.Proposals) != 0 {
+		t.Errorf("expected 0 applied proposals (extend_enum is schema surface), got %d", len(report.Proposals))
 	}
 }
 
@@ -825,12 +825,6 @@ func TestApplyProposals_SkipCorrectValueAfterExtendEnum(t *testing.T) {
 		Kind:    "rootline/proposals",
 		Proposals: []proposal.Proposal{
 			{
-				Type:  proposal.ExtendEnum,
-				Field: "estado",
-				Value: "Obsoleto",
-				Paths: []string{"a.md"},
-			},
-			{
 				Type:  proposal.CorrectValue,
 				Field: "estado",
 				From:  "Obsoleto",
@@ -845,18 +839,18 @@ func TestApplyProposals_SkipCorrectValueAfterExtendEnum(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// CorrectValue should have been skipped since extend_enum made "Obsoleto" valid.
+	// CorrectValue should be applied (it's a repair proposal).
 	if len(report.Proposals) != 1 {
-		t.Errorf("expected 1 applied proposal (extend_enum only), got %d", len(report.Proposals))
+		t.Errorf("expected 1 applied proposal, got %d", len(report.Proposals))
 	}
-	if report.Proposals[0].Type != proposal.ExtendEnum {
-		t.Errorf("expected extend_enum proposal, got %s", report.Proposals[0].Type)
+	if report.Proposals[0].Type != proposal.CorrectValue {
+		t.Errorf("expected correct_value proposal, got %s", report.Proposals[0].Type)
 	}
 
-	// File should NOT have been changed to Completed.
+	// File should have been corrected to Completed.
 	content, _ := os.ReadFile(filepath.Join(dir, "a.md"))
-	if strings.Contains(string(content), "Completed") {
-		t.Error("file should not have been corrected to Completed after extend_enum")
+	if !strings.Contains(string(content), "Completed") {
+		t.Error("file should have been corrected to Completed")
 	}
 }
 
@@ -1130,12 +1124,18 @@ func TestApplyProposals_RemoveStemField(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	// RemoveStemField is a schema proposal and should NOT be applied.
 	content, _ := os.ReadFile(childStem)
-	if strings.Contains(string(content), "estado") {
-		t.Errorf("expected estado removed from child .stem, got:\n%s", string(content))
+	if !strings.Contains(string(content), "estado") {
+		t.Errorf("expected estado to remain (remove_stem_field is schema proposal, not applied), got:\n%s", string(content))
 	}
 	if !strings.Contains(string(content), "ejecutable_en") {
 		t.Error("expected ejecutable_en to remain")
+	}
+
+	// Report should have no applied proposals.
+	if len(report.Proposals) != 0 {
+		t.Errorf("expected 0 applied proposals, got %d", len(report.Proposals))
 	}
 }
 
@@ -1528,12 +1528,18 @@ func TestApplyProposals_AddAggregate(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	// AddAggregate is a schema proposal and should NOT be applied.
 	content, _ := os.ReadFile(stemPath)
-	if !strings.Contains(string(content), "progress") {
-		t.Errorf("expected progress in .stem, got:\n%s", string(content))
+	if strings.Contains(string(content), "progress") {
+		t.Errorf("add_aggregate should NOT have been applied (schema proposal), got:\n%s", string(content))
 	}
-	if !strings.Contains(string(content), "aggregate") {
-		t.Errorf("expected aggregate section in .stem, got:\n%s", string(content))
+	if strings.Contains(string(content), "aggregate") {
+		t.Errorf("aggregate section should NOT exist (not applied), got:\n%s", string(content))
+	}
+
+	// Report should have no applied proposals.
+	if len(report.Proposals) != 0 {
+		t.Errorf("expected 0 applied proposals, got %d", len(report.Proposals))
 	}
 }
 
@@ -1559,8 +1565,9 @@ func TestApplyProposals_AddAggregate_NoPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error for empty paths: %v", err)
 	}
-	if len(report.Proposals) != 1 {
-		t.Errorf("expected proposal to be in applied list, got %d", len(report.Proposals))
+	// AddAggregate is a schema proposal, so it should not be in applied list.
+	if len(report.Proposals) != 0 {
+		t.Errorf("expected 0 applied proposals (schema surface), got %d", len(report.Proposals))
 	}
 }
 

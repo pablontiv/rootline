@@ -27,10 +27,11 @@ type FixResult struct {
 
 // BatchFixResult is the versioned JSON output for multi-file fix.
 type BatchFixResult struct {
-	Version int          `json:"version"`
-	Kind    string       `json:"kind"`
-	Results []*FixResult `json:"results"`
-	Summary FixSummary   `json:"summary"`
+	Version           int          `json:"version"`
+	Kind              string       `json:"kind"`
+	Results           []*FixResult `json:"results"`
+	Summary           FixSummary   `json:"summary"`
+	SchemaSuggestions int          `json:"schema_suggestions,omitempty"`
 }
 
 // FixSummary holds aggregate counts for batch fix.
@@ -216,6 +217,11 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	}
 	appendStemHealthProposals(report, ctx, root)
 
+	// Separate schema proposals from data proposals (for dry-run and apply both).
+	// In dry-run, we show what would be applied vs. what would be skipped.
+	// In normal apply, we only apply data proposals.
+	separateSchemaAndDataProposals(report)
+
 	// In dry-run mode, use proposal engine for richer output.
 	if fixDryRun {
 		if outputFormat == "table" {
@@ -233,7 +239,7 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 
 	// Convert proposals to BatchFixResult for output compatibility.
 	results := proposalsToFixResults(report, records)
-	batch := newBatchFixResult(results)
+	batch := newBatchFixResultWithSuggestions(results, len(report.SchemaSuggestions))
 
 	if outputFormat == "table" {
 		return renderFixTable(cmd, batch)
@@ -253,6 +259,25 @@ func appendStemHealthProposals(report *proposal.Report, ctx context.Context, roo
 		report.Summary.RemoveStemField += len(stemProposals)
 		report.Summary.Total += len(stemProposals)
 	}
+}
+
+// separateSchemaAndDataProposals splits proposals into data-only (applied) and
+// schema-only (suggestions). This allows dry-run to show both, and apply to
+// skip schema proposals.
+func separateSchemaAndDataProposals(report *proposal.Report) {
+	var dataProposals []proposal.Proposal
+	var schemaSuggestions []proposal.Proposal
+
+	for _, p := range report.Proposals {
+		if p.Surface() == proposal.SurfaceSchema {
+			schemaSuggestions = append(schemaSuggestions, p)
+		} else {
+			dataProposals = append(dataProposals, p)
+		}
+	}
+
+	report.Proposals = dataProposals
+	report.SchemaSuggestions = schemaSuggestions
 }
 
 // appendPropagateProposals detects stale aggregate values in index files and appends proposals to the report.
@@ -345,7 +370,7 @@ func proposalsToFixResults(report *proposal.Report, records []*extract.Record) [
 	return results
 }
 
-func newBatchFixResult(results []*FixResult) *BatchFixResult {
+func newBatchFixResultWithSuggestions(results []*FixResult, schemaSuggestionsCount int) *BatchFixResult {
 	summary := FixSummary{Total: len(results)}
 	for _, r := range results {
 		if r.Fixed || r.FieldsAdded > 0 || r.ValuesCorrected > 0 {
@@ -355,10 +380,11 @@ func newBatchFixResult(results []*FixResult) *BatchFixResult {
 		}
 	}
 	return &BatchFixResult{
-		Version: 1,
-		Kind:    "rootline/fix-batch",
-		Results: results,
-		Summary: summary,
+		Version:           1,
+		Kind:              "rootline/fix-batch",
+		Results:           results,
+		Summary:           summary,
+		SchemaSuggestions: schemaSuggestionsCount,
 	}
 }
 
@@ -371,9 +397,20 @@ func renderProposalTable(cmd *cobra.Command, report *proposal.Report) error {
 	}
 	if len(rows) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No proposals generated (0 fixable errors)")
-		return nil
+	} else {
+		renderTable(cmd.OutOrStdout(), headers, rows)
 	}
-	renderTable(cmd.OutOrStdout(), headers, rows)
+
+	// Show schema suggestions as a separate note
+	if len(report.SchemaSuggestions) > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Schema suggestions (not applied):\n")
+		for _, p := range report.SchemaSuggestions {
+			files := strings.Join(p.Paths, ", ")
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s (%s)\n", p.Type, p.Field, files)
+		}
+	}
+
 	return nil
 }
 
@@ -392,5 +429,13 @@ func renderFixTable(cmd *cobra.Command, batch *BatchFixResult) error {
 		rows = append(rows, []string{r.Path, fixed, changesStr})
 	}
 	renderTable(cmd.OutOrStdout(), headers, rows)
+
+	// Note about schema suggestions if present
+	if batch.SchemaSuggestions > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note: %d schema proposals were skipped (data-only repairs applied).\n", batch.SchemaSuggestions)
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "To apply schema changes, use 'rootline schema propose' or manually edit .stem files.")
+	}
+
 	return nil
 }

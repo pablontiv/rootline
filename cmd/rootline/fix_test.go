@@ -447,7 +447,7 @@ func TestFixAllDryRunTable(t *testing.T) {
 
 func TestFixAllApplyExtendEnum(t *testing.T) {
 	dir := setupTestDir(t)
-	// Create 2 files with the same invalid enum value — triggers extend_enum.
+	// Create 2 files with the same invalid enum value — would trigger extend_enum.
 	mustWriteFile(t, filepath.Join(dir, "file1.md"), []byte("---\nestado: Obsoleto\ntipo: test\n---\n# F1\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "file2.md"), []byte("---\nestado: Obsoleto\ntipo: test\n---\n# F2\n"), 0644)
 	mustChdir(t, dir)
@@ -462,7 +462,7 @@ func TestFixAllApplyExtendEnum(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 
-	// Check that .stem was modified to include "Obsoleto".
+	// Check that .stem was NOT modified — extend_enum is now skipped.
 	stemContent, readErr := filepath.Abs(filepath.Join(dir, ".stem"))
 	if readErr != nil {
 		t.Fatal(readErr)
@@ -471,23 +471,27 @@ func TestFixAllApplyExtendEnum(t *testing.T) {
 	if readErr != nil {
 		t.Fatal(readErr)
 	}
-	if !strings.Contains(string(content), "Obsoleto") {
-		t.Errorf("expected .stem to contain 'Obsoleto' after extend_enum, got:\n%s", string(content))
+	if strings.Contains(string(content), "Obsoleto") {
+		t.Errorf("extend_enum should NOT have been applied to .stem — schema proposals are now skipped")
 	}
 
-	// T003: Verify files with estado: Obsoleto are NOT changed to Completed.
-	// After extend_enum makes "Obsoleto" valid, correct_value should be skipped.
+	// Files with estado: Obsoleto should be preserved (not changed to anything).
 	for _, name := range []string{"file1.md", "file2.md"} {
 		fileContent, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatalf("reading %s: %v", name, err)
 		}
 		if strings.Contains(string(fileContent), "Completed") {
-			t.Errorf("%s: estado was changed to Completed — correct_value should have been skipped after extend_enum", name)
+			t.Errorf("%s: estado should not have been changed", name)
 		}
 		if !strings.Contains(string(fileContent), "Obsoleto") {
 			t.Errorf("%s: expected estado: Obsoleto preserved, got:\n%s", name, string(fileContent))
 		}
+	}
+
+	// Schema suggestions should be > 0 (extend_enum was proposed but skipped).
+	if batch.SchemaSuggestions <= 0 {
+		t.Error("expected schema_suggestions > 0 for skipped extend_enum")
 	}
 }
 
@@ -853,9 +857,9 @@ schema:
 		t.Errorf("expected add_aggregate > 0, got 0.\nFull output: %s", out)
 	}
 
-	// Check the proposal description.
+	// Check the proposal in schema_suggestions (not proposals, since it's a schema proposal).
 	found := false
-	for _, p := range report.Proposals {
+	for _, p := range report.SchemaSuggestions {
 		if p.Type == proposal.AddAggregate && p.Field == "estado" {
 			found = true
 			if !strings.Contains(p.Description, "would add aggregate for 'estado'") {
@@ -867,7 +871,7 @@ schema:
 		}
 	}
 	if !found {
-		t.Errorf("expected add_aggregate proposal for 'estado', got proposals: %+v", report.Proposals)
+		t.Errorf("expected add_aggregate proposal for 'estado' in schema_suggestions, got schema_suggestions: %+v", report.SchemaSuggestions)
 	}
 }
 
@@ -909,17 +913,241 @@ schema:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify .stem now has aggregate section.
+	// Verify .stem was NOT modified — add_aggregate is a schema proposal and is now skipped.
 	content, readErr := os.ReadFile(filepath.Join(root, ".stem"))
 	if readErr != nil {
 		t.Fatalf("failed to read .stem: %v", readErr)
 	}
 	stemStr := string(content)
 
-	if !strings.Contains(stemStr, "aggregate") {
-		t.Errorf("expected aggregate section in .stem, got:\n%s", stemStr)
+	if strings.Contains(stemStr, "aggregate") {
+		t.Errorf("add_aggregate should NOT have been applied to .stem — schema proposals are now skipped")
 	}
-	if !strings.Contains(stemStr, "estado") {
-		t.Errorf("expected estado in aggregate section, got:\n%s", stemStr)
+}
+
+// TestFixAllSchemaProposalsNotApplied verifies that extend_enum proposals are
+// skipped by fix --all and reported as schema_suggestions instead of being applied.
+func TestFixAllSchemaProposalsNotApplied(t *testing.T) {
+	dir := setupTestDir(t)
+
+	// Create 2 files with the same unknown enum value — would trigger extend_enum.
+	mustWriteFile(t, filepath.Join(dir, "file1.md"), []byte("---\nestado: Archivado\ntipo: test\n---\n# F1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "file2.md"), []byte("---\nestado: Archivado\ntipo: test\n---\n# F2\n"), 0644)
+	mustChdir(t, dir)
+
+	out, err := runCmd(t, "fix", "--all", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
+
+	var batch BatchFixResult
+	if err := json.Unmarshal([]byte(out), &batch); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// .stem should NOT be modified — extend_enum was NOT applied.
+	stemContent, readErr := os.ReadFile(filepath.Join(dir, ".stem"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if strings.Contains(string(stemContent), "Archivado") {
+		t.Error("extend_enum should NOT have been applied to .stem — schema proposals are skipped")
+	}
+
+	// But SchemaSuggestions should be > 0.
+	if batch.SchemaSuggestions == 0 {
+		t.Error("expected schema_suggestions > 0 for skipped extend_enum")
+	}
+}
+
+// TestFixAllDataRepairsApplied verifies that data-level proposals like correct_value
+// and add_field are still applied by fix --all.
+func TestFixAllDataRepairsApplied(t *testing.T) {
+	dir := setupTestDir(t)
+
+	// File with typo in estado.
+	mustWriteFile(t, filepath.Join(dir, "typo.md"), []byte("---\nestado: Completd\ntipo: test\n---\n# Typo\n"), 0644)
+
+	// File with missing estado.
+	mustWriteFile(t, filepath.Join(dir, "missing.md"), []byte("---\ntipo: test\n---\n# Missing\n"), 0644)
+
+	mustChdir(t, dir)
+
+	out, err := runCmd(t, "fix", "--all", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var batch BatchFixResult
+	if err := json.Unmarshal([]byte(out), &batch); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// Verify typo.md was fixed.
+	typoContent, err := os.ReadFile(filepath.Join(dir, "typo.md"))
+	if err != nil {
+		t.Fatalf("reading typo.md: %v", err)
+	}
+	if !strings.Contains(string(typoContent), "Completed") {
+		t.Error("expected typo corrected to Completed")
+	}
+	if strings.Contains(string(typoContent), "Completd") {
+		t.Error("typo should have been corrected")
+	}
+
+	// Verify missing.md was fixed.
+	missingContent, err := os.ReadFile(filepath.Join(dir, "missing.md"))
+	if err != nil {
+		t.Fatalf("reading missing.md: %v", err)
+	}
+	if !strings.Contains(string(missingContent), "estado:") {
+		t.Error("expected estado field added to missing.md")
+	}
+
+	// Check batch results show both files fixed.
+	if batch.Summary.Fixed < 2 {
+		t.Errorf("expected at least 2 fixed files, got %d", batch.Summary.Fixed)
+	}
+}
+
+// TestFixAllDryRunShowsSchemaSuggestions verifies that schema suggestions appear
+// in dry-run output without being applied.
+func TestFixAllDryRunShowsSchemaSuggestions(t *testing.T) {
+	dir := setupTestDir(t)
+
+	// Create 2 files with same unknown enum to trigger extend_enum.
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\nestado: Unknown\ntipo: test\n---\n# A\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\nestado: Unknown\ntipo: test\n---\n# B\n"), 0644)
+
+	mustChdir(t, dir)
+
+	out, err := runCmd(t, "fix", "--all", "--dry-run", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report proposal.Report
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// Dry-run should show schema_suggestions array with extend_enum.
+	if len(report.SchemaSuggestions) == 0 {
+		t.Error("expected schema_suggestions in dry-run output")
+	}
+
+	foundExtendEnum := false
+	for _, p := range report.SchemaSuggestions {
+		if p.Type == proposal.ExtendEnum {
+			foundExtendEnum = true
+			break
+		}
+	}
+	if !foundExtendEnum {
+		t.Error("expected extend_enum in schema_suggestions")
+	}
+
+	// Files should not be modified in dry-run.
+	aContent, _ := os.ReadFile(filepath.Join(dir, "a.md"))
+	if !strings.Contains(string(aContent), "Unknown") {
+		t.Error("dry-run should not modify files")
+	}
+}
+
+// TestFixAllRemoveStemFieldNotApplied verifies that remove_stem_field proposals
+// are skipped and reported as suggestions.
+func TestFixAllRemoveStemFieldNotApplied(t *testing.T) {
+	root := t.TempDir()
+	_ = os.Mkdir(filepath.Join(root, ".git"), 0o755)
+
+	// Create a .stem with a field that references a non-existent type.
+	stem := `version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completed]
+  badField:
+    type: nonexistent_type
+`
+	stemPath := filepath.Join(root, ".stem")
+	mustWriteFile(t, stemPath, []byte(stem), 0644)
+
+	// Create a document.
+	mustWriteFile(t, filepath.Join(root, "test.md"), []byte("---\nestado: Pending\n---\n# Test\n"), 0644)
+
+	mustChdir(t, root)
+
+	out, err := runCmd(t, "fix", "--all", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var batch BatchFixResult
+	if err := json.Unmarshal([]byte(out), &batch); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// .stem should still contain badField — remove_stem_field was NOT applied.
+	stemContent, readErr := os.ReadFile(stemPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !strings.Contains(string(stemContent), "badField") {
+		t.Error("remove_stem_field should NOT have been applied — schema proposals are skipped")
+	}
+
+	// Schema suggestions should be > 0 if remove_stem_field was proposed.
+	// (badField was proposed for removal but not applied.)
+}
+
+// TestFixAllAddAggregateNotApplied verifies that add_aggregate proposals are
+// skipped and not applied to the .stem file.
+func TestFixAllAddAggregateNotApplied(t *testing.T) {
+	root := t.TempDir()
+	_ = os.Mkdir(filepath.Join(root, ".git"), 0o755)
+
+	// .stem with no aggregate section.
+	stem := `version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completed]
+`
+	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(stem), 0644)
+
+	// Create hierarchical structure to trigger add_aggregate.
+	epicDir := filepath.Join(root, "E01-test")
+	_ = os.MkdirAll(epicDir, 0755)
+	mustWriteFile(t, filepath.Join(epicDir, "README.md"), []byte("---\nestado: Pending\n---\n# E01\n"), 0644)
+
+	featDir := filepath.Join(epicDir, "F01-sub")
+	_ = os.MkdirAll(featDir, 0755)
+	mustWriteFile(t, filepath.Join(featDir, "README.md"), []byte("---\nestado: Completed\n---\n# F01\n"), 0644)
+
+	mustChdir(t, root)
+
+	out, err := runCmd(t, "fix", "--all", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var batch BatchFixResult
+	if err := json.Unmarshal([]byte(out), &batch); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// .stem should NOT have aggregate section — add_aggregate was NOT applied.
+	stemContent, _ := os.ReadFile(filepath.Join(root, ".stem"))
+	if strings.Contains(string(stemContent), "aggregate") {
+		t.Error("add_aggregate should NOT have been applied — schema proposals are skipped")
+	}
+
+	// Schema suggestions should be > 0 if add_aggregate was proposed.
+	// (add_aggregate was proposed but not applied.)
 }

@@ -72,9 +72,17 @@ The output groups proposals by type, showing affected files and rationale:
       "paths": ["research/kedral/design.md", "research/kedral/roadmap.md"]
     }
   ],
+  "schema_suggestions": [
+    {
+      "type": "extend_enum",
+      "field": "estado",
+      "description": "2 records use \"Archivado\"; propose adding to enum",
+      "paths": [".stem"]
+    }
+  ],
   "summary": {
     "total": 3,
-    "extend_enum": 0,
+    "extend_enum": 1,
     "migrate_value": 0,
     "correct_value": 0,
     "extract_body": 1,
@@ -96,7 +104,15 @@ The output groups proposals by type, showing affected files and rationale:
 rootline fix --all
 ```
 
-Rootline applies proposals in order of priority (e.g., updating the `.stem` first, then fixing the data).
+`fix --all` applies **data-only repairs** (correct_value, add_field, migrate_value, extract_body, etc.) to document frontmatter. It does NOT apply schema-surface proposals (extend_enum, add_aggregate, remove_stem_field) — these appear as suggestions in the `schema_suggestions` array.
+
+Schema proposals require careful review and are meant to be applied separately:
+
+```bash
+# To apply schema changes, manually edit .stem files or use:
+rootline describe --by-domain  # Review current schema
+# Then manually update .stem based on schema_suggestions
+```
 
 ## YAML AST Preservation
 
