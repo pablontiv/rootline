@@ -834,6 +834,125 @@ bash integrations/pi/smoke-tests/test-validate.sh
    - All records validate with 0 errors
    - Verified: 2026-05-09
 
+## Release Strategy
+
+### Package Identity
+
+- **Package name**: `pi-rootline` (defined in `package.json`)
+- **Current location**: Co-located in `pablontiv/rootline` repository under `integrations/pi/`
+- **Separate npm package**: Deferred — no separate npm distribution needed at this stage. Package is installed via Git or local path.
+
+### Installation Methods
+
+#### Local Development (Current)
+
+For development and local testing, install directly from a filesystem path:
+
+```bash
+# From within rootline repo
+pi install -l ./integrations/pi
+
+# From anywhere, using absolute path
+pi install -l /home/shared/rootline/integrations/pi
+```
+
+This method is recommended for:
+- Local development workflows
+- Integration testing with your own Pi instance
+- Testing the install flow in isolated environments
+
+#### Git Install (Future)
+
+When Pi's package ecosystem matures, users will be able to install via Git reference:
+
+```bash
+# Proposed syntax (pending Pi ecosystem maturity)
+pi install github:pablontiv/rootline/integrations/pi
+# or similar Git-based installation syntax
+```
+
+Currently not supported by Pi's install system — this is a deferred feature pending ecosystem stabilization.
+
+### Versioning Strategy
+
+**Version inheritance**: The `pi-rootline` package version is **not** independently versioned. Instead:
+
+- The `package.json` version field (`0.1.0`) is a placeholder and does not drive releases
+- Actual package compatibility is tied to the rootline binary version
+- When rootline releases a new version (e.g., `v0.9.100` → `v0.10.0`), the pi-rootline package is included as part of that release
+- No separate semver bump or npm package release occurs — the source code is packaged as part of rootline's GitHub Release artifacts
+
+**Rationale**: Since the package is co-located in the rootline repo and tightly coupled to the rootline binary's functionality, independent versioning would create confusion about compatibility. Users install `pi-rootline` to extend a specific rootline version, so tying them together simplifies dependency management.
+
+### Compatibility
+
+#### Peer Dependencies
+
+- **`@earendil-works/pi-coding-agent: "*"`** — Pi coding agent package (installed as a dependency of Pi itself)
+- **`rootline` binary ≥ current version** — The pi-rootline package requires the rootline CLI binary to be available in `$PATH`
+
+#### Verification
+
+To verify compatibility before use, run:
+
+```bash
+# Check Rootline binary is installed
+which rootline
+rootline --version
+
+# Check Pi package is installed
+pi list | grep rootline
+
+# Run health check
+pi tools | grep rootline-
+# Should show: rootline-query, rootline-describe, rootline-validate, rootline-tree, rootline-stats, rootline-doctor, rootline-context, rootline-fix, rootline-migrate, rootline-analyze, rootline-apply
+```
+
+If `rootline` is not found, see [Troubleshooting > rootline: command not found](#rootline-command-not-found).
+
+### Location Decision
+
+**Stays in `pablontiv/rootline`**: The Pi extension package remains in this repository. Benefits:
+
+- **Single source of truth**: Rootline CLI + Pi extension stay synchronized — no async release issues
+- **Unified testing**: CI runs both CLI and Pi extension tests in the same workflow
+- **Simplified dependency management**: Users install one repository for both CLI and extensions
+- **Deferred extraction**: If the Pi ecosystem matures (separate distribution, npm publishing, etc.), extraction to a separate repo can be considered in a future release without breaking existing workflows
+
+### Future Evolution
+
+If circumstances change (e.g., Pi package ecosystem becomes a primary distribution channel, separate team ownership, etc.), the package **may** be extracted to:
+
+- A separate `pi-rootline` npm package on npm registry
+- A dedicated `pablontiv/pi-rootline` GitHub repository
+- A community marketplace or plugin distribution system
+
+Any extraction would:
+1. Maintain backward compatibility with local path installs during transition
+2. Update this README with new installation instructions
+3. Require a major version bump (v1.0+) to signal the structural change
+4. Be coordinated with the main rootline release cycle
+
+Until then, the co-located approach remains the canonical distribution method.
+
+### Integration Test Target
+
+The `/home/shared/pinata/` repository (`pi-pinata` personal extension bundle) can be used as a real-world integration test target:
+
+```bash
+# Install pi-rootline into your personal Pi instance
+pi install -l /home/shared/rootline/integrations/pi
+
+# Verify tools are available in Pi
+pi tools | grep rootline-
+
+# Test a query
+pi list | grep -c rootline
+# Should show at least one match: "pi-rootline" or similar
+```
+
+This validates the end-to-end install flow without requiring mocking or artificial test environments.
+
 ## Architecture
 
 See `/docs/roadmap/O02-design-pi-extension-architecture/T006-architecture-decision-record.md` for the design rationale.
