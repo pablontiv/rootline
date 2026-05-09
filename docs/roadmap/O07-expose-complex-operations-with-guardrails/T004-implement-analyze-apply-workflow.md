@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T004: Implement protected workflow around analyze reports and apply.
@@ -48,3 +48,36 @@ Esta task forma parte de O07 y debe ejecutarse leyendo este archivo, el README d
 - `internal/infer/`
 - `cmd/rootline/analyze.go`
 - `cmd/rootline/apply.go`
+
+## Salida / Implementación
+
+### Tools Implemented
+
+1. **rootline-analyze** (read-only)
+   - Input: `path` (required), `incremental` (optional), `threshold` (optional)
+   - Runs: `rootline analyze <path> --output json [--incremental] [--threshold N]`
+   - Timeout: 60s
+   - Returns: Full AnalyzeReport JSON
+   - No confirmation required (read-only operation)
+
+2. **rootline-apply** (mutating)
+   - Input: `report_path` (required), `mode` ("schema" | "repair" | "both"), `dry_run` (optional, default: true), `confirmed` (optional)
+   - Validates `report_path` with `validateTargetPath()`
+   - Requires confirmation when `!dry_run` in non-interactive mode
+   - Runs post-apply validation with `rootline validate --all`
+   - Returns: `{ applied, dry_run, mode, schema_result?, repair_result?, validation? }`
+   - Timeout: 30s per apply command
+
+### Implementation Details
+
+- File: `integrations/pi/extensions/analyze-apply.ts`
+- Test file: `integrations/pi/extensions/analyze-apply.test.ts`
+- Test suite: 19 tests covering all paths (analyze success, apply dry-run, confirmation, validation, error handling)
+- Security: Path validation prevents traversal attacks
+- Guardrails: Confirmation required for non-dry-run mutations in non-interactive mode
+
+### Acceptance Criteria Met
+
+- ✓ Analyze report can be generated and inspected from Pi
+- ✓ Apply requires explicit user approval, target report, and post-apply validation
+- ✓ `rootline validate --all docs/roadmap/` returns exit 0 (79 valid files, 2 schema-health warnings only)
