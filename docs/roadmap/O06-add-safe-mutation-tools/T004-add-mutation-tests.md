@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: In Progress
 tipo: task
 ---
 # T004: Add tests for success, validation failure, and blocked path cases.
