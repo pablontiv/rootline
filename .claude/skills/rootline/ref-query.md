@@ -39,9 +39,11 @@ rootline query <dir> --sort "prioridad:asc,impact_score:desc" -o json
 | `--limit N` | limit rows after filtering and sorting |
 | `--sort "field:asc,other:desc"` | deterministic multi-key sort |
 | `--from <path>` | scan root when no positional path is used |
+| `--select "path,estado,title"` | compact projection; include only named fields |
 
 ### JSON Shape
 
+Without `--select` (full records):
 ```json
 {
   "version": 1,
@@ -57,6 +59,41 @@ rootline query <dir> --sort "prioridad:asc,impact_score:desc" -o json
   "meta": { "count": 1 }
 }
 ```
+
+With `--select "path,estado,title"` (compact projection):
+```json
+{
+  "version": 1,
+  "kind": "rootline/query",
+  "rows": [
+    {
+      "path": "docs/T001-task.md",
+      "estado": "Pending",
+      "title": "T001: some task"
+    }
+  ],
+  "meta": { "count": 1 }
+}
+```
+
+### Projection with --select
+
+Use `--select` for compact output with only specified fields. Examples:
+
+```bash
+rootline query docs/roadmap --select path,estado,title
+rootline query docs/roadmap --where "estado == 'In Progress'" --select path,title,links
+```
+
+Fields available in projection:
+- `path` — document path relative to scan root
+- `estado`, `tipo`, etc. — any frontmatter field
+- `derived_field` — any derived field from `.stem`
+- `title` — extracted from first Markdown heading (`# Heading`)
+- `links` — array of wiki-link references
+- Missing fields are omitted from the projected row
+
+`title` is a special computed field extracted from the first `# Heading` in the document body. If no heading exists, it is omitted from the row.
 
 ## tree
 
