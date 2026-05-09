@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -117,8 +119,22 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Handle output formats
 	if outputFormat == "table" {
 		return renderQueryTable(cmd, result)
+	}
+	if outputFormat == "jsonl" {
+		if querySelect == "" {
+			return fmt.Errorf("jsonl output requires --select flag")
+		}
+		return outputQueryJSONL(cmd, result)
+	}
+	if outputFormat == "csv" {
+		if querySelect == "" {
+			return fmt.Errorf("csv output requires --select flag")
+		}
+		fields := parseSelectFields(querySelect)
+		return outputQueryCSV(cmd, result, fields)
 	}
 	return outputJSON(cmd, result, false)
 }
@@ -242,4 +258,56 @@ func projectQueryResult(result any, fields []string) (any, error) {
 		Meta:    query.QueryMeta{Count: len(projectedRows)},
 		Rows:    projectedRows,
 	}, nil
+}
+
+// outputQueryJSONL outputs a ProjectedQueryResult as JSON Lines (one JSON object per line).
+func outputQueryJSONL(cmd *cobra.Command, result any) error {
+	pqr, ok := result.(*query.ProjectedQueryResult)
+	if !ok {
+		return fmt.Errorf("expected ProjectedQueryResult for jsonl output")
+	}
+
+	for _, row := range pqr.Rows {
+		b, err := json.Marshal(row)
+		if err != nil {
+			return fmt.Errorf("marshaling row to JSON: %w", err)
+		}
+		if _, err := fmt.Fprintln(cmd.OutOrStdout(), string(b)); err != nil {
+			return fmt.Errorf("writing JSONL line: %w", err)
+		}
+	}
+	return nil
+}
+
+// outputQueryCSV outputs a ProjectedQueryResult as CSV with header row.
+// The columns are derived from the --select fields in order.
+func outputQueryCSV(cmd *cobra.Command, result any, fields []string) error {
+	pqr, ok := result.(*query.ProjectedQueryResult)
+	if !ok {
+		return fmt.Errorf("expected ProjectedQueryResult for csv output")
+	}
+
+	w := csv.NewWriter(cmd.OutOrStdout())
+	defer w.Flush()
+
+	// Write header row
+	if err := w.Write(fields); err != nil {
+		return fmt.Errorf("writing CSV header: %w", err)
+	}
+
+	// Write data rows
+	for _, row := range pqr.Rows {
+		record := make([]string, len(fields))
+		for i, field := range fields {
+			if v, ok := row[field]; ok && v != nil {
+				record[i] = fmt.Sprintf("%v", v)
+			}
+			// If field is missing or nil, leave as empty string
+		}
+		if err := w.Write(record); err != nil {
+			return fmt.Errorf("writing CSV row: %w", err)
+		}
+	}
+
+	return nil
 }

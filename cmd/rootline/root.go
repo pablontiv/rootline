@@ -23,7 +23,7 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "json", "output format (json|table)")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "json", "output format (json|jsonl|csv|table)")
 	rootCmd.PersistentFlags().StringSliceVar(&fieldPath, "field", nil, "dot-path field extraction (repeatable)")
 }
 

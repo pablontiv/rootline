@@ -49,6 +49,7 @@ func resetFlags() {
 	queryFrom = "."
 	queryWhere = nil
 	querySort = ""
+	querySelect = ""
 	validateAll = false
 	validateStrict = false
 	validateStaged = false
@@ -111,6 +112,10 @@ func resetFlags() {
 		f.Changed = false
 	}
 	if f := queryCmd.Flags().Lookup("sort"); f != nil {
+		_ = f.Value.Set("")
+		f.Changed = false
+	}
+	if f := queryCmd.Flags().Lookup("select"); f != nil {
 		_ = f.Value.Set("")
 		f.Changed = false
 	}
@@ -1184,6 +1189,150 @@ func TestQuerySelectBackwardCompat(t *testing.T) {
 	}
 	if kind, ok := result["kind"]; !ok || kind != "rootline/query" {
 		t.Errorf("expected kind rootline/query, got %v", kind)
+	}
+}
+
+// --- Query output format tests (JSONL and CSV) ---
+
+func TestQueryOutputJSONL(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--select", "path,estado", "--output", "jsonl")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) == 0 {
+		t.Fatal("expected JSONL output lines")
+	}
+
+	// Each line should be valid JSON
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			t.Errorf("line %d not valid JSON: %v (line: %s)", i, err, line)
+		}
+		// Each object should have path and estado fields
+		if _, ok := obj["path"]; !ok {
+			t.Errorf("line %d missing 'path' field", i)
+		}
+	}
+}
+
+func TestQueryOutputCSV(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--select", "path,estado", "--output", "csv")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 2 {
+		t.Fatal("expected CSV output with header and at least one data row")
+	}
+
+	// First line should be the header
+	header := lines[0]
+	if !strings.Contains(header, "path") || !strings.Contains(header, "estado") {
+		t.Errorf("expected header to contain 'path' and 'estado', got: %s", header)
+	}
+
+	// Data rows should exist
+	if len(lines) < 2 {
+		t.Error("expected at least one data row in CSV output")
+	}
+}
+
+func TestQueryOutputCSVWithNil(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--select", "path,estado,nonexistent", "--output", "csv")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 2 {
+		t.Fatal("expected CSV output with header and at least one data row")
+	}
+
+	// First line should be the header with three columns
+	header := lines[0]
+	headerCols := strings.Split(header, ",")
+	if len(headerCols) != 3 {
+		t.Errorf("expected 3 header columns, got %d", len(headerCols))
+	}
+
+	// Check that data row has 3 columns (nonexistent should be empty)
+	if len(lines) >= 2 {
+		dataCols := strings.Split(lines[1], ",")
+		if len(dataCols) != 3 {
+			t.Errorf("expected 3 data columns, got %d", len(dataCols))
+		}
+	}
+}
+
+func TestQueryOutputJSONLNoSelect(t *testing.T) {
+	dir := setupTestDir(t)
+	out, _ := runCmd(t, "query", "--from", dir, "--output", "jsonl")
+	if !strings.Contains(out, "requires --select") {
+		t.Errorf("expected error message about --select requirement in output, got: %s", out)
+	}
+}
+
+func TestQueryOutputCSVNoSelect(t *testing.T) {
+	dir := setupTestDir(t)
+	out, _ := runCmd(t, "query", "--from", dir, "--output", "csv")
+	if !strings.Contains(out, "requires --select") {
+		t.Errorf("expected error message about --select requirement in output, got: %s", out)
+	}
+}
+
+func TestQueryOutputJSONLColumnOrder(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--select", "estado,path", "--output", "jsonl")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) == 0 {
+		t.Fatal("expected JSONL output lines")
+	}
+
+	// Parse first line and check field order is preserved in the JSON object
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &obj); err != nil {
+		t.Fatalf("first line not valid JSON: %v", err)
+	}
+
+	// Both fields should exist in the projected row
+	if _, ok := obj["estado"]; !ok {
+		t.Errorf("expected 'estado' field in JSONL object")
+	}
+	if _, ok := obj["path"]; !ok {
+		t.Errorf("expected 'path' field in JSONL object")
+	}
+}
+
+func TestQueryOutputCSVColumnOrder(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--select", "estado,path", "--output", "csv")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 2 {
+		t.Fatal("expected CSV output with header")
+	}
+
+	header := lines[0]
+	// Header should be "estado,path" in that order
+	if header != "estado,path" {
+		t.Errorf("expected header 'estado,path', got: %s", header)
 	}
 }
 
