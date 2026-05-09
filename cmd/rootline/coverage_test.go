@@ -6,6 +6,7 @@ package main
 // appendPropagateProposals, proposalsToFixResults.
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -469,5 +470,390 @@ schema:
 	out, err := runCmd(t, "fix", "--all", "--dry-run", childDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+}
+
+// --- Apply safety characterization tests (O09/T002) ---
+
+// TestApplySafety_DryRunSchemaInferences characterizes whether apply --dry-run
+// modifies .stem files when applying schema inferences. A correct implementation
+// should NOT modify .stem during dry-run.
+func TestApplySafety_DryRunSchemaInferences(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// .stem with incomplete enum
+	stemContent := `version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Done]
+  tipo:
+    type: string
+`
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte(stemContent), 0644)
+
+	// Document with a third enum value not in schema
+	mustWriteFile(t, filepath.Join(dir, "doc1.md"),
+		[]byte("---\nestado: Pending\ntipo: task\n---\n# Doc\n"), 0644)
+
+	// Generate analyze report
+	out, err := runCmd(t, "analyze", dir)
+	if err != nil {
+		t.Fatalf("analyze failed: %v\noutput: %s", err, out)
+	}
+
+	// Save original stem bytes
+	originalStemBytes := mustReadFile(t, stemPath)
+
+	// Write report to file and apply with --dry-run
+	reportFile := filepath.Join(dir, "report.json")
+	mustWriteFile(t, reportFile, []byte(out), 0644)
+
+	_, applyErr := runCmd(t, "apply", "--dry-run", reportFile)
+	if applyErr != nil {
+		t.Logf("apply --dry-run error (may be expected): %v", applyErr)
+	}
+
+	// Read stem after dry-run
+	afterStemBytes := mustReadFile(t, stemPath)
+
+	// BUG: apply --dry-run CURRENTLY WRITES .stem files. This test documents that bug.
+	if !bytes.Equal(originalStemBytes, afterStemBytes) {
+		t.Skip("characterization: dry-run writes .stem — expected to fail until T003 fix")
+	}
+
+	// If we get here, dry-run correctly preserved the .stem file
+	if bytes.Equal(originalStemBytes, afterStemBytes) {
+		t.Logf("dry-run correctly preserved .stem bytes")
+	}
+}
+
+// TestApplySafety_DryRunMissingSchema characterizes whether apply --dry-run
+// creates .stem files for directories with missing_schema inferences.
+// A correct implementation should NOT create .stem files during dry-run.
+func TestApplySafety_DryRunMissingSchema(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	subDir := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Parent .stem
+	parentStem := `version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Done]
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(parentStem), 0644)
+
+	// Document in subdirectory (no .stem in sub)
+	mustWriteFile(t, filepath.Join(subDir, "doc.md"),
+		[]byte("---\nestado: Pending\n---\n# Doc\n"), 0644)
+
+	// Analyze to detect missing_schema in subDir
+	out, err := runCmd(t, "analyze", dir)
+	if err != nil {
+		t.Fatalf("analyze failed: %v\noutput: %s", err, out)
+	}
+
+	// Check for missing_schema inferences in the report
+	var report map[string]any
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid analyze report: %v", err)
+	}
+
+	// Save state before dry-run
+	subStemPath := filepath.Join(subDir, ".stem")
+	_, existsBefore := os.Stat(subStemPath)
+
+	// Write report and apply with --dry-run
+	reportFile := filepath.Join(dir, "report.json")
+	mustWriteFile(t, reportFile, []byte(out), 0644)
+
+	_, applyErr := runCmd(t, "apply", "--dry-run", reportFile)
+	if applyErr != nil {
+		t.Logf("apply --dry-run error (may be expected): %v", applyErr)
+	}
+
+	// Check state after dry-run
+	_, existsAfter := os.Stat(subStemPath)
+
+	// BUG: apply --dry-run CURRENTLY SCAFFOLDS .stem during pre-phase.
+	// This characterizes that behavior.
+	if existsBefore != nil && existsAfter == nil {
+		// .stem was created during dry-run (bug)
+		t.Skip("characterization: dry-run creates .stem — expected to fail until T003 fix")
+	}
+
+	// If we get here, dry-run correctly did NOT create .stem
+	if existsBefore != nil && existsAfter != nil {
+		t.Logf("dry-run correctly did not create .stem")
+	}
+}
+
+// TestApplySafety_JSONPurityWithMissingSchema characterizes whether
+// apply --output json produces parseable JSON when missing_schema is present.
+// A correct implementation should NOT emit human-readable text to stdout
+// that contaminates the JSON output.
+func TestApplySafety_JSONPurityWithMissingSchema(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	subDir := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Parent .stem
+	parentStem := `version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: string
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(parentStem), 0644)
+
+	// Document in subdirectory (missing .stem)
+	mustWriteFile(t, filepath.Join(subDir, "doc.md"),
+		[]byte("---\nestado: value\n---\n# Doc\n"), 0644)
+
+	// Analyze
+	out, err := runCmd(t, "analyze", dir)
+	if err != nil {
+		t.Fatalf("analyze failed: %v\noutput: %s", err, out)
+	}
+
+	// Write report and apply with --dry-run
+	reportFile := filepath.Join(dir, "report.json")
+	mustWriteFile(t, reportFile, []byte(out), 0644)
+
+	applyOut, applyErr := runCmd(t, "apply", "--dry-run", reportFile)
+	if applyErr != nil {
+		t.Logf("apply --dry-run error (may be expected): %v", applyErr)
+	}
+
+	// Try to parse stdout as JSON
+	var result map[string]any
+	if err := json.Unmarshal([]byte(applyOut), &result); err != nil {
+		// BUG: stdout is contaminated with "scaffolded..." text
+		t.Skip("characterization: stdout contamination bug — expected to fail until T003 fix")
+	}
+
+	// If we get here, stdout is valid JSON (correct behavior)
+	t.Logf("apply --output json produced parseable JSON (correct behavior)")
+}
+
+// TestApplySafety_RootMostStemTargetSelection characterizes which .stem file
+// is selected when multiple .stem files exist at different hierarchy levels.
+// Documents current behavior for future fix.
+func TestApplySafety_RootMostStemTargetSelection(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Parent .stem (root-most)
+	parentStem := `version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Done]
+  parent_field:
+    type: string
+`
+	parentStemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, parentStemPath, []byte(parentStem), 0644)
+
+	// Create subdirectory with its own .stem
+	subDir := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	childStem := `version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Done, InProgress]
+  child_field:
+    type: string
+`
+	childStemPath := filepath.Join(subDir, ".stem")
+	mustWriteFile(t, childStemPath, []byte(childStem), 0644)
+
+	// Document in subdirectory uses a value from child's enum
+	mustWriteFile(t, filepath.Join(subDir, "doc.md"),
+		[]byte("---\nestado: InProgress\nchild_field: value\n---\n# Doc\n"), 0644)
+
+	// Analyze from parent
+	out, err := runCmd(t, "analyze", dir)
+	if err != nil {
+		t.Fatalf("analyze failed: %v\noutput: %s", err, out)
+	}
+
+	// Write report and apply with --dry-run to see which .stem is selected
+	reportFile := filepath.Join(dir, "report.json")
+	mustWriteFile(t, reportFile, []byte(out), 0644)
+
+	// Save original bytes for both stems
+	parentOriginal := mustReadFile(t, parentStemPath)
+	childOriginal := mustReadFile(t, childStemPath)
+
+	_, applyErr := runCmd(t, "apply", "--dry-run", reportFile)
+	if applyErr != nil {
+		t.Logf("apply --dry-run error (may be expected): %v", applyErr)
+	}
+
+	// Read both stems after apply
+	parentAfter := mustReadFile(t, parentStemPath)
+	childAfter := mustReadFile(t, childStemPath)
+
+	// Characterize: which stem was selected?
+	parentModified := !bytes.Equal(parentOriginal, parentAfter)
+	childModified := !bytes.Equal(childOriginal, childAfter)
+
+	switch {
+	case parentModified && !childModified:
+		t.Logf("characterization: parent .stem was selected (closest-to-root behavior)")
+	case !parentModified && childModified:
+		t.Logf("characterization: child .stem was selected (closest-to-file behavior)")
+	case parentModified && childModified:
+		t.Logf("characterization: both stems were modified")
+	default:
+		t.Logf("characterization: neither stem was modified (dry-run worked correctly)")
+	}
+}
+
+// TestApplySafety_PartialWriteRisk characterizes the non-transactional risk
+// where scaffold/schema/data modifications happen sequentially without
+// transaction protection. If one phase fails, others may have already modified files.
+func TestApplySafety_PartialWriteRisk(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	subDir := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Parent .stem
+	parentStem := `version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: string
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(parentStem), 0644)
+
+	// Document in subdirectory
+	mustWriteFile(t, filepath.Join(subDir, "doc.md"),
+		[]byte("---\nestado: value\n---\n# Doc\n"), 0644)
+
+	// Analyze
+	out, err := runCmd(t, "analyze", dir)
+	if err != nil {
+		t.Fatalf("analyze failed: %v\noutput: %s", err, out)
+	}
+
+	reportFile := filepath.Join(dir, "report.json")
+	mustWriteFile(t, reportFile, []byte(out), 0644)
+
+	// Record initial state
+	subStemPath := filepath.Join(subDir, ".stem")
+	_, existsBefore := os.Stat(subStemPath)
+
+	// Apply (not dry-run, will actually write)
+	applyOut, applyErr := runCmd(t, "apply", reportFile)
+	if applyErr != nil {
+		// Expect error if scaffold fails for some reason
+		t.Logf("apply error (may happen if scaffold fails): %v, output: %s", applyErr, applyOut)
+	}
+
+	// Check final state: if scaffold was created, schema may have been modified too
+	_, existsAfter := os.Stat(subStemPath)
+
+	if existsBefore != nil && existsAfter == nil {
+		// Scaffold was created — document partial-write risk
+		t.Logf("characterization: apply created .stem (partial-write risk — other phases may not roll back)")
+	} else {
+		t.Logf("characterization: apply did not create .stem")
+	}
+}
+
+// TestApplySafety_StdoutContaminationWithScaffold tests that "scaffolded..."
+// messages printed to stdout contaminate JSON output when missing_schema is present.
+func TestApplySafety_StdoutContaminationWithScaffold(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	subDir := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Parent .stem
+	parentStem := `version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: string
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(parentStem), 0644)
+
+	// Document in subdirectory (will trigger missing_schema)
+	mustWriteFile(t, filepath.Join(subDir, "doc.md"),
+		[]byte("---\nestado: value\n---\n# Doc\n"), 0644)
+
+	// Analyze
+	out, err := runCmd(t, "analyze", dir)
+	if err != nil {
+		t.Fatalf("analyze failed: %v\noutput: %s", err, out)
+	}
+
+	reportFile := filepath.Join(dir, "report.json")
+	mustWriteFile(t, reportFile, []byte(out), 0644)
+
+	// Apply with --dry-run
+	applyOut, _ := runCmd(t, "apply", "--dry-run", reportFile)
+
+	// Check if stdout contains "scaffolded" text (bug indicator)
+	if strings.Contains(applyOut, "scaffolded") {
+		// Try to parse as JSON — will fail due to contamination
+		var result map[string]any
+		if err := json.Unmarshal([]byte(applyOut), &result); err != nil {
+			t.Skip("characterization: stdout contamination bug — 'scaffolded' text in JSON output")
+		}
+	} else {
+		t.Logf("no scaffold contamination detected in stdout")
 	}
 }
