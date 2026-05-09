@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T001: Inventory every Rootline CLI command and its flags that matter to Pi.
