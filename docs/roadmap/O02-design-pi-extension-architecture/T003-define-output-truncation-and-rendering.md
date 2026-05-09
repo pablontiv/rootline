@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T003: Define output truncation and optional TUI rendering behavior.
