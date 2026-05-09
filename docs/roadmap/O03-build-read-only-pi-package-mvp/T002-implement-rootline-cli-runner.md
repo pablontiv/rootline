@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: In Progress
 tipo: task
 ---
 # T002: Implement the shared rootline CLI runner in the extension package.
