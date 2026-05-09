@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: In Progress
 tipo: task
 ---
 # T002: Design a shared CLI runner for executing rootline from Pi.
