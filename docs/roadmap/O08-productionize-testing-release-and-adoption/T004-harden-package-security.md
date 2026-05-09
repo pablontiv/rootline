@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Obsolete
 tipo: task
 ---
 # T004: Review package security and supply-chain posture.

@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Obsolete
 tipo: task
 ---
 # T005: Write user-facing adoption and troubleshooting docs.
