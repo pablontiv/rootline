@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T003: Add status or widget showing Rootline project health.
@@ -42,3 +42,20 @@ Esta task forma parte de O05 y debe ejecutarse leyendo este archivo, el README d
 ## Fuente de verdad
 
 - `Pi UI status/widget docs`
+
+## Implementación
+
+Creado `integrations/pi/extensions/status.ts` que registra la herramienta `rootline-status`:
+
+- **Función**: Health check rápida (<3s típico) para widgets de UI
+- **Estados detectados**: no_rootline (binary not found), binary_only (no .stem), stem_governed (governed + validation)
+- **Salida**: JSON con state, status_line (human-readable), version, stem_count, valid, errors, warnings
+- **Símbolos**: ✗ (no_rootline), ⚠ (binary_only), ✓ (stem_governed)
+- **Tests**: 6 tests unitarios verifican registro, esquema y contrato de comportamiento
+
+**Criterios de aceptación verificados**:
+1. Status shows missing binary, no .stem, valid, or errors ✓
+2. Widget output remains concise and non-blocking (5s timeout) ✓
+3. `rootline validate --all docs/roadmap/` exit 0 ✓ (79 valid, 0 errors, 2 warnings)
+
+**Commit**: feat(pi): add rootline-status widget for project health monitoring
