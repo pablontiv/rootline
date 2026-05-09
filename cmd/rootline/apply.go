@@ -16,10 +16,16 @@ var applyDryRun bool
 
 var applyCmd = &cobra.Command{
 	Use:   "apply [report.json]",
-	Short: "Apply inference results to .stem and document files",
-	Long:  "Read an analyze report (from file or stdin) and apply\nschema-modifying inferences to .stem files and data corrections to documents.",
-	Args:  cobra.MaximumNArgs(1),
-	RunE:  runApply,
+	Short: "Deprecated legacy inference apply",
+	Long: `DEPRECATED: rootline apply applies proposals indiscriminately. Use instead:
+  rootline schema apply  -- for schema mutations (.stem files)
+  rootline repair apply  -- for data-only repairs (frontmatter)
+  rootline fix --all     -- for automatic data repairs
+
+Read an analyze report (from file or stdin) and apply
+schema-modifying inferences to .stem files and data corrections to documents.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runApply,
 }
 
 func init() {
@@ -28,6 +34,9 @@ func init() {
 }
 
 func runApply(cmd *cobra.Command, args []string) error {
+	// Deprecation warning. Keep stdout clean for machine-readable output.
+	_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "Warning: 'rootline apply' is deprecated. Use 'rootline schema apply', 'rootline repair apply', or 'rootline fix --all' instead.")
+
 	// Read report from file or stdin.
 	var data []byte
 	var err error

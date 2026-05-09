@@ -20,9 +20,14 @@ var analyzeThreshold float64
 var analyzeCmd = &cobra.Command{
 	Use:   "analyze [directory]",
 	Short: "Analyze documents and infer schema patterns",
-	Long:  "Run all inference detectors on documents in the given directory\nand produce a structured report of findings.",
-	Args:  cobra.MaximumNArgs(1),
-	RunE:  runAnalyze,
+	Long: `Run all inference detectors on documents in the given directory
+and produce a structured report of findings.
+
+The generated report can be processed by:
+  rootline schema apply  -- applies schema-modifying proposals to .stem files
+  rootline repair apply  -- applies data-only repairs to document frontmatter`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runAnalyze,
 }
 
 func init() {
