@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: In Progress
 tipo: task
 ---
 # T005: Add tests or executable fixtures for read-only tools.

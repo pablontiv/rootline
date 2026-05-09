@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: In Progress
 tipo: task
 ---
 # T001: Detect Rootline project state from cwd.
