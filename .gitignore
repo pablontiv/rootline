@@ -37,3 +37,7 @@ Thumbs.db
 
 # Skill evals (local only)
 .claude/skills/*/evals/
+
+# JavaScript dependencies
+node_modules/
+**/node_modules/

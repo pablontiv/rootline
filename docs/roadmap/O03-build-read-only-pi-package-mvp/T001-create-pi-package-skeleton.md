@@ -22,7 +22,7 @@ Esta task forma parte de O03 y debe ejecutarse leyendo este archivo, el README d
 ## Alcance
 
 **In**:
-1. integrations/pi/package.json declares pi extensions, skills, and prompts locations.
+1. integrations/pi/package.json declares pi extensions and prompts locations.
 2. Peer dependencies follow Pi package guidance.
 
 **Out**:
@@ -36,7 +36,7 @@ Esta task forma parte de O03 y debe ejecutarse leyendo este archivo, el README d
 
 ## Criterios de Aceptación
 
-- integrations/pi/package.json declares pi extensions, skills, and prompts locations.
+- integrations/pi/package.json declares pi extensions and prompts locations.
 - Peer dependencies follow Pi package guidance.
 - `rootline validate --all docs/roadmap/` retorna exit 0 o solo warnings aceptados por la configuración del roadmap.
 

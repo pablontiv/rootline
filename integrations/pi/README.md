@@ -2,7 +2,7 @@
 
 Pi extension bundle for Rootline schema querying, validation, and analysis.
 
-Rootline treats the filesystem as a database: directories are tables, files are records, metadata comes from YAML frontmatter, and structure is inherited via `.stem` files. This Pi package exposes Rootline capabilities through tools, slash commands, and prompt workflows.
+Rootline treats the filesystem as a database: directories are tables, files are records, metadata comes from YAML frontmatter, and structure is inherited via `.stem` files. This Pi package exposes Rootline capabilities through tools and prompt workflows.
 
 ## Installation
 
@@ -683,12 +683,6 @@ The package includes 4 prompt templates for common Rootline scenarios. Use these
 3. View directory-level organization
 4. Filter by semantic domain for complex schemas
 
-## Skill
-
-The `rootline.md` skill documents Rootline CLI operations as the primary interface for `.stem`-governed Markdown data. It defines deterministic execution rules, command routing, and required workflows for validation, repair, inspection, and analysis.
-
-Use when working with Markdown records governed by `.stem` schemas or when the user asks to validate, fix, query, inspect, scaffold, mutate, analyze, apply, graph, trace, or serve Rootline data.
-
 ## Troubleshooting
 
 ### rootline: command not found
@@ -961,7 +955,7 @@ See `/docs/roadmap/O02-design-pi-extension-architecture/T006-architecture-decisi
 
 ```
 .
-├── package.json          # Pi manifest with extensions, skills, prompts
+├── package.json          # Pi manifest with extensions and prompts
 ├── extensions/           # TypeScript tool implementations
 │   ├── query.ts         # rootline-query tool
 │   ├── describe.ts      # rootline-describe tool
@@ -970,8 +964,6 @@ See `/docs/roadmap/O02-design-pi-extension-architecture/T006-architecture-decisi
 │   ├── stats.ts         # rootline-stats tool
 │   ├── doctor.ts        # rootline-doctor tool
 │   └── context.ts       # rootline-context tool
-├── skills/
-│   └── rootline.md      # Rootline CLI operations skill
 └── prompts/             # Prompt templates
     ├── validate-and-fix.md
     ├── analyze-schema.md

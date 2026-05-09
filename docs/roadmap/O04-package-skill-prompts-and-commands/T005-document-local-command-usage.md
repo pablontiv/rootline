@@ -2,7 +2,7 @@
 estado: Completed
 tipo: task
 ---
-# T005: Document local usage of skills, prompts, and commands.
+# T005: Document local usage of tools, prompts, and commands.
 
 **Outcome**: [O04 Package skill, prompts, and command UX](README.md)
 **Contribuye a**: CE1 del Outcome.
@@ -11,12 +11,12 @@ tipo: task
 
 ## Preserva
 
-- INV1: Skills and prompts instruct agents to prefer Rootline tools over manual grep/read for governed records.
-  - Verificar: Inspect packaged skill and prompt content.
+- INV1: Tool descriptions and prompts instruct agents to prefer Rootline tools over manual grep/read for governed records.
+  - Verificar: Inspect packaged tool descriptions and prompt content.
 
 ## Contexto
 
-Esta task forma parte de O04 y debe ejecutarse leyendo este archivo, el README del Outcome y las fuentes de verdad listadas abajo. Document local usage of skills, prompts, and commands.
+Esta task forma parte de O04 y debe ejecutarse leyendo este archivo, el README del Outcome y las fuentes de verdad listadas abajo. Document local usage of tools, prompts, and commands.
 
 ## Alcance
 

@@ -11,8 +11,8 @@ tipo: task
 
 ## Preserva
 
-- INV1: Skills and prompts instruct agents to prefer Rootline tools over manual grep/read for governed records.
-  - Verificar: Inspect packaged skill and prompt content.
+- INV1: Tool descriptions and prompts instruct agents to prefer Rootline tools over manual grep/read for governed records.
+  - Verificar: Inspect packaged tool descriptions and prompt content.
 
 ## Contexto
 
