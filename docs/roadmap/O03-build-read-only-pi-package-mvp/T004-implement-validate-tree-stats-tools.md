@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T004: Implement rootline_validate, rootline_tree, and rootline_stats tools.
