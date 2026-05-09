@@ -198,10 +198,11 @@ func InsertWikiLinksBeforeHeading(content string, links []string) string {
 // ApplySchemaProposals applies schema-surface proposals (extend_enum, remove_stem_field)
 // that were separated from data proposals. It is the counterpart to ApplyProposals.
 func ApplySchemaProposals(_ context.Context, report *proposal.Report, root string) error {
-	all := append(report.Proposals, report.SchemaSuggestions...)
+	all := make([]proposal.Proposal, 0, len(report.Proposals)+len(report.SchemaSuggestions))
+	all = append(all, report.Proposals...)
+	all = append(all, report.SchemaSuggestions...)
 	for _, p := range all {
-		switch p.Type {
-		case proposal.ExtendEnum:
+		if p.Type == proposal.ExtendEnum {
 			if err := applyExtendEnum(p, root); err != nil {
 				return fmt.Errorf("extend_enum %s: %w", p.Field, err)
 			}
