@@ -37,7 +37,7 @@ Verify the package loaded:
 pi tools | grep rootline-
 ```
 
-You should see: `rootline-query`, `rootline-describe`, `rootline-validate`, `rootline-tree`, `rootline-stats`, `rootline-new`, `rootline-set`, `rootline-doctor`, `rootline-context`.
+You should see: `rootline-query`, `rootline-describe`, `rootline-validate`, `rootline-tree`, `rootline-stats`, `rootline-new`, `rootline-set`, `rootline-doctor`, `rootline-context`, `rootline-fix`, `rootline-migrate`, `rootline-analyze`, `rootline-apply`.
 
 ## Tools
 
@@ -212,7 +212,11 @@ Returns: `state` (one of: `no_rootline`, `binary_only`, `stem_governed`), `versi
 
 ## Mutation Tools
 
-The Pi package provides 2 tools for safely creating and updating governed records with integrated validation and confirmation guardrails.
+The Pi package provides safe mutation tools with integrated validation and confirmation guardrails.
+
+### Simple Mutations (O06)
+
+Single-record safe mutations with confirmation:
 
 ### rootline-new
 
@@ -302,6 +306,139 @@ await tool("rootline-set", {
 
 Returns: `updated` (boolean), `path`, `fields_set`, `dry_run_preview` (for dry-run), `validation` (post-write result).
 
+### Complex Bulk Mutations (O07)
+
+Bulk operations that affect multiple files or schema state. These tools require careful use with explicit confirmation and preview workflows. See [Complex Operations](#complex-operations) section for risk model and rollback guidance.
+
+#### rootline-fix
+
+Bulk correction of validation errors across multiple documents (field standardization, enum fixes, required field population).
+
+**Parameters:**
+- `path` (required): Directory or file path to analyze and fix
+- `dry_run` (optional): Preview changes without writing (default: true)
+- `confirmed` (optional): Explicit confirmation for mutations in non-interactive mode (default: false)
+- `interactive` (optional): Whether Pi is running interactively (default: false)
+- `where` (optional): Filter expression to target specific records (e.g., `estado == 'Pending'`)
+
+**Example:**
+```javascript
+// Preview fixes
+await tool("rootline-fix", {
+  path: "docs/roadmap/",
+  dry_run: true
+})
+
+// Apply fixes (interactive mode)
+await tool("rootline-fix", {
+  path: "docs/roadmap/",
+  dry_run: false,
+  interactive: true
+})
+
+// Apply fixes with explicit confirmation (non-interactive)
+await tool("rootline-fix", {
+  path: "docs/roadmap/",
+  dry_run: false,
+  confirmed: true
+})
+```
+
+Returns: `fixed` (boolean), `path`, `proposals` (list of corrections), `validation` (post-fix validation).
+
+#### rootline-migrate
+
+Bulk migration of records and schema across a directory hierarchy (field renames, type changes, hierarchical restructuring).
+
+**Parameters:**
+- `path` (required): Directory path to migrate
+- `dry_run` (optional): Preview changes without writing (default: true)
+- `confirmed` (optional): Explicit confirmation for mutations in non-interactive mode (default: false)
+- `interactive` (optional): Whether Pi is running interactively (default: false)
+
+**Example:**
+```javascript
+// Preview migration plan
+await tool("rootline-migrate", {
+  path: "docs/roadmap/",
+  dry_run: true
+})
+
+// Apply migration (interactive mode)
+await tool("rootline-migrate", {
+  path: "docs/roadmap/",
+  dry_run: false,
+  interactive: true
+})
+```
+
+Returns: `migrated` (boolean), `path`, `plan` (migration steps), `validation` (post-migration validation).
+
+#### rootline-analyze
+
+Analyze records to detect schema inference opportunities, governance gaps, and validation improvements (read-only, no confirmation required).
+
+**Parameters:**
+- `path` (required): Directory path to analyze
+- `incremental` (optional): Skip patterns already covered by .stem files (default: false)
+- `threshold` (optional): Confidence threshold for inferences (0-100, default: 80)
+
+**Example:**
+```javascript
+// Generate analysis report
+await tool("rootline-analyze", {
+  path: "docs/roadmap/",
+  incremental: true
+})
+
+// Save report to file for review and apply later
+const report = await tool("rootline-analyze", {
+  path: "docs/roadmap/"
+})
+// Then save to disk: fs.writeFileSync("analyze-report.json", JSON.stringify(report))
+```
+
+Returns: `kind` ("rootline/analyze-report"), `version` (1), `directory`, `timestamp`, `summary`, `inferences` (list of detected patterns), `governance_gaps`, `validation_improvements`.
+
+#### rootline-apply
+
+Apply proposals from an analysis report (schema changes to .stem files, or data repairs to documents).
+
+**Parameters:**
+- `report_path` (required): Path to a rootline-analyze report (JSON file)
+- `mode` (optional): "schema", "repair", or "both" (default: "both")
+- `dry_run` (optional): Preview changes without writing (default: true)
+- `confirmed` (optional): Explicit confirmation for mutations in non-interactive mode (default: false)
+- `interactive` (optional): Whether Pi is running interactively (default: false)
+
+**Example:**
+```javascript
+// Preview proposals from a report
+await tool("rootline-apply", {
+  report_path: "analyze-report.json",
+  mode: "both",
+  dry_run: true
+})
+
+// Apply schema changes only
+await tool("rootline-apply", {
+  report_path: "analyze-report.json",
+  mode: "schema",
+  dry_run: false,
+  interactive: true
+})
+
+// Apply data repairs only (non-interactive with confirmation)
+await tool("rootline-apply", {
+  report_path: "analyze-report.json",
+  mode: "repair",
+  dry_run: false,
+  confirmed: true
+})
+```
+
+Returns: `applied` (boolean), `dry_run`, `mode`, `schema_result?` (if mode includes schema), `repair_result?` (if mode includes repair), `validation` (post-apply validation).
+
 ## When to Use Direct Edit/Write vs. Mutation Tools
 
 | Scenario | Use |
@@ -312,17 +449,155 @@ Returns: `updated` (boolean), `path`, `fields_set`, `dry_run_preview` (for dry-r
 | Modifying document body only (no frontmatter changes) | Direct write/edit tools |
 | Structural changes (reorganizing sections) | Direct write/edit tools, then run `rootline validate` |
 
+## Complex Operations
+
+O07 exposes complex bulk operations that can affect multiple files or schema state. These operations have integrated guardrails to prevent accidental mutations and provide clear rollback guidance.
+
+### When Operations Require Confirmation
+
+All mutation operations default to **safe-by-default** behavior:
+
+| Operation | Default Mode | To Actually Apply |
+|-----------|--------------|-------------------|
+| `rootline-fix` | `dry_run: true` | Set `dry_run: false` + `confirmed: true` |
+| `rootline-migrate` | `dry_run: true` | Set `dry_run: false` + `confirmed: true` |
+| `rootline-apply` (repair) | `dry_run: true` | Set `dry_run: false` + `confirmed: true` |
+| `rootline-apply` (schema) | `dry_run: true` | Set `dry_run: false` + `confirmed: true` |
+| `rootline-analyze` | N/A | Read-only operation |
+
+**Interactive vs. Non-Interactive Behavior:**
+- **Interactive mode** (`interactive: true`): Agent prompts the user before applying mutations
+- **Non-interactive/headless mode**: Operation is blocked unless `confirmed: true` is explicitly set
+
+This prevents silent mutations and ensures explicit user intent.
+
+### Risk Model
+
+| Operation | Risk Level | Affects | Scope | Rollback |
+|-----------|-----------|---------|-------|----------|
+| `rootline-analyze` | None | None | Read-only | N/A |
+| `rootline-fix` | Medium | Document frontmatter | Single or bulk documents | `git reset` or `git checkout` |
+| `rootline-apply (repair)` | Medium | Document frontmatter | Single or bulk documents | `git reset` or `git checkout` |
+| `rootline-migrate` | High | Documents + .stem files | Multiple files in hierarchy | `git reset --hard` or `git restore` |
+| `rootline-apply (schema)` | High | .stem schema files | Schema definitions | `git restore` or manual `.stem` revert |
+
+**Risk Factors:**
+- **None**: Read-only analysis, no mutations
+- **Medium**: Frontmatter changes only, documents remain valid, easy to revert
+- **High**: Schema changes or bulk document mutations, requires careful review of diffs
+
+### Git Checkpoint and Rollback Procedure
+
+**Before any complex operation**, create a checkpoint:
+
+```bash
+git add -A
+git commit -m "checkpoint before rootline [operation]"
+# Example: "checkpoint before rootline migrate docs/roadmap/"
+```
+
+**If something goes wrong:**
+
+**Option 1: Revert entire operation**
+```bash
+# Undo to the checkpoint commit
+git reset --hard HEAD~1
+```
+
+**Option 2: Revert only changed documents (for frontmatter issues)**
+```bash
+# Restore specific files
+git checkout -- docs/roadmap/O07-*/
+```
+
+**Option 3: Revert only schema files**
+```bash
+# If only .stem files were changed
+git restore docs/roadmap/.stem
+```
+
+**Verification after rollback:**
+```bash
+# Verify documents are back to checkpoint
+rootline validate --all docs/roadmap/ --output json
+
+# Check git status
+git status
+```
+
+### Complex Operations Workflow
+
+**Recommended workflow for bulk operations:**
+
+1. **Generate and preview**
+   ```javascript
+   // Step 1: Create checkpoint
+   // Run: git add -A && git commit -m "checkpoint before rootline analyze"
+   
+   // Step 2: Analyze or preview (dry-run)
+   await tool("rootline-analyze", {
+     path: "docs/roadmap/",
+     incremental: true
+   })
+   
+   // Or preview fixes
+   await tool("rootline-fix", {
+     path: "docs/roadmap/",
+     dry_run: true
+   })
+   ```
+
+2. **Review and approve**
+   - Inspect the analysis report or dry-run preview
+   - Look for unexpected changes or breaking modifications
+   - Decide whether to proceed or adjust strategy
+
+3. **Apply with confirmation**
+   ```javascript
+   // Step 3: Apply changes (in interactive mode, user is prompted)
+   await tool("rootline-fix", {
+     path: "docs/roadmap/",
+     dry_run: false,
+     confirmed: true,
+     interactive: true
+   })
+   ```
+
+4. **Validate and commit**
+   ```javascript
+   // Step 4: Validate results
+   await tool("rootline-validate", {
+     path: "docs/roadmap/"
+   })
+   
+   // If validation passes: git add && git commit
+   // If validation fails: git reset to checkpoint
+   ```
+
+### When NOT to Use Complex Operations
+
+- **Uncontrolled bulk changes**: If unsure about the scope, start with a filtered query to understand the impact first
+- **Critical schema changes**: For schema migrations affecting the entire hierarchy, use a feature branch and test on a copy first
+- **Production-like data**: Always test migrations on a smaller subset before running on the full dataset
+
 ## Bulk Operations and Non-Goals
 
-This package exposes single-record mutations with integrated validation. Complex bulk operations are **intentionally deferred** to [Outcome O07](https://github.com/pablontiv/rootline/blob/master/docs/roadmap/O07-expose-complex-operations-with-guardrails) (Expose complex operations with guardrails).
+This package exposes single-record mutations with integrated validation, and complex bulk operations with guardrails. **Single-record operations** (O06) are always safe:
 
-**Not in scope for O06:**
-- `rootline fix` (bulk field correction across multiple records) — use O07 protected-fix workflow
-- `rootline migrate` (schema migration and bulk changes) — use O07 protected-migrate workflow
-- `rootline apply` (deprecated, superceded by schema/repair workflows)
-- Batch record creation — not supported in O06; use `rootline-new` for single records
+| Operation | Scope | Guardrails |
+|-----------|-------|-----------|
+| `rootline-new` | Single file creation | Confirmation required in non-interactive mode |
+| `rootline-set` | Single field update | Confirmation required + post-validation |
 
-Bulk operations require preview workflows, rollback procedures, and audit trails that are designed and implemented in O07.
+**Complex bulk operations** (O07) require explicit confirmation and preview workflows:
+- `rootline-fix` (bulk field correction across multiple records)
+- `rootline-migrate` (schema migration and bulk changes)
+- `rootline-analyze` (inference and analysis)
+- `rootline-apply` (repair or schema application from proposals)
+
+**Not in scope:**
+- Batch record creation — use `rootline-new` for single records, or `rootline-migrate` to bulk-restructure existing records
+- Automated rollback — manual git-based rollback is required; see [Git checkpoint/rollback](#git-checkpoint-and-rollback-procedure) above
 
 ## Slash Commands
 
