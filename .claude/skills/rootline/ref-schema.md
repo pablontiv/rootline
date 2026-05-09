@@ -122,13 +122,26 @@ Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new comman
 - `layers` (array of strings) — ordered `.stem` chain root→leaf
 - `provenance` (object) — field name → `.stem` path that last defined it
 
-## Schema Propose Command
+## Schema Commands
+
+### schema propose
 
 `rootline schema propose <dir> [--incremental] [--output json|table]` generates read-only schema proposals:
 - Detects whether the directory has a hierarchical structure (E##/F##/S###/T### patterns) and calls `GenerateHierarchicalSchema` or `GenerateFlatSchema`
 - Emits JSON: version 1, kind `"rootline/schema-proposals"`, with `proposals` array (id, operation, target, confidence, requires_agent, patch_preview) and summary
 - `--incremental`: skips proposals covered by existing `.stem` files
 - Never creates, modifies, or deletes any file
+
+### schema apply
+
+`rootline schema apply --report <proposals.json> [--dry-run]` applies schema proposals to `.stem` files:
+- Input kind must be `"rootline/schema-proposals"`, version must be 1 (else structured error)
+- Skips proposals with `requires_agent: true`
+- `create_stem` operation: calls `ScaffoldSchema` to create the target `.stem` file
+- `update_stem` operation: calls `ApplySchemaInferences` on the target `.stem` file
+- `--dry-run`: no files written; reports what would be done
+- Post-apply: runs `rootline validate --all` and includes results in output
+- Emits JSON: version 1, kind `"rootline/schema-apply"` with applied/skipped/errors/validation_summary
 
 ## Fix All Schema Safety
 
