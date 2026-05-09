@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -165,12 +164,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 			Cycles:      cycles,
 			BrokenLinks: broken,
 		}
-		data, err := json.Marshal(result)
-		if err != nil {
-			return fmt.Errorf("marshaling JSON: %w", err)
-		}
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
-		return nil
+		return outputJSON(cmd, result, false)
 	}
 
 	// Diagram output.

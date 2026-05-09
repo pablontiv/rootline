@@ -265,3 +265,87 @@ func TestGraphCheck_SchemaFiltersReferenceLinks(t *testing.T) {
 		t.Errorf("expected clean check, got: %s", out)
 	}
 }
+
+func TestGraphJSON_FieldProjection_Edges(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[c.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "c.md"), []byte("---\n---\n# C\n"), 0644)
+
+	out, err := runCmd(t, "graph", dir, "--field", "edges")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	var edges []any
+	if err := json.Unmarshal([]byte(out), &edges); err != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", err, out)
+	}
+	if len(edges) != 2 {
+		t.Errorf("edges = %d, want 2", len(edges))
+	}
+}
+
+func TestGraphJSON_FieldProjection_BrokenLinks(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[nonexistent.md]]\n"), 0644)
+
+	out, err := runCmd(t, "graph", dir, "--field", "broken_links")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	var brokenLinks []any
+	if err := json.Unmarshal([]byte(out), &brokenLinks); err != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", err, out)
+	}
+	if len(brokenLinks) != 1 {
+		t.Errorf("broken_links = %d, want 1", len(brokenLinks))
+	}
+}
+
+func TestGraphJSON_Unchanged(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n"), 0644)
+
+	out, err := runCmd(t, "graph", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", err, out)
+	}
+
+	// Verify all expected fields are present
+	if _, ok := result["version"]; !ok {
+		t.Error("missing version field")
+	}
+	if _, ok := result["kind"]; !ok {
+		t.Error("missing kind field")
+	}
+	if _, ok := result["nodes"]; !ok {
+		t.Error("missing nodes field")
+	}
+	if _, ok := result["edges"]; !ok {
+		t.Error("missing edges field")
+	}
+	if _, ok := result["cycles"]; !ok {
+		t.Error("missing cycles field")
+	}
+	if _, ok := result["broken_links"]; !ok {
+		t.Error("missing broken_links field")
+	}
+
+	if result["version"].(float64) != 1 {
+		t.Errorf("version = %v, want 1", result["version"])
+	}
+	if result["kind"] != "rootline/graph" {
+		t.Errorf("kind = %v, want rootline/graph", result["kind"])
+	}
+}
