@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T004: Implement convenience slash commands for validation and tree inspection.
