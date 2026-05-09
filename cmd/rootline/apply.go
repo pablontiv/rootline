@@ -66,13 +66,21 @@ func runApply(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	entries, walkErr := rules.WalkUp(root)
-	if walkErr != nil || len(entries) == 0 {
+	res, resolveErr := rules.Resolve(root, root)
+	if resolveErr != nil {
+		return fmt.Errorf("resolving stems for %s: %w", report.Path, resolveErr)
+	}
+
+	if len(res.Chain) == 0 {
 		return fmt.Errorf("no .stem found for %s", report.Path)
 	}
 
-	// Use the closest stem file.
-	stemPath := entries[0].Path
+	// Use the closest (leaf-most) stem file for schema modifications.
+	closestStem := res.ClosestStem()
+	if closestStem == nil {
+		return fmt.Errorf("no stem available for %s", report.Path)
+	}
+	stemPath := closestStem.Path
 
 	// Separate schema-modifying and data-correction inferences.
 	var schemaInferences []infer.ReportInference
