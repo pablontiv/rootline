@@ -122,6 +122,21 @@ Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new comman
 - `layers` (array of strings) — ordered `.stem` chain root→leaf
 - `provenance` (object) — field name → `.stem` path that last defined it
 
+## Schema Propose Command
+
+`rootline schema propose <dir> [--incremental] [--output json|table]` generates read-only schema proposals:
+- Detects whether the directory has a hierarchical structure (E##/F##/S###/T### patterns) and calls `GenerateHierarchicalSchema` or `GenerateFlatSchema`
+- Emits JSON: version 1, kind `"rootline/schema-proposals"`, with `proposals` array (id, operation, target, confidence, requires_agent, patch_preview) and summary
+- `--incremental`: skips proposals covered by existing `.stem` files
+- Never creates, modifies, or deletes any file
+
+## Fix All Schema Safety
+
+`fix --all` now applies **data-only repairs** only (correct_value, add_field, migrate_value):
+- Schema-surface proposals (extend_enum, add_aggregate, remove_stem_field) are skipped
+- Skipped proposals appear in `schema_suggestions` count in JSON output and table note
+- Use `rootline schema propose` or manually edit `.stem` files for schema changes
+
 ## Repair Apply Command
 
 `rootline repair apply --report <analyze-report.json> [--dry-run]` applies data-only repairs:
