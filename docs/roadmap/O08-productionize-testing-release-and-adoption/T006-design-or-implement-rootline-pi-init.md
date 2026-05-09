@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Obsolete
 tipo: task
 ---
 # T006: Design or implement rootline pi init onboarding helper.
