@@ -15,6 +15,13 @@ type StemResolver func(dir string) *rules.StemFile
 // directory. For each record it resolves the effective .stem, collects
 // sibling records as children (for aggregation builtins), and evaluates
 // derive expressions. Errors are silently skipped (derivation is best-effort).
+//
+// Note: Derivation uses directory-level schema resolution (merged stems per directory)
+// rather than per-record resolution. This is intentional because:
+// - Derivation expressions (expr-lang) operate on computed fields, not schema enforcement
+// - Aggregation builtins (children) group records by parent directory, not record type
+// - Match-scoped fields affect schema validation, not derivation
+// If per-record scoping becomes necessary, use ResolveForRecord(dir, recordPath) instead.
 func DeriveAll(ctx context.Context, records []*extract.Record, root string, resolver StemResolver) {
 	if resolver == nil {
 		return
@@ -30,7 +37,7 @@ func DeriveAll(ctx context.Context, records []*extract.Record, root string, reso
 	// Build a record resolver for linked field injection.
 	recResolver := NewMapResolver(records)
 
-	// Cache effective stems per directory.
+	// Cache effective stems per directory (merged schema, not per-record filtered).
 	stemCache := make(map[string]*rules.StemFile)
 
 	for _, rec := range records {

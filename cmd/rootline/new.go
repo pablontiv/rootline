@@ -46,14 +46,15 @@ func runNew(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Resolve effective schema from parent directory
+	// Resolve effective schema using per-record resolution to apply match filtering.
+	// This ensures that if the schema has match-scoped fields, only fields applicable
+	// to this record type are included in the generated frontmatter.
 	dir := filepath.Dir(absTarget)
-	entries, err := rules.WalkUp(dir)
+	effective, err := rules.ResolveForRecord(dir, absTarget)
 	if err != nil {
-		return fmt.Errorf("discovering .stem files: %w", err)
+		return fmt.Errorf("resolving .stem for %s: %w", dir, err)
 	}
 
-	effective := rules.MergeStemFiles(entries)
 	if effective == nil || len(effective.Schema) == 0 {
 		return fmt.Errorf("no .stem schema found for %s", dir)
 	}

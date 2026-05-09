@@ -1042,3 +1042,90 @@ func TestValidate_RequiredLinkFieldMissing(t *testing.T) {
 		t.Error("expected required error for missing link field")
 	}
 }
+
+func TestValidate_PerRecordMatchFiltering_RequiredField(t *testing.T) {
+	// Test that per-record schema with match filtering works correctly.
+	// A field with RequiredMatch should only be required if the record path matches.
+	stem := &StemFile{
+		Path: "docs/tasks/.stem",
+		Schema: map[string]SchemaField{
+			"title": {Type: "string", Required: true, Source: "root/.stem"},
+			// ejecutable_en is only required for T* (task) records
+			"ejecutable_en": {
+				Type:     "string",
+				Required: false,
+				RequiredMatch: &FieldMatch{
+					Patterns: []string{"T*"},
+				},
+				Source: "docs/tasks/.stem",
+			},
+		},
+	}
+
+	t.Run("T-record has match-scoped field required", func(t *testing.T) {
+		rec := &extract.Record{
+			Path:        "docs/epics/E01/F01/T001-task.md",
+			Type:        "markdown",
+			Frontmatter: map[string]any{"title": "Test"},
+		}
+		// Simulate ResolveForRecord by applying match filtering
+		filtered := FilterSchemaByMatch(pointerSchema(stem.Schema), rec.Path)
+		effectiveStem := &StemFile{
+			Path:   stem.Path,
+			Schema: valueSchema(filtered),
+		}
+
+		errs := Validate(context.Background(), rec, effectiveStem)
+		// Should have an error for missing ejecutable_en since it matches T*
+		found := false
+		for _, e := range errs {
+			if e.Rule == "required" && e.Field == "ejecutable_en" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected required error for ejecutable_en in T-record")
+		}
+	})
+
+	t.Run("F-record does not have match-scoped field required", func(t *testing.T) {
+		rec := &extract.Record{
+			Path:        "docs/epics/E01/F01-feature/README.md",
+			Type:        "markdown",
+			Frontmatter: map[string]any{"title": "Feature"},
+		}
+		// Simulate ResolveForRecord by applying match filtering
+		filtered := FilterSchemaByMatch(pointerSchema(stem.Schema), rec.Path)
+		effectiveStem := &StemFile{
+			Path:   stem.Path,
+			Schema: valueSchema(filtered),
+		}
+
+		errs := Validate(context.Background(), rec, effectiveStem)
+		// Should NOT have an error for ejecutable_en since it doesn't match T*
+		for _, e := range errs {
+			if e.Rule == "required" && e.Field == "ejecutable_en" {
+				t.Errorf("unexpected required error for ejecutable_en in F-record: %s", e.Message)
+			}
+		}
+	})
+}
+
+// Helper functions for test support
+func pointerSchema(schema map[string]SchemaField) map[string]*SchemaField {
+	ptrSchema := make(map[string]*SchemaField, len(schema))
+	for name, field := range schema {
+		f := field
+		ptrSchema[name] = &f
+	}
+	return ptrSchema
+}
+
+func valueSchema(ptrSchema map[string]*SchemaField) map[string]SchemaField {
+	schema := make(map[string]SchemaField, len(ptrSchema))
+	for name, field := range ptrSchema {
+		schema[name] = *field
+	}
+	return schema
+}

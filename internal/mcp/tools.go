@@ -263,12 +263,38 @@ func handleDescribe(ctx context.Context, _ *mcp.CallToolRequest, input DescribeI
 		return nil, nil, fmt.Errorf("resolving path: %w", err)
 	}
 
-	entries, err := rules.WalkUp(absPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("walking up: %w", err)
+	// For directory-level describe, use directory-level resolution.
+	// For file-level describe, use per-record resolution with match filtering.
+	// Determine intent: if absPath is a directory, use directory schema; if a file, use record schema.
+	info, statErr := os.Stat(absPath)
+	var entries []rules.StemEntry
+	var walkErr error
+
+	if statErr == nil && info.IsDir() {
+		// Directory: show directory-level schema
+		entries, walkErr = rules.WalkUp(absPath)
+	} else {
+		// File: show per-record schema (with match filtering)
+		dir := filepath.Dir(absPath)
+		entries, walkErr = rules.WalkUp(dir)
 	}
 
-	effective := rules.MergeStemFiles(entries)
+	if walkErr != nil {
+		return nil, nil, fmt.Errorf("walking up: %w", walkErr)
+	}
+
+	var effective *rules.StemFile
+	if statErr == nil && info.IsDir() {
+		// Directory-level: merge without filtering
+		effective = rules.MergeStemFiles(entries)
+	} else {
+		// File-level: use per-record resolution with match filtering
+		effective, _ = rules.ResolveForRecord(filepath.Dir(absPath), absPath)
+		if effective == nil {
+			// Fallback to directory schema if per-record fails
+			effective = rules.MergeStemFiles(entries)
+		}
+	}
 	result := rules.NewDescribeResult(input.Path, entries, effective)
 
 	// Filter by domain if requested
@@ -826,14 +852,15 @@ func handleNew(ctx context.Context, _ *mcp.CallToolRequest, input NewInput) (*mc
 		}
 	}
 
-	// Resolve effective schema from parent directory
+	// Resolve effective schema using per-record resolution to apply match filtering.
+	// This ensures that if the schema has match-scoped fields, only fields applicable
+	// to this record type are included in the generated frontmatter.
 	dir := filepath.Dir(absTarget)
-	entries, err := rules.WalkUp(dir)
+	effective, err := rules.ResolveForRecord(dir, absTarget)
 	if err != nil {
-		return nil, nil, fmt.Errorf("discovering .stem files: %w", err)
+		return nil, nil, fmt.Errorf("resolving .stem for %s: %w", dir, err)
 	}
 
-	effective := rules.MergeStemFiles(entries)
 	if effective == nil || len(effective.Schema) == 0 {
 		return nil, nil, fmt.Errorf("no .stem schema found for %s", dir)
 	}
