@@ -10,7 +10,6 @@ import (
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/infer"
-	"github.com/pablontiv/rootline/internal/migrate"
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/pablontiv/rootline/internal/templates"
 	"github.com/spf13/cobra"
@@ -96,37 +95,29 @@ func runInitFlat(cmd *cobra.Command, absTarget, target string, records []*extrac
 		}
 	}
 
-	// Analyze frontmatter
-	schema := infer.Analyze(records)
-
-	// Detect section patterns at a stricter 0.80 threshold (init is more
-	// prescriptive than analyze's 0.60 default).
-	sectionInferences := infer.DetectSectionPatterns(records, 0.80)
-	for _, inf := range sectionInferences {
-		fieldName := sectionFieldName(inf.Field)
-		heading := "## " + inf.Field
-		sf := rules.SchemaField{
-			Type:    "section",
-			Heading: heading,
-		}
-		if inf.Type == "required_section" {
-			sf.Required = true
-		}
-		schema.Schema[fieldName] = sf
+	// Generate flat schema using the new schema generation service
+	opts := infer.InferOptions{
+		SectionThreshold:  0.80, // prescriptive for init
+		IncludeStructural: true,
+	}
+	stemFile, err := infer.GenerateFlatSchema(cmd.Context(), absTarget, records, opts)
+	if err != nil {
+		return fmt.Errorf("generating flat schema: %w", err)
 	}
 
-	// Warn about mixed content
-	if schema.TotalFiles > 0 && schema.FilesWithout > 0 {
-		ratio := float64(schema.FilesWithout) / float64(schema.TotalFiles)
+	// Analyze frontmatter for warning about mixed content
+	analyzed := infer.Analyze(records)
+	if analyzed.TotalFiles > 0 && analyzed.FilesWithout > 0 {
+		ratio := float64(analyzed.FilesWithout) / float64(analyzed.TotalFiles)
 		if ratio > 0.2 {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
 				"Warning: %d of %d files have no frontmatter. Consider running init on a more specific subdirectory.\n",
-				schema.FilesWithout, schema.TotalFiles)
+				analyzed.FilesWithout, analyzed.TotalFiles)
 		}
 	}
 
-	// Generate YAML
-	yaml := generateStemYAML(schema, absTarget)
+	// Generate YAML from StemFile
+	yaml := stemFileToYAML(stemFile, absTarget)
 
 	if initDryRun {
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), yaml)
@@ -138,17 +129,39 @@ func runInitFlat(cmd *cobra.Command, absTarget, target string, records []*extrac
 	}
 
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created %s (%d fields inferred from %d files)\n",
-		stemPath, len(schema.Schema), len(records))
+		stemPath, len(stemFile.Schema), len(records))
 	return nil
 }
 
 func runInitHierarchical(cmd *cobra.Command, absTarget, target string, hierarchy *infer.HierarchyResult, records []*extract.Record) error {
-	// Build the list of .stem files to write.
-	stemFiles, generatedAggNames := buildHierarchicalStems(absTarget, hierarchy)
+	// Generate hierarchical schema using the new schema generation service
+	opts := infer.InferOptions{
+		SectionThreshold:  0.80,
+		IncludeStructural: true,
+	}
+	stemMap, err := infer.GenerateHierarchicalSchema(cmd.Context(), absTarget, records, opts)
+	if err != nil {
+		return fmt.Errorf("generating hierarchical schema: %w", err)
+	}
 
-	// Emit notes for auto-generated aggregates.
-	for _, name := range generatedAggNames {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Note: auto-generated aggregate for '%s'\n", name)
+	// Convert StemFiles to file content for writing
+	stemFiles := make([]stemFile, 0, len(stemMap))
+	for _, rootStem := range stemMap {
+		yaml := stemFileToYAML(rootStem, absTarget)
+		stemFiles = append(stemFiles, stemFile{
+			path:    filepath.Join(absTarget, ".stem"),
+			content: yaml,
+		})
+	}
+
+	// Emit notes for auto-generated aggregates
+	if len(stemMap) > 0 {
+		rootStem := stemMap["."]
+		if rootStem != nil && len(rootStem.Aggregate) > 0 {
+			for name := range rootStem.Aggregate {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Note: auto-generated aggregate for '%s'\n", name)
+			}
+		}
 	}
 
 	// Check for existing .stem files.
@@ -192,71 +205,19 @@ type stemFile struct {
 	content string
 }
 
-// buildHierarchicalStems generates a single root .stem file with a levels: section.
-// Returns the stem files and a sorted list of field names for which aggregates were generated.
-func buildHierarchicalStems(absTarget string, hierarchy *infer.HierarchyResult) ([]stemFile, []string) {
-	var files []stemFile
-
-	// Generate aggregate expressions for enum fields in root schema.
-	aggregates := migrate.GenerateAggregates(hierarchy.Root.Schema, nil)
-	aggNames := make([]string, 0, len(aggregates))
-	for k := range aggregates {
-		aggNames = append(aggNames, k)
-	}
-	sort.Strings(aggNames)
-
-	// Single root .stem: common fields + levels section + aggregates.
-	rootYAML := generateHierarchicalRootYAML(hierarchy, aggregates, absTarget)
-	files = append(files, stemFile{
-		path:    filepath.Join(absTarget, ".stem"),
-		content: rootYAML,
-	})
-
-	return files, aggNames
-}
-
-// generateStructuralYAML generates the structural: section for a .stem file
-// by running the structural inference detector on scanRoot.
-func generateStructuralYAML(scanRoot string) string {
-	inferences := infer.DetectStructural(scanRoot)
-	if len(inferences) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("structural:\n  subdirs:\n")
-	for _, inf := range inferences {
-		if inf.Type != "add_structural_rule" {
-			continue
-		}
-		switch inf.Field {
-		case "require_index":
-			fmt.Fprintf(&b, "    require_index: %s\n", inf.Value)
-		case "min_children":
-			fmt.Fprintf(&b, "    min_children: %s\n", inf.Value)
-		case "max_children":
-			fmt.Fprintf(&b, "    max_children: %s\n", inf.Value)
-		}
-	}
-	return b.String()
-}
-
-// generateHierarchicalRootYAML generates the root .stem with common fields,
-// match-based per-level schema, and aggregates.
-func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates map[string]string, scanRoot string) string {
+// stemFileToYAML converts a StemFile to YAML string representation.
+func stemFileToYAML(stem *rules.StemFile, scanRoot string) string {
 	var b strings.Builder
 	b.WriteString("version: 2\nscope:\n  match: \"*.md\"\nschema:\n")
 
-	// Merge root and per-level fields into a single schema with match annotations.
-	matchSchema := hierarchy.ToMatchSchema()
-
-	keys := make([]string, 0, len(matchSchema))
-	for k := range matchSchema {
+	keys := make([]string, 0, len(stem.Schema))
+	for k := range stem.Schema {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
 	for _, name := range keys {
-		field := matchSchema[name]
+		field := stem.Schema[name]
 		fmt.Fprintf(&b, "  %s:\n", name)
 		fmt.Fprintf(&b, "    type: %s\n", field.Type)
 		if field.Required {
@@ -264,6 +225,9 @@ func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates m
 		}
 		if len(field.Values) > 0 {
 			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(field.Values, ", "))
+		}
+		if field.Heading != "" {
+			fmt.Fprintf(&b, "    heading: %q\n", field.Heading)
 		}
 		if field.Prefix != "" {
 			fmt.Fprintf(&b, "    prefix: %s\n", field.Prefix)
@@ -306,66 +270,37 @@ func generateHierarchicalRootYAML(hierarchy *infer.HierarchyResult, aggregates m
 		}
 	}
 
-	// Emit aggregate section for auto-generated expressions.
-	if len(aggregates) > 0 {
-		aggKeys := make([]string, 0, len(aggregates))
-		for k := range aggregates {
+	// Emit aggregate section if present
+	if len(stem.Aggregate) > 0 {
+		aggKeys := make([]string, 0, len(stem.Aggregate))
+		for k := range stem.Aggregate {
 			aggKeys = append(aggKeys, k)
 		}
 		sort.Strings(aggKeys)
 
 		b.WriteString("aggregate:\n")
 		for _, name := range aggKeys {
+			val := stem.Aggregate[name]
 			fmt.Fprintf(&b, "  %s: |\n", name)
-			for _, line := range strings.Split(aggregates[name], "\n") {
+			for _, line := range strings.Split(fmt.Sprintf("%v", val), "\n") {
 				fmt.Fprintf(&b, "    %s\n", line)
 			}
 		}
 	}
 
-	// Append structural inference section if detected.
-	if s := generateStructuralYAML(scanRoot); s != "" {
-		b.WriteString(s)
+	// Append structural inference section if present
+	if !stem.Structural.IsEmpty() {
+		b.WriteString("structural:\n  subdirs:\n")
+		if stem.Structural.Subdirs.RequireIndex != "" {
+			fmt.Fprintf(&b, "    require_index: %s\n", stem.Structural.Subdirs.RequireIndex)
+		}
+		if stem.Structural.Subdirs.MinChildren > 0 {
+			fmt.Fprintf(&b, "    min_children: %d\n", stem.Structural.Subdirs.MinChildren)
+		}
+		if stem.Structural.Subdirs.MaxChildren > 0 {
+			fmt.Fprintf(&b, "    max_children: %d\n", stem.Structural.Subdirs.MaxChildren)
+		}
 	}
 
 	return b.String()
-}
-
-func generateStemYAML(schema *infer.InferredSchema, scanRoot string) string {
-	var b strings.Builder
-	b.WriteString("version: 2\nscope:\n  match: \"*.md\"\nschema:\n")
-
-	keys := make([]string, 0, len(schema.Schema))
-	for k := range schema.Schema {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, name := range keys {
-		field := schema.Schema[name]
-		fmt.Fprintf(&b, "  %s:\n", name)
-		fmt.Fprintf(&b, "    type: %s\n", field.Type)
-		if field.Required {
-			b.WriteString("    required: true\n")
-		}
-		if len(field.Values) > 0 {
-			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(field.Values, ", "))
-		}
-		if field.Heading != "" {
-			fmt.Fprintf(&b, "    heading: %q\n", field.Heading)
-		}
-	}
-
-	// Append structural inference section if detected.
-	if s := generateStructuralYAML(scanRoot); s != "" {
-		b.WriteString(s)
-	}
-
-	return b.String()
-}
-
-// sectionFieldName converts a heading text to a .stem field name:
-// lowercase with spaces replaced by underscores.
-func sectionFieldName(heading string) string {
-	return strings.ToLower(strings.ReplaceAll(heading, " ", "_"))
 }
