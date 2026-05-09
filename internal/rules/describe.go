@@ -13,17 +13,19 @@ import (
 // It shows the effective schema for a directory after merging all
 // ancestor .stem files.
 type DescribeResult struct {
-	Version   int                    `json:"version"`
-	Kind      string                 `json:"kind"`
-	Path      string                 `json:"path"`
-	Applies   []string               `json:"applies"`
-	Scope     Scope                  `json:"scope"`
-	Schema    map[string]SchemaField `json:"schema"`
-	Validate  []ValidationRule       `json:"validate"`
-	Derive    map[string]any         `json:"derive"`
-	Aggregate map[string]any         `json:"aggregate"`
-	Links     LinkSchema             `json:"links"`
-	Hints     []string               `json:"hints,omitempty"`
+	Version    int                    `json:"version"`
+	Kind       string                 `json:"kind"`
+	Path       string                 `json:"path"`
+	Applies    []string               `json:"applies"`
+	Scope      Scope                  `json:"scope"`
+	Schema     map[string]SchemaField `json:"schema"`
+	Validate   []ValidationRule       `json:"validate"`
+	Derive     map[string]any         `json:"derive"`
+	Aggregate  map[string]any         `json:"aggregate"`
+	Links      LinkSchema             `json:"links"`
+	Layers     []string               `json:"layers,omitempty"`
+	Provenance map[string]string      `json:"provenance,omitempty"`
+	Hints      []string               `json:"hints,omitempty"`
 }
 
 // NewDescribeResult builds a DescribeResult from walk-up entries and
@@ -62,17 +64,38 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 		}
 	}
 
+	// Build layers and provenance from entries
+	layers := make([]string, len(entries))
+	for i, e := range entries {
+		layers[i] = e.Path
+	}
+
+	// Build provenance map: field name → stem path that defined it
+	provenance := make(map[string]string)
+	if entries != nil {
+		for _, entry := range entries {
+			if entry.Stem != nil {
+				for name := range entry.Stem.Schema {
+					// Last writer wins — later entries (closer to leaf) override earlier ones.
+					provenance[name] = entry.Path
+				}
+			}
+		}
+	}
+
 	return &DescribeResult{
-		Version:   1,
-		Kind:      "rootline/describe",
-		Path:      path,
-		Applies:   applies,
-		Scope:     effective.Scope,
-		Schema:    schema,
-		Validate:  validate,
-		Derive:    derive,
-		Aggregate: aggregate,
-		Links:     effective.Links,
+		Version:    1,
+		Kind:       "rootline/describe",
+		Path:       path,
+		Applies:    applies,
+		Scope:      effective.Scope,
+		Schema:     schema,
+		Validate:   validate,
+		Derive:     derive,
+		Aggregate:  aggregate,
+		Links:      effective.Links,
+		Layers:     layers,
+		Provenance: provenance,
 	}
 }
 

@@ -69,6 +69,10 @@ rootline describe docs/api/
 Every field includes `source` — the `.stem` file that defined it.
 This makes the merge cascade transparent and debuggable.
 
+The `layers` array lists all `.stem` files in resolution order (root-to-leaf).
+The `provenance` map shows which `.stem` file defined each field, enabling
+field-level traceability of the schema inheritance chain.
+
 ### Sections
 
 | Section | Purpose |

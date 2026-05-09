@@ -171,3 +171,77 @@ func TestDescribeResult_NilFieldsBecomeMaps(t *testing.T) {
 		}
 	}
 }
+
+func TestDescribeResult_ProvenanceWithNestedStems(t *testing.T) {
+	// Simulate a 2-level stem chain: root/.stem defines "title" and "tipo",
+	// docs/tasks/.stem narrows "tipo".
+	rootStem := &StemFile{
+		Schema: map[string]SchemaField{
+			"title": {Type: "string", Required: true},
+			"tipo":  {Type: "enum", Values: []string{"feature", "fix"}},
+		},
+	}
+	taskStem := &StemFile{
+		Schema: map[string]SchemaField{
+			"tipo": {Type: "enum", Values: []string{"feature"}}, // narrowed
+		},
+	}
+
+	entries := []StemEntry{
+		{Path: "root/.stem", Stem: rootStem},
+		{Path: "docs/tasks/.stem", Stem: taskStem},
+	}
+
+	// Effective is the merged schema
+	effective := &StemFile{
+		Schema: map[string]SchemaField{
+			"title": {Type: "string", Required: true, Source: "root/.stem"},
+			"tipo":  {Type: "enum", Values: []string{"feature"}, Source: "docs/tasks/.stem"},
+		},
+	}
+
+	result := NewDescribeResult("docs/tasks/", entries, effective)
+
+	// Check layers
+	if len(result.Layers) != 2 {
+		t.Fatalf("layers = %d, want 2", len(result.Layers))
+	}
+	if result.Layers[0] != "root/.stem" || result.Layers[1] != "docs/tasks/.stem" {
+		t.Errorf("layers = %v, want [root/.stem docs/tasks/.stem]", result.Layers)
+	}
+
+	// Check provenance
+	if result.Provenance["title"] != "root/.stem" {
+		t.Errorf("provenance[title] = %q, want root/.stem", result.Provenance["title"])
+	}
+	if result.Provenance["tipo"] != "docs/tasks/.stem" {
+		t.Errorf("provenance[tipo] = %q, want docs/tasks/.stem", result.Provenance["tipo"])
+	}
+
+	// Verify in JSON
+	data, err := result.ToJSON()
+	if err != nil {
+		t.Fatalf("ToJSON: %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("JSON parse: %v", err)
+	}
+
+	layers, ok := parsed["layers"].([]any)
+	if !ok || len(layers) != 2 {
+		t.Fatalf("JSON layers = %v, want 2-element array", layers)
+	}
+
+	prov, ok := parsed["provenance"].(map[string]any)
+	if !ok {
+		t.Fatalf("JSON provenance = %v, want object", prov)
+	}
+	if prov["title"] != "root/.stem" {
+		t.Errorf("JSON provenance.title = %v, want root/.stem", prov["title"])
+	}
+	if prov["tipo"] != "docs/tasks/.stem" {
+		t.Errorf("JSON provenance.tipo = %v, want docs/tasks/.stem", prov["tipo"])
+	}
+}

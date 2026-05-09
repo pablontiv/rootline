@@ -8,12 +8,14 @@ import (
 
 // ExplainResult is the versioned JSON output for the explain command and MCP tool.
 type ExplainResult struct {
-	Version   int            `json:"version"`
-	Kind      string         `json:"kind"`
-	Path      string         `json:"path"`
-	StemChain []string       `json:"stem_chain"`
-	Fields    []ExplainField `json:"fields"`
-	Errors    []ExplainError `json:"errors,omitempty"`
+	Version    int               `json:"version"`
+	Kind       string            `json:"kind"`
+	Path       string            `json:"path"`
+	StemChain  []string          `json:"stem_chain"`
+	Layers     []string          `json:"layers,omitempty"`
+	Provenance map[string]string `json:"provenance,omitempty"`
+	Fields     []ExplainField    `json:"fields"`
+	Errors     []ExplainError    `json:"errors,omitempty"`
 }
 
 // ExplainField traces a single field's value and origin.
@@ -47,6 +49,25 @@ func NewExplainResult(
 	chain := make([]string, len(entries))
 	for i, e := range entries {
 		chain[i] = e.Path
+	}
+
+	// Build layers (same as chain for now, but semantically distinct)
+	layers := make([]string, len(entries))
+	for i, e := range entries {
+		layers[i] = e.Path
+	}
+
+	// Build provenance map: field name → stem path that defined it
+	provenance := make(map[string]string)
+	if entries != nil {
+		for _, entry := range entries {
+			if entry.Stem != nil {
+				for name := range entry.Stem.Schema {
+					// Last writer wins — later entries (closer to leaf) override earlier ones.
+					provenance[name] = entry.Path
+				}
+			}
+		}
 	}
 
 	var fields []ExplainField
@@ -117,12 +138,14 @@ func NewExplainResult(
 	}
 
 	return &ExplainResult{
-		Version:   1,
-		Kind:      "rootline/explain",
-		Path:      path,
-		StemChain: chain,
-		Fields:    fields,
-		Errors:    explainErrs,
+		Version:    1,
+		Kind:       "rootline/explain",
+		Path:       path,
+		StemChain:  chain,
+		Layers:     layers,
+		Provenance: provenance,
+		Fields:     fields,
+		Errors:     explainErrs,
 	}
 }
 

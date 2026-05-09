@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -300,5 +301,89 @@ func TestNewExplainResult_DeriveNonStringExpression(t *testing.T) {
 	}
 	if field.Expression != "" {
 		t.Errorf("expression = %q, want empty (non-string derive)", field.Expression)
+	}
+}
+
+func TestNewExplainResult_ProvenanceWithNestedStems(t *testing.T) {
+	// Simulate a 2-level stem chain: root/.stem defines "estado" and "tipo",
+	// tasks/.stem narrows "tipo".
+	record := &extract.Record{
+		Frontmatter: map[string]any{"estado": "Pending", "tipo": "feature"},
+		Derived:     map[string]any{},
+	}
+
+	rootStem := &StemFile{
+		Schema: map[string]SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Done"}, Source: "root/.stem"},
+			"tipo":   {Type: "enum", Values: []string{"feature", "fix"}, Source: "root/.stem"},
+		},
+	}
+
+	taskStem := &StemFile{
+		Schema: map[string]SchemaField{
+			"tipo": {Type: "enum", Values: []string{"feature"}, Source: "tasks/.stem"},
+		},
+	}
+
+	entries := []StemEntry{
+		{Path: "root/.stem", Stem: rootStem},
+		{Path: "tasks/.stem", Stem: taskStem},
+	}
+
+	effective := &StemFile{
+		Schema: map[string]SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Done"}, Source: "root/.stem"},
+			"tipo":   {Type: "enum", Values: []string{"feature"}, Source: "tasks/.stem"},
+		},
+	}
+
+	result := NewExplainResult("tasks/task01.md", entries, effective, record, nil)
+
+	// Check layers
+	if len(result.Layers) != 2 {
+		t.Fatalf("layers = %d, want 2", len(result.Layers))
+	}
+	if result.Layers[0] != "root/.stem" || result.Layers[1] != "tasks/.stem" {
+		t.Errorf("layers = %v, want [root/.stem tasks/.stem]", result.Layers)
+	}
+
+	// Check provenance
+	if result.Provenance["estado"] != "root/.stem" {
+		t.Errorf("provenance[estado] = %q, want root/.stem", result.Provenance["estado"])
+	}
+	if result.Provenance["tipo"] != "tasks/.stem" {
+		t.Errorf("provenance[tipo] = %q, want tasks/.stem", result.Provenance["tipo"])
+	}
+
+	// Both stem_chain and layers should be present in JSON
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("JSON parse: %v", err)
+	}
+
+	stemChain, ok := parsed["stem_chain"].([]any)
+	if !ok || len(stemChain) != 2 {
+		t.Errorf("JSON stem_chain = %v, want 2-element array", stemChain)
+	}
+
+	layers, ok := parsed["layers"].([]any)
+	if !ok || len(layers) != 2 {
+		t.Errorf("JSON layers = %v, want 2-element array", layers)
+	}
+
+	prov, ok := parsed["provenance"].(map[string]any)
+	if !ok {
+		t.Errorf("JSON provenance = %v, want object", prov)
+	}
+	if prov["estado"] != "root/.stem" {
+		t.Errorf("JSON provenance.estado = %v, want root/.stem", prov["estado"])
+	}
+	if prov["tipo"] != "tasks/.stem" {
+		t.Errorf("JSON provenance.tipo = %v, want tasks/.stem", prov["tipo"])
 	}
 }
