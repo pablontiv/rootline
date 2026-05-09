@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T001: Design UX for complex Rootline operations.
@@ -49,3 +49,10 @@ Esta task forma parte de O07 y debe ejecutarse leyendo este archivo, el README d
 - `cmd/rootline/fix.go`
 - `cmd/rootline/migrate.go`
 - `cmd/rootline/apply.go`
+
+## Deliverables
+
+- **Design document**: `integrations/pi/extensions/complex-ops-design.md`
+  - Specifies guardrail patterns for 4 complex operations (fix, migrate, analyze/apply, repair-apply)
+  - Covers user intent, preview workflows, validation, and rollback procedures
+  - Provides tool specs, parameter definitions, and implementation notes for T002-T004
