@@ -8,6 +8,9 @@ tipo: task
 **Contribuye a**: CE2 del Outcome.
 
 [[blocked_by:./T001-design-complex-operation-ux.md]]
+[[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T007-implement-schema-propose-bootstrap-and-incremental.md]]
+[[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T008-implement-schema-apply-explicit.md]]
+[[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T009-implement-repair-apply-data-only.md]]
 [[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T011-deprecate-legacy-apply-and-update-command-surfaces.md]]
 
 ## Preserva

@@ -15,13 +15,13 @@ while read local_ref local_sha remote_ref remote_sha; do
     range="$remote_sha..$local_sha"
   fi
 
-  # Check if any docs/epics files changed in the push range
-  if git diff --name-only "$range" -- docs/epics/ 2>/dev/null | grep -q .; then
-    echo "Validating docs/epics/ before push..."
-    if ! rootline validate --all docs/epics/ > /dev/null 2>&1; then
-      echo "rootline validate --all docs/epics/ failed. Fix errors before pushing."
-      echo "Run: rootline validate --all docs/epics/"
-      echo "Or:  rootline fix --all docs/epics/"
+  # Check if any docs/roadmap files changed in the push range
+  if git diff --name-only "$range" -- docs/roadmap/ 2>/dev/null | grep -q .; then
+    echo "Validating docs/roadmap/ before push..."
+    if ! rootline validate --all docs/roadmap/ > /dev/null 2>&1; then
+      echo "rootline validate --all docs/roadmap/ failed. Fix errors before pushing."
+      echo "Run: rootline validate --all docs/roadmap/"
+      echo "Or:  rootline fix --all docs/roadmap/"
       exit 1
     fi
     echo "docs/epics/ validation passed"

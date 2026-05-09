@@ -25,7 +25,7 @@ Run `just --list` to see all available recipes. Key ones:
 | `just check` | Format check + golangci-lint + go build |
 | `just test` | Run all tests with race detector |
 | `just fmt` | Auto-format code |
-| `just validate` | Validate docs/epics with rootline |
+| `just validate` | Validate docs/roadmap with rootline |
 | `just fix-docs` | Fix and propagate doc aggregates |
 
 ## Workflow
@@ -78,7 +78,7 @@ All PRs must pass:
 - `go mod tidy` (no uncommitted changes)
 - `golangci-lint run`
 - `govulncheck ./...`
-- `rootline validate --all docs/epics/`
+- `rootline validate --all docs/roadmap/`
 
 ## Reporting Issues
 

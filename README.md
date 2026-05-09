@@ -15,7 +15,7 @@ A **file-based database and constraint engine** for structured documentation. `.
 | Constraint | Validation rule (`required`, `enum`, `exists`) |
 | Domain type | `domain:` property (semantic type) |
 
-> **Status**: Engine and MCP server complete — all CLI commands and 9 MCP tools functional. 16 inference detectors (13 data + 3 governance).
+> **Status**: Engine and MCP server complete — all CLI commands and 12 MCP tools functional. 16 inference detectors (13 data + 3 governance).
 
 ---
 
@@ -278,7 +278,7 @@ Rootline is designed as a **structured knowledge source for AI assistants**. All
 
 ### MCP Server
 
-`rootline serve` starts a **Model Context Protocol (MCP)** server over stdio, exposing 9 tools via JSON-RPC 2.0. AI assistants query Rootline using the same contracts as the CLI.
+`rootline serve` starts a **Model Context Protocol (MCP)** server over stdio, exposing 12 tools via JSON-RPC 2.0. AI assistants query Rootline using the same contracts as the CLI.
 
 Configure in Claude Desktop or any MCP client:
 
@@ -293,7 +293,7 @@ Configure in Claude Desktop or any MCP client:
 }
 ```
 
-Available tools: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`. See [MCP Server docs](docs/json-rpc.md) for full tool catalog.
+Available tools: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`, `trace`, `new`, `health`. See [MCP Server docs](docs/json-rpc.md) for full tool catalog.
 
 ---
 

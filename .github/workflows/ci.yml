@@ -24,7 +24,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go build -o rootline ./cmd/rootline/
-      - run: ./rootline validate --all docs/epics/
+      - run: ./rootline validate --all docs/roadmap/
 
   release:
     uses: pablontiv/crossbeam/.github/workflows/go-release.yml@v1

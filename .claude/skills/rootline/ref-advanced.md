@@ -118,20 +118,30 @@ Flags:
 
 Use `--field summary` only after confirming the analyze JSON contains that path.
 
-## apply
+## apply (Deprecated)
 
-Use `apply` to modify `.stem` and document frontmatter from an analyze report.
+The legacy `apply` command is deprecated. Use specialized commands instead:
 
+**For schema proposals** (add fields to `.stem`, extend enums, etc.):
 ```bash
-rootline analyze <dir> -o json > report.json
-rootline apply report.json
-rootline apply report.json -o table
+rootline schema propose <dir> -o json > proposals.json
+rootline schema apply --report proposals.json --dry-run
+rootline schema apply --report proposals.json
 ```
 
-Safety rule: treat `apply` as mutating even with `--dry-run`, because schema-application paths can write `.stem` files before data-correction dry-run handling. To preview, inspect the analyze report and `cmd/rootline/apply.go` instead of executing `apply --dry-run` as a guarantee.
+**For data-only repairs** (fix document frontmatter values):
+```bash
+rootline fix --all <dir> --dry-run -o json > repairs.json
+rootline repair apply --report repairs.json --dry-run
+rootline repair apply --report repairs.json
+```
 
-After `apply`, always run:
+**Legacy mixed apply** (preserved for backward compatibility):
+```bash
+rootline apply report.json
+```
 
+Always inspect proposals before applying and validate after:
 ```bash
 rootline validate --all <dir> -o json
 git diff -- <dir>
@@ -150,9 +160,9 @@ rootline serve --stdio
 - Stdio is for clients that launch Rootline as a subprocess.
 - The MCP tool catalog is defined in `internal/mcp/tools.go`.
 
-Registered MCP tools: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`, `trace`, `new`, `health`.
+Registered MCP tools (12 total): `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`, `trace`, `new`, `health`.
 
-CLI commands without MCP tools: `init`, `analyze`, `apply`, `migrate`, `hooks`, `completion`, `serve`.
+CLI commands without MCP tools: `init`, `analyze`, `schema`, `repair`, `apply` (legacy), `migrate`, `hooks`, `completion`, `serve`.
 
 ## hooks and completion
 

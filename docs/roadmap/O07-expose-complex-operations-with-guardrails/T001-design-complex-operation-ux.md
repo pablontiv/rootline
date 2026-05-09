@@ -9,6 +9,9 @@ tipo: task
 
 [[blocked_by:../O06-add-safe-mutation-tools/T005-document-safe-mutation-workflows.md]]
 [[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T001-codify-command-responsibility-contracts.md]]
+[[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T008-implement-schema-apply-explicit.md]]
+[[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T009-implement-repair-apply-data-only.md]]
+[[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T011-deprecate-legacy-apply-and-update-command-surfaces.md]]
 
 ## Preserva
 

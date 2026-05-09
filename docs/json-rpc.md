@@ -53,7 +53,7 @@ rootline serve --addr 127.0.0.1:9200
 
 ## Tool Catalog
 
-Rootline provides 9 functional MCP tools that map 1:1 to CLI commands.
+Rootline provides 12 functional MCP tools that map 1:1 to CLI commands.
 
 ### query
 
@@ -179,6 +179,41 @@ Build dependency graph from `[[wiki-links]]` with cycle detection and broken lin
 | `format` | string | no | Output format: `dot` or `mermaid` (default: JSON) |
 
 **Returns**: `rootline/graph` — nodes, edges, cycles, and broken links (with fuzzy `suggestions` for close matches). Or DOT/Mermaid text if `format` is set.
+
+### trace
+
+Follow reference chains through the document graph via BFS traversal. Shows connected documents and their estado.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Absolute path to the starting file |
+| `reverse` | bool | no | Follow incoming references instead of outgoing |
+| `depth` | int | no | Max traversal depth (0 = unlimited) |
+| `edge_type` | string | no | Filter by edge type (field name) |
+
+**Returns**: Graph traversal result with connected documents and their fields.
+
+### new
+
+Create a new document with frontmatter scaffolded from the effective `.stem` schema of the target directory.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | yes | Absolute path to the new document file |
+| `content` | string | no | Full document content (frontmatter + body); if provided, used directly instead of generating from schema |
+| `force` | bool | no | Overwrite existing file |
+| `dry_run` | bool | no | Show generated content without writing file |
+
+**Returns**: `rootline/new` or text output — created file path and status, or full content if `dry_run` is true.
+
+### health
+
+Return server health status: version, uptime, goroutines.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+
+**Returns**: Server health status including version, uptime, and runtime metrics.
 
 ---
 

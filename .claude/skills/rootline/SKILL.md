@@ -25,7 +25,7 @@ Use `Read` only for body content the CLI does not expose, a small error context,
 3. **Validation exit code**: `validate` returns non-zero when errors exist. If JSON was requested, parse stdout and continue the workflow.
 4. **Mutations**: run the command-specific preview first. Apply changes only when the user explicitly requested a write (`arregla`, `aplica`, `cambia`, `set`, `crea`, `corrige`, `fix`, `apply`) or approves the preview.
 5. **Verify writes**: after any mutation, run the smallest matching `rootline validate` command and show `git diff -- <target>` when files changed.
-6. **Do not use `apply --dry-run` as a safe preview for schema changes**: `apply` can write `.stem` files while `--dry-run` is set. Treat `apply` as mutating unless code inspection of this repository proves otherwise.
+6. **Schema vs. data mutations are now separate**: Use `schema apply --report <file>` for schema proposals and `repair apply --report <file>` for data-only repairs. The legacy `apply` command is deprecated in favor of these specialized commands. Always inspect proposals before applying.
 7. **Expressions**: `--where` uses expr syntax: `==`, `!=`, `in`, `contains`, `&&`, `||`, booleans, and `field != nil` for existence.
 8. **Field extraction**: `--field a.b.c` extracts one JSON dot path. Do not rely on multiple `--field` values.
 
@@ -46,7 +46,9 @@ Use `Read` only for body content the CLI does not expose, a small error context,
 | Graph wiki-links | `graph` | JSON: `rootline graph <dir> -o json`; Mermaid: `rootline graph <dir> -o table --format mermaid` |
 | Infer schema | `init` | `rootline init <dir> --dry-run` then `rootline init <dir>` |
 | Analyze patterns | `analyze` | `rootline analyze <dir> -o json` |
-| Apply analysis | `apply` | treat as write: inspect report, then `rootline apply report.json` |
+| Apply schema proposals | `schema apply` | `rootline schema apply --report proposals.json --dry-run` then apply without `--dry-run` |
+| Apply data repairs | `repair apply` | `rootline repair apply --report repairs.json --dry-run` then apply without `--dry-run` |
+| Apply analysis (legacy) | `apply` | deprecated; use `schema apply` or `repair apply` instead |
 | Schema operations | `migrate` | diff: `rootline migrate <path> -o json`; writes require `--rename`, `--split`, or `--scaffold` |
 | MCP server | `serve` | HTTP: `rootline serve --addr 127.0.0.1:9200`; stdio: `rootline serve --stdio` |
 | Git hook management | `hooks` | `rootline hooks status|install|uninstall` |

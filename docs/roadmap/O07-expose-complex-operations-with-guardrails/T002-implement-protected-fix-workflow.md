@@ -8,6 +8,8 @@ tipo: task
 **Contribuye a**: CE1 del Outcome.
 
 [[blocked_by:./T001-design-complex-operation-ux.md]]
+[[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T008-implement-schema-apply-explicit.md]]
+[[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T009-implement-repair-apply-data-only.md]]
 [[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T010-make-fix-all-schema-safe-by-default.md]]
 
 ## Preserva

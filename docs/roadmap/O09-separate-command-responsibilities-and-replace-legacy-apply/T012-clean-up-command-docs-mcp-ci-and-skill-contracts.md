@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T012: Clean up command docs MCP CI and skill contracts

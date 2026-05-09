@@ -20,9 +20,9 @@ test:
 
 # Validate docs
 validate:
-    rootline validate --all docs/epics/
+    rootline validate --all docs/roadmap/
 
 # Fix docs (propagate aggregates)
 fix-docs:
-    rootline fix --all docs/epics/
+    rootline fix --all docs/roadmap/
 
