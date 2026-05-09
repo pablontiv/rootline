@@ -112,8 +112,35 @@ The central resolver in `internal/rules/resolver.go` exposes:
 - `EffectiveSchema(path, root)` — merged schema with match filtering
 - `Resolve(path, root)` — chain + schema + field provenance
 - `(*Resolution).ClosestStem()` / `RootMostStem()` — explicit closest vs. root-most selection
+- `ResolveLayered(path, root, monotonic bool)` — extends with `LayeredResolution.Layers` and `Conflicts`; in monotonic mode surfaces type widening, required loosening, enum extension, and structural loosening as conflicts
 
 Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new command code.
+
+## Describe / Explain Provenance
+
+`rootline describe` and `rootline explain` JSON output now includes:
+- `layers` (array of strings) — ordered `.stem` chain root→leaf
+- `provenance` (object) — field name → `.stem` path that last defined it
+
+## Repair Apply Command
+
+`rootline repair apply --report <analyze-report.json> [--dry-run]` applies data-only repairs:
+- Accepts repair-surface proposals (correct_value, add_field, migrate_value, etc.)
+- Silently rejects schema proposals (extend_enum, add_aggregate, remove_stem_field, etc.)
+- Never creates, deletes, or modifies `.stem` files
+- Supports `--dry-run` for preview without writes
+- Emits JSON: version 1, kind "rootline/repair", with Changed/Skipped/Rejected/Errors
+
+Engine: `internal/fix/repair.go` → `ApplyRepair(proposals, dryRun, root)`
+
+## Schema Generation Services (internal)
+
+`internal/infer/schema_gen.go` exports reusable services for schema candidate generation without file writes:
+- `GenerateFlatSchema(ctx, dir, records, opts InferOptions) (*rules.StemFile, error)`
+- `GenerateHierarchicalSchema(ctx, dir, records, opts InferOptions) (map[string]*rules.StemFile, error)`
+- `DefaultInferOptions()` — `{SectionThreshold: 0.80, IncludeStructural: true}` (matches `init` defaults)
+
+`init` command delegates to these instead of inline logic. Use in tests to generate schema candidates without filesystem writes.
 
 ## Proposal Surface Taxonomy
 
