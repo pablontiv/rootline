@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: In Progress
 tipo: task
 ---
 # T001: Create the integrations/pi package skeleton with manifest resources.
