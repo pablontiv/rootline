@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T001: Adapt the existing Rootline skill into the Pi package.
