@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T002: Add headless Pi smoke tests for package discovery and core workflows.
