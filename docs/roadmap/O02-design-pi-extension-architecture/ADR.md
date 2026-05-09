@@ -1,7 +1,7 @@
 ---
-tipo: adr
+tipo: decision
+estado: Completed
 decision_date: 2026-05-09
-status: Accepted
 ---
 
 # ADR: Pi Rootline Extension Architecture
