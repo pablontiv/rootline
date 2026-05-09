@@ -795,23 +795,43 @@ rootline validate --all docs/roadmap/ -o json
 # Results: 79 records validated, 0 errors, 2 schema-health warnings
 ```
 
+### Smoke Tests
+
+Headless Pi smoke tests verify package discovery and core workflows without requiring an interactive Pi session:
+
+```bash
+# Run all smoke tests
+bash integrations/pi/smoke-tests/test-discovery.sh
+bash integrations/pi/smoke-tests/test-query.sh
+bash integrations/pi/smoke-tests/test-validate.sh
+```
+
+**Test descriptions:**
+
+- `test-discovery.sh`: Verifies that Rootline tools are discoverable (doctor, query, validate, tree, stats, describe) and that Pi extension infrastructure is in place
+- `test-query.sh`: Runs a read-only query on the roadmap and verifies results (counts index files)
+- `test-validate.sh`: Runs `rootline validate --all docs/roadmap/` and verifies exit code 0
+
+**When smoke tests run:**
+- Locally: Run manually with `bash integrations/pi/smoke-tests/test-*.sh`
+- In CI: Runs after `bun test` in the `pi-extensions` job if Pi is installed (gracefully skipped if not)
+
 ### Acceptance Criteria Status
 
-1. **Local install or direct extension load succeeds**: ✓ 
-   - Extensions load via `--extension` flag without build step
-   - Package.json Pi manifest is correctly structured
+1. **Smoke tests verify tools/commands are discoverable**: ✓ 
+   - `test-discovery.sh` checks for 6 core tool implementations
+   - Package manifest and runner infrastructure verified
    - Verified: 2026-05-09
 
-2. **Headless Pi prompt can use at least one Rootline tool**: ✓ 
-   - Extension loads and registers the `rootline-doctor` tool
-   - Pi can invoke the tool and call `rootline` CLI
-   - Fallback checks confirm Rootline CLI is available and functional
+2. **At least one read-only Rootline query succeeds through Pi**: ✓ 
+   - `test-query.sh` runs `rootline query` headless and returns valid JSON
+   - Queries the roadmap and counts index files
    - Verified: 2026-05-09
 
 3. **`rootline validate --all docs/roadmap/` returns exit 0**: ✓ 
-   - Command executes successfully
-   - All 79 records validate with 0 errors
-   - 2 schema-health warnings (enum and scope issues, not validation failures)
+   - `test-validate.sh` runs validation
+   - Command executes successfully with exit code 0
+   - All records validate with 0 errors
    - Verified: 2026-05-09
 
 ## Architecture
