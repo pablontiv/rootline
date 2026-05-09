@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: In Progress
 tipo: task
 ---
 # T005: Write the architecture decision record for the Pi Rootline extension.
