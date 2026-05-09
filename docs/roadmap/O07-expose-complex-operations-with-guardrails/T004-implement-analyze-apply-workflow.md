@@ -8,6 +8,7 @@ tipo: task
 **Contribuye a**: CE2 del Outcome.
 
 [[blocked_by:./T001-design-complex-operation-ux.md]]
+[[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T011-deprecate-legacy-apply-and-update-command-surfaces.md]]
 
 ## Preserva
 

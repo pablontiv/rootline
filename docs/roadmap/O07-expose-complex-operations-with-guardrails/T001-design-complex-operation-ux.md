@@ -8,6 +8,7 @@ tipo: task
 **Contribuye a**: CE1 del Outcome.
 
 [[blocked_by:../O06-add-safe-mutation-tools/T005-document-safe-mutation-workflows.md]]
+[[blocked_by:../O09-separate-command-responsibilities-and-replace-legacy-apply/T001-codify-command-responsibility-contracts.md]]
 
 ## Preserva
 
@@ -21,7 +22,7 @@ Esta task forma parte de O07 y debe ejecutarse leyendo este archivo, el README d
 ## Alcance
 
 **In**:
-1. Design covers analyze, fix, migrate, and apply exposure mode.
+1. Design covers analyze, fix, migrate, and replacement schema/repair apply surfaces, or legacy apply only if O09 keeps it.
 2. Each operation has user-intent, preview, validation, and rollback notes.
 
 **Out**:
@@ -35,7 +36,7 @@ Esta task forma parte de O07 y debe ejecutarse leyendo este archivo, el README d
 
 ## Criterios de Aceptación
 
-- Design covers analyze, fix, migrate, and apply exposure mode.
+- Design covers analyze, fix, migrate, and replacement schema/repair apply surfaces, or legacy apply only if O09 keeps it.
 - Each operation has user-intent, preview, validation, and rollback notes.
 - `rootline validate --all docs/roadmap/` retorna exit 0 o solo warnings aceptados por la configuración del roadmap.
 
