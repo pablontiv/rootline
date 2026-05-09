@@ -1,5 +1,5 @@
 ---
-tipo: decision
+tipo: task
 estado: Completed
 decision_date: 2026-05-09
 ---
