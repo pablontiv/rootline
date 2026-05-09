@@ -41,7 +41,11 @@ rootline query <dir> --sort "prioridad:asc,impact_score:desc" -o json
 | `--from <path>` | scan root when no positional path is used |
 | `--select "path,estado,title"` | compact projection; include only named fields |
 
-### JSON Shape
+### Output Formats
+
+Default (`--output json`) returns structured JSON. With `--select`, use `--output jsonl` or `--output csv` for streaming or processing convenience.
+
+#### JSON (default)
 
 Without `--select` (full records):
 ```json
@@ -75,6 +79,42 @@ With `--select "path,estado,title"` (compact projection):
   "meta": { "count": 1 }
 }
 ```
+
+#### JSONL (with `--select` only)
+
+Emit one JSON object per line — useful for shell pipes and streaming:
+
+```bash
+rootline query docs/roadmap --select path,estado --output jsonl
+```
+
+Output:
+```
+{"estado":"Pending","path":"docs/T001-task.md"}
+{"estado":"Completed","path":"docs/T002-task.md"}
+```
+
+Pipe to `jq` for further processing:
+```bash
+rootline query docs/roadmap --select path,estado --output jsonl | jq -r '.path'
+```
+
+#### CSV (with `--select` only)
+
+Emit CSV with header row — columns follow `--select` field order:
+
+```bash
+rootline query docs/roadmap --select path,estado,title --output csv
+```
+
+Output:
+```
+path,estado,title
+docs/T001-task.md,Pending,T001: some task
+docs/T002-task.md,Completed,T002: another task
+```
+
+Missing or nil fields render as empty columns. CSV quoting handles commas, tabs, and newlines automatically.
 
 ### Projection with --select
 
