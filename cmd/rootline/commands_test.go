@@ -84,6 +84,9 @@ func resetFlags() {
 	traceDepth = 0
 	traceType = ""
 	traceFormat = "tree"
+	schemaProposeIncremental = false
+	schemaApplyReport = ""
+	schemaApplyDryRun = false
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
 	if f := treeCmd.Flags().Lookup("where"); f != nil {
@@ -139,6 +142,18 @@ func resetFlags() {
 		f.Changed = false
 	}
 	if f := applyCmd.Flags().Lookup("dry-run"); f != nil {
+		_ = f.Value.Set("false")
+		f.Changed = false
+	}
+	if f := schemaApplyCmd.Flags().Lookup("report"); f != nil {
+		_ = f.Value.Set("")
+		f.Changed = false
+	}
+	if f := schemaApplyCmd.Flags().Lookup("dry-run"); f != nil {
+		_ = f.Value.Set("false")
+		f.Changed = false
+	}
+	if f := schemaProposeCmd.Flags().Lookup("incremental"); f != nil {
 		_ = f.Value.Set("false")
 		f.Changed = false
 	}

@@ -220,6 +220,299 @@ func TestSchemaProposeEmptyDir(t *testing.T) {
 	}
 }
 
+// Schema Apply Tests
+
+func executeSchemaApply(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	resetFlags()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs(append([]string{"schema", "apply"}, args...))
+	err := rootCmd.Execute()
+	return buf.String(), err
+}
+
+// TestSchemaApplyInvalidKind tests that wrong report kind is rejected.
+func TestSchemaApplyInvalidKind(t *testing.T) {
+	root := t.TempDir()
+
+	// Create a report with wrong kind
+	report := SchemaProposalsReport{
+		Version: 1,
+		Kind:    "rootline/invalid-kind",
+		Path:    root,
+		Proposals: []SchemaProposal{
+			{
+				ID:            "test",
+				Operation:     "create_stem",
+				Target:        filepath.Join(root, ".stem"),
+				RequiresAgent: false,
+			},
+		},
+	}
+
+	reportData, _ := json.Marshal(report)
+	reportFile := filepath.Join(root, "report.json")
+	if err := os.WriteFile(reportFile, reportData, 0o644); err != nil {
+		t.Fatalf("writing report: %v", err)
+	}
+
+	_, err := executeSchemaApply(t, "--report", reportFile)
+	if err == nil {
+		t.Error("expected error for wrong report kind, got nil")
+	}
+}
+
+// TestSchemaApplyInvalidVersion tests that wrong report version is rejected.
+func TestSchemaApplyInvalidVersion(t *testing.T) {
+	root := t.TempDir()
+
+	// Create a report with wrong version
+	report := SchemaProposalsReport{
+		Version: 2,
+		Kind:    "rootline/schema-proposals",
+		Path:    root,
+		Proposals: []SchemaProposal{
+			{
+				ID:            "test",
+				Operation:     "create_stem",
+				Target:        filepath.Join(root, ".stem"),
+				RequiresAgent: false,
+			},
+		},
+	}
+
+	reportData, _ := json.Marshal(report)
+	reportFile := filepath.Join(root, "report.json")
+	if err := os.WriteFile(reportFile, reportData, 0o644); err != nil {
+		t.Fatalf("writing report: %v", err)
+	}
+
+	_, err := executeSchemaApply(t, "--report", reportFile)
+	if err == nil {
+		t.Error("expected error for wrong version, got nil")
+	}
+}
+
+// TestSchemaApplyDryRun tests that --dry-run does not write files.
+func TestSchemaApplyDryRun(t *testing.T) {
+	root := t.TempDir()
+
+	// Create a test directory with a markdown file
+	testDir := filepath.Join(root, "testdir")
+	if err := os.Mkdir(testDir, 0o755); err != nil {
+		t.Fatalf("creating test directory: %v", err)
+	}
+
+	testFile := filepath.Join(testDir, "test.md")
+	if err := os.WriteFile(testFile, []byte("---\ntitle: Test\n---\nContent"), 0o644); err != nil {
+		t.Fatalf("writing test file: %v", err)
+	}
+
+	// Create a schema proposals report with create_stem
+	report := SchemaProposalsReport{
+		Version: 1,
+		Kind:    "rootline/schema-proposals",
+		Path:    testDir,
+		Proposals: []SchemaProposal{
+			{
+				ID:            "bootstrap-flat",
+				Operation:     "create_stem",
+				Target:        filepath.Join(testDir, ".stem"),
+				Confidence:    0.85,
+				RequiresAgent: false,
+				PatchPreview:  "version: 2\nschema:\n  title:\n    type: string\n",
+			},
+		},
+	}
+
+	reportData, _ := json.Marshal(report)
+	reportFile := filepath.Join(root, "report.json")
+	if err := os.WriteFile(reportFile, reportData, 0o644); err != nil {
+		t.Fatalf("writing report: %v", err)
+	}
+
+	// Record files before apply
+	filesBefore := listFilesWithContent(t, testDir)
+
+	_, err := executeSchemaApply(t, "--report", reportFile, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Record files after dry-run
+	filesAfter := listFilesWithContent(t, testDir)
+
+	// Verify no files were created
+	if len(filesAfter) != len(filesBefore) {
+		t.Errorf("dry-run created files: before=%d, after=%d", len(filesBefore), len(filesAfter))
+	}
+
+	// Verify existing files unchanged
+	for name, beforeContent := range filesBefore {
+		afterContent, ok := filesAfter[name]
+		if !ok {
+			t.Errorf("file %s was deleted by dry-run", name)
+			continue
+		}
+		if beforeContent != afterContent {
+			t.Errorf("file %s was modified by dry-run", name)
+		}
+	}
+}
+
+// TestSchemaApplySkipsRequiresAgent tests that proposals with requires_agent are skipped.
+func TestSchemaApplySkipsRequiresAgent(t *testing.T) {
+	root := t.TempDir()
+
+	// Create a schema proposals report with requires_agent=true
+	report := SchemaProposalsReport{
+		Version: 1,
+		Kind:    "rootline/schema-proposals",
+		Path:    root,
+		Proposals: []SchemaProposal{
+			{
+				ID:            "test-agent",
+				Operation:     "create_stem",
+				Target:        filepath.Join(root, ".stem"),
+				RequiresAgent: true,
+				PatchPreview:  "version: 2\nschema:\n  test:\n    type: string\n",
+			},
+		},
+	}
+
+	reportData, _ := json.Marshal(report)
+	reportFile := filepath.Join(root, "report.json")
+	if err := os.WriteFile(reportFile, reportData, 0o644); err != nil {
+		t.Fatalf("writing report: %v", err)
+	}
+
+	stdout, err := executeSchemaApply(t, "--report", reportFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result SchemaApplyResult
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	// Verify proposal was skipped
+	if len(result.Skipped) == 0 {
+		t.Error("expected skipped proposal, got none")
+	}
+
+	// Verify stem file was not created
+	stemPath := filepath.Join(root, ".stem")
+	if _, err := os.Stat(stemPath); err == nil {
+		t.Error("stem file should not be created for requires_agent proposal")
+	}
+}
+
+// TestSchemaApplyCreateStem tests that valid create_stem proposals create .stem files.
+func TestSchemaApplyCreateStem(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		"docs/doc1.md": "---\ntitle: Test\nauthor: Someone\n---\nContent",
+	})
+
+	docsDir := filepath.Join(root, "docs")
+
+	// Create a schema proposals report with create_stem
+	report := SchemaProposalsReport{
+		Version: 1,
+		Kind:    "rootline/schema-proposals",
+		Path:    docsDir,
+		Proposals: []SchemaProposal{
+			{
+				ID:            "bootstrap-flat",
+				Operation:     "create_stem",
+				Target:        filepath.Join(docsDir, ".stem"),
+				Confidence:    0.85,
+				RequiresAgent: false,
+				PatchPreview:  "version: 2\nschema:\n  title:\n    type: string\n  author:\n    type: string\n",
+			},
+		},
+	}
+
+	reportData, _ := json.Marshal(report)
+	reportFile := filepath.Join(root, "report.json")
+	if err := os.WriteFile(reportFile, reportData, 0o644); err != nil {
+		t.Fatalf("writing report: %v", err)
+	}
+
+	stdout, err := executeSchemaApply(t, "--report", reportFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result SchemaApplyResult
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	// Verify report structure
+	if result.Version != 1 {
+		t.Errorf("expected version 1, got %d", result.Version)
+	}
+	if result.Kind != "rootline/schema-apply" {
+		t.Errorf("expected kind 'rootline/schema-apply', got %s", result.Kind)
+	}
+
+	// Verify proposal was applied
+	if len(result.Applied) == 0 {
+		t.Error("expected applied proposal, got none")
+	}
+
+	// Verify stem file was created
+	stemPath := filepath.Join(docsDir, ".stem")
+	if _, err := os.Stat(stemPath); err != nil {
+		t.Errorf("stem file not created: %v", err)
+	}
+}
+
+// TestSchemaApplyResultStructure tests that the result JSON has correct structure.
+func TestSchemaApplyResultStructure(t *testing.T) {
+	root := t.TempDir()
+
+	// Create empty report
+	report := SchemaProposalsReport{
+		Version: 1,
+		Kind:    "rootline/schema-proposals",
+		Path:    root,
+	}
+
+	reportData, _ := json.Marshal(report)
+	reportFile := filepath.Join(root, "report.json")
+	if err := os.WriteFile(reportFile, reportData, 0o644); err != nil {
+		t.Fatalf("writing report: %v", err)
+	}
+
+	stdout, err := executeSchemaApply(t, "--report", reportFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result SchemaApplyResult
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	// Verify required fields are present
+	if result.Version == 0 {
+		t.Error("version is 0")
+	}
+	if result.Kind == "" {
+		t.Error("kind is empty")
+	}
+	if result.Applied == nil {
+		t.Error("applied is nil")
+	}
+	if result.Skipped == nil {
+		t.Error("skipped is nil")
+	}
+}
+
 // Helper functions
 
 func listFilesWithContent(t *testing.T, dir string) map[string]string {
