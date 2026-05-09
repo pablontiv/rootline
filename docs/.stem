@@ -3,5 +3,6 @@ scope:
     match: "*.md"
 schema:
     estado:
-        type: string
+        type: enum
+        values: [Pending, Specified, "In Progress", Completed, Blocked, Obsolete]
         required: true

@@ -4,7 +4,8 @@ scope:
 
 schema:
   estado:
-    type: string
+    type: enum
+    values: [Pending, Specified, "In Progress", Completed, Blocked, Obsolete]
     required:
       match: ["O*", "T*"]
     match: ["O*", "T*"]
