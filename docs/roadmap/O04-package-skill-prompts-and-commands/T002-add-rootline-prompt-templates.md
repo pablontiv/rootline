@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T002: Add prompt templates for query, validate, analyze, and roadmap workflows.
