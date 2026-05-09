@@ -149,10 +149,20 @@ export default function (pi: ExtensionAPI) {
       // Note: rootline new doesn't support --output json, so it outputs plain text
       // The runner will fail with json_parse_failed if we try to parse as JSON
       // We need to call exec directly for plain text output
-      const execResult = await pi.exec("rootline", args, {
-        cwd: process.cwd(),
-        timeout: 10_000,
-      });
+      let execResult;
+      try {
+        execResult = await pi.exec("rootline", args, {
+          cwd: process.cwd(),
+          timeout: 10_000,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          created: false,
+          path: targetPath,
+          error: `Failed to execute rootline: ${msg}`,
+        } as RootlineNewResult;
+      }
 
       if (execResult.code !== 0) {
         return {
