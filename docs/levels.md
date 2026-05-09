@@ -77,8 +77,25 @@ Here `ejecutable_en` only exists for `T*` records and is required only for them.
 
 When validating or querying a record, `ResolveForRecord` filters schema fields by matching the record's path against each field's `match:` pattern. Fields without `match:` always apply. This means a single root `.stem` can define the schema for an entire hierarchy without child `.stem` files.
 
+## Hierarchical Constraints (Monotonic Narrowing)
+
+When multiple `.stem` files exist in a hierarchy (parent and child), they form a **layered constraint system**. A child `.stem` can **narrow** a parent constraint (make it stricter), but cannot **widen** it (make it looser). This ensures schema consistency from root to leaf:
+
+- **Type narrowing** — child can narrow `string` to `enum`, but not widen `enum` to `string`
+- **Required narrowing** — child cannot relax `required: true` to `required: false`
+- **Enum narrowing** — child's enum values must be a subset of parent's values
+- **Severity narrowing** — child cannot reduce severity level
+
+For example:
+- Parent: `estado: { type: string }`
+- Child: `estado: { type: enum, values: [draft, active] }` ✓ Valid narrowing
+- Child: `estado: { type: string, required: false }` ✗ Invalid (widening if parent required)
+
+When a child `.stem` violates monotonic constraints, `rootline validate --all` detects this in the **monotonic-violations** stemhealth check.
+
 ## Benefits
 
 - **Single file**: One `.stem` defines all levels — no redundant child `.stem` files.
 - **Composable**: Each field independently declares its scope.
 - **Debuggable**: `rootline describe` shows which fields apply at each path, with their source.
+- **Safe evolution**: Monotonic narrowing prevents accidental schema loosening.

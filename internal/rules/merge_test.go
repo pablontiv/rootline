@@ -47,6 +47,9 @@ func TestMergeStemFiles_SingleEntry(t *testing.T) {
 
 func TestMergeStemFiles_MapMerge(t *testing.T) {
 	// I5 §1.3: parent {a:1, b:2} + child {b:3, c:4} = {a:1, b:3, c:4}
+	// NOTE: Child redefines "b" with a different type (string → enum).
+	// This demonstrates v2 merge behavior; under monotonic narrowing,
+	// this would be allowed because string→enum is valid narrowing.
 	entries := []StemEntry{
 		stemEntry("parent/.stem", &StemFile{
 			Version: 1,
@@ -143,6 +146,12 @@ func TestMergeStemFiles_NullRemovesKey(t *testing.T) {
 
 func TestMergeStemFiles_ThreeLevels(t *testing.T) {
 	// Grandparent → Parent → Child merge.
+	// NOTE: Parent overrides Estado's enum values from gp. Under monotonic narrowing
+	// semantics, this would require either:
+	// 1. Parent values are a subset of gp values (narrowing), or
+	// 2. Parent does not redefine Estado (inheritance).
+	// This test documents v2 legacy behavior; monotonic validation is checked
+	// separately in stemhealth_test.go (monotonic-violations).
 	entries := []StemEntry{
 		stemEntry("gp/.stem", &StemFile{
 			Version: 1,
@@ -226,6 +235,10 @@ func TestMergeStemFiles_FourLevelChain(t *testing.T) {
 }
 
 func TestMergeStemFiles_ChildOverridesRequired(t *testing.T) {
+	// NOTE: v2 merge semantics allow child to loosen required to false.
+	// Under monotonic narrowing semantics, this would be a violation.
+	// This test documents v2 legacy behavior; monotonic validation
+	// is checked separately in stemhealth_test.go (monotonic-violations).
 	entries := []StemEntry{
 		stemEntry("parent/.stem", &StemFile{
 			Version: 1,
