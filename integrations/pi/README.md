@@ -37,11 +37,11 @@ Verify the package loaded:
 pi tools | grep rootline-
 ```
 
-You should see: `rootline-query`, `rootline-describe`, `rootline-validate`, `rootline-tree`, `rootline-stats`, `rootline-doctor`, `rootline-context`.
+You should see: `rootline-query`, `rootline-describe`, `rootline-validate`, `rootline-tree`, `rootline-stats`, `rootline-new`, `rootline-set`, `rootline-doctor`, `rootline-context`.
 
 ## Tools
 
-The Pi package provides 7 tools for querying, validating, and analyzing Rootline-governed directories.
+The Pi package provides 9 tools for querying, validating, analyzing, and safely mutating Rootline-governed directories.
 
 ### rootline-query
 
@@ -209,6 +209,120 @@ await tool("rootline-context")
 ```
 
 Returns: `state` (one of: `no_rootline`, `binary_only`, `stem_governed`), `version`, `stem_count`.
+
+## Mutation Tools
+
+The Pi package provides 2 tools for safely creating and updating governed records with integrated validation and confirmation guardrails.
+
+### rootline-new
+
+Create a new governed record file with frontmatter scaffolded from the effective `.stem` schema.
+
+**When to use:** Use `rootline-new` when you need to create a new record in a directory with `.stem` schema governance. The tool guarantees that the file is scaffolded with correct frontmatter fields and any default values defined in the schema.
+
+**Parameters:**
+- `path` (required): Target file path to create
+- `force` (optional): Overwrite existing file (default: false)
+- `dry_run` (optional): Preview generated content without writing (default: false)
+- `confirmed` (optional): Explicit confirmation for mutations in non-interactive mode (default: false)
+- `interactive` (optional): Whether Pi is running interactively (default: false)
+
+**Guardrails:**
+- Path safety: rejects paths outside project root or with traversal attempts
+- Confirmation: requires `confirmed: true` in non-interactive mode
+- Post-validation: automatically validates the created file against `.stem` schema
+
+**Example:**
+```javascript
+// Preview file creation
+await tool("rootline-new", {
+  path: "docs/roadmap/E14-new-feature/README.md",
+  dry_run: true
+})
+
+// Create file (interactive mode)
+await tool("rootline-new", {
+  path: "docs/roadmap/E14-new-feature/README.md",
+  interactive: true
+})
+
+// Create file (non-interactive, requires confirmation)
+await tool("rootline-new", {
+  path: "docs/roadmap/E14-new-feature/README.md",
+  confirmed: true
+})
+```
+
+Returns: `created` (boolean), `path`, `validation` (post-write validation details), `content_preview` (for dry-run).
+
+### rootline-set
+
+Update specific frontmatter fields in an existing governed record with automatic post-mutation validation.
+
+**When to use:** Use `rootline-set` when you need to update frontmatter fields in an existing record that is governed by a `.stem` schema. The tool guarantees that the mutation is validated immediately after writing, catching any constraint violations from the schema.
+
+**Parameters:**
+- `path` (required): Target file to update
+- `fields` (required): Array of field assignments: `[{field: "fieldname", value: "value"}, ...]`
+- `dry_run` (optional): Preview changes without writing (default: false)
+- `confirmed` (optional): Explicit confirmation for mutations in non-interactive mode (default: false)
+- `interactive` (optional): Whether Pi is running interactively (default: false)
+
+**Guardrails:**
+- Path safety: rejects paths outside project root or with traversal attempts
+- Confirmation: requires `confirmed: true` in non-interactive mode
+- Post-validation: automatically validates the updated file against `.stem` schema
+
+**Example:**
+```javascript
+// Update estado field (interactive mode)
+await tool("rootline-set", {
+  path: "docs/roadmap/O06-add-safe-mutation-tools/T005-document-safe-mutation-workflows.md",
+  fields: [{ field: "estado", value: "Completed" }],
+  interactive: true
+})
+
+// Preview changes
+await tool("rootline-set", {
+  path: "docs/roadmap/O06-add-safe-mutation-tools/T005-document-safe-mutation-workflows.md",
+  fields: [{ field: "estado", value: "Completed" }],
+  dry_run: true
+})
+
+// Non-interactive mutation with explicit confirmation
+await tool("rootline-set", {
+  path: "docs/roadmap/O06-add-safe-mutation-tools/T005-document-safe-mutation-workflows.md",
+  fields: [
+    { field: "estado", value: "Completed" },
+    { field: "tipo", value: "epic" }
+  ],
+  confirmed: true
+})
+```
+
+Returns: `updated` (boolean), `path`, `fields_set`, `dry_run_preview` (for dry-run), `validation` (post-write result).
+
+## When to Use Direct Edit/Write vs. Mutation Tools
+
+| Scenario | Use |
+|----------|-----|
+| Creating a new governed record (file with `.stem` schema in parent dir) | `rootline-new` |
+| Updating frontmatter fields in a governed record | `rootline-set` |
+| Ungoverndered file (no `.stem` schema) | Direct write/edit tools |
+| Modifying document body only (no frontmatter changes) | Direct write/edit tools |
+| Structural changes (reorganizing sections) | Direct write/edit tools, then run `rootline validate` |
+
+## Bulk Operations and Non-Goals
+
+This package exposes single-record mutations with integrated validation. Complex bulk operations are **intentionally deferred** to [Outcome O07](https://github.com/pablontiv/rootline/blob/master/docs/roadmap/O07-expose-complex-operations-with-guardrails) (Expose complex operations with guardrails).
+
+**Not in scope for O06:**
+- `rootline fix` (bulk field correction across multiple records) — use O07 protected-fix workflow
+- `rootline migrate` (schema migration and bulk changes) — use O07 protected-migrate workflow
+- `rootline apply` (deprecated, superceded by schema/repair workflows)
+- Batch record creation — not supported in O06; use `rootline-new` for single records
+
+Bulk operations require preview workflows, rollback procedures, and audit trails that are designed and implemented in O07.
 
 ## Slash Commands
 
