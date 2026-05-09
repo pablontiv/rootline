@@ -104,3 +104,13 @@ The generated document:
 - uses the first enum value when no default exists
 - writes required fields with empty values when needed
 - derives the title from the filename
+
+## Stem Resolution API (internal)
+
+The central resolver in `internal/rules/resolver.go` exposes:
+- `StemChain(path, root)` — stem files root→leaf
+- `EffectiveSchema(path, root)` — merged schema with match filtering
+- `Resolve(path, root)` — chain + schema + field provenance
+- `(*Resolution).ClosestStem()` / `RootMostStem()` — explicit closest vs. root-most selection
+
+Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new command code.
