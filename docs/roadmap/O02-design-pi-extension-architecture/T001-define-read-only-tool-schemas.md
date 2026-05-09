@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T001: Define parameter and result contracts for read-only Rootline tools.

@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T004: Define compatibility expectations between rootline CLI versions and the Pi extension.
