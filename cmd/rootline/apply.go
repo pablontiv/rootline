@@ -52,16 +52,14 @@ func runApply(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving path: %w", err)
 	}
 
-	// Pre-phase: scaffold .stem for directories that have none.
+	// Pre-phase: scaffold .stem for directories that have none (skip if dry-run).
 	for _, cat := range report.Categories {
 		for _, inf := range cat.Inferences {
 			if inf.Type != "missing_schema" || inf.RequiresAgent {
 				continue
 			}
-			if scaffoldErr := infer.ScaffoldSchema(inf.Source); scaffoldErr != nil {
+			if scaffoldErr := infer.ScaffoldSchema(inf.Source, applyDryRun); scaffoldErr != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "scaffold %s: %v\n", inf.Source, scaffoldErr)
-			} else {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "scaffolded %s/.stem\n", inf.Source)
 			}
 		}
 	}
@@ -97,7 +95,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 	}
 
 	// Apply schema modifications (to .stem).
-	schemaResult, err := infer.ApplySchemaInferences(stemPath, schemaInferences)
+	schemaResult, err := infer.ApplySchemaInferences(stemPath, schemaInferences, applyDryRun)
 	if err != nil {
 		return fmt.Errorf("applying schema: %w", err)
 	}

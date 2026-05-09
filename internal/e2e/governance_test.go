@@ -81,7 +81,7 @@ func TestGovernance_ScaffoldSchema(t *testing.T) {
 		govWriteFile(t, filepath.Join(dir, name), content)
 	}
 
-	err := infer.ScaffoldSchema(dir)
+	err := infer.ScaffoldSchema(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}

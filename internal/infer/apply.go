@@ -27,7 +27,8 @@ type ApplyOptions struct {
 // ApplySchemaInferences applies schema-modifying inferences to a .stem file.
 // Uses yaml.Node to preserve formatting and handle fields like Required
 // that have yaml:"-" tags on the struct.
-func ApplySchemaInferences(stemPath string, inferences []ReportInference) (*ApplyResult, error) {
+// If dryRun is true, no files are written.
+func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun bool) (*ApplyResult, error) {
 	data, err := os.ReadFile(stemPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading stem: %w", err)
@@ -102,10 +103,14 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference) (*Appl
 		return nil, fmt.Errorf("marshaling stem: %w", err)
 	}
 
-	if err := os.WriteFile(stemPath, out, 0o644); err != nil {
-		return nil, fmt.Errorf("writing stem: %w", err)
+	// Skip write if in dry-run mode.
+	if !dryRun {
+		if err := os.WriteFile(stemPath, out, 0o644); err != nil {
+			return nil, fmt.Errorf("writing stem: %w", err)
+		}
 	}
 
+	result.DryRun = dryRun
 	return result, nil
 }
 

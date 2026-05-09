@@ -21,7 +21,7 @@ func TestApplySchemaInferences_ExtendEnum(t *testing.T) {
 		{Type: "enum_values", Field: "tipo", Value: "[a b c]"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestApplySchemaInferences_RequiresAgentSkipped(t *testing.T) {
 		{Type: "required_field", Field: "estado", RequiresAgent: true, Message: "needs agent"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestApplySchemaInferences_AddRequired(t *testing.T) {
 		{Type: "required_field", Field: "estado"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestApplySchemaInferences_NoModifications(t *testing.T) {
 	}
 
 	// Empty inferences list → no modifications.
-	result, err := ApplySchemaInferences(stemPath, nil)
+	result, err := ApplySchemaInferences(stemPath, nil, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestApplySchemaInferences_AddDefault(t *testing.T) {
 		{Type: "constant_field", Field: "estado", Value: "Pending"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestApplySchemaInferences_SetType(t *testing.T) {
 		{Type: "field_type", Field: "count", Value: "integer"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestApplySchemaInferences_EnumNoValuesKey(t *testing.T) {
 		{Type: "enum_values", Field: "tipo", Value: "[a b]"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -392,7 +392,7 @@ func TestApplySchemaInferences_UntypedField(t *testing.T) {
 
 	result, err := ApplySchemaInferences(stemPath, []ReportInference{
 		{Type: "untyped_field", Field: "mystery", Value: "string"},
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,7 +415,7 @@ func TestApplySchemaInferences_SequenceIncomplete(t *testing.T) {
 
 	result, err := ApplySchemaInferences(stemPath, []ReportInference{
 		{Type: "sequence_incomplete", Field: "id", Value: "T:3"},
-	})
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,7 +442,7 @@ func TestApplySchemaInferences_EnumNoField(t *testing.T) {
 		{Type: "enum_values", Field: "nonexistent", Value: "[a b]"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -463,7 +463,7 @@ func TestApplySchemaInferences_EnumEmptyValue(t *testing.T) {
 		{Type: "enum_values", Field: "tipo", Value: "[]"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -484,7 +484,7 @@ func TestApplySchemaInferences_EnumAllExisting(t *testing.T) {
 		{Type: "enum_values", Field: "tipo", Value: "[a b]"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -505,7 +505,7 @@ func TestApplySchemaInferences_RequiredAlreadySet(t *testing.T) {
 		{Type: "required_field", Field: "estado"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -526,7 +526,7 @@ func TestApplySchemaInferences_DefaultAlreadySet(t *testing.T) {
 		{Type: "constant_field", Field: "estado", Value: "Pending"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -547,7 +547,7 @@ func TestApplySchemaInferences_TypeAlreadySet(t *testing.T) {
 		{Type: "field_type", Field: "count", Value: "integer"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -568,7 +568,7 @@ func TestApplySchemaInferences_RequiredFieldNotInSchema(t *testing.T) {
 		{Type: "required_field", Field: "nonexistent"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -712,7 +712,7 @@ func TestApplySchemaInferences_UpdateExistingProperty(t *testing.T) {
 		{Type: "required_field", Field: "estado"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -795,7 +795,7 @@ func TestApplySchemaInferences_DefaultNotInSchema(t *testing.T) {
 		{Type: "constant_field", Field: "nonexistent", Value: "Pending"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -816,7 +816,7 @@ func TestApplySchemaInferences_FieldTypeNotInSchema(t *testing.T) {
 		{Type: "field_type", Field: "nonexistent", Value: "integer"},
 	}
 
-	result, err := ApplySchemaInferences(stemPath, inferences)
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -886,7 +886,7 @@ func TestParseValueList(t *testing.T) {
 }
 
 func TestApplySchemaInferences_ReadError(t *testing.T) {
-	_, err := ApplySchemaInferences("/nonexistent/.stem", nil)
+	_, err := ApplySchemaInferences("/nonexistent/.stem", nil, false)
 	if err == nil {
 		t.Error("expected error for nonexistent file")
 	}
@@ -899,7 +899,7 @@ func TestApplySchemaInferences_InvalidYAML(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := ApplySchemaInferences(stemPath, nil)
+	_, err := ApplySchemaInferences(stemPath, nil, false)
 	if err == nil {
 		t.Error("expected error for invalid YAML")
 	}
@@ -1011,7 +1011,7 @@ func TestScaffoldSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := ScaffoldSchema(dir)
+	err := ScaffoldSchema(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1035,7 +1035,7 @@ func TestScaffoldSchema(t *testing.T) {
 
 func TestScaffoldSchema_NoMarkdown(t *testing.T) {
 	dir := t.TempDir()
-	err := ScaffoldSchema(dir)
+	err := ScaffoldSchema(dir, false)
 	if err == nil {
 		t.Error("expected error when no markdown files found")
 	}

@@ -12,7 +12,8 @@ import (
 
 // ScaffoldSchema creates a minimal version-2 .stem file at dirPath by
 // reading markdown files and collecting their frontmatter fields.
-func ScaffoldSchema(dirPath string) error {
+// If dryRun is true, no files are written.
+func ScaffoldSchema(dirPath string, dryRun bool) error {
 	reg := extract.NewRegistry()
 
 	entries, err := os.ReadDir(dirPath)
@@ -62,5 +63,8 @@ func ScaffoldSchema(dirPath string) error {
 	}
 
 	stemPath := filepath.Join(dirPath, ".stem")
+	if dryRun {
+		return nil
+	}
 	return os.WriteFile(stemPath, []byte(b.String()), 0o644)
 }

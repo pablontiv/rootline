@@ -35,7 +35,7 @@ func TestApply_AnalyzeThenApplyThenValidate(t *testing.T) {
 		t.Fatalf("no stem found: %v", err)
 	}
 
-	result, err := infer.ApplySchemaInferences(entries[0].Path, allInferences)
+	result, err := infer.ApplySchemaInferences(entries[0].Path, allInferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestApply_RequiresAgent_Skipped(t *testing.T) {
 		{Type: "required_field", Field: "estado", RequiresAgent: true, Message: "needs human review"},
 	}
 
-	result, err := infer.ApplySchemaInferences(entries[0].Path, inferences)
+	result, err := infer.ApplySchemaInferences(entries[0].Path, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
