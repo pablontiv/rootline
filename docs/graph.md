@@ -71,6 +71,34 @@ Returns exit code 1 if cycles or broken links are found:
 }
 ```
 
+### With --field (Field Projection)
+
+Extract specific fields from graph results with array-aware dot-path syntax:
+
+```bash
+# Extract all edge sources
+rootline graph docs/ --field 'edges[].source'
+# ["T001-task.md", "T002-task.md"]
+
+# Extract edge targets
+rootline graph docs/ --field 'edges[].target'
+
+# Extract both source and target as objects
+rootline graph docs/ --field 'edges[]'
+
+# Check for broken links and extract details
+rootline graph docs/ --check --field 'broken_links'
+# [{"source": "T002-task.md", "target": "T999-nonexistent", "type": "blocks", ...}]
+
+# Extract simple broken link targets
+rootline graph docs/ --check --field 'broken_links[].target'
+# ["T999-nonexistent"]
+```
+
+The `--field` flag applies to graph JSON output and supports:
+- Simple paths: `nodes`, `edges`, `cycles`, `broken_links`
+- Array projection: `edges[].source`, `edges[].target`, `broken_links[].target`
+
 ## Target Resolution
 
 Links resolve targets by:

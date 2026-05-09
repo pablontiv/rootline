@@ -195,15 +195,41 @@ rootline completion bash|zsh|fish         # Shell completion scripts
 rootline serve                            # MCP server (JSON-RPC 2.0 over stdio)
 ```
 
-All commands support `--output json|table` and `--field` for dot-path extraction:
+All commands support `--output json|table` and `--field` for dot-path extraction, including array projection:
 
 ```bash
+# Dot-path extraction
 rootline describe docs/prd/ --field schema.id.next
 # "T004"
 
+# Simple field projection from query
 rootline query --where 'estado == "Pending"' --field path
 # docs/projects/P01/tasks/T005-deploy-grafana.md
 
+# Array projection: extract fields from arrays (rows, edges, etc.)
+rootline query --field 'rows[].path'
+# ["docs/projects/P01/tasks/T005-deploy-grafana.md", ...]
+
+rootline query --field 'rows[].frontmatter.estado'
+# ["Pending", "In Progress", ...]
+
+rootline graph docs/ --field 'edges[].source'
+# ["docs/api/auth.md", ...]
+
+# Compact query projections with --select (JSON, JSONL, CSV)
+rootline query --select path,estado,title
+# {"rows": [{"path": "...", "estado": "Pending", "title": "..."}, ...]}
+
+rootline query --select path,estado --output jsonl
+# {"path": "...", "estado": "Pending"}
+# {"path": "...", "estado": "In Progress"}
+
+rootline query --select path,estado,title --output csv
+# path,estado,title
+# docs/api/auth.md,Pending,Authentication Guide
+# docs/api/endpoints.md,In Progress,Endpoint Reference
+
+# Filtering across commands
 rootline tree docs/epics/ --where 'estado != "Completed"'
 rootline stats docs/epics/ --where 'tipo == "software-module"'
 rootline graph docs/epics/ --where 'tipo != "feature"' --check

@@ -86,12 +86,31 @@ field-level traceability of the schema inheritance chain.
 
 ## Field Extraction
 
-The `--field` flag extracts values by dot-path:
+The `--field` flag extracts values by dot-path. Most commands support both simple object paths and array projection:
 
 ```bash
+# Simple dot-path
 rootline describe docs/api/ --field schema.status.values
 # ["draft", "review", "published"]
+
+# Array projection: extract a field from each array element
+rootline query --from docs/ --field 'rows[].path'
+# ["docs/api/auth.md", "docs/api/endpoints.md"]
+
+rootline query --from docs/ --field 'rows[].frontmatter.estado'
+# ["Pending", "In Progress", "Completed"]
+
+# Nested array projections
+rootline graph docs/ --field 'edges[].source'
+# ["docs/api/auth.md", "docs/api/validate.md"]
+
+rootline graph docs/ --field 'broken_links'
+# [{"link": "[[NonExistent]]", "source": "docs/api/auth.md"}, ...]
 ```
 
+Array projection syntax `field[].subfield` works for:
+- Query results: `rows[].path`, `rows[].frontmatter.*`, `rows[].derived.*`
+- Graph results: `edges[]`, `broken_links[]`
+
 This allows tools, editors, and AI assistants to guide authoring
-without inspecting `.stem` files directly.
+and extract specific fields without Python postprocessing.

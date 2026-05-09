@@ -32,6 +32,67 @@ Sort type detection per field:
 
 Missing/nil values always sort last, regardless of direction. Sort applies after filtering and before limit.
 
+### Compact Projections with `--select`
+
+The `--select` flag produces compact output containing only specified fields:
+
+```bash
+rootline query --select path,estado,title
+rootline query --select path,estado,title,links --output jsonl
+rootline query --where 'estado == "Pending"' --select path,title --output csv
+```
+
+`--select` accepts a comma-separated list of field names. Supported field names include:
+- `path` — document file path
+- `title` — first Markdown heading or first non-empty body line
+- Any frontmatter field name (e.g., `estado`, `prioridad`, `owner`)
+- Any derived field (defined in `.stem` `derive:` section)
+- `links` — document links extracted from wiki-link references
+
+**Without `--select`**, query results include full records with `frontmatter`, `body`, `links`, and `derived`.
+
+**With `--select`**, only specified fields are included in each row, reducing noise and making output suitable for shell pipelines.
+
+### Output Formats
+
+The `--output` flag supports multiple formats for projected query results:
+
+| Format | Encoding | Use case |
+|--------|----------|----------|
+| `json` (default) | Full JSON objects in a `rows` array | AI agents, typed languages, complete data |
+| `table` | Human-readable columnar format | Terminal inspection, reports |
+| `jsonl` | One JSON object per line | Streaming processors, log ingestion |
+| `csv` | RFC 4180 CSV with headers | Spreadsheets, SQL import, `awk`/`cut` pipelines |
+
+> **Note**: `jsonl` and `csv` formats require `--select` to specify which columns to output.
+
+Examples:
+
+```bash
+# JSON (default): full records in a rows array
+rootline query --select path,estado --output json
+# {"version": 1, "kind": "rootline/query", "rows": [{"path": "...", "estado": "..."}, ...]}
+
+# JSONL: one record per line, no outer wrapper
+rootline query --select path,estado --output jsonl
+# {"path": "...", "estado": "Pending"}
+# {"path": "...", "estado": "In Progress"}
+
+# CSV: RFC 4180 with quoted fields and escaping
+rootline query --select path,estado,title --output csv
+# path,estado,title
+# "docs/api/auth.md","Pending","Authentication Guide"
+# "docs/api/endpoints.md","In Progress","Endpoint Reference"
+
+# CSV with nil values (rendered as empty)
+rootline query --select path,estado,owner --output csv
+# path,estado,owner
+# "docs/api/auth.md","Pending","alice"
+# "docs/api/endpoints.md","In Progress",""
+```
+
+Column order in `jsonl` and `csv` output follows the order specified in `--select`.
+
 ### Queryable Fields
 
 | Field | Type | Description |
