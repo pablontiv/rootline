@@ -43,3 +43,7 @@ Esta task forma parte de O02 y debe ejecutarse leyendo este archivo, el README d
 
 - `docs/roadmap/O01-map-rootline-integration-surface/`
 - `docs/roadmap/O02-design-pi-extension-architecture/`
+
+## ADR Location
+
+See [ADR.md](ADR.md) in this directory.
