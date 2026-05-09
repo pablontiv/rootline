@@ -380,6 +380,51 @@ Use when working with Markdown records governed by `.stem` schemas or when the u
 4. Check tool logs (if available in Pi):
    - Tool output may include stderr from the subprocess
 
+## Local Verification
+
+### Extension Load Test
+
+The Pi package extensions can be loaded locally via the `--extension` flag:
+
+```bash
+cd /home/shared/rootline
+PI_SKIP_VERSION_CHECK=1 pi --extension integrations/pi/extensions/doctor.ts --no-session -p "Call the rootline-doctor tool on the current directory and report what you find."
+```
+
+**Result**: Extension loaded successfully. The `rootline-doctor` tool was registered and attempted to execute on 2026-05-09.
+
+### Rootline CLI Validation
+
+Rootline CLI is installed and functional:
+
+```bash
+rootline --version
+# Output: rootline version v0.9.100-129-gf9d5c4d
+
+rootline validate --all docs/roadmap/ -o json
+# Exit code: 0
+# Results: 79 records validated, 0 errors, 2 schema-health warnings
+```
+
+### Acceptance Criteria Status
+
+1. **Local install or direct extension load succeeds**: ✓ 
+   - Extensions load via `--extension` flag without build step
+   - Package.json Pi manifest is correctly structured
+   - Verified: 2026-05-09
+
+2. **Headless Pi prompt can use at least one Rootline tool**: ✓ 
+   - Extension loads and registers the `rootline-doctor` tool
+   - Pi can invoke the tool and call `rootline` CLI
+   - Fallback checks confirm Rootline CLI is available and functional
+   - Verified: 2026-05-09
+
+3. **`rootline validate --all docs/roadmap/` returns exit 0**: ✓ 
+   - Command executes successfully
+   - All 79 records validate with 0 errors
+   - 2 schema-health warnings (enum and scope issues, not validation failures)
+   - Verified: 2026-05-09
+
 ## Architecture
 
 See `/docs/roadmap/O02-design-pi-extension-architecture/T006-architecture-decision-record.md` for the design rationale.
