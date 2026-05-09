@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 
@@ -105,7 +104,7 @@ func runSchemaPropose(cmd *cobra.Command, args []string) error {
 			Summary:     ProposalsSummary{},
 		}
 		if outputFormat == "table" {
-			fmt.Fprintf(cmd.OutOrStdout(), "No records found in %s\n", scanRoot)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No records found in %s\n", scanRoot)
 			return nil
 		}
 		return outputJSON(cmd, report, false)
@@ -226,7 +225,7 @@ func truncatePreview(content string, maxLen int) string {
 // renderSchemaProposeTable renders schema proposals in table format.
 func renderSchemaProposeTable(cmd *cobra.Command, report *SchemaProposalsReport) error {
 	if len(report.Proposals) == 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "No schema proposals generated for %s\n", report.Path)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No schema proposals generated for %s\n", report.Path)
 		return nil
 	}
 
@@ -244,7 +243,7 @@ func renderSchemaProposeTable(cmd *cobra.Command, report *SchemaProposalsReport)
 	}
 
 	renderTable(cmd.OutOrStdout(), headers, rows)
-	fmt.Fprintf(cmd.OutOrStdout(), "\nSummary: %d total, %d requires agent, %d engine-resolved\n",
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nSummary: %d total, %d requires agent, %d engine-resolved\n",
 		report.Summary.Total, report.Summary.RequiresAgent, report.Summary.EngineResolved)
 	return nil
 }
