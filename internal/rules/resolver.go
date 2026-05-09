@@ -144,3 +144,274 @@ func (r *Resolution) RootMostStem() *StemEntry {
 	}
 	return &r.Chain[0]
 }
+
+// LayerConstraint represents a single constraint from a specific .stem file layer.
+type LayerConstraint struct {
+	StemPath  string      // Path to the .stem file that defined this constraint
+	Field     string      // Field name
+	Value     interface{} // The constraint value (e.g., enum values, type, required status)
+	Operation string      // "define", "narrow", "conflict", "destructive", "extension"
+}
+
+// LayeredResolution extends Resolution with monotonic constraint tracking.
+// It tracks all constraints from all .stem files in the chain and identifies
+// violations when monotonic=true.
+type LayeredResolution struct {
+	*Resolution                   // Embed existing resolution
+	Layers      []LayerConstraint // All constraints from all stems, root-to-leaf
+	Conflicts   []LayerConstraint // Constraints that violate monotonic rules
+}
+
+// ResolveLayered returns a LayeredResolution that tracks constraints across
+// the .stem chain and validates monotonic narrowing if enabled.
+//
+// In non-monotonic mode (monotonic=false), behaves like Resolve but populates
+// Layers for provenance tracking. Conflicts is empty.
+//
+// In monotonic mode (monotonic=true), validates each child constraint against
+// parent constraints. Populates Conflicts for violations:
+//   - Type widening (e.g., enum → string)
+//   - Required loosening (true → false)
+//   - Enum extension without explicit narrowing to subset
+//   - Severity loosening (error → warn)
+//   - Structural loosening (min_children reduction)
+//   - Domain redefinition
+//   - etc.
+func ResolveLayered(path string, root string, monotonic bool) (*LayeredResolution, error) {
+	// First, get the base resolution.
+	baseRes, err := Resolve(path, root)
+	if err != nil {
+		return nil, err
+	}
+
+	lr := &LayeredResolution{
+		Resolution: baseRes,
+		Layers:     make([]LayerConstraint, 0),
+		Conflicts:  make([]LayerConstraint, 0),
+	}
+
+	if len(baseRes.Chain) == 0 {
+		return lr, nil
+	}
+
+	// Collect all constraints from all stems.
+	for i, entry := range baseRes.Chain {
+		stem := entry.Stem
+		for fieldName, field := range stem.Schema {
+			// Record type constraint
+			lr.Layers = append(lr.Layers, LayerConstraint{
+				StemPath:  entry.Path,
+				Field:     fieldName + ".type",
+				Value:     field.Type,
+				Operation: "define",
+			})
+
+			// Record required constraint
+			if field.Required || field.RequiredMatch != nil {
+				var reqValue interface{} = field.Required
+				if field.RequiredMatch != nil {
+					reqValue = field.RequiredMatch
+				}
+				lr.Layers = append(lr.Layers, LayerConstraint{
+					StemPath:  entry.Path,
+					Field:     fieldName + ".required",
+					Value:     reqValue,
+					Operation: "define",
+				})
+			}
+
+			// Record enum values constraint
+			if len(field.Values) > 0 {
+				lr.Layers = append(lr.Layers, LayerConstraint{
+					StemPath:  entry.Path,
+					Field:     fieldName + ".values",
+					Value:     field.Values,
+					Operation: "define",
+				})
+			}
+
+			// Record severity constraint
+			if field.Severity != "" {
+				lr.Layers = append(lr.Layers, LayerConstraint{
+					StemPath:  entry.Path,
+					Field:     fieldName + ".severity",
+					Value:     field.Severity,
+					Operation: "define",
+				})
+			}
+
+			// Record domain constraint
+			if field.Domain != "" {
+				lr.Layers = append(lr.Layers, LayerConstraint{
+					StemPath:  entry.Path,
+					Field:     fieldName + ".domain",
+					Value:     field.Domain,
+					Operation: "define",
+				})
+			}
+		}
+
+		// Validate monotonic constraints if enabled and not the first (root) level.
+		if monotonic && i > 0 {
+			validateMonotonicConstraints(baseRes.Chain[i-1].Stem, stem, entry.Path, lr)
+		}
+	}
+
+	// Validate structural constraints if monotonic.
+	if monotonic && len(baseRes.Chain) > 1 {
+		validateMonotonicStructural(baseRes.Chain, lr)
+	}
+
+	return lr, nil
+}
+
+// validateMonotonicConstraints checks that child constraints do not violate parent constraints.
+func validateMonotonicConstraints(parentStem, childStem *StemFile, childPath string, lr *LayeredResolution) {
+	for fieldName, childField := range childStem.Schema {
+		parentField, exists := parentStem.Schema[fieldName]
+		if !exists {
+			// New field in child — always allowed
+			continue
+		}
+
+		// Type constraint: child can narrow (string→enum) but not widen
+		if childField.Type != parentField.Type {
+			if !isValidTypeNarrowing(parentField.Type, childField.Type) {
+				lr.Conflicts = append(lr.Conflicts, LayerConstraint{
+					StemPath:  childPath,
+					Field:     fieldName + ".type",
+					Value:     childField.Type + " (parent: " + parentField.Type + ")",
+					Operation: "conflict",
+				})
+			}
+		}
+
+		// Required constraint: child cannot loosen
+		if parentField.Required && !childField.Required && childField.RequiredMatch == nil {
+			lr.Conflicts = append(lr.Conflicts, LayerConstraint{
+				StemPath:  childPath,
+				Field:     fieldName + ".required",
+				Value:     "false (parent: true)",
+				Operation: "conflict",
+			})
+		}
+
+		// Enum values: child must be a subset (narrowing)
+		if parentField.Type == "enum" && childField.Type == "enum" {
+			if len(parentField.Values) > 0 && len(childField.Values) > 0 {
+				if !isSubset(childField.Values, parentField.Values) {
+					// Extension or incompatible set — this is a conflict
+					added := findAdded(childField.Values, parentField.Values)
+					if len(added) > 0 {
+						lr.Conflicts = append(lr.Conflicts, LayerConstraint{
+							StemPath:  childPath,
+							Field:     fieldName + ".values",
+							Value:     added,
+							Operation: "extension",
+						})
+					}
+				}
+			}
+		}
+
+		// Severity constraint: child can tighten (warn→error) but not loosen
+		if childField.Severity != "" && parentField.Severity != "" {
+			parentSev := severityOrder[parentField.Severity]
+			childSev := severityOrder[childField.Severity]
+			if childSev < parentSev {
+				lr.Conflicts = append(lr.Conflicts, LayerConstraint{
+					StemPath:  childPath,
+					Field:     fieldName + ".severity",
+					Value:     childField.Severity + " (parent: " + parentField.Severity + ")",
+					Operation: "conflict",
+				})
+			}
+		}
+
+		// Domain constraint: immutable once set
+		if parentField.Domain != "" && childField.Domain != "" && childField.Domain != parentField.Domain {
+			lr.Conflicts = append(lr.Conflicts, LayerConstraint{
+				StemPath:  childPath,
+				Field:     fieldName + ".domain",
+				Value:     childField.Domain + " (parent: " + parentField.Domain + ")",
+				Operation: "conflict",
+			})
+		}
+	}
+}
+
+// validateMonotonicStructural checks structural constraint monotonicity.
+func validateMonotonicStructural(chain []StemEntry, lr *LayeredResolution) {
+	for i := 1; i < len(chain); i++ {
+		parentStem := chain[i-1].Stem
+		childStem := chain[i].Stem
+
+		// min_children: child can increase (tighten) but not decrease (loosen)
+		if parentStem.Structural.Subdirs.MinChildren > 0 && childStem.Structural.Subdirs.MinChildren > 0 {
+			if childStem.Structural.Subdirs.MinChildren < parentStem.Structural.Subdirs.MinChildren {
+				lr.Conflicts = append(lr.Conflicts, LayerConstraint{
+					StemPath:  chain[i].Path,
+					Field:     "structural.subdirs.min_children",
+					Value:     childStem.Structural.Subdirs.MinChildren,
+					Operation: "conflict",
+				})
+			}
+		}
+
+		// max_children: child can decrease (tighten) but not increase (loosen)
+		if parentStem.Structural.Subdirs.MaxChildren > 0 && childStem.Structural.Subdirs.MaxChildren > 0 {
+			if childStem.Structural.Subdirs.MaxChildren > parentStem.Structural.Subdirs.MaxChildren {
+				lr.Conflicts = append(lr.Conflicts, LayerConstraint{
+					StemPath:  chain[i].Path,
+					Field:     "structural.subdirs.max_children",
+					Value:     childStem.Structural.Subdirs.MaxChildren,
+					Operation: "conflict",
+				})
+			}
+		}
+	}
+}
+
+// isValidTypeNarrowing returns true if childType is a valid narrowing of parentType.
+// Valid narrowings:
+//   - string → enum (restricts to enum values)
+//   - int → positive-int (future)
+func isValidTypeNarrowing(parentType, childType string) bool {
+	if parentType == childType {
+		return true
+	}
+	if parentType == "string" && childType == "enum" {
+		return true
+	}
+	// Add more narrowing rules here as needed
+	return false
+}
+
+// isSubset returns true if child is a subset of parent (all child values in parent).
+func isSubset(child, parent []string) bool {
+	parentMap := make(map[string]bool)
+	for _, v := range parent {
+		parentMap[v] = true
+	}
+	for _, v := range child {
+		if !parentMap[v] {
+			return false
+		}
+	}
+	return true
+}
+
+// findAdded returns values in child that are not in parent.
+func findAdded(child, parent []string) []string {
+	parentMap := make(map[string]bool)
+	for _, v := range parent {
+		parentMap[v] = true
+	}
+	var added []string
+	for _, v := range child {
+		if !parentMap[v] {
+			added = append(added, v)
+		}
+	}
+	return added
+}

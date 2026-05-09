@@ -319,3 +319,548 @@ schema:
 		t.Errorf("expected 3 enum values after override, got %d", len(res.EffectiveSchema["status"].Values))
 	}
 }
+
+// ====== Monotonic Constraint Tests ======
+
+func TestResolveLayered_NonMonotonicMode(t *testing.T) {
+	root := setupResolverTest(t)
+	targetPath := filepath.Join(root, "docs", "roadmap", "plan.md")
+
+	lr, err := ResolveLayered(targetPath, root, false)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	// In non-monotonic mode, Layers should be populated but Conflicts should be empty.
+	if len(lr.Layers) == 0 {
+		t.Fatal("expected Layers to be populated in non-monotonic mode")
+	}
+	if len(lr.Conflicts) != 0 {
+		t.Fatalf("expected no Conflicts in non-monotonic mode, got %d", len(lr.Conflicts))
+	}
+}
+
+func TestResolveLayered_MonotonicStringToEnumNarrowing(t *testing.T) {
+	root := t.TempDir()
+
+	// Create .git marker.
+	gitDir := filepath.Join(root, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create root .stem with string type.
+	rootStem := filepath.Join(root, ".stem")
+	rootContent := []byte(`version: 2
+schema:
+  status:
+    type: string
+`)
+	if err := os.WriteFile(rootStem, rootContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create child .stem with enum type (narrowing).
+	subDir := filepath.Join(root, "tasks")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subStem := filepath.Join(subDir, ".stem")
+	subContent := []byte(`version: 2
+schema:
+  status:
+    type: enum
+    values: [pending, active, completed]
+`)
+	if err := os.WriteFile(subStem, subContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	targetPath := filepath.Join(subDir, "task.md")
+
+	// In monotonic mode, this narrowing should be valid (string→enum is allowed narrowing).
+	lr, err := ResolveLayered(targetPath, root, true)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	// Should have no conflicts for this valid narrowing.
+	if len(lr.Conflicts) != 0 {
+		t.Fatalf("expected no conflicts for valid string→enum narrowing, got %d", len(lr.Conflicts))
+	}
+}
+
+func TestResolveLayered_MonotonicEnumExtensionRejected(t *testing.T) {
+	root := t.TempDir()
+
+	// Create .git marker.
+	gitDir := filepath.Join(root, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create root .stem with enum values.
+	rootStem := filepath.Join(root, ".stem")
+	rootContent := []byte(`version: 2
+schema:
+  status:
+    type: enum
+    values: [pending, completed]
+`)
+	if err := os.WriteFile(rootStem, rootContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create child .stem that extends enum (invalid in monotonic mode).
+	subDir := filepath.Join(root, "tasks")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subStem := filepath.Join(subDir, ".stem")
+	subContent := []byte(`version: 2
+schema:
+  status:
+    type: enum
+    values: [pending, in_progress, completed]
+`)
+	if err := os.WriteFile(subStem, subContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	targetPath := filepath.Join(subDir, "task.md")
+
+	lr, err := ResolveLayered(targetPath, root, true)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	// Should have a conflict for enum extension.
+	if len(lr.Conflicts) == 0 {
+		t.Fatal("expected conflict for enum extension in monotonic mode")
+	}
+
+	// Find the conflict.
+	found := false
+	for _, conflict := range lr.Conflicts {
+		if conflict.Field == "status.values" && conflict.Operation == "extension" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected status.values extension conflict, got conflicts: %+v", lr.Conflicts)
+	}
+}
+
+func TestResolveLayered_MonotonicEnumNarrowing(t *testing.T) {
+	root := t.TempDir()
+
+	// Create .git marker.
+	gitDir := filepath.Join(root, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create root .stem with enum values.
+	rootStem := filepath.Join(root, ".stem")
+	rootContent := []byte(`version: 2
+schema:
+  status:
+    type: enum
+    values: [pending, active, completed, archived]
+`)
+	if err := os.WriteFile(rootStem, rootContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create child .stem that narrows enum (valid in monotonic mode).
+	subDir := filepath.Join(root, "tasks")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subStem := filepath.Join(subDir, ".stem")
+	subContent := []byte(`version: 2
+schema:
+  status:
+    type: enum
+    values: [pending, active, completed]
+`)
+	if err := os.WriteFile(subStem, subContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	targetPath := filepath.Join(subDir, "task.md")
+
+	lr, err := ResolveLayered(targetPath, root, true)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	// Should have no conflicts for valid enum narrowing.
+	if len(lr.Conflicts) != 0 {
+		t.Fatalf("expected no conflicts for enum narrowing, got %d: %+v", len(lr.Conflicts), lr.Conflicts)
+	}
+}
+
+func TestResolveLayered_MonotonicRequiredLoosening(t *testing.T) {
+	root := t.TempDir()
+
+	// Create .git marker.
+	gitDir := filepath.Join(root, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create root .stem with required=true.
+	rootStem := filepath.Join(root, ".stem")
+	rootContent := []byte(`version: 2
+schema:
+  title:
+    type: string
+    required: true
+`)
+	if err := os.WriteFile(rootStem, rootContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create child .stem that loosens required (invalid in monotonic mode).
+	subDir := filepath.Join(root, "docs")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subStem := filepath.Join(subDir, ".stem")
+	subContent := []byte(`version: 2
+schema:
+  title:
+    type: string
+    required: false
+`)
+	if err := os.WriteFile(subStem, subContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	targetPath := filepath.Join(subDir, "doc.md")
+
+	lr, err := ResolveLayered(targetPath, root, true)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	// Should have a conflict for required loosening.
+	if len(lr.Conflicts) == 0 {
+		t.Fatal("expected conflict for required loosening in monotonic mode")
+	}
+
+	// Find the conflict.
+	found := false
+	for _, conflict := range lr.Conflicts {
+		if conflict.Field == "title.required" && conflict.Operation == "conflict" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected title.required conflict, got conflicts: %+v", lr.Conflicts)
+	}
+}
+
+func TestResolveLayered_MonotonicSeverityLoosening(t *testing.T) {
+	root := t.TempDir()
+
+	// Create .git marker.
+	gitDir := filepath.Join(root, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create root .stem with severity=error.
+	rootStem := filepath.Join(root, ".stem")
+	rootContent := []byte(`version: 2
+schema:
+  id:
+    type: string
+    severity: error
+`)
+	if err := os.WriteFile(rootStem, rootContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create child .stem that loosens severity (invalid in monotonic mode).
+	subDir := filepath.Join(root, "tasks")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subStem := filepath.Join(subDir, ".stem")
+	subContent := []byte(`version: 2
+schema:
+  id:
+    type: string
+    severity: warn
+`)
+	if err := os.WriteFile(subStem, subContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	targetPath := filepath.Join(subDir, "task.md")
+
+	lr, err := ResolveLayered(targetPath, root, true)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	// Should have a conflict for severity loosening.
+	if len(lr.Conflicts) == 0 {
+		t.Fatal("expected conflict for severity loosening in monotonic mode")
+	}
+
+	found := false
+	for _, conflict := range lr.Conflicts {
+		if conflict.Field == "id.severity" && conflict.Operation == "conflict" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected id.severity conflict, got conflicts: %+v", lr.Conflicts)
+	}
+}
+
+func TestResolveLayered_MonotonicDomainImmutable(t *testing.T) {
+	root := t.TempDir()
+
+	// Create .git marker.
+	gitDir := filepath.Join(root, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create root .stem with domain=lifecycle_state.
+	rootStem := filepath.Join(root, ".stem")
+	rootContent := []byte(`version: 2
+schema:
+  status:
+    type: enum
+    domain: lifecycle_state
+    values: [draft, published]
+`)
+	if err := os.WriteFile(rootStem, rootContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create child .stem that changes domain (invalid in monotonic mode).
+	subDir := filepath.Join(root, "tasks")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subStem := filepath.Join(subDir, ".stem")
+	subContent := []byte(`version: 2
+schema:
+  status:
+    type: enum
+    domain: record_type
+    values: [pending, completed]
+`)
+	if err := os.WriteFile(subStem, subContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	targetPath := filepath.Join(subDir, "task.md")
+
+	lr, err := ResolveLayered(targetPath, root, true)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	// Should have a conflict for domain change.
+	if len(lr.Conflicts) == 0 {
+		t.Fatal("expected conflict for domain redefinition in monotonic mode")
+	}
+
+	found := false
+	for _, conflict := range lr.Conflicts {
+		if conflict.Field == "status.domain" && conflict.Operation == "conflict" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected status.domain conflict, got conflicts: %+v", lr.Conflicts)
+	}
+}
+
+func TestResolveLayered_MonotonicStructuralTightening(t *testing.T) {
+	root := t.TempDir()
+
+	// Create .git marker.
+	gitDir := filepath.Join(root, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create root .stem with min_children=1.
+	rootStem := filepath.Join(root, ".stem")
+	rootContent := []byte(`version: 2
+structural:
+  subdirs:
+    min_children: 1
+`)
+	if err := os.WriteFile(rootStem, rootContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create child .stem that tightens min_children (valid in monotonic mode).
+	subDir := filepath.Join(root, "epics")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subStem := filepath.Join(subDir, ".stem")
+	subContent := []byte(`version: 2
+structural:
+  subdirs:
+    min_children: 2
+`)
+	if err := os.WriteFile(subStem, subContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	targetPath := filepath.Join(subDir, "epic.md")
+
+	lr, err := ResolveLayered(targetPath, root, true)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	// Should have no conflicts for structural tightening.
+	if len(lr.Conflicts) != 0 {
+		t.Fatalf("expected no conflicts for structural tightening, got %d: %+v", len(lr.Conflicts), lr.Conflicts)
+	}
+}
+
+func TestResolveLayered_MonotonicStructuralLoosening(t *testing.T) {
+	root := t.TempDir()
+
+	// Create .git marker.
+	gitDir := filepath.Join(root, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create root .stem with min_children=2.
+	rootStem := filepath.Join(root, ".stem")
+	rootContent := []byte(`version: 2
+structural:
+  subdirs:
+    min_children: 2
+`)
+	if err := os.WriteFile(rootStem, rootContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create child .stem that loosens min_children (invalid in monotonic mode).
+	subDir := filepath.Join(root, "epics")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subStem := filepath.Join(subDir, ".stem")
+	subContent := []byte(`version: 2
+structural:
+  subdirs:
+    min_children: 1
+`)
+	if err := os.WriteFile(subStem, subContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	targetPath := filepath.Join(subDir, "epic.md")
+
+	lr, err := ResolveLayered(targetPath, root, true)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	// Should have a conflict for structural loosening.
+	if len(lr.Conflicts) == 0 {
+		t.Fatal("expected conflict for structural loosening in monotonic mode")
+	}
+
+	found := false
+	for _, conflict := range lr.Conflicts {
+		if conflict.Field == "structural.subdirs.min_children" && conflict.Operation == "conflict" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected structural.subdirs.min_children conflict, got conflicts: %+v", lr.Conflicts)
+	}
+}
+
+func TestResolveLayered_ThreeLevelHierarchy(t *testing.T) {
+	root := t.TempDir()
+
+	// Create .git marker.
+	gitDir := filepath.Join(root, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Level 1: root .stem with string type.
+	rootStem := filepath.Join(root, ".stem")
+	rootContent := []byte(`version: 2
+schema:
+  status:
+    type: string
+`)
+	if err := os.WriteFile(rootStem, rootContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Level 2: epics .stem narrows to enum.
+	epicsDir := filepath.Join(root, "epics")
+	if err := os.MkdirAll(epicsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	epicsStem := filepath.Join(epicsDir, ".stem")
+	epicsContent := []byte(`version: 2
+schema:
+  status:
+    type: enum
+    values: [pending, active, completed, archived]
+`)
+	if err := os.WriteFile(epicsStem, epicsContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Level 3: tasks .stem further narrows enum (valid narrowing).
+	tasksDir := filepath.Join(epicsDir, "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tasksStem := filepath.Join(tasksDir, ".stem")
+	tasksContent := []byte(`version: 2
+schema:
+  status:
+    type: enum
+    values: [pending, active, completed]
+`)
+	if err := os.WriteFile(tasksStem, tasksContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	targetPath := filepath.Join(tasksDir, "task.md")
+
+	lr, err := ResolveLayered(targetPath, root, true)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	// Should have 3 entries in chain.
+	if len(lr.Chain) != 3 {
+		t.Fatalf("expected 3 stems in chain, got %d", len(lr.Chain))
+	}
+
+	// Should have no conflicts (all narrowing operations are valid).
+	if len(lr.Conflicts) != 0 {
+		t.Fatalf("expected no conflicts for three-level valid narrowing, got %d: %+v", len(lr.Conflicts), lr.Conflicts)
+	}
+}
