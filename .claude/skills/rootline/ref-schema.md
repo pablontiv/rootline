@@ -114,3 +114,19 @@ The central resolver in `internal/rules/resolver.go` exposes:
 - `(*Resolution).ClosestStem()` / `RootMostStem()` — explicit closest vs. root-most selection
 
 Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new command code.
+
+## Proposal Surface Taxonomy
+
+`internal/proposal/surface.go` classifies proposals without needing command context:
+
+```go
+Surface() ProposalSurface  // returns one of:
+// schema       — mutates .stem (extend_enum, add_aggregate, remove_stem_field)
+// repair       — mutates Markdown only (correct_value, add_field, ...)
+// bootstrap    — scaffold missing .stem (missing_schema)
+// migration    — bulk rename/type change
+// diagnostic   — read-only governance finding
+// requires_agent — needs human/agent decision
+```
+
+Use `proposal.Surface()` to gate schema vs. repair apply paths.
