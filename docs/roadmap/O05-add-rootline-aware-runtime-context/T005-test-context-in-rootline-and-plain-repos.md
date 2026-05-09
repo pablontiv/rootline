@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: In Progress
 tipo: task
 ---
 # T005: Test runtime context behavior in Rootline and non-Rootline repos.
