@@ -566,6 +566,60 @@ func TestOutputJSONWithNestedField(t *testing.T) {
 	}
 }
 
+func TestOutputJSONWithArrayProjection(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--field", "rows[].path")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var paths []string
+	if err := json.Unmarshal([]byte(out), &paths); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	if len(paths) != 2 || paths[0] != "doc1.md" || paths[1] != "doc2.md" {
+		t.Errorf("paths = %#v, want [doc1.md doc2.md]", paths)
+	}
+}
+
+func TestOutputJSONWithNestedArrayProjection(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--field", "rows[].frontmatter.estado")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var estados []string
+	if err := json.Unmarshal([]byte(out), &estados); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	if len(estados) != 2 || estados[0] != "Pending" || estados[1] != "Completed" {
+		t.Errorf("estados = %#v, want [Pending Completed]", estados)
+	}
+}
+
+func TestOutputJSONWithArrayProjectionMissingKey(t *testing.T) {
+	data := []byte(`{"rows":[{"path":"doc1.md"},{"frontmatter":{"estado":"Pending"}}]}`)
+	_, err := extractField(data, "rows[].path")
+	if err == nil {
+		t.Fatal("expected error for missing projected key")
+	}
+	if !strings.Contains(err.Error(), "key \"path\" not found") {
+		t.Fatalf("expected missing key error, got: %v", err)
+	}
+}
+
+func TestOutputJSONWithArrayProjectionInvalidTraversal(t *testing.T) {
+	data := []byte(`{"rows":{"path":"doc1.md"}}`)
+	_, err := extractField(data, "rows[].path")
+	if err == nil {
+		t.Fatal("expected error for array projection over non-array")
+	}
+	if !strings.Contains(err.Error(), "not an array") {
+		t.Fatalf("expected not an array error, got: %v", err)
+	}
+}
+
 func TestOutputJSONWithFieldNotFound(t *testing.T) {
 	dir := setupTestDir(t)
 	_, err := runCmd(t, "stats", dir, "--field", "nonexistent.path")

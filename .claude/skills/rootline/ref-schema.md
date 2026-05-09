@@ -185,3 +185,34 @@ Surface() ProposalSurface  // returns one of:
 ```
 
 Use `proposal.Surface()` to gate schema vs. repair apply paths.
+
+## Legacy Apply Deprecation
+
+`rootline apply` is **deprecated**. On every invocation it prints to stderr:
+> Warning: 'rootline apply' is deprecated. Use 'rootline schema apply' for schema changes or 'rootline repair apply' for data repairs.
+
+The command remains functional for backward compatibility. `analyze` help text now references the replacement workflows. Replace scripts/agents using `apply` with:
+- `rootline schema apply --report <proposals.json>` — schema changes (`.stem` files)
+- `rootline repair apply --report <analyze-report.json>` — data corrections (frontmatter)
+
+## Field Extraction — Array Projection
+
+The global `--field` flag supports both object paths and array projection:
+
+```bash
+rootline query --from dir --field "rows[].path"          # extract path from each row
+rootline query --from dir --field "rows[].frontmatter.estado"  # nested field per row
+rootline graph dir --field "edges[].source"              # source of each graph edge
+```
+
+Syntax: append `[]` to a key to project over an array: `key[].subpath`. Returns a JSON array of extracted values. Errors on missing keys or non-array traversal.
+
+Engine: `cmd/rootline/validate.go` → `extractField` → `extractFieldPath` (recursive).
+
+## Apply Schema Proposals (internal)
+
+`internal/fix/fix.go` exports `ApplySchemaProposals(ctx, report, root)`:
+- Applies schema-surface proposals from either `report.Proposals` or `report.SchemaSuggestions`
+- Currently handles: `extend_enum` (finds and rewrites the `.stem` file)
+- Counterpart to `ApplyProposals` for the schema write path
+- Used by e2e tests and callers that need to apply schema proposals separately from data proposals

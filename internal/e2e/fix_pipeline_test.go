@@ -433,8 +433,9 @@ func TestFixPipeline_ExtendEnum(t *testing.T) {
 		t.Errorf("extend value = %q, want nuevo", p.Value)
 	}
 
-	if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
-		t.Fatalf("apply: %v", err)
+	// ExtendEnum is schema-surface; apply schema proposals via ApplySchemaProposals.
+	if err := fix.ApplySchemaProposals(ctx, report, root); err != nil {
+		t.Fatalf("apply schema proposals: %v", err)
 	}
 
 	// Re-validate: the enum was extended so the value is now valid.

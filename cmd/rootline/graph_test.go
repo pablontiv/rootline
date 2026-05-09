@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -284,6 +285,28 @@ func TestGraphJSON_FieldProjection_Edges(t *testing.T) {
 	}
 	if len(edges) != 2 {
 		t.Errorf("edges = %d, want 2", len(edges))
+	}
+}
+
+func TestGraphJSON_FieldProjection_EdgeSources(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[c.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "c.md"), []byte("---\n---\n# C\n"), 0644)
+
+	out, err := runCmd(t, "graph", dir, "--field", "edges[].source")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	var sources []string
+	if err := json.Unmarshal([]byte(out), &sources); err != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", err, out)
+	}
+	sort.Strings(sources)
+	if len(sources) != 2 || sources[0] != "a.md" || sources[1] != "b.md" {
+		t.Errorf("sources = %#v, want [a.md b.md]", sources)
 	}
 }
 

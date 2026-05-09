@@ -382,21 +382,55 @@ func extractField(data []byte, path string) ([]byte, error) {
 		return nil, fmt.Errorf("parsing JSON for field extraction: %w", err)
 	}
 
-	current := obj
-	parts := splitDotPath(path)
-	for _, part := range parts {
-		m, ok := current.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("field %q: not an object at %q", path, part)
-		}
-		val, exists := m[part]
-		if !exists {
-			return nil, fmt.Errorf("field %q: key %q not found", path, part)
-		}
-		current = val
+	current, err := extractFieldPath(obj, splitDotPath(path), path)
+	if err != nil {
+		return nil, err
 	}
 
 	return json.Marshal(current)
+}
+
+func extractFieldPath(current any, parts []string, fullPath string) (any, error) {
+	if len(parts) == 0 {
+		return current, nil
+	}
+
+	part := parts[0]
+	if strings.HasSuffix(part, "[]") {
+		key := strings.TrimSuffix(part, "[]")
+		m, ok := current.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("field %q: not an object at %q", fullPath, part)
+		}
+		val, exists := m[key]
+		if !exists {
+			return nil, fmt.Errorf("field %q: key %q not found", fullPath, key)
+		}
+		items, ok := val.([]any)
+		if !ok {
+			return nil, fmt.Errorf("field %q: %q is not an array", fullPath, key)
+		}
+
+		projected := make([]any, 0, len(items))
+		for i, item := range items {
+			v, err := extractFieldPath(item, parts[1:], fullPath)
+			if err != nil {
+				return nil, fmt.Errorf("field %q: array %q index %d: %w", fullPath, key, i, err)
+			}
+			projected = append(projected, v)
+		}
+		return projected, nil
+	}
+
+	m, ok := current.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("field %q: not an object at %q", fullPath, part)
+	}
+	val, exists := m[part]
+	if !exists {
+		return nil, fmt.Errorf("field %q: key %q not found", fullPath, part)
+	}
+	return extractFieldPath(val, parts[1:], fullPath)
 }
 
 // parentChildGroup holds an index file and its direct children for drift detection.
