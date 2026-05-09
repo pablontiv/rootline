@@ -72,13 +72,11 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 
 	// Build provenance map: field name → stem path that defined it
 	provenance := make(map[string]string)
-	if entries != nil {
-		for _, entry := range entries {
-			if entry.Stem != nil {
-				for name := range entry.Stem.Schema {
-					// Last writer wins — later entries (closer to leaf) override earlier ones.
-					provenance[name] = entry.Path
-				}
+	for _, entry := range entries {
+		if entry.Stem != nil {
+			for name := range entry.Stem.Schema {
+				// Last writer wins — later entries (closer to leaf) override earlier ones.
+				provenance[name] = entry.Path
 			}
 		}
 	}

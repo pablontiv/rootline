@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -43,17 +42,14 @@ Use --dry-run to preview changes without modifying files.`,
 
 func init() {
 	repairApplyCmd.Flags().StringVar(&reportPath, "report", "", "path to analyze report JSON (required)")
-	repairApplyCmd.MarkFlagRequired("report")
+	_ = repairApplyCmd.MarkFlagRequired("report")
 	repairApplyCmd.Flags().BoolVar(&repairDryRun, "dry-run", false, "preview changes without modifying files")
 
 	repairCmd.AddCommand(repairApplyCmd)
 	rootCmd.AddCommand(repairCmd)
 }
 
-func runRepairApply(cmd *cobra.Command, args []string) error {
-	ctx := cmd.Context()
-	ctx = context.WithValue(ctx, contextKeyDryRun, repairDryRun)
-
+func runRepairApply(cmd *cobra.Command, _ []string) error {
 	if reportPath == "" {
 		return fmt.Errorf("--report is required")
 	}
@@ -128,8 +124,3 @@ func renderRepairTable(cmd *cobra.Command, result *fix.RepairResult) error {
 
 	return nil
 }
-
-// contextKeyDryRun is used to pass dry-run flag through context.
-type contextKey string
-
-const contextKeyDryRun contextKey = "dryRun"

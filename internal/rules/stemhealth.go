@@ -414,17 +414,16 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 			if dotIdx := strings.Index(fieldName, "."); dotIdx > 0 {
 				fieldName = fieldName[:dotIdx]
 			}
-			constraintType := conflict.Field[len(fieldName):]
-			if constraintType == "" {
-				constraintType = ".type"
-			}
 
 			// Build a descriptive message based on the operation type
-			msg := fmt.Sprintf("field %q: %s violation at %s", fieldName, conflict.Operation, conflict.Field)
-			if conflict.Operation == "conflict" {
+			var msg string
+			switch conflict.Operation {
+			case "conflict":
 				msg = fmt.Sprintf("field %q violates monotonic constraint (type change: %v)", fieldName, conflict.Value)
-			} else if conflict.Operation == "extension" {
+			case "extension":
 				msg = fmt.Sprintf("field %q: enum extended with disallowed value(s): %v", fieldName, conflict.Value)
+			default:
+				msg = fmt.Sprintf("field %q: %s violation at %s", fieldName, conflict.Operation, conflict.Field)
 			}
 
 			checks = append(checks, StemHealthCheck{
