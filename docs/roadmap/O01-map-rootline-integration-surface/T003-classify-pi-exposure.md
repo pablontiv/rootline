@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T003: Classify each command as Pi tool, slash command, prompt, context rule, or unsupported.
