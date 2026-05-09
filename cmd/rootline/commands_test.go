@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -980,4 +981,218 @@ func TestQuerySort_IntegrationBacklog(t *testing.T) {
 	if result["kind"] != "rootline/query" {
 		t.Errorf("expected kind rootline/query, got %v", result["kind"])
 	}
+}
+
+// --- Query projection tests (--select flag) ---
+
+func TestQuerySelectPath(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--select", "path")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if result["kind"] != "rootline/query" {
+		t.Errorf("expected kind rootline/query, got %v", result["kind"])
+	}
+	rows, ok := result["rows"].([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatal("expected rows in result")
+	}
+	row, ok := rows[0].(map[string]any)
+	if !ok {
+		t.Fatal("expected row to be a map")
+	}
+	if _, ok := row["path"]; !ok {
+		t.Errorf("expected 'path' field in projected row, got: %v", row)
+	}
+	// Path should be the only field (along with version, kind, meta)
+	if len(row) != 1 {
+		t.Errorf("expected only 'path' field in row, got fields: %v", row)
+	}
+}
+
+func TestQuerySelectPathAndEstado(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--select", "path,estado")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	rows, ok := result["rows"].([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatal("expected rows in result")
+	}
+	row, ok := rows[0].(map[string]any)
+	if !ok {
+		t.Fatal("expected row to be a map")
+	}
+	if _, ok := row["path"]; !ok {
+		t.Errorf("expected 'path' field in projected row")
+	}
+	if _, ok := row["estado"]; !ok {
+		t.Errorf("expected 'estado' field in projected row")
+	}
+}
+
+func TestQuerySelectTitle(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--select", "path,title")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	rows, ok := result["rows"].([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatal("expected rows in result")
+	}
+	row, ok := rows[0].(map[string]any)
+	if !ok {
+		t.Fatal("expected row to be a map")
+	}
+	// Title should be extracted from "# Doc 1" heading
+	if title, ok := row["title"]; ok {
+		if title != "Doc 1" && title != "Doc 2" {
+			t.Errorf("expected title to be 'Doc 1' or 'Doc 2', got: %v", title)
+		}
+	}
+}
+
+func TestQuerySelectLinks(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--select", "path,links")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	rows, ok := result["rows"].([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatal("expected rows in result")
+	}
+	row, ok := rows[0].(map[string]any)
+	if !ok {
+		t.Fatal("expected row to be a map")
+	}
+	// Links field may or may not be present depending on doc content
+	if path, ok := row["path"]; !ok {
+		t.Errorf("expected 'path' field, got: %v", row)
+	} else if path == "" {
+		t.Errorf("expected non-empty path")
+	}
+}
+
+func TestQuerySelectNonexistent(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--select", "path,nonexistent")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	rows, ok := result["rows"].([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatal("expected rows in result")
+	}
+	row, ok := rows[0].(map[string]any)
+	if !ok {
+		t.Fatal("expected row to be a map")
+	}
+	// Path should be present, nonexistent field should be omitted
+	if _, ok := row["path"]; !ok {
+		t.Errorf("expected 'path' field")
+	}
+	if _, ok := row["nonexistent"]; ok {
+		t.Errorf("expected nonexistent field to be omitted")
+	}
+}
+
+func TestQuerySelectWithWhere(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir, "--where", "estado == 'Pending'", "--select", "path,estado,title")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	rows, ok := result["rows"].([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatal("expected rows in result")
+	}
+	// Should only have doc1.md (Pending)
+	row, ok := rows[0].(map[string]any)
+	if !ok {
+		t.Fatal("expected row to be a map")
+	}
+	if len(rows) != 1 {
+		t.Errorf("expected 1 row after filtering, got %d", len(rows))
+	}
+	if estado, ok := row["estado"]; ok {
+		if estado != "Pending" {
+			t.Errorf("expected estado='Pending', got %v", estado)
+		}
+	}
+}
+
+func TestQuerySelectBackwardCompat(t *testing.T) {
+	dir := setupTestDir(t)
+	out, err := runCmd(t, "query", "--from", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	rows, ok := result["rows"].([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatal("expected rows in result")
+	}
+	row, ok := rows[0].(map[string]any)
+	if !ok {
+		t.Fatal("expected row to be a map")
+	}
+	// Without --select, rows should have full Record fields (path, frontmatter, body, type, links, etc.)
+	// Check that we have the important fields from the Record struct
+	if _, ok := row["path"]; !ok {
+		t.Errorf("expected 'path' field in full record, got keys: %v", getMapKeys(row))
+	}
+	// Check version and kind to verify we're still using QueryResult
+	if version, ok := result["version"]; !ok {
+		t.Errorf("expected version field in result")
+	} else {
+		// Version might be float64 after JSON unmarshal
+		vFloat, _ := version.(float64)
+		if int(vFloat) != 1 {
+			t.Errorf("expected version 1, got %v", version)
+		}
+	}
+	if kind, ok := result["kind"]; !ok || kind != "rootline/query" {
+		t.Errorf("expected kind rootline/query, got %v", kind)
+	}
+}
+
+// getMapKeys returns the keys of a map in sorted order for debugging
+func getMapKeys(m map[string]any) []string {
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

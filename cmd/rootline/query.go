@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
@@ -22,11 +23,12 @@ const whereExamples = `Examples:
   rootline query --where 'tags != nil'`
 
 var (
-	queryWhere []string
-	queryCount bool
-	queryLimit int
-	queryFrom  string
-	querySort  string
+	queryWhere  []string
+	queryCount  bool
+	queryLimit  int
+	queryFrom   string
+	querySort   string
+	querySelect string
 )
 
 var queryCmd = &cobra.Command{
@@ -43,6 +45,7 @@ func init() {
 	queryCmd.Flags().IntVar(&queryLimit, "limit", 0, "limit number of results (0 = unlimited)")
 	queryCmd.Flags().StringVar(&queryFrom, "from", ".", "root path to scan")
 	queryCmd.Flags().StringVar(&querySort, "sort", "", `sort by fields (e.g. "prioridad:asc,impact_score:desc")`)
+	queryCmd.Flags().StringVar(&querySelect, "select", "", "comma-separated field names to include in each row (e.g. path,estado,title,links)")
 	rootCmd.AddCommand(queryCmd)
 }
 
@@ -105,6 +108,15 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("executing query: %w", err)
 	}
 
+	// Apply projection if --select is given
+	if querySelect != "" {
+		fields := parseSelectFields(querySelect)
+		result, err = projectQueryResult(result, fields)
+		if err != nil {
+			return fmt.Errorf("applying projection: %w", err)
+		}
+	}
+
 	if outputFormat == "table" {
 		return renderQueryTable(cmd, result)
 	}
@@ -149,4 +161,85 @@ func renderQueryTable(cmd *cobra.Command, result any) error {
 
 	renderTable(cmd.OutOrStdout(), headers, rows)
 	return nil
+}
+
+// parseSelectFields splits a comma-separated string into field names.
+func parseSelectFields(selectStr string) []string {
+	var fields []string
+	for _, f := range strings.Split(selectStr, ",") {
+		f = strings.TrimSpace(f)
+		if f != "" {
+			fields = append(fields, f)
+		}
+	}
+	return fields
+}
+
+// extractTitle returns the first heading from the body (e.g., "# Heading" -> "Heading").
+// Falls back to the first non-empty line if no heading is found.
+func extractTitle(body string) string {
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "# ") {
+			return strings.TrimPrefix(line, "# ")
+		}
+	}
+	// Fallback: return first non-empty line
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "---") {
+			return line
+		}
+	}
+	return ""
+}
+
+// projectQueryResult projects rows to include only selected fields.
+// It converts QueryResult rows to projected format (path, title, and selected fields).
+func projectQueryResult(result any, fields []string) (any, error) {
+	qr, ok := result.(*query.QueryResult)
+	if !ok {
+		return result, nil
+	}
+
+	// Build projected rows: each row becomes a map[string]any with only selected fields
+	projectedRows := make([]map[string]any, len(qr.Rows))
+	for i, row := range qr.Rows {
+		projected := make(map[string]any)
+		for _, field := range fields {
+			switch field {
+			case "path":
+				projected["path"] = row.Path
+			case "title":
+				title := extractTitle(row.Body)
+				if title != "" {
+					projected["title"] = title
+				}
+			case "links":
+				if len(row.Links) > 0 {
+					projected["links"] = row.Links
+				}
+			default:
+				// Try derived fields first, then frontmatter
+				if row.Derived != nil {
+					if v, ok := row.Derived[field]; ok {
+						projected[field] = v
+						continue
+					}
+				}
+				if v, ok := row.Frontmatter[field]; ok {
+					projected[field] = v
+				}
+			}
+		}
+		projectedRows[i] = projected
+	}
+
+	// Return a projected QueryResult with map rows instead of Record pointers
+	return &query.ProjectedQueryResult{
+		Version: 1,
+		Kind:    "rootline/query",
+		Meta:    query.QueryMeta{Count: len(projectedRows)},
+		Rows:    projectedRows,
+	}, nil
 }

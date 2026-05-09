@@ -53,6 +53,14 @@ type QueryMeta struct {
 	Count int `json:"count"`
 }
 
+// ProjectedQueryResult is the versioned JSON output for a projected query.
+type ProjectedQueryResult struct {
+	Version int              `json:"version"`
+	Kind    string           `json:"kind"`
+	Meta    QueryMeta        `json:"meta"`
+	Rows    []map[string]any `json:"rows"`
+}
+
 // CountResult is the versioned JSON output for a count query.
 type CountResult struct {
 	Version int       `json:"version"`
