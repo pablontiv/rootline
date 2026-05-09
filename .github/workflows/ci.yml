@@ -26,12 +26,20 @@ jobs:
       - run: go build -o rootline ./cmd/rootline/
       - run: ./rootline validate --all docs/roadmap/
 
+  pi-extensions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: oven-sh/setup-bun@v2
+      - run: cd integrations/pi && bun install
+      - run: cd integrations/pi && bun test
+
   release:
     uses: pablontiv/crossbeam/.github/workflows/go-release.yml@v1
-    needs: [ci, gitleaks, docs-validate]
+    needs: [ci, gitleaks, docs-validate, pi-extensions]
     if: github.event_name == 'push'
     with:
-      quality-gate-jobs: '["ci","gitleaks","docs-validate"]'
+      quality-gate-jobs: '["ci","gitleaks","docs-validate","pi-extensions"]'
       binary-name: rootline
     permissions:
       contents: write
