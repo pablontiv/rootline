@@ -736,3 +736,114 @@ schema:
 		}
 	}
 }
+
+func TestValidateStemHealth_MonotonicViolation_TypeWidening(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Parent: estado is enum
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: enum
+    values: [draft, active, completed]
+`))
+	// Child: estado is widened to string (violation!)
+	sub := filepath.Join(dir, "sub")
+	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: string
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	found := false
+	for _, c := range result.Checks {
+		if c.Name == "monotonic-violations" && c.Status == "fail" {
+			found = true
+			if c.Field != "estado" {
+				t.Errorf("expected field 'estado', got %q", c.Field)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("expected monotonic-violations error for type widening (enum → string)")
+	}
+}
+
+func TestValidateStemHealth_MonotonicNarrowing_AllowedNoViolation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Parent: estado is string
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: string
+`))
+	// Child: estado is narrowed to enum (allowed!)
+	sub := filepath.Join(dir, "sub")
+	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: enum
+    values: [draft, active]
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, c := range result.Checks {
+		if c.Name == "monotonic-violations" && c.Field == "estado" {
+			t.Errorf("unexpected monotonic-violations error for valid narrowing (string → enum): %s", c.Message)
+		}
+	}
+}
+
+func TestValidateStemHealth_MonotonicViolation_BatchOutput(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Parent: required: true
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  titulo:
+    type: string
+    required: true
+`))
+	// Child: required: false (violation!)
+	sub := filepath.Join(dir, "sub")
+	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 2
+schema:
+  titulo:
+    type: string
+    required: false
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, c := range result.Checks {
+		if c.Name == "monotonic-violations" && c.Status == "fail" {
+			found = true
+			if c.Field != "titulo" {
+				t.Errorf("expected field 'titulo', got %q", c.Field)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("expected monotonic-violations error in batch output for required loosening")
+	}
+}

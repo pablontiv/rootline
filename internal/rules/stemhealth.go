@@ -396,6 +396,51 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		return nil, ctx.Err()
 	}
 
+	// Check 11: Monotonic constraint violations
+	for sf := range parsedStems {
+		relPath, _ := filepath.Rel(absRoot, sf)
+		dir := filepath.Dir(sf)
+
+		// Resolve layered constraints with monotonic=true for this directory
+		lr, resolveErr := ResolveLayered(dir, absRoot, true)
+		if resolveErr != nil {
+			continue
+		}
+
+		// For each conflict, emit a diagnostic error
+		for _, conflict := range lr.Conflicts {
+			// Extract field name from conflict.Field (e.g., "fieldname.type" → "fieldname")
+			fieldName := conflict.Field
+			if dotIdx := strings.Index(fieldName, "."); dotIdx > 0 {
+				fieldName = fieldName[:dotIdx]
+			}
+			constraintType := conflict.Field[len(fieldName):]
+			if constraintType == "" {
+				constraintType = ".type"
+			}
+
+			// Build a descriptive message based on the operation type
+			msg := fmt.Sprintf("field %q: %s violation at %s", fieldName, conflict.Operation, conflict.Field)
+			if conflict.Operation == "conflict" {
+				msg = fmt.Sprintf("field %q violates monotonic constraint (type change: %v)", fieldName, conflict.Value)
+			} else if conflict.Operation == "extension" {
+				msg = fmt.Sprintf("field %q: enum extended with disallowed value(s): %v", fieldName, conflict.Value)
+			}
+
+			checks = append(checks, StemHealthCheck{
+				Name:    "monotonic-violations",
+				Status:  "fail",
+				Message: msg,
+				Path:    relPath,
+				Field:   fieldName,
+			})
+		}
+	}
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	return &StemHealthResult{Checks: checks}, nil
 }
 
