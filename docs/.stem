@@ -4,5 +4,5 @@ scope:
 schema:
     estado:
         type: enum
-        values: [Pending, Specified, "In Progress", Completed, Blocked, Obsolete]
+        values: [Pending, Specified, "In Progress", Completed, Blocked, "On Hold", Obsolete]
         required: true
