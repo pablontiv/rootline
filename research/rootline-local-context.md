@@ -47,7 +47,6 @@ Caveat: `apply` output uses `internal/infer.ApplyResult` with no `version/kind` 
 - `rootline init --template owner/repo[@tag]` fetches `.stem` files from public GitHub repos:
   - CLI hook: `cmd/rootline/init.go` lines 24-52.
   - Git clone/copy implementation: `internal/templates/fetch.go` lines 1-172.
-- Marketplace workflow only syncs `.claude/skills/*` to `pablontiv/agent-marketplace` with `rootline-` prefix (`.github/workflows/publish-marketplace.yml` lines 1-8, 56-95, 112-196).
 - Local hooks sync `.claude/skills/{roadmap,rootline}` to `~/.claude/skills`; comments mention Pi discovers there via `.pi/settings.json`, but no `.pi` directory was found (`.githooks/pre-push` lines 57-64; `.githooks/post-merge` lines 6-13).
 
 ## Docs/assets organization
@@ -57,7 +56,6 @@ Caveat: `apply` output uses `internal/infer.ApplyResult` with no `version/kind` 
   - `.claude/skills/rootline/SKILL.md` lines 1-84, includes command routing and JSON caveats.
   - `.claude/skills/roadmap/SKILL.md` lines 1-120.
   - `.claude/skills/roadmap/base.stem` lines 1-29.
-- `docs/marketplace-pipeline.md` documents skills marketplace sync (`docs/marketplace-pipeline.md` lines 5-29, 97-102).
 - Visual/brand guidance exists at `docs/identity.md` lines 1-67.
 - No `package.json`, `.pi/`, `.claude-plugin/`, or Pi manifest found locally.
 - Potential stale constraint: CI and hooks reference `docs/epics/`, but `docs/epics` does not exist in this checkout. Command: `test -d docs/epics; echo docs_epics_exists=$?` returned `1`. See `.github/workflows/ci.yml` lines 16-21 and `.githooks/pre-push` lines 7-27.
@@ -68,7 +66,7 @@ Yes, for static package/skill assets, but distribution plumbing would need chang
 
 Decision implications:
 - If Pi package is just skills/prompts/config: put under `.claude/skills/...` or a new `.pi/...`; repo can host it. `.gitignore` does not exclude `.pi/` (`.gitignore` lines 1-39).
-- If it must publish through current marketplace workflow, only `.claude/skills/*` is synced today; add/update `.github/workflows/publish-marketplace.yml`.
+- Rootline no longer publishes local `.claude/skills/*` to an external marketplace.
 - If it must ship with binary releases, update `.goreleaser.yml`, installers, and possibly `action.yml`.
 - If it needs engine behavior, prefer CLI integration. External Go imports cannot use `internal/*`.
 
@@ -76,8 +74,6 @@ Decision implications:
 
 - `.claude/skills/rootline/SKILL.md`
 - `.claude/skills/<new-pi-skill>/...` or new `.pi/...`
-- `.github/workflows/publish-marketplace.yml`
-- `docs/marketplace-pipeline.md`
 - `README.md`
 - `.goreleaser.yml`, `install.sh`, `install.ps1` if release assets change
 

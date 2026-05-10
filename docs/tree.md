@@ -23,12 +23,11 @@ rootline tree -o json                             # JSON output
 ## Table Output
 
 ```
-docs [10/21]
+docs [10/20]
 ├── derivation.md [Completed]
 ├── describe.md [Completed]
 ├── fix.md [Completed]
 ├── graph.md [Completed]
-├── marketplace-pipeline.md [Pending]
 ├── query.md [Completed]
 └── research [0/10]
     ├── intrinsic-hierarchy-principle.md [In Progress]

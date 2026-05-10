@@ -327,7 +327,6 @@ AI assistants and automation should call the Rootline CLI directly and consume s
 | [Levels & Match](docs/levels.md) | Hierarchical field scoping with match patterns |
 | [Extensibility](docs/extensibility.md) | Extractor architecture, future formats |
 | [Visual Identity](docs/identity.md) | Logo, colors, usage guidelines |
-| [Distribution Pipeline](docs/marketplace-pipeline.md) | Marketplace distribution pipeline |
 
 ---
 
