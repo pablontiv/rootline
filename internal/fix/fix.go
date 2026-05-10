@@ -318,7 +318,7 @@ func applyMigrateValue(p proposal.Proposal, root string, recordMap map[string]*e
 			newContent = InsertWikiLinksBeforeHeading(newContent, p.WikiLinks)
 		}
 
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
 			return err
 		}
 	}
@@ -364,7 +364,7 @@ func rewriteRecordFile(root, path string, fm map[string]any) error {
 		return err
 	}
 	newContent := RewriteFrontmatter(string(content), fm)
-	return os.WriteFile(absPath, []byte(newContent), 0644)
+	return os.WriteFile(absPath, []byte(newContent), 0644) //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
 }
 
 func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Record) error {
@@ -401,7 +401,7 @@ func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Rec
 					content += "\n"
 				}
 				content += "\n" + heading + "\n\n" + newValue + "\n"
-				if err := os.WriteFile(absPath, []byte(content), 0644); err != nil {
+				if err := os.WriteFile(absPath, []byte(content), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
 					return err
 				}
 				continue
@@ -470,7 +470,7 @@ func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Rec
 			return fmt.Errorf("unknown mode %q for set_section", p.Mode)
 		}
 
-		if err := os.WriteFile(absPath, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(absPath, []byte(content), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
 			return err
 		}
 	}
@@ -485,7 +485,7 @@ func applyCorrectLink(p proposal.Proposal, root string) error {
 			return err
 		}
 		newContent := strings.Replace(string(content), p.From, p.To, 1)
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
 			return err
 		}
 	}

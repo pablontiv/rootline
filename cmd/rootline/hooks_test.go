@@ -18,7 +18,7 @@ func TestHooksInstallAndStatus(t *testing.T) {
 	existing, hadHook := os.ReadFile(hookPath)
 	defer func() {
 		if hadHook == nil {
-			_ = os.WriteFile(hookPath, existing, 0755)
+			_ = os.WriteFile(hookPath, existing, 0755) //nolint:gosec // test restores the repository hook path resolved by preCommitPath
 		} else {
 			_ = os.Remove(hookPath)
 		}
@@ -79,7 +79,7 @@ func TestHooksInstallExistingNonRootline(t *testing.T) {
 	existing, hadHook := os.ReadFile(hookPath)
 	defer func() {
 		if hadHook == nil {
-			_ = os.WriteFile(hookPath, existing, 0755)
+			_ = os.WriteFile(hookPath, existing, 0755) //nolint:gosec // test restores the repository hook path resolved by preCommitPath
 		} else {
 			_ = os.Remove(hookPath)
 		}
@@ -118,7 +118,7 @@ func TestHooksUninstallNonRootline(t *testing.T) {
 	existing, hadHook := os.ReadFile(hookPath)
 	defer func() {
 		if hadHook == nil {
-			_ = os.WriteFile(hookPath, existing, 0755)
+			_ = os.WriteFile(hookPath, existing, 0755) //nolint:gosec // test restores the repository hook path resolved by preCommitPath
 		} else {
 			_ = os.Remove(hookPath)
 		}

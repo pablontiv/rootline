@@ -181,7 +181,7 @@ func applyRepairCorrectValue(p *proposal.Proposal, root string, recordMap map[st
 		}
 
 		newContent := RewriteFrontmatter(string(content), rec.Frontmatter)
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 
@@ -220,7 +220,7 @@ func applyRepairAddField(p *proposal.Proposal, root string, recordMap map[string
 		}
 
 		newContent := RewriteFrontmatter(string(content), rec.Frontmatter)
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 
@@ -254,7 +254,7 @@ func applyRepairSetField(p *proposal.Proposal, root string, recordMap map[string
 		}
 
 		newContent := RewriteFrontmatter(string(content), rec.Frontmatter)
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 
@@ -306,7 +306,7 @@ func applyRepairCorrectLink(p *proposal.Proposal, root string, result *RepairRes
 			newContent = replaceOnce(newContent, p.From, p.To)
 		}
 
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 

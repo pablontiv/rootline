@@ -307,7 +307,7 @@ func postValidateOrRollback(ctx context.Context, absPath, dir string, originalCo
 	newRecord, err := ext.Extract(absPath, newContent)
 	if err != nil {
 		// Rollback
-		_ = os.WriteFile(absPath, originalContent, 0644)
+		_ = os.WriteFile(absPath, originalContent, 0644) //nolint:gosec // rollback intentionally restores the user-selected validated document path
 		return fmt.Errorf("re-extracting %s after mutation (rolled back): %w", absPath, err)
 	}
 
@@ -320,7 +320,7 @@ func postValidateOrRollback(ctx context.Context, absPath, dir string, originalCo
 	errs := rules.Validate(ctx, newRecord, freshEffective)
 	if len(errs) > 0 {
 		// Rollback
-		_ = os.WriteFile(absPath, originalContent, 0644)
+		_ = os.WriteFile(absPath, originalContent, 0644) //nolint:gosec // rollback intentionally restores the user-selected validated document path
 		var msgs []string
 		for _, e := range errs {
 			msgs = append(msgs, fmt.Sprintf("%s: %s", e.Field, e.Message))

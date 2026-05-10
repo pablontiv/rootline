@@ -30,8 +30,8 @@ Pi has a broad native extension surface: TypeScript extensions can register LLM 
   - `prompts/*.md` for common review/validation/migration prompts.
 - Extension should probably call the existing `rootline` CLI via `pi.exec()` and require Rootline on `PATH`, rather than bundling the Go binary.
 - For teams, document `pi install -l npm:@pablontiv/rootline-pi` so `.pi/settings.json` can share the package requirement.
-- For development, use `pi -e ./integrations/pi` or `pi install -l ./integrations/pi`.
-- If installing from the main Rootline git repo, Pi expects package resources at repo root unless root `package.json` has a `pi` manifest pointing into `integrations/pi`; npm package is cleaner.
+- For development, use the external Pi package repository rather than this Rootline repo.
+- If installing from a git repo, Pi expects package resources at repo root unless that repo has a root `package.json` with a `pi` manifest; a dedicated npm package is cleaner.
 
 ## Confidence
 High for Pi extension/package capabilities and install model; based on current official Pi docs plus source inspection. Medium for exact best packaging location because it depends on Rootline release/distribution preferences.

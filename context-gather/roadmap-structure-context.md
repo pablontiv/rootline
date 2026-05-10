@@ -103,7 +103,7 @@ The local `docs/roadmap/` is a Pi integration roadmap, not a general Rootline co
 
 Local filesystem facts:
 - There is no `docs/epics/` directory despite `Justfile` and inherited docs referencing it.
-- There is no `integrations/pi/` directory yet, though multiple roadmap tasks cite `integrations/pi/extensions/` as future source of truth.
+- Rootline no longer owns a co-located Pi package; current roadmap history may still discuss the former package location.
 - There are no child `.stem` files under `docs/roadmap/`; all roadmap outcomes/tasks inherit the root roadmap schema.
 
 Validation commands observed:

@@ -185,7 +185,7 @@ func applyDocCorrection(inf ReportInference, opts ApplyOptions) ([]string, error
 		}
 
 		newContent := rewriteFrontmatter(string(content), fm)
-		if err := os.WriteFile(absPath, []byte(newContent), 0o644); err != nil {
+		if err := os.WriteFile(absPath, []byte(newContent), 0o644); err != nil { //nolint:gosec // apply writes report-selected paths under the caller-provided root
 			return nil, fmt.Errorf("writing %s: %w", relPath, err)
 		}
 		msgs = append(msgs, desc)
@@ -229,7 +229,7 @@ func applyAddField(inf ReportInference, opts ApplyOptions) ([]string, error) {
 		}
 
 		newContent := rewriteFrontmatter(string(content), fm)
-		if err := os.WriteFile(absPath, []byte(newContent), 0o644); err != nil {
+		if err := os.WriteFile(absPath, []byte(newContent), 0o644); err != nil { //nolint:gosec // apply writes report-selected paths under the caller-provided root
 			return nil, fmt.Errorf("writing %s: %w", relPath, err)
 		}
 		msgs = append(msgs, desc)

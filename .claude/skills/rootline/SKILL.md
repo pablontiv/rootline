@@ -5,7 +5,7 @@ description: Use when working with Markdown records governed by .stem schemas or
 
 # Rootline CLI Operations
 
-Rootline is the primary interface for `.stem`-governed Markdown data. Use `rootline` commands before manual file reads.
+Rootline is the primary interface for `.stem`-governed Markdown data. Use `rootline` commands before manual file reads. Rootline no longer owns a co-located Pi package; Pi integrations live outside this repository.
 
 ## Source of Truth
 

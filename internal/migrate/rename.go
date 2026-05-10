@@ -156,7 +156,7 @@ func renameFieldInFile(absPath, oldField, newField string) error {
 		return nil
 	}
 
-	return os.WriteFile(absPath, []byte(newContent), 0644)
+	return os.WriteFile(absPath, []byte(newContent), 0644) //nolint:gosec // migrate intentionally rewrites validated repository documents
 }
 
 // renameFrontmatterField renames a key in the YAML frontmatter of a markdown string.
@@ -234,7 +234,7 @@ func findStemsWithField(rootPath, field string) ([]string, error) {
 		}
 		seen[absPath] = true
 
-		content, readErr := os.ReadFile(path)
+		content, readErr := os.ReadFile(absPath) //nolint:gosec // path comes from filepath.WalkDir and is deduplicated before reading
 		if readErr != nil {
 			return nil
 		}

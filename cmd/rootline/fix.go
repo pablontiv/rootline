@@ -134,7 +134,7 @@ func runFix(cmd *cobra.Command, args []string) error {
 
 		// Rewrite file
 		newContent := fix.RewriteFrontmatter(string(content), record.Frontmatter)
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil {
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // fix intentionally rewrites the user-selected validated document path
 			return fmt.Errorf("writing %s: %w", file, err)
 		}
 
