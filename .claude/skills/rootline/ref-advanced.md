@@ -147,23 +147,6 @@ rootline validate --all <dir> -o json
 git diff -- <dir>
 ```
 
-## serve and MCP
-
-Use `serve` to expose Rootline through MCP.
-
-```bash
-rootline serve --addr 127.0.0.1:9200
-rootline serve --stdio
-```
-
-- HTTP serves MCP at `/mcp` and health at `/health`.
-- Stdio is for clients that launch Rootline as a subprocess.
-- The MCP tool catalog is defined in `internal/mcp/tools.go`.
-
-Registered MCP tools (12 total): `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`, `trace`, `new`, `health`.
-
-CLI commands without MCP tools: `init`, `analyze`, `schema`, `repair`, `apply` (legacy), `migrate`, `hooks`, `completion`, `serve`.
-
 ## hooks and completion
 
 Use only when the user asks for shell or repository integration.

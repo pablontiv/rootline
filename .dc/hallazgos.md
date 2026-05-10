@@ -15,8 +15,8 @@ Descubrimientos e insights del proyecto. Se actualiza continuamente.
 **Categoría:** Diseño
 
 ### 2026-04-02 23:30
-**Insight:** CLI y MCP server llaman al motor core directamente — sin serialización entre layers, misma API
-**Contexto:** `/dc:reversa` — internal/mcp/ y cmd/rootline/ comparten packages internos
+**Insight:** Los comandos CLI llaman al motor core directamente — contratos JSON estables sin una capa remota intermedia
+**Contexto:** `/dc:reversa` — cmd/rootline/ comparte packages internos con el motor
 **Categoría:** Arquitectura
 
 ### 2026-04-02 23:30

@@ -34,7 +34,6 @@ The research document (`[[intake/inference-engine-architecture]]`) proposes a th
 - The Go engine handles deterministic computation; `internal/infer/` has `Analyze()` and `AnalyzeHierarchy()`
 - `internal/migrate/` has diff detection infrastructure that could be reused for incremental inference
 - The research was validated against a real dataset (375 files, 4 hierarchy levels)
-- The MCP server provides JSON-RPC interface that `analyze` could expose through
 
 **What I think I know (unvalidated):**
 - The three-layer model (engine/skills/agents) has clean boundaries

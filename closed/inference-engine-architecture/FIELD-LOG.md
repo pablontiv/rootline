@@ -141,7 +141,7 @@ Resolve the 3 remaining open questions: Q1 (report versioning), Q3 (threshold co
 
 ### What I did
 
-- Audited all 18+ versioned JSON contracts across CLI and MCP to understand rootline's existing versioning pattern
+- Audited all versioned JSON contracts across CLI surfaces to understand rootline's existing versioning pattern
 - Located all 8 hardcoded inference thresholds with exact file/line references
 - Read the full intrinsic-hierarchy-principle.md research document to assess v3 readiness
 
@@ -153,7 +153,6 @@ Rootline has 18+ JSON contract types, all using `version: 1` + `kind` field (e.g
 - `internal/query/query.go` (QueryResult, CountResult)
 - `internal/rules/result.go` (ValidationResult, BatchValidationResult)
 - `internal/proposal/proposal.go` (Proposal.Report)
-- `internal/mcp/tools.go` (tree, stats, graph results)
 - `cmd/rootline/fix.go` (BatchFixResult)
 - `internal/migrate/` (DiffResult, ToV2Result, RenameResult)
 

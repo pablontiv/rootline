@@ -13,7 +13,7 @@ Before relying on a command detail, verify it locally with one of:
 
 ```bash
 rootline <command> --help
-rg -n "Use:|Flags\(\)" cmd/rootline/<command>.go internal/mcp/tools.go
+rg -n "Use:|Flags\(\)" cmd/rootline/<command>.go
 ```
 
 Use `Read` only for body content the CLI does not expose, a small error context, or editing review.
@@ -50,7 +50,6 @@ Use `Read` only for body content the CLI does not expose, a small error context,
 | Apply data repairs | `repair apply` | `rootline repair apply --report repairs.json --dry-run` then apply without `--dry-run` |
 | Apply analysis (legacy) | `apply` | deprecated; use `schema apply` or `repair apply` instead |
 | Schema operations | `migrate` | diff: `rootline migrate <path> -o json`; writes require `--rename`, `--split`, or `--scaffold` |
-| MCP server | `serve` | HTTP: `rootline serve --addr 127.0.0.1:9200`; stdio: `rootline serve --stdio` |
 | Git hook management | `hooks` | `rootline hooks status|install|uninstall` |
 
 ## Required Workflows
@@ -121,8 +120,4 @@ Read only the relevant file:
 - Validation and repair: `ref-validate.md`
 - Schema inspection and scaffolding: `ref-schema.md`
 - Query, tree, stats, explain, trace: `ref-query.md`
-- Graph, migrate, init, analyze, apply, serve, MCP: `ref-advanced.md`
-
-## MCP
-
-The MCP catalog is defined in `internal/mcp/tools.go`: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`, `trace`, `new`, `health`. CLI commands without MCP tools include `init`, `analyze`, `apply`, and `migrate`.
+- Graph, migrate, init, analyze, apply: `ref-advanced.md`

@@ -8,12 +8,12 @@ I did **not** write `/home/shared/rootline/research/rootline-local-context.md` b
 - Single CLI binary entrypoint: `cmd/rootline/main.go` lines 1-5, root command/global flags in `cmd/rootline/root.go` lines 1-31.
 - Packages from `go list ./...`:
   - `cmd/rootline`
-  - `internal/{derive,e2e,extract,fix,fuzzy,graph,index,infer,mcp,migrate,proposal,query,rules,templates}`
-- Important constraint: all reusable engine code is under `internal/`, so an external Pi package cannot import it directly. External integration should use CLI JSON or MCP unless the Pi extension lives inside this repo/module.
+  - `internal/{derive,e2e,extract,fix,fuzzy,graph,index,infer,migrate,proposal,query,rules,templates}`
+- Important constraint: all reusable engine code is under `internal/`, so an external Pi package cannot import it directly. External integration should use CLI JSON unless the Pi extension lives inside this repo/module.
 
 ## CLI and JSON outputs
 
-Commands confirmed via `./rootline --help`: `analyze`, `apply`, `completion`, `describe`, `explain`, `fix`, `graph`, `hooks`, `init`, `migrate`, `new`, `query`, `serve`, `set`, `stats`, `trace`, `tree`, `validate`.
+Commands confirmed via `./rootline --help`: `analyze`, `apply`, `completion`, `describe`, `explain`, `fix`, `graph`, `hooks`, `init`, `migrate`, `new`, `query`, `set`, `stats`, `trace`, `tree`, `validate`.
 
 Global flags:
 - `--output json|table`, default `json`
@@ -70,7 +70,7 @@ Decision implications:
 - If Pi package is just skills/prompts/config: put under `.claude/skills/...` or a new `.pi/...`; repo can host it. `.gitignore` does not exclude `.pi/` (`.gitignore` lines 1-39).
 - If it must publish through current marketplace workflow, only `.claude/skills/*` is synced today; add/update `.github/workflows/publish-marketplace.yml`.
 - If it must ship with binary releases, update `.goreleaser.yml`, installers, and possibly `action.yml`.
-- If it needs engine behavior, prefer CLI/MCP integration. External Go imports cannot use `internal/*`.
+- If it needs engine behavior, prefer CLI integration. External Go imports cannot use `internal/*`.
 
 ## Likely affected files
 
@@ -80,7 +80,6 @@ Decision implications:
 - `docs/marketplace-pipeline.md`
 - `README.md`
 - `.goreleaser.yml`, `install.sh`, `install.ps1` if release assets change
-- `internal/mcp/tools.go` / `cmd/rootline/serve.go` only if Pi extension uses MCP changes
 
 ## Confidence
 

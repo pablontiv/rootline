@@ -6,7 +6,7 @@ import (
 	"github.com/pablontiv/rootline/internal/extract"
 )
 
-// ExplainResult is the versioned JSON output for the explain command and MCP tool.
+// ExplainResult is the versioned JSON output for the explain command.
 type ExplainResult struct {
 	Version    int               `json:"version"`
 	Kind       string            `json:"kind"`

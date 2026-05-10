@@ -15,7 +15,7 @@ A **file-based database and constraint engine** for structured documentation. `.
 | Constraint | Validation rule (`required`, `enum`, `exists`) |
 | Domain type | `domain:` property (semantic type) |
 
-> **Status**: Engine and MCP server complete — all CLI commands and 12 MCP tools functional. 16 inference detectors (13 data + 3 governance).
+> **Status**: CLI engine complete — all core commands functional. 16 inference detectors (13 data + 3 governance).
 
 ---
 
@@ -156,7 +156,7 @@ schema:
 **Why domains matter**:
 - **Type inference**: `domain: lifecycle_state` implies `type: enum` — no need to declare both
 - **Virtual aliases**: `rootline query --where 'lifecycle_state == "activo"'` works regardless of the field's actual name
-- **Consumer tools**: AI agents and MCP clients resolve fields by domain, not by name — works across projects with different naming conventions
+- **Consumer tools**: AI agents resolve fields by domain, not by name — works across projects with different naming conventions
 - **Governance**: `rootline analyze` flags fields without domains as governance gaps
 
 ---
@@ -192,7 +192,6 @@ rootline apply [file] [--dry-run]         # Deprecated legacy mixed apply; prefe
 # Tooling
 rootline hooks install|uninstall|status   # Git pre-commit hook management
 rootline completion bash|zsh|fish         # Shell completion scripts
-rootline serve                            # MCP server (JSON-RPC 2.0 over stdio)
 ```
 
 All commands support `--output json|table` and `--field` for dot-path extraction, including array projection:
@@ -302,24 +301,9 @@ Shows each field's origin (frontmatter, schema default, derived, or aggregated) 
 
 Rootline is designed as a **structured knowledge source for AI assistants**. All commands output stable JSON with `"version": 1` contracts, making them suitable for tool use and automation.
 
-### MCP Server
+### CLI-first automation
 
-`rootline serve` starts a **Model Context Protocol (MCP)** server over stdio, exposing 12 tools via JSON-RPC 2.0. AI assistants query Rootline using the same contracts as the CLI.
-
-Configure in Claude Desktop or any MCP client:
-
-```json
-{
-  "mcpServers": {
-    "rootline": {
-      "command": "rootline",
-      "args": ["serve"]
-    }
-  }
-}
-```
-
-Available tools: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`, `trace`, `new`, `health`. See [MCP Server docs](docs/json-rpc.md) for full tool catalog.
+AI assistants and automation should call the Rootline CLI directly and consume stable JSON output from commands such as `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`, `trace`, and `new`.
 
 ---
 
@@ -341,7 +325,6 @@ Available tools: `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `f
 | [Derivation Engine](docs/derivation.md) | Derive and aggregate expressions, builtins, linked fields |
 | [Schema Migration](docs/migrate.md) | Breaking change detection, field rename, v2 upgrade |
 | [Levels & Match](docs/levels.md) | Hierarchical field scoping with match patterns |
-| [MCP Server](docs/json-rpc.md) | Tool catalog, setup, JSON-RPC protocol |
 | [Extensibility](docs/extensibility.md) | Extractor architecture, future formats |
 | [Visual Identity](docs/identity.md) | Logo, colors, usage guidelines |
 | [Distribution Pipeline](docs/marketplace-pipeline.md) | Marketplace distribution pipeline |

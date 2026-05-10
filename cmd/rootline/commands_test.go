@@ -634,18 +634,6 @@ func TestOutputJSONWithFieldNotFound(t *testing.T) {
 	}
 }
 
-// --- Serve test ---
-
-func TestServeStub(t *testing.T) {
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"serve"})
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 // --- Explain tests ---
 
 func TestExplainJSON(t *testing.T) {
