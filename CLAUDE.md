@@ -67,7 +67,7 @@ Derivation evaluates per-record expressions from `.stem` `derive:` fields. Aggre
 ## Project Documentation
 
 - `docs/research/` — Pre-research for deferred features (plugin architecture)
-- `docs/epics/` — Roadmap for features. Completed: derivation engine (E04/F04), dependency graph (E04/F05), fix proposals (E04/F10), schema migration (E07/F01), v1 stem removal (E12), inference detectors (E13/F02). Pending: aggregate consistency engine (E14), marketplace distribution (E03/F09), repo best practices (E05).
+- `docs/epics/` — Roadmap for features. Completed: derivation engine (E04/F04), dependency graph (E04/F05), fix proposals (E04/F10), schema migration (E07/F01), v1 stem removal (E12), inference detectors (E13/F02). Pending: aggregate consistency engine (E14), repo best practices (E05).
 - Documentation is written in a mix of Spanish and English (field names like `estado`, `tipo`, `ejecutable_en` are in Spanish)
 
 ## Rootline as Primary Interface
