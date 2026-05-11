@@ -129,6 +129,9 @@ func runSet(cmd *cobra.Command, args []string) error {
 	// Step 2: Read file.
 	content, err := os.ReadFile(absPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("file not found: %s (use 'rootline new' to scaffold a new document)", filePath)
+		}
 		return fmt.Errorf("reading %s: %w", filePath, err)
 	}
 

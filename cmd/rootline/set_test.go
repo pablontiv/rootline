@@ -235,6 +235,36 @@ func TestSetClearField(t *testing.T) {
 	}
 }
 
+// TestSetNonexistentFile verifies that set fails with a clear error when the
+// target file does not exist, both with and without --create.
+// --create creates missing sections, not missing files.
+func TestSetNonexistentFile(t *testing.T) {
+	dir := setupSetTestDir(t)
+	missing := filepath.Join(dir, "does-not-exist.md")
+
+	_, err := runCmd(t, "set", missing, "estado=Completed")
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+	if !strings.Contains(err.Error(), "file not found") {
+		t.Errorf("expected 'file not found' error, got: %v", err)
+	}
+}
+
+func TestSetCreateOnNonexistentFile(t *testing.T) {
+	dir := setupSetTestDir(t)
+	missing := filepath.Join(dir, "does-not-exist.md")
+
+	// --create does NOT create files; the same file-not-found error must occur.
+	_, err := runCmd(t, "set", "--create", missing, "estado=Completed")
+	if err == nil {
+		t.Fatal("expected error for nonexistent file even with --create")
+	}
+	if !strings.Contains(err.Error(), "file not found") {
+		t.Errorf("expected 'file not found' error, got: %v", err)
+	}
+}
+
 func TestSetMultipleFields(t *testing.T) {
 	dir := setupSetTestDir(t)
 	target := filepath.Join(dir, "doc.md")

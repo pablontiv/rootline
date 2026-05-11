@@ -34,7 +34,7 @@ For frontmatter fields, `field` is the YAML key name. For sections, `field` is t
 |------|-------------|
 | `--dry-run` | Show proposed changes without writing to disk |
 | `--create` | Create sections that don't exist (does not create files; use `rootline new` to scaffold new documents) |
-| `--no-validate` | Skip pre- and post-validation (apply unconditionally) |
+| `--no-validate` | Skip post-mutation validation (pre-validation of enum constraints always runs) |
 
 ## Pipeline
 
@@ -88,10 +88,10 @@ rootline set docs/api/overview.md descripcion=@notes.txt
 rootline set docs/api/overview.md estado=Pending --dry-run
 ```
 
-### Create a file if it does not exist
+### Create a section that doesn't exist
 
 ```bash
-rootline set docs/api/new-endpoint.md estado=draft --create
+rootline set docs/api/overview.md --create notes="Initial notes."
 ```
 
 ### Skip validation (advanced)
@@ -106,7 +106,7 @@ rootline set docs/api/overview.md estado=Custom --no-validate
 |-----------|---------|
 | Invalid enum value | `pre-validation failed: field "estado": value "Custom" not in enum [draft, review, published]` |
 | Post-validation failure | `post-validation failed; changes rolled back: required field "tipo" is missing` |
-| File not found (without --create) | `file not found: docs/api/missing.md (use --create to scaffold)` |
+| File not found | `file not found: docs/api/missing.md (use 'rootline new' to scaffold a new document)` |
 | Section not found (set, not append) | Section is created if it does not exist |
 | Source file not found (=@path) | `cannot read source file: @notes.txt: no such file` |
 
@@ -123,4 +123,4 @@ With `--dry-run`, `rootline set` prints a diff-style preview without modifying a
 
 - YAML AST preservation: when writing frontmatter, Rootline uses the YAML AST parser to preserve existing comments and formatting.
 - Section mutations require AST extraction to be enabled (default for markdown files with body content).
-- `--create` scaffolds the new file from the effective schema defaults before applying the provided field assignments.
+- `--create` allows adding sections that don't yet exist in the document body. It does not create new files; use `rootline new` to scaffold a new document from the schema.
