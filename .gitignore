@@ -41,3 +41,4 @@ Thumbs.db
 # JavaScript dependencies
 node_modules/
 **/node_modules/
+cartyx-out/
