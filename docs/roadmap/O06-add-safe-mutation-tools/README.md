@@ -41,3 +41,6 @@ Expose Rootline writes that are narrow, auditable, and validated after execution
 | [T003](T003-implement-rootline-set-tool.md) | Implement rootline_set for updating frontmatter fields. |
 | [T004](T004-add-mutation-tests.md) | Add tests for success, validation failure, and blocked path cases. |
 | [T005](T005-document-safe-mutation-workflows.md) | Document safe mutation workflows and non-goals. |
+| [T006](T006-fix-section-aware-validation.md) | Make rootline validation paths see Markdown sections defined by .stem section fields, so section-aware mutations and validation agree. |
+| [T007](T007-reconcile-set-create-contract.md) | Align rootline set --create implementation, help text, docs, and tests so agents know exactly whether it creates sections only or also scaffolds missing files. |
+| [T008](T008-fix-new-scaffolding-defaults.md) | Prevent rootline new from blindly using the first enum value for discriminating fields such as roadmap tipo, and document the scaffold default policy. |
