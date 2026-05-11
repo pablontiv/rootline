@@ -33,7 +33,7 @@ For frontmatter fields, `field` is the YAML key name. For sections, `field` is t
 | Flag | Description |
 |------|-------------|
 | `--dry-run` | Show proposed changes without writing to disk |
-| `--create` | Create the file if it does not exist (scaffolds from schema) |
+| `--create` | Create sections that don't exist (does not create files; use `rootline new` to scaffold new documents) |
 | `--no-validate` | Skip pre- and post-validation (apply unconditionally) |
 
 ## Pipeline
