@@ -124,7 +124,7 @@ Required sections are checked like required frontmatter fields. A missing sectio
 }
 ```
 
-Section validation requires AST extraction to be active (default for markdown files). Sections are matched by their heading text, normalized to trim leading/trailing whitespace.
+Section validation works in both single-file (`validate <file>`) and batch (`validate --all`) modes. Sections are matched by their heading text, normalized to trim leading/trailing whitespace.
 
 ## Exit Codes
 

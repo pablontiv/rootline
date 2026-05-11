@@ -58,7 +58,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 func runValidateFiles(cmd *cobra.Command, files []string) error {
 	ctx := cmd.Context()
 
-	reg := extract.NewRegistry()
+	reg := extract.NewASTRegistry()
 	var results []*rules.ValidationResult
 
 	for _, file := range files {
@@ -142,7 +142,7 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 	}
 
 	// Phase 2: Document validation.
-	reg := extract.NewRegistry()
+	reg := extract.NewASTRegistry()
 	resolver := func(dir string) *rules.StemFile {
 		entries, err := rules.WalkUp(dir)
 		if err != nil || len(entries) == 0 {

@@ -504,6 +504,121 @@ bloqueador: "needs API key"
 	}
 }
 
+// TestValidate_SectionAwareValidation verifies that rootline validate correctly
+// checks required section fields using AST-parsed sections, not just frontmatter.
+// This is a regression test for the validate/set extraction path divergence:
+// validate must use AST parsing so record.Sections is populated.
+func TestValidate_SectionAwareValidation(t *testing.T) {
+	binPath, err := exec.LookPath("rootline")
+	if err != nil {
+		binPath = "/usr/local/bin/rootline"
+		if _, statErr := os.Stat(binPath); statErr != nil {
+			t.Skipf("rootline binary not found (%v); build with 'go build ./cmd/rootline/'", err)
+		}
+	}
+
+	stemWithSection := `version: 2
+schema:
+    estado:
+        type: enum
+        values: [bloqueado, listo-para-implementar]
+        required: true
+    contexto:
+        type: section
+        heading: "## Contexto"
+        required: true
+    investigacion:
+        type: section
+        heading: "## Investigación"
+        required: false
+`
+
+	docWithSection := `---
+estado: bloqueado
+---
+
+# Test
+
+## Contexto
+
+Present context.
+`
+
+	docMissingSection := `---
+estado: bloqueado
+---
+
+# Test
+`
+
+	t.Run("required section present exits 0", func(t *testing.T) {
+		root := setupProject(t, map[string]string{
+			".stem":  stemWithSection,
+			"doc.md": docWithSection,
+		})
+		cmd := exec.Command(binPath, "validate", filepath.Join(root, "doc.md")) //nolint:gosec
+		out, cmdErr := cmd.CombinedOutput()
+		if cmdErr != nil {
+			t.Errorf("expected exit 0 for doc with required section present, got error: %v\nOutput: %s", cmdErr, out)
+		}
+	})
+
+	t.Run("required section absent exits non-zero", func(t *testing.T) {
+		root := setupProject(t, map[string]string{
+			".stem":  stemWithSection,
+			"doc.md": docMissingSection,
+		})
+		cmd := exec.Command(binPath, "validate", filepath.Join(root, "doc.md")) //nolint:gosec
+		out, cmdErr := cmd.CombinedOutput()
+		if cmdErr == nil {
+			t.Errorf("expected exit non-zero for doc missing required section, but it succeeded.\nOutput: %s", out)
+		}
+		if !strings.Contains(string(out), "contexto") {
+			t.Errorf("expected error mentioning 'contexto', got: %s", out)
+		}
+	})
+
+	t.Run("validate --all detects required sections", func(t *testing.T) {
+		root := setupProject(t, map[string]string{
+			".stem":  stemWithSection,
+			"doc.md": docMissingSection,
+		})
+		cmd := exec.Command(binPath, "validate", "--all", root) //nolint:gosec
+		out, cmdErr := cmd.CombinedOutput()
+		if cmdErr == nil {
+			t.Errorf("expected exit non-zero for validate --all with missing section, but it succeeded.\nOutput: %s", out)
+		}
+		if !strings.Contains(string(out), "contexto") {
+			t.Errorf("expected error mentioning 'contexto', got: %s", out)
+		}
+	})
+
+	t.Run("set --create then validate exits 0", func(t *testing.T) {
+		root := setupProject(t, map[string]string{
+			".stem":  stemWithSection,
+			"doc.md": docMissingSection,
+		})
+		docPath := filepath.Join(root, "doc.md")
+
+		// Use set --create to add the required contexto section.
+		// Post-validation inside set itself uses AST parsing, so after the section
+		// is written the post-validate also passes.
+		setCmd := exec.Command(binPath, "set", "--create", docPath, "contexto=Context added.") //nolint:gosec
+		if setOut, setErr := setCmd.CombinedOutput(); setErr != nil {
+			t.Fatalf("set --create failed: %v\nOutput: %s", setErr, setOut)
+		}
+
+		// rootline validate must now exit 0 — this is the regression: before the
+		// fix, validate used NewRegistry() (no AST), so Sections was nil even
+		// though the section was physically present in the file.
+		valCmd := exec.Command(binPath, "validate", docPath) //nolint:gosec
+		out, valErr := valCmd.CombinedOutput()
+		if valErr != nil {
+			t.Errorf("expected validate to pass after set --create added required section, got: %v\nOutput: %s", valErr, out)
+		}
+	})
+}
+
 // TestSet_RollbackOnInvalidValue verifies that setting an enum field to an
 // invalid value causes the command to fail AND leaves the file unchanged.
 // This test exercises the pre-validation guard in the set command by running
