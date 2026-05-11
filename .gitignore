@@ -42,3 +42,6 @@ Thumbs.db
 node_modules/
 **/node_modules/
 cartyx-out/
+
+# Local runtime context
+context/
