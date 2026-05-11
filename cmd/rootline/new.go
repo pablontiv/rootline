@@ -115,12 +115,11 @@ func generateMarkdown(absPath string, effective *rules.StemFile) string {
 			continue
 		}
 
-		// Determine value for non-section fields
+		// Determine value for non-section fields.
+		// Only use field.Default when explicitly set; never fall back to Values[0].
 		value := ""
 		if field.Default != "" {
 			value = field.Default
-		} else if field.Type == "enum" && len(field.Values) > 0 {
-			value = field.Values[0]
 		}
 
 		switch {

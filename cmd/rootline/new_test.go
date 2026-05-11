@@ -40,9 +40,9 @@ func TestNewRequiredFields(t *testing.T) {
 
 	content := mustReadFile(t, target)
 	s := string(content)
-	// estado is required+enum, should appear with first value
-	if !strings.Contains(s, "estado: Completado") && !strings.Contains(s, "estado: Pending") {
-		t.Errorf("expected estado with enum value, got: %s", s)
+	// estado is required+enum without explicit default: field present with empty value + values comment.
+	if !strings.Contains(s, "estado:") {
+		t.Errorf("expected estado field in frontmatter, got: %s", s)
 	}
 }
 
@@ -116,6 +116,66 @@ func TestNewDryRun(t *testing.T) {
 	// File should NOT exist on disk
 	if _, err := os.Stat(target); err == nil {
 		t.Error("dry-run should not create file on disk")
+	}
+}
+
+// TestNewEnumWithExplicitDefault verifies that when a .stem field has an explicit
+// default, rootline new uses that default value.
+func TestNewEnumWithExplicitDefault(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completed]
+    default: Pending
+`), 0644)
+
+	target := filepath.Join(dir, "doc.md")
+	out, err := runCmd(t, "new", target, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "estado: Pending") {
+		t.Errorf("expected 'estado: Pending' from explicit default, got: %s", out)
+	}
+}
+
+// TestNewEnumWithoutDefault verifies that enum fields without an explicit default
+// are scaffolded with an empty value (not Values[0]).
+func TestNewEnumWithoutDefault(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  tipo:
+    type: enum
+    required: true
+    values: [outcome, task]
+`), 0644)
+
+	target := filepath.Join(dir, "T001-my-task.md")
+	out, err := runCmd(t, "new", target, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should show the values comment but NOT pick "outcome" as the value.
+	if strings.Contains(out, "tipo: outcome") {
+		t.Errorf("enum without explicit default must not fall back to Values[0]; got 'tipo: outcome' in: %s", out)
+	}
+	if !strings.Contains(out, "tipo:") {
+		t.Errorf("expected 'tipo:' field in output, got: %s", out)
+	}
+	// Values comment should still appear.
+	if !strings.Contains(out, "[outcome, task]") {
+		t.Errorf("expected values comment '[outcome, task]' in output, got: %s", out)
 	}
 }
 

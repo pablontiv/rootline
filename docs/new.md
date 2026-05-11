@@ -29,13 +29,25 @@ estado:
 # New Endpoint
 ```
 
-The title is auto-generated from the filename: dashes and underscores become spaces, with title case applied. Required fields appear with empty placeholders. Enum fields include the allowed values as inline comments when defaults are available.
+The title is auto-generated from the filename: dashes and underscores become spaces, with title case applied.
+
+## Enum Fields
+
+Enum fields are always scaffolded with an inline comment listing the allowed values:
+
+- Fields with an explicit `default:` in the schema use that default as the initial value.
+- Fields without an explicit default are scaffolded with an empty value so the user must choose:
+
+```markdown
+tipo:  # [outcome, task]
+```
+
+This prevents wrong defaults from being written silently.
 
 ## Sequence Fields
 
-When the target directory has a `sequence` field in the schema, `rootline new` auto-generates the next available number based on existing files in the directory:
+Sequence fields (`type: sequence`) are scaffolded with an empty placeholder. Auto-generation of the next sequence value is not supported by `rootline new`; use `rootline describe <dir>` to find the next available ID:
 
 ```bash
-rootline new docs/epics/E04/F03/S001/T004-new-task.md
-# id field auto-set to T004
+rootline describe docs/epics/ --field schema.id.next
 ```

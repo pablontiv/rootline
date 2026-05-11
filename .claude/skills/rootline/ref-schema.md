@@ -101,7 +101,7 @@ The generated document:
 
 - includes fields from the effective schema
 - uses field defaults when defined
-- uses the first enum value when no default exists
+- leaves enum fields empty (with values as inline comment) when no explicit default exists
 - writes required fields with empty values when needed
 - derives the title from the filename
 
