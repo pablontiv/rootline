@@ -91,10 +91,31 @@ func generateMarkdown(absPath string, effective *rules.StemFile) string {
 	}
 	sort.Strings(keys)
 
+	// Track section fields to generate after frontmatter
+	var sections []struct {
+		name    string
+		field   rules.SchemaField
+		heading string
+	}
+
 	for _, name := range keys {
 		field := effective.Schema[name]
 
-		// Determine value
+		// Section fields are handled after frontmatter
+		if field.Type == "section" {
+			heading := field.Heading
+			if heading == "" {
+				heading = "## " + name
+			}
+			sections = append(sections, struct {
+				name    string
+				field   rules.SchemaField
+				heading string
+			}{name, field, heading})
+			continue
+		}
+
+		// Determine value for non-section fields
 		value := ""
 		if field.Default != "" {
 			value = field.Default
@@ -120,6 +141,24 @@ func generateMarkdown(absPath string, effective *rules.StemFile) string {
 	title = strings.ReplaceAll(title, "-", " ")
 	title = strings.ReplaceAll(title, "_", " ")
 	fmt.Fprintf(&b, "# %s\n", cases.Title(language.Und).String(title))
+
+	// Generate section headings (only if required or has default content)
+	for _, sec := range sections {
+		if !sec.field.Required && sec.field.Default == "" {
+			// Skip optional sections without defaults
+			continue
+		}
+		b.WriteString("\n")
+		b.WriteString(sec.heading)
+		b.WriteString("\n\n")
+		if sec.field.Default != "" {
+			b.WriteString(sec.field.Default)
+			b.WriteString("\n")
+		} else {
+			// For required sections without defaults, add a placeholder comment
+			b.WriteString("<!-- TODO: Add content -->\n")
+		}
+	}
 
 	return b.String()
 }
