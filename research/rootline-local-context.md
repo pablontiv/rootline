@@ -47,15 +47,13 @@ Caveat: `apply` output uses `internal/infer.ApplyResult` with no `version/kind` 
 - `rootline init --template owner/repo[@tag]` fetches `.stem` files from public GitHub repos:
   - CLI hook: `cmd/rootline/init.go` lines 24-52.
   - Git clone/copy implementation: `internal/templates/fetch.go` lines 1-172.
-- Local hooks sync `.claude/skills/{roadmap,rootline}` to `~/.claude/skills`; comments mention Pi discovers there via `.pi/settings.json`, but no `.pi` directory was found (`.githooks/pre-push` lines 57-64; `.githooks/post-merge` lines 6-13).
+- Local hooks sync `.claude/skills/rootline` to `~/.claude/skills` (`.githooks/pre-push`; `.githooks/post-merge`).
 
 ## Docs/assets organization
 
 - Main docs are flat under `docs/*.md`; schema at `docs/.stem` requires `estado` (`docs/.stem` lines 1-6).
 - Existing Claude/Pi-adjacent assets:
   - `.claude/skills/rootline/SKILL.md` lines 1-84, includes command routing and JSON caveats.
-  - `.claude/skills/roadmap/SKILL.md` lines 1-120.
-  - `.claude/skills/roadmap/base.stem` lines 1-29.
 - Visual/brand guidance exists at `docs/identity.md` lines 1-67.
 - No `package.json`, `.pi/`, `.claude-plugin/`, or Pi manifest found locally.
 - Potential stale constraint: CI and hooks reference `docs/epics/`, but `docs/epics` does not exist in this checkout. Command: `test -d docs/epics; echo docs_epics_exists=$?` returned `1`. See `.github/workflows/ci.yml` lines 16-21 and `.githooks/pre-push` lines 7-27.

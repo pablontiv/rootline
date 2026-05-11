@@ -125,11 +125,11 @@ Key details:
 
 1. Q1 (report versioning), Q3 (threshold configurability), Q4 (v3 connection) remain open but have lower roadmap-shape impact
 2. Should the "extraction-then-reasoning" pattern be formalized as a theory?
-3. Is the line ready for `/discover reflect` → close → `/roadmap`?
+3. Is the line ready to close and proceed to implementation planning?
 
 ### Next cycle
 
-Two questions resolved (Q2, Q5). Recommend `/discover reflect` to evaluate whether to close this line and proceed to roadmap decomposition, or continue exploring Q1/Q3/Q4.
+Two questions resolved (Q2, Q5). Recommend evaluating whether to close this line and proceed to implementation planning, or continue exploring Q1/Q3/Q4.
 
 ---
 
@@ -213,7 +213,7 @@ None related to this line. The line is ready for `/discover reflect`.
 
 ### Next cycle
 
-No next cycle needed. Recommend `/discover reflect` → CLOSE → formalize "computation-then-understanding" as theory → proceed to `/roadmap`.
+No next cycle needed. Recommend closing the line, formalizing "computation-then-understanding" as theory, and proceeding to implementation planning.
 
 ---
 

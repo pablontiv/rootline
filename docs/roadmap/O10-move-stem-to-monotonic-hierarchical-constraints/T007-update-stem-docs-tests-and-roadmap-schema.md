@@ -19,14 +19,14 @@ tipo: task
 
 ## Contexto
 
-Docs and tests currently encode cascade override behavior. The roadmap schema itself also shows a design tension: parent `docs/.stem` defines `estado: string`, while the canonical roadmap skill expects a status enum under `docs/roadmap/.stem`. Under monotonic semantics this should be valid narrowing or explicitly modeled.
+Docs and tests currently encode cascade override behavior. The roadmap schema itself also shows a design tension: parent `docs/.stem` defines `estado: string`, while the project roadmap may need status enum constraints under `docs/roadmap/.stem`. Under monotonic semantics this should be valid narrowing or explicitly modeled.
 
 ## Alcance
 
 **In**:
 1. Update README and `.stem` docs from override cascade language to layered constraints where applicable.
 2. Update tests that currently expect destructive child override or nil removal as normal behavior.
-3. Resolve roadmap schema drift between `docs/roadmap/.stem` and `.claude/skills/roadmap/base.stem` according to approved narrowing semantics.
+3. Resolve roadmap schema status handling in `docs/roadmap/.stem` according to approved narrowing semantics.
 4. Update validate/describe docs for new health diagnostics and provenance output.
 5. Fix stale docs discovered during investigation where touched by `.stem` semantics.
 
@@ -56,4 +56,3 @@ Docs and tests currently encode cascade override behavior. The roadmap schema it
 - `internal/rules/stemhealth_test.go`
 - `docs/.stem`
 - `docs/roadmap/.stem`
-- `.claude/skills/roadmap/base.stem`

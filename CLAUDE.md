@@ -72,7 +72,7 @@ Derivation evaluates per-record expressions from `.stem` `derive:` fields. Aggre
 
 ## Rootline as Primary Interface
 
-Use `rootline` CLI as the primary tool for querying project data — not manual file reads, Glob, or Explore agents. When a skill defines its own discovery procedure (e.g., `/roadmap loop` uses `rootline query`), follow the skill's procedure directly instead of launching Explore agents or reading files individually.
+Use `rootline` CLI as the primary tool for querying project data — not manual file reads, Glob, or Explore agents.
 
 - `rootline query` — find records by frontmatter fields (estado, tipo, etc.)
 - `rootline tree` — view directory structure with metadata

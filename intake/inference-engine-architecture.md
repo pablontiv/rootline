@@ -154,7 +154,7 @@ Subcapa simbólica (hallazgo nuevo):
 
 | Resultado | Umbral | Acción |
 |-----------|--------|--------|
-| **Go** | ≥5 CAPs confirmadas, incluyendo CAP-01 y CAP-06 | Proceder a `/roadmap` con arquitectura de 2 capas |
+| **Go** | ≥5 CAPs confirmadas, incluyendo CAP-01 y CAP-06 | Proceder a planificación de implementación con arquitectura de 2 capas |
 | **Pivot** | CAP-06 falla (se necesita bidireccional) | Rediseñar interfaz engine↔agent, investigar MCP protocol |
 | **Stop** | CAP-01 falla (goldmark no integra) O ≥3 CAPs fallan | Replantear premisas. Posible vuelta a 3 capas. |
 
