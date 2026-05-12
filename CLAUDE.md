@@ -124,8 +124,10 @@ CI/CD uses shared reusable workflows from `pablontiv/crossbeam@v1`:
 - `go-ci.yml` — build, test (with 85% coverage threshold), tidy, lint, vuln
 - `gitleaks.yml` — secret scanning
 - `go-release.yml` — auto-tag + goreleaser release
-- `codeql.yml` — CodeQL security scanning (Go)
-- `scorecard.yml` — OpenSSF Scorecard
+- `codeql.yml` — CodeQL security scanning (Go), runs on nightly schedule (3 AM UTC) for efficiency
+- `scorecard.yml` — OpenSSF Scorecard, runs on nightly schedule (4 AM UTC) for efficiency
+
+Both `codeql.yml` and `scorecard.yml` now run on a scheduled basis (not on every push) to reduce CI load, with concurrency controls in `ci.yml` to cancel redundant runs during commit bursts.
 
 `docs-validate` is repo-specific (runs `rootline validate --all docs/epics/`) and stays inline in `ci.yml`.
 
