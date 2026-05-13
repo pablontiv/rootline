@@ -15,7 +15,7 @@ jobs:
     uses: pablontiv/crossbeam/.github/workflows/go-ci.yml@v1
     with:
       go-version-file: go.mod
-      coverage-threshold: 84
+      coverage-threshold: 85
 
   gitleaks:
     uses: pablontiv/crossbeam/.github/workflows/gitleaks.yml@v1
