@@ -2,6 +2,7 @@ package rules
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -243,5 +244,61 @@ func TestDescribeResult_ProvenanceWithNestedStems(t *testing.T) {
 	}
 	if prov["tipo"] != "docs/tasks/.stem" {
 		t.Errorf("JSON provenance.tipo = %v, want docs/tasks/.stem", prov["tipo"])
+	}
+}
+
+func TestDescribeResult_NextByPatternInJSON(t *testing.T) {
+	dir := t.TempDir()
+	// Create entries matching both O* and T* patterns
+	if err := os.Mkdir(filepath.Join(dir, "O01-outcome"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(dir, "T001-task.md"))
+
+	entries := []StemEntry{{Path: filepath.Join(dir, ".stem"), Stem: &StemFile{}}}
+	effective := &StemFile{
+		Schema: map[string]SchemaField{
+			"id": {
+				Type: "sequence",
+				Match: &FieldMatch{
+					Configs: map[string]any{
+						"O*": map[string]any{"prefix": "O", "digits": 2},
+						"T*": map[string]any{"prefix": "T", "digits": 3},
+					},
+				},
+			},
+		},
+	}
+
+	result := NewDescribeResult(dir, entries, effective)
+
+	idField := result.Schema["id"]
+	if idField.NextByPattern == nil {
+		t.Fatal("NextByPattern is nil, want map")
+	}
+	if idField.NextByPattern["O*"] != "O02" {
+		t.Errorf("NextByPattern[O*] = %q, want O02", idField.NextByPattern["O*"])
+	}
+	if idField.NextByPattern["T*"] != "T002" {
+		t.Errorf("NextByPattern[T*] = %q, want T002", idField.NextByPattern["T*"])
+	}
+
+	// Verify it appears in JSON output
+	data, err := result.ToJSON()
+	if err != nil {
+		t.Fatalf("ToJSON: %v", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("JSON parse: %v", err)
+	}
+	schema := parsed["schema"].(map[string]any)
+	idJSON := schema["id"].(map[string]any)
+	nbp, ok := idJSON["next_by_pattern"].(map[string]any)
+	if !ok {
+		t.Fatalf("next_by_pattern missing from JSON or wrong type: %v", idJSON)
+	}
+	if nbp["O*"] != "O02" {
+		t.Errorf("JSON next_by_pattern[O*] = %v, want O02", nbp["O*"])
 	}
 }

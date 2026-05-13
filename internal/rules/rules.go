@@ -149,18 +149,19 @@ func (fm *FieldMatch) UnmarshalYAML(value *yaml.Node) error {
 
 // SchemaField defines a single field in the schema.
 type SchemaField struct {
-	Type          string       `yaml:"type" json:"type"`
-	Required      bool         `yaml:"-" json:"required"`
-	Values        []string     `yaml:"values" json:"values,omitempty"`
-	Default       string       `yaml:"default" json:"default,omitempty"`
-	Severity      string       `yaml:"severity" json:"severity,omitempty"`
-	Source        string       `yaml:"-" json:"source,omitempty"`
-	Prefix        string       `yaml:"prefix" json:"prefix,omitempty"`
-	Digits        int          `yaml:"digits" json:"digits,omitempty"`
-	Next          string       `yaml:"-" json:"next,omitempty"`
-	Excludes      *ExcludeRule `yaml:"excludes" json:"excludes,omitempty"`
-	Match         *FieldMatch  `yaml:"match" json:"match,omitempty"`
-	RequiredMatch *FieldMatch  `yaml:"-" json:"required_match,omitempty"`
+	Type          string            `yaml:"type" json:"type"`
+	Required      bool              `yaml:"-" json:"required"`
+	Values        []string          `yaml:"values" json:"values,omitempty"`
+	Default       string            `yaml:"default" json:"default,omitempty"`
+	Severity      string            `yaml:"severity" json:"severity,omitempty"`
+	Source        string            `yaml:"-" json:"source,omitempty"`
+	Prefix        string            `yaml:"prefix" json:"prefix,omitempty"`
+	Digits        int               `yaml:"digits" json:"digits,omitempty"`
+	Next          string            `yaml:"-" json:"next,omitempty"`
+	NextByPattern map[string]string `yaml:"-" json:"next_by_pattern,omitempty"`
+	Excludes      *ExcludeRule      `yaml:"excludes" json:"excludes,omitempty"`
+	Match         *FieldMatch       `yaml:"match" json:"match,omitempty"`
+	RequiredMatch *FieldMatch       `yaml:"-" json:"required_match,omitempty"`
 	// Section fields (type: section)
 	Heading string `yaml:"heading" json:"heading,omitempty"`
 	Ordered *int   `yaml:"ordered" json:"ordered,omitempty"`

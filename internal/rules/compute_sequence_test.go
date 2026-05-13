@@ -91,3 +91,64 @@ func TestComputeNextSequence_ZeroDigits(t *testing.T) {
 		t.Errorf("zero digits: got %q, want empty", got)
 	}
 }
+
+func makeMultiPatternField(t *testing.T) (SchemaField, string) {
+	t.Helper()
+	dir := t.TempDir()
+	mkTestDir(t, filepath.Join(dir, "O01-first-outcome"))
+	mkTestDir(t, filepath.Join(dir, "O02-second-outcome"))
+	writeTestFile(t, filepath.Join(dir, "T001-direct-task.md"))
+
+	field := SchemaField{
+		Type: "sequence",
+		Match: &FieldMatch{
+			Configs: map[string]any{
+				"O*": map[string]any{"prefix": "O", "digits": 2},
+				"T*": map[string]any{"prefix": "T", "digits": 3},
+			},
+		},
+	}
+	return field, dir
+}
+
+func TestComputeAllNextSequences_MultiPattern(t *testing.T) {
+	field, dir := makeMultiPatternField(t)
+
+	got := computeAllNextSequences(dir, field)
+
+	if got == nil {
+		t.Fatal("computeAllNextSequences returned nil, want map")
+	}
+	if got["O*"] != "O03" {
+		t.Errorf("O*: got %q, want O03", got["O*"])
+	}
+	if got["T*"] != "T002" {
+		t.Errorf("T*: got %q, want T002", got["T*"])
+	}
+}
+
+func TestComputeNextSequence_MultiPatternDeterministic(t *testing.T) {
+	field, dir := makeMultiPatternField(t)
+
+	// O* < T* alphabetically; both patterns have matching entries.
+	// next must always return the O* value — deterministically.
+	first := computeNextSequence(dir, field)
+	for i := 0; i < 10; i++ {
+		got := computeNextSequence(dir, field)
+		if got != first {
+			t.Errorf("non-deterministic: run %d got %q, first run got %q", i+1, got, first)
+		}
+	}
+	if first != "O03" {
+		t.Errorf("next = %q, want O03 (first alphabetical pattern that matches)", first)
+	}
+}
+
+func TestComputeAllNextSequences_NilMatch(t *testing.T) {
+	dir := t.TempDir()
+	field := SchemaField{Type: "sequence"}
+	got := computeAllNextSequences(dir, field)
+	if got != nil {
+		t.Errorf("nil match: got %v, want nil", got)
+	}
+}

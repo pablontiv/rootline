@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 )
 
@@ -56,10 +57,11 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 		aggregate = map[string]any{}
 	}
 
-	// Compute Next for sequence fields
+	// Compute Next and NextByPattern for sequence fields
 	for name, field := range schema {
 		if field.Type == "sequence" {
 			field.Next = computeNextSequence(path, field)
+			field.NextByPattern = computeAllNextSequences(path, field)
 			schema[name] = field
 		}
 	}
@@ -101,13 +103,13 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 // finds the highest numeric suffix, and returns prefix + next number zero-padded
 // to the specified digits. Supports both top-level prefix/digits and match configs
 // where prefix/digits are nested per-pattern (e.g., "E*": {prefix: E, digits: 2}).
+// When multiple match config patterns are present, patterns are evaluated in
+// alphabetical order to ensure deterministic results.
 func computeNextSequence(dirPath string, field SchemaField) string {
 	if field.Prefix != "" && field.Digits > 0 {
-		// Direct prefix/digits at top level
 		return computeNextFromPrefix(dirPath, field.Prefix, field.Digits)
 	}
 
-	// No direct prefix/digits — resolve from match configs
 	if field.Match == nil || field.Match.Configs == nil {
 		return ""
 	}
@@ -117,8 +119,8 @@ func computeNextSequence(dirPath string, field SchemaField) string {
 		return ""
 	}
 
-	// Find which config pattern matches existing directory entries
-	for globPattern, config := range field.Match.Configs {
+	for _, globPattern := range sortedPatterns(field.Match.Configs) {
+		config := field.Match.Configs[globPattern]
 		cfgMap, ok := config.(map[string]any)
 		if !ok {
 			continue
@@ -130,13 +132,50 @@ func computeNextSequence(dirPath string, field SchemaField) string {
 
 		for _, e := range entries {
 			if matched, _ := filepath.Match(globPattern, e.Name()); matched {
-				// This config's pattern matches an entry — use it
 				return computeNextFromPrefix(dirPath, prefix, digits)
 			}
 		}
 	}
 
 	return ""
+}
+
+// computeAllNextSequences returns the next sequence value for every pattern
+// in match configs. Unlike computeNextSequence, it does not stop at the first
+// match — it computes a value for each pattern independently.
+func computeAllNextSequences(dirPath string, field SchemaField) map[string]string {
+	if field.Match == nil || field.Match.Configs == nil {
+		return nil
+	}
+
+	result := make(map[string]string, len(field.Match.Configs))
+	for _, globPattern := range sortedPatterns(field.Match.Configs) {
+		config := field.Match.Configs[globPattern]
+		cfgMap, ok := config.(map[string]any)
+		if !ok {
+			continue
+		}
+		prefix, digits := extractPrefixDigits(cfgMap)
+		if prefix == "" || digits <= 0 {
+			continue
+		}
+		result[globPattern] = computeNextFromPrefix(dirPath, prefix, digits)
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+// sortedPatterns returns the keys of configs sorted alphabetically.
+func sortedPatterns(configs map[string]any) []string {
+	patterns := make([]string, 0, len(configs))
+	for p := range configs {
+		patterns = append(patterns, p)
+	}
+	sort.Strings(patterns)
+	return patterns
 }
 
 // computeNextFromPrefix scans dirPath for entries matching prefix + digits pattern
