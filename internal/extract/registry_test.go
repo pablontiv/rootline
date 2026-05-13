@@ -89,3 +89,21 @@ type fakeExtractor struct {
 func (f *fakeExtractor) Name() string                            { return f.name }
 func (f *fakeExtractor) Extensions() []string                    { return f.exts }
 func (f *fakeExtractor) Extract(string, []byte) (*Record, error) { return nil, nil }
+
+func TestNewASTRegistry_IncludesMarkdown(t *testing.T) {
+	r := NewASTRegistry()
+	e := r.ForFile("doc.md", "")
+	if e == nil {
+		t.Fatal("NewASTRegistry ForFile(doc.md) returned nil")
+	}
+	if e.Name() != "markdown" {
+		t.Errorf("name = %q, want markdown", e.Name())
+	}
+	me, ok := e.(*MarkdownExtractor)
+	if !ok {
+		t.Fatal("expected *MarkdownExtractor")
+	}
+	if me.ParseAST == nil || !*me.ParseAST {
+		t.Error("expected ParseAST to be set to true")
+	}
+}

@@ -89,3 +89,11 @@ func TestEnrichBuiltins_SurvivesDeriveAll(t *testing.T) {
 		t.Errorf("README.slug = %v, want 'test'", records[0].Derived["slug"])
 	}
 }
+
+func TestEnrichBuiltinsSimple(t *testing.T) {
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"titulo": "Hello"}},
+	}
+	// No .stem in temp dir — should not panic.
+	EnrichBuiltinsSimple(context.Background(), records, t.TempDir())
+}

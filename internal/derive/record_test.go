@@ -179,6 +179,14 @@ func TestDeriveRecordMultipleFields(t *testing.T) {
 	}
 }
 
+func TestDeriveErrorString(t *testing.T) {
+	e := &DeriveError{Field: "slug", Expression: `slugify(titulo)`, Message: "undefined: titulo"}
+	want := "derive slug (slugify(titulo)): undefined: titulo"
+	if e.Error() != want {
+		t.Errorf("Error() = %q, want %q", e.Error(), want)
+	}
+}
+
 func TestChildToMap(t *testing.T) {
 	c := &extract.Record{
 		Path:        "child.md",

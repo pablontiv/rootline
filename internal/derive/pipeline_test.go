@@ -91,3 +91,29 @@ func TestDeriveAllResolverReturnsNil(t *testing.T) {
 		t.Error("expected nil Derived when resolver returns nil")
 	}
 }
+
+func TestHasDeriveFields(t *testing.T) {
+	if HasDeriveFields(nil) {
+		t.Error("HasDeriveFields(nil) = true, want false")
+	}
+	records := []*extract.Record{{Path: "a.md"}}
+	if !HasDeriveFields(records) {
+		t.Error("HasDeriveFields(non-empty) = false, want true")
+	}
+}
+
+func TestDeriveAllSimple(t *testing.T) {
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"titulo": "Hello"}},
+	}
+	// DeriveAllSimple uses DefaultResolver which walks the real FS.
+	// With no .stem file present, it should not panic and leave Derived nil.
+	DeriveAllSimple(context.Background(), records, t.TempDir())
+}
+
+func TestDefaultResolver(t *testing.T) {
+	dir := t.TempDir()
+	resolver := DefaultResolver()
+	// No .stem in temp dir — should not panic.
+	_ = resolver(dir)
+}

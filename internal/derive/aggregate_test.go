@@ -215,3 +215,11 @@ func TestAggregateAll_RootReadme(t *testing.T) {
 		t.Errorf("root README estado = %v, want 'In Progress' (not all descendants completed)", records[0].Derived["estado"])
 	}
 }
+
+func TestAggregateAllSimple(t *testing.T) {
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{}},
+	}
+	// No .stem in temp dir — should not panic.
+	AggregateAllSimple(context.Background(), records, t.TempDir())
+}

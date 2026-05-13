@@ -373,3 +373,32 @@ func BenchmarkExtractWithoutAST_Medium(b *testing.B) {
 		_, _ = e.Extract("bench.md", content)
 	}
 }
+
+func TestEffectiveField_DerivedTakesPrecedence(t *testing.T) {
+	r := &Record{
+		Frontmatter: map[string]any{"estado": "Pending"},
+		Derived:     map[string]any{"estado": "Derived"},
+	}
+	v, ok := r.EffectiveField("estado")
+	if !ok || v != "Derived" {
+		t.Errorf("EffectiveField = (%v, %v), want (Derived, true)", v, ok)
+	}
+}
+
+func TestEffectiveField_FrontmatterFallback(t *testing.T) {
+	r := &Record{
+		Frontmatter: map[string]any{"estado": "Pending"},
+	}
+	v, ok := r.EffectiveField("estado")
+	if !ok || v != "Pending" {
+		t.Errorf("EffectiveField = (%v, %v), want (Pending, true)", v, ok)
+	}
+}
+
+func TestEffectiveField_Missing(t *testing.T) {
+	r := &Record{Frontmatter: map[string]any{}}
+	_, ok := r.EffectiveField("missing")
+	if ok {
+		t.Error("expected false for missing field")
+	}
+}

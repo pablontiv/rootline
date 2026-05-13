@@ -58,6 +58,18 @@ func TestParseLinks_InlineCode(t *testing.T) {
 	}
 }
 
+func TestContainsWikilink(t *testing.T) {
+	if !ContainsWikilink("see [[T003]] for details") {
+		t.Error("expected true for string with wikilink")
+	}
+	if ContainsWikilink("no links here") {
+		t.Error("expected false for string without wikilink")
+	}
+	if ContainsWikilink("") {
+		t.Error("expected false for empty string")
+	}
+}
+
 func TestParseLinks_NoLinks(t *testing.T) {
 	links := ParseLinks("no links here")
 	if len(links) != 0 {
