@@ -93,6 +93,8 @@ rootline new <dir>/<ID>-<slug>.md
 rootline validate <dir>/<ID>-<slug>.md -o json
 ```
 
+> **Multi-pattern schemas:** `schema.id.next` retorna el próximo valor del primer patrón alfabético que tiene entries existentes en el directorio. En schemas con múltiples patrones de secuencia (ej: `O*` y `T*`), usar `--field schema.id.next_by_pattern` para obtener el próximo valor de **todos** los patrones simultáneamente: `{"O*": "O14", "T*": "T014"}`.
+
 ### Mutate a Field or Section
 
 ```bash

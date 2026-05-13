@@ -114,3 +114,12 @@ Array projection syntax `field[].subfield` works for:
 
 This allows tools, editors, and AI assistants to guide authoring
 and extract specific fields without Python postprocessing.
+
+## Multi-pattern Sequences
+
+**Multi-pattern sequences** — get the next value for each pattern:
+
+```bash
+rootline describe docs/roadmap/ --field schema.id.next_by_pattern
+# → {"O*": "O14", "T*": "T014"}
+```

@@ -105,6 +105,22 @@ The generated document:
 - writes required fields with empty values when needed
 - derives the title from the filename
 
+### Schemas multi-patrón: `next` vs `next_by_pattern`
+
+Cuando `id` define múltiples patrones vía `match` (ej: `O*` y `T*`), el campo `next` retorna el próximo valor del primer patrón alfabético que coincide con entries existentes en el directorio — determinístico, pero incompleto para schemas multi-patrón.
+
+Para obtener el próximo valor de **cada** patrón:
+
+```bash
+rootline describe <dir> --field schema.id.next_by_pattern
+# → {"O*": "O14", "T*": "T014"}
+
+rootline describe <dir>/O14-slug/ --field schema.id.next_by_pattern
+# → {"T*": "T001"}
+```
+
+Usar `next_by_pattern` cuando el LLM necesita asignar números tanto para Outcomes como para Tasks en el mismo flujo de materialización.
+
 ## Stem Resolution API (internal)
 
 The central resolver in `internal/rules/resolver.go` exposes:
