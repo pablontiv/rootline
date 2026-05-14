@@ -427,14 +427,11 @@ func TestTreeJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if result.Version != 1 {
-		t.Errorf("expected version 1, got %d", result.Version)
+	if result.Version != 2 {
+		t.Errorf("expected version 2, got %d", result.Version)
 	}
 	if result.Root.Total != 2 {
 		t.Errorf("expected 2 total, got %d", result.Root.Total)
-	}
-	if result.Root.Completed != 1 {
-		t.Errorf("expected 1 completed, got %d", result.Root.Completed)
 	}
 }
 
@@ -444,8 +441,8 @@ func TestTreeASCII(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "[1/2]") {
-		t.Errorf("expected [1/2] in ASCII output, got: %s", out)
+	if !strings.Contains(out, "[2]") {
+		t.Errorf("expected [2] in ASCII output, got: %s", out)
 	}
 	if !strings.Contains(out, "doc1.md") {
 		t.Errorf("expected doc1.md in tree")

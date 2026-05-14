@@ -161,9 +161,6 @@ func TestTreeNestedStem_CountsPropagateCorrectly(t *testing.T) {
 	if result.Root.Total != 4 {
 		t.Errorf("total = %d, want 4", result.Root.Total)
 	}
-	if result.Root.Completed != 2 {
-		t.Errorf("completed = %d, want 2", result.Root.Completed)
-	}
 }
 
 func TestStatsNestedStem_CountsAll(t *testing.T) {

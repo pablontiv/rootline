@@ -81,9 +81,6 @@ func TestTreeCmd_ScopeFiltering_SubdirOnly(t *testing.T) {
 	if result.Root.Total != 2 {
 		t.Errorf("total = %d, want 2", result.Root.Total)
 	}
-	if result.Root.Completed != 1 {
-		t.Errorf("completed = %d, want 1", result.Root.Completed)
-	}
 }
 
 func TestTreeCmd_ScopeFiltering_ASCIIOutput(t *testing.T) {
@@ -123,17 +120,14 @@ func TestTreeCmd_JSONStructure(t *testing.T) {
 		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
 	}
 
-	if result.Version != 1 {
-		t.Errorf("version = %d, want 1", result.Version)
+	if result.Version != 2 {
+		t.Errorf("version = %d, want 2", result.Version)
 	}
 	if result.Kind != "rootline/tree" {
 		t.Errorf("kind = %q, want rootline/tree", result.Kind)
 	}
 	if result.Root.Total != 2 {
 		t.Errorf("root total = %d, want 2", result.Root.Total)
-	}
-	if result.Root.Completed != 1 {
-		t.Errorf("root completed = %d, want 1", result.Root.Completed)
 	}
 }
 
@@ -198,8 +192,8 @@ func TestTreeCmd_ASCIIRendering(t *testing.T) {
 	if len(lines) == 0 {
 		t.Fatal("expected non-empty output")
 	}
-	if !strings.Contains(lines[0], "[2/3]") {
-		t.Errorf("root line = %q, want [2/3]", lines[0])
+	if !strings.Contains(lines[0], "[3]") {
+		t.Errorf("root line = %q, want [3]", lines[0])
 	}
 
 	// Should contain tree connectors.
@@ -253,9 +247,6 @@ func TestTreeCmd_DeepNesting(t *testing.T) {
 	if result.Root.Total != 2 {
 		t.Errorf("total = %d, want 2", result.Root.Total)
 	}
-	if result.Root.Completed != 1 {
-		t.Errorf("completed = %d, want 1", result.Root.Completed)
-	}
 
 	// Verify nesting: root -> a -> b -> c -> ...
 	if len(result.Root.Children) != 1 || result.Root.Children[0].Name != "a" {
@@ -271,15 +262,12 @@ func TestBuildTree_Basic(t *testing.T) {
 		{Path: "doc2.md", Frontmatter: map[string]any{"estado": "Pending"}},
 	}
 
-	root := buildTree(records, "project", "estado")
+	root := buildTree(records, "project")
 	if root.Name != "project" {
 		t.Errorf("root name = %q, want project", root.Name)
 	}
 	if root.Total != 2 {
 		t.Errorf("total = %d, want 2", root.Total)
-	}
-	if root.Completed != 1 {
-		t.Errorf("completed = %d, want 1", root.Completed)
 	}
 	if len(root.Children) != 2 {
 		t.Errorf("children = %d, want 2", len(root.Children))
@@ -293,12 +281,9 @@ func TestBuildTree_WithSubdirs(t *testing.T) {
 		{Path: "other/c.md", Frontmatter: map[string]any{"estado": "Pending"}},
 	}
 
-	root := buildTree(records, "root", "estado")
+	root := buildTree(records, "root")
 	if root.Total != 3 {
 		t.Errorf("total = %d, want 3", root.Total)
-	}
-	if root.Completed != 2 {
-		t.Errorf("completed = %d, want 2", root.Completed)
 	}
 
 	// Should have 2 directory children: other and sub (sorted).
@@ -318,22 +303,16 @@ func TestBuildTree_NoEstado(t *testing.T) {
 		{Path: "doc.md", Frontmatter: map[string]any{"title": "Hello"}},
 	}
 
-	root := buildTree(records, "root", "estado")
+	root := buildTree(records, "root")
 	if root.Total != 1 {
 		t.Errorf("total = %d, want 1", root.Total)
-	}
-	if root.Completed != 0 {
-		t.Errorf("completed = %d, want 0 (no estado)", root.Completed)
 	}
 }
 
 func TestBuildTree_EmptyRecords(t *testing.T) {
-	root := buildTree(nil, "empty", "estado")
+	root := buildTree(nil, "empty")
 	if root.Total != 0 {
 		t.Errorf("total = %d, want 0", root.Total)
-	}
-	if root.Completed != 0 {
-		t.Errorf("completed = %d, want 0", root.Completed)
 	}
 	if len(root.Children) != 0 {
 		t.Errorf("children = %d, want 0", len(root.Children))
@@ -381,13 +360,13 @@ func TestFindChild_SkipsLeaves(t *testing.T) {
 }
 
 func TestRenderASCII_EmptyRoot(t *testing.T) {
-	root := &treeNode{Name: "empty", Total: 0, Completed: 0}
+	root := &treeNode{Name: "empty", Total: 0}
 	lines := renderASCII(root, "")
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line, got %d", len(lines))
 	}
-	if lines[0] != "empty [0/0]" {
-		t.Errorf("line = %q, want 'empty [0/0]'", lines[0])
+	if lines[0] != "empty [0]" {
+		t.Errorf("line = %q, want 'empty [0]'", lines[0])
 	}
 }
 
@@ -401,7 +380,7 @@ func TestRenderASCII_NonRootPrefix(t *testing.T) {
 }
 
 func TestRenderChild_Leaf(t *testing.T) {
-	leaf := &treeNode{Name: "doc.md", IsLeaf: true, Estado: "Pending"}
+	leaf := &treeNode{Name: "doc.md", IsLeaf: true, Frontmatter: map[string]any{"estado": "Pending"}}
 	lines := renderChild(leaf, "", false)
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line, got %d", len(lines))
@@ -418,7 +397,7 @@ func TestRenderChild_Leaf(t *testing.T) {
 }
 
 func TestRenderChild_LastLeaf(t *testing.T) {
-	leaf := &treeNode{Name: "last.md", IsLeaf: true, Estado: "Completed"}
+	leaf := &treeNode{Name: "last.md", IsLeaf: true, Frontmatter: map[string]any{"estado": "Completed"}}
 	lines := renderChild(leaf, "", true)
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line, got %d", len(lines))
@@ -430,25 +409,24 @@ func TestRenderChild_LastLeaf(t *testing.T) {
 
 func TestRenderChild_Directory(t *testing.T) {
 	dir := &treeNode{
-		Name:      "subdir",
-		Total:     2,
-		Completed: 1,
+		Name:  "subdir",
+		Total: 2,
 		Children: []*treeNode{
-			{Name: "a.md", IsLeaf: true, Estado: "Completed", Total: 1, Completed: 1},
-			{Name: "b.md", IsLeaf: true, Estado: "Pending", Total: 1, Completed: 0},
+			{Name: "a.md", IsLeaf: true, Frontmatter: map[string]any{"estado": "Completed"}, Total: 1},
+			{Name: "b.md", IsLeaf: true, Frontmatter: map[string]any{"estado": "Pending"}, Total: 1},
 		},
 	}
 	lines := renderChild(dir, "", false)
 	if len(lines) != 3 {
 		t.Fatalf("expected 3 lines, got %d: %v", len(lines), lines)
 	}
-	if !strings.Contains(lines[0], "subdir [1/2]") {
-		t.Errorf("dir line = %q, want subdir [1/2]", lines[0])
+	if !strings.Contains(lines[0], "subdir [2]") {
+		t.Errorf("dir line = %q, want subdir [2]", lines[0])
 	}
 }
 
 func TestRenderChild_LeafNoEstado(t *testing.T) {
-	leaf := &treeNode{Name: "doc.md", IsLeaf: true, Estado: ""}
+	leaf := &treeNode{Name: "doc.md", IsLeaf: true, Frontmatter: map[string]any{}}
 	lines := renderChild(leaf, "", true)
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line, got %d", len(lines))
@@ -466,11 +444,11 @@ func TestPropagateCounts_NestedDirs(t *testing.T) {
 			{
 				Name: "sub",
 				Children: []*treeNode{
-					{Name: "a.md", IsLeaf: true, Total: 1, Completed: 1},
-					{Name: "b.md", IsLeaf: true, Total: 1, Completed: 0},
+					{Name: "a.md", IsLeaf: true, Total: 1},
+					{Name: "b.md", IsLeaf: true, Total: 1},
 				},
 			},
-			{Name: "c.md", IsLeaf: true, Total: 1, Completed: 1},
+			{Name: "c.md", IsLeaf: true, Total: 1},
 		},
 	}
 
@@ -478,9 +456,6 @@ func TestPropagateCounts_NestedDirs(t *testing.T) {
 
 	if root.Total != 3 {
 		t.Errorf("root total = %d, want 3", root.Total)
-	}
-	if root.Completed != 2 {
-		t.Errorf("root completed = %d, want 2", root.Completed)
 	}
 
 	// Find the sub node (sorting puts "c.md" before "sub" alphabetically).
@@ -495,9 +470,6 @@ func TestPropagateCounts_NestedDirs(t *testing.T) {
 	}
 	if subNode.Total != 2 {
 		t.Errorf("sub total = %d, want 2", subNode.Total)
-	}
-	if subNode.Completed != 1 {
-		t.Errorf("sub completed = %d, want 1", subNode.Completed)
 	}
 }
 
