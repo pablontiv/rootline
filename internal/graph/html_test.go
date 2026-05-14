@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -85,5 +86,70 @@ func TestRenderHTML_CreatesValidHTMLFile(t *testing.T) {
 	}
 	if info.Size() == 0 {
 		t.Errorf("expected non-empty HTML file, got size 0")
+	}
+}
+
+func TestRenderHTMLContent(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		contains []string
+	}{
+		{
+			name:    "simple graph",
+			content: "graph TD; A-->B;",
+			contains: []string{
+				"graph TD; A-->B;",
+				"<!DOCTYPE html>",
+				"mermaid.initialize",
+			},
+		},
+		{
+			name:    "empty content",
+			content: "",
+			contains: []string{
+				"<pre class=\"mermaid\"></pre>",
+			},
+		},
+		{
+			name:    "with html-like characters",
+			content: "graph TD; A[\"<b>Bold</b>\"] --> B;",
+			contains: []string{
+				"graph TD; A[\"<b>Bold</b>\"] --> B;",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := RenderHTMLContent(tt.content)
+			if err != nil {
+				t.Fatalf("RenderHTMLContent() error = %v", err)
+			}
+			for _, want := range tt.contains {
+				if !strings.Contains(got, want) {
+					t.Errorf("RenderHTMLContent() = %v, want to contain %v", got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestRenderHTML_ErrorPaths(t *testing.T) {
+	// Backup and restore the mockable function
+	oldCreateTemp := osCreateTemp
+	t.Cleanup(func() { osCreateTemp = oldCreateTemp })
+
+	// Mock os.CreateTemp to return an error
+	osCreateTemp = func(dir, pattern string) (*os.File, error) {
+		return nil, errors.New("mocked error")
+	}
+
+	_, err := RenderHTML("graph TD; A-->B;")
+	if err == nil {
+		t.Fatal("expected error from RenderHTML, got nil")
+	}
+	if !strings.Contains(err.Error(), "mocked error") {
+		t.Errorf("expected error containing 'mocked error', got: %v", err)
 	}
 }
