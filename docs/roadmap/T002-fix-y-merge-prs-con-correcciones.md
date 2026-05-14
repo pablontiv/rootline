@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: task
 ---
 # T002: Fix y merge de PR #29 (commit) y PR #30 (go.mod)
