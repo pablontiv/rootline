@@ -15,8 +15,6 @@ A **file-based database and constraint engine** for structured documentation. `.
 | Constraint | Validation rule (`required`, `enum`, `exists`) |
 | Domain type | `domain:` property (semantic type) |
 
-> **Status**: CLI engine complete — all core commands functional. 16 inference detectors (13 data + 3 governance).
-
 ---
 
 ## Table of Contents
