@@ -155,6 +155,7 @@ type SchemaField struct {
 	Default       string            `yaml:"default" json:"default,omitempty"`
 	Severity      string            `yaml:"severity" json:"severity,omitempty"`
 	Source        string            `yaml:"-" json:"source,omitempty"`
+	Extract       string            `yaml:"source" json:"extract,omitempty"`
 	Prefix        string            `yaml:"prefix" json:"prefix,omitempty"`
 	Digits        int               `yaml:"digits" json:"digits,omitempty"`
 	Next          string            `yaml:"-" json:"next,omitempty"`
@@ -177,6 +178,7 @@ type schemaFieldRaw struct {
 	Values   []string     `yaml:"values"`
 	Default  string       `yaml:"default"`
 	Severity string       `yaml:"severity"`
+	Extract  string       `yaml:"source"`
 	Prefix   string       `yaml:"prefix"`
 	Digits   int          `yaml:"digits"`
 	Excludes *ExcludeRule `yaml:"excludes"`
@@ -199,6 +201,7 @@ func (sf *SchemaField) UnmarshalYAML(value *yaml.Node) error {
 	sf.Values = raw.Values
 	sf.Default = raw.Default
 	sf.Severity = raw.Severity
+	sf.Extract = raw.Extract
 	sf.Prefix = raw.Prefix
 	sf.Digits = raw.Digits
 	sf.Excludes = raw.Excludes

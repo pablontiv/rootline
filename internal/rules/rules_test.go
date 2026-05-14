@@ -698,3 +698,38 @@ func TestParseStem_NoStructural(t *testing.T) {
 		t.Error("structural should be empty when not defined")
 	}
 }
+
+func TestParseStem_SourceExtraction(t *testing.T) {
+	content := []byte(`version: 2
+schema:
+  titulo:
+    type: string
+    source: body.h1
+  contexto:
+    type: string
+    source: body.section["## Contexto"]
+  estado:
+    type: enum
+    values: [draft, published]
+`)
+	stem, err := ParseStem("test/.stem", content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	titulo := stem.Schema["titulo"]
+	if titulo.Extract != "body.h1" {
+		t.Errorf("titulo.Extract = %q, want %q", titulo.Extract, "body.h1")
+	}
+
+	contexto := stem.Schema["contexto"]
+	if contexto.Extract != `body.section["## Contexto"]` {
+		t.Errorf("contexto.Extract = %q, want %q", contexto.Extract, `body.section["## Contexto"]`)
+	}
+
+	// estado should have empty Extract since source is not specified
+	estado := stem.Schema["estado"]
+	if estado.Extract != "" {
+		t.Errorf("estado.Extract = %q, want empty", estado.Extract)
+	}
+}
