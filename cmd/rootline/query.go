@@ -191,25 +191,6 @@ func parseSelectFields(selectStr string) []string {
 	return fields
 }
 
-// extractTitle returns the first heading from the body (e.g., "# Heading" -> "Heading").
-// Falls back to the first non-empty line if no heading is found.
-func extractTitle(body string) string {
-	for _, line := range strings.Split(body, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "# ") {
-			return strings.TrimPrefix(line, "# ")
-		}
-	}
-	// Fallback: return first non-empty line
-	for _, line := range strings.Split(body, "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" && !strings.HasPrefix(line, "---") {
-			return line
-		}
-	}
-	return ""
-}
-
 // projectQueryResult projects rows to include only selected fields.
 // It converts QueryResult rows to projected format (path, title, and selected fields).
 func projectQueryResult(result any, fields []string) (any, error) {
@@ -226,11 +207,6 @@ func projectQueryResult(result any, fields []string) (any, error) {
 			switch field {
 			case "path":
 				projected["path"] = row.Path
-			case "title":
-				title := extractTitle(row.Body)
-				if title != "" {
-					projected["title"] = title
-				}
 			case "links":
 				if len(row.Links) > 0 {
 					projected["links"] = row.Links
