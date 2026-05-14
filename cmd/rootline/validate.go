@@ -465,20 +465,7 @@ func groupByParentDir(records []*extract.Record, root string) map[string]*parent
 
 // splitDotPath splits a dot-separated path into parts.
 func splitDotPath(path string) []string {
-	var parts []string
-	current := ""
-	for _, ch := range path {
-		if ch == '.' {
-			if current != "" {
-				parts = append(parts, current)
-				current = ""
-			}
-		} else {
-			current += string(ch)
-		}
-	}
-	if current != "" {
-		parts = append(parts, current)
-	}
-	return parts
+	return strings.FieldsFunc(path, func(r rune) bool {
+		return r == '.'
+	})
 }
