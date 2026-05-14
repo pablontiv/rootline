@@ -3,6 +3,10 @@ scope:
   match: "*.md"
 
 schema:
+  titulo:
+    type: string
+    source: body.h1
+
   estado:
     type: enum
     required:
@@ -23,9 +27,17 @@ schema:
       "O*": { prefix: O, digits: 2 }
       "T*": { prefix: T, digits: 3 }
 
+  is_done:
+    type: bool
+    severity: off
+
+derive:
+  is_done: "estado in ['Completed', 'Obsolete']"
+
 links:
   blocked_by:
     target: '^(\./|\.\./|.*/)T[0-9]{3}-[^/]+\.md$'
+    value_field: estado
   reference:
     target: ".*"
 

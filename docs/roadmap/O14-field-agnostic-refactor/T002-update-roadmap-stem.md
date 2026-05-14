@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: task
 ---
 # T002: Update roadmap `.stem` with `titulo`, `is_done`, and `value_field`
