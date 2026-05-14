@@ -57,8 +57,9 @@ type LinkSchema struct {
 
 // LinkRule defines a constraint for a specific link type.
 type LinkRule struct {
-	Target string `yaml:"target" json:"target,omitempty"`
-	Field  string `yaml:"field" json:"field,omitempty"`
+	Target     string `yaml:"target" json:"target,omitempty"`
+	Field      string `yaml:"field" json:"field,omitempty"`
+	ValueField string `yaml:"value_field" json:"value_field,omitempty"`
 }
 
 // UnmarshalYAML implements custom unmarshaling for LinkSchema.

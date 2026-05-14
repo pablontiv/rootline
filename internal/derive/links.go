@@ -8,10 +8,19 @@
 //
 // For each link type with a Field defined in the stem's links.rules,
 // a variable named after the Field is injected into the env map.
-// The variable is a []any (slice of any) containing the string values
-// of the "estado" frontmatter field from each resolved target record.
+// The variable is a []any (slice of any) containing the string values of the
+// ValueField frontmatter field from each resolved target record.
 //
-// Example .stem configuration:
+// Example .stem configuration (with explicit value_field):
+//
+//	links:
+//	  rules:
+//	    blocks:
+//	      target: "*.md"
+//	      field: blocked_by
+//	      value_field: estado
+//
+// Example .stem configuration (backward compatible, defaults to "estado"):
 //
 //	links:
 //	  rules:
@@ -24,8 +33,9 @@
 //
 //	blocked_by = []any{"Completed", "Pending"}
 //
-// If no links of that type exist (or none resolve), the variable is
-// not set in the env (i.e., it is nil in expr-lang expressions).
+// If no links of that type exist (or none resolve), the variable is not set
+// in the env (i.e., it is nil in expr-lang expressions). If value_field is
+// not specified, it defaults to "estado" for backward compatibility.
 //
 // # Usage in Derive Expressions
 //
@@ -97,8 +107,9 @@ func (m *MapResolver) Resolve(path string) *extract.Record {
 //
 // For each link on the record, it looks up the link type in the stem's
 // LinkSchema.Rules. If a rule defines a Field, the linked record is resolved
-// and its "estado" frontmatter value is extracted and accumulated into a
-// string slice keyed by rule.Field in the env map.
+// and its ValueField frontmatter value is extracted and accumulated into a
+// string slice keyed by rule.Field in the env map. If ValueField is not
+// specified, it defaults to "estado" for backward compatibility.
 //
 // Links to non-existent targets are silently skipped.
 func InjectLinkedFields(env map[string]any, record *extract.Record, stem *rules.StemFile, resolver RecordResolver) {
@@ -125,8 +136,14 @@ func InjectLinkedFields(env map[string]any, record *extract.Record, stem *rules.
 			continue
 		}
 
-		// Extract the target's "estado" field value.
-		val, ok := target.EffectiveField("estado")
+		// Extract the target's ValueField value.
+		// If ValueField is not specified, default to "estado" for backward compatibility.
+		valueField := rule.ValueField
+		if valueField == "" {
+			valueField = "estado"
+		}
+
+		val, ok := target.EffectiveField(valueField)
 		if ok {
 			fieldValues[rule.Field] = append(fieldValues[rule.Field], fmt.Sprintf("%v", val))
 		}
