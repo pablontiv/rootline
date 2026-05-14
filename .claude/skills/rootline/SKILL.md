@@ -1,6 +1,7 @@
 ---
 name: rootline
 description: Use when working with Markdown records governed by .stem schemas or when the user asks to validate, fix, query, inspect, scaffold, mutate, analyze, apply, graph, or trace Rootline data, even if they do not name Rootline. Do not use for roadmap decomposition or Go debugging.
+updated: 2026-05-14
 ---
 
 # Rootline CLI Operations

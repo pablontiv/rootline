@@ -39,7 +39,7 @@ rootline query <dir> --sort "prioridad:asc,impact_score:desc" -o json
 | `--limit N` | limit rows after filtering and sorting |
 | `--sort "field:asc,other:desc"` | deterministic multi-key sort |
 | `--from <path>` | scan root when no positional path is used |
-| `--select "path,estado,title"` | compact projection; include only named fields |
+| `--select "path,estado,titulo"` | compact projection; include only named fields |
 
 ### Output Formats
 
