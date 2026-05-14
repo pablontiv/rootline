@@ -37,13 +37,12 @@ type TreeResult struct {
 
 // treeNode represents a directory or file in the tree.
 type treeNode struct {
-	Name      string      `json:"name"`
-	Path      string      `json:"path"`
-	Children  []*treeNode `json:"children,omitempty"`
-	Completed int         `json:"completed"`
-	Total     int         `json:"total"`
-	IsLeaf    bool        `json:"is_leaf,omitempty"`
-	Estado    string      `json:"estado,omitempty"`
+	Name        string         `json:"name"`
+	Path        string         `json:"path"`
+	Children    []*treeNode    `json:"children,omitempty"`
+	Total       int            `json:"total"`
+	IsLeaf      bool           `json:"is_leaf,omitempty"`
+	Frontmatter map[string]any `json:"frontmatter,omitempty"`
 }
 
 func runTree(cmd *cobra.Command, args []string) error {
@@ -82,21 +81,10 @@ func runTree(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("filtering records: %w", err)
 	}
 
-	// Resolve lifecycle field via domain lookup with fallback
-	estadoField := "estado"
-	entries, walkErr := rules.WalkUp(absRoot)
-	if walkErr == nil {
-		if eff := rules.MergeStemFiles(entries); eff != nil {
-			if name, found := rules.FindFieldByDomain(eff.Schema, "lifecycle_state", absRoot); found {
-				estadoField = name
-			}
-		}
-	}
-
-	root := buildTree(records, filepath.Base(absRoot), estadoField)
+	root := buildTree(records, filepath.Base(absRoot))
 
 	if outputFormat == "json" {
-		result := &TreeResult{Version: 1, Kind: "rootline/tree", Root: root}
+		result := &TreeResult{Version: 2, Kind: "rootline/tree", Root: root}
 		return outputJSON(cmd, result, false)
 	}
 
@@ -108,7 +96,7 @@ func runTree(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func buildTree(records []*extract.Record, rootName string, estadoField string) *treeNode {
+func buildTree(records []*extract.Record, rootName string) *treeNode {
 	root := &treeNode{Name: rootName, Path: rootName}
 
 	for _, rec := range records {
@@ -125,21 +113,26 @@ func buildTree(records []*extract.Record, rootName string, estadoField string) *
 			node = child
 		}
 
-		// Create leaf node for the file
-		estado := ""
-		if e, ok := rec.EffectiveField(estadoField); ok {
-			estado = fmt.Sprintf("%v", e)
+		// Create leaf node for the file with Frontmatter map
+		frontmatter := make(map[string]any)
+
+		// Add frontmatter fields
+		for k, v := range rec.Frontmatter {
+			frontmatter[k] = v
 		}
+
+		// Add derived fields
+		for k, v := range rec.Derived {
+			frontmatter[k] = v
+		}
+
 		leaf := &treeNode{
-			Name:   parts[len(parts)-1],
-			Path:   rec.Path,
-			IsLeaf: true,
-			Estado: estado,
+			Name:        parts[len(parts)-1],
+			Path:        rec.Path,
+			IsLeaf:      true,
+			Frontmatter: frontmatter,
+			Total:       1,
 		}
-		if estado == "Completed" {
-			leaf.Completed = 1
-		}
-		leaf.Total = 1
 		node.Children = append(node.Children, leaf)
 	}
 
@@ -166,11 +159,9 @@ func propagateCounts(node *treeNode) {
 		return node.Children[i].Name < node.Children[j].Name
 	})
 
-	node.Completed = 0
 	node.Total = 0
 	for _, child := range node.Children {
 		propagateCounts(child)
-		node.Completed += child.Completed
 		node.Total += child.Total
 	}
 }
@@ -180,7 +171,7 @@ func renderASCII(node *treeNode, prefix string) []string {
 
 	// Root node
 	if prefix == "" {
-		lines = append(lines, fmt.Sprintf("%s [%d/%d]", node.Name, node.Completed, node.Total))
+		lines = append(lines, fmt.Sprintf("%s [%d]", node.Name, node.Total))
 		for i, child := range node.Children {
 			isLast := i == len(node.Children)-1
 			lines = append(lines, renderChild(child, "", isLast)...)
@@ -201,13 +192,18 @@ func renderChild(node *treeNode, prefix string, isLast bool) []string {
 	}
 
 	if node.IsLeaf {
-		estado := node.Estado
+		estado := ""
+		if node.Frontmatter != nil {
+			if e, ok := node.Frontmatter["estado"]; ok {
+				estado = fmt.Sprintf("%v", e)
+			}
+		}
 		if estado == "" {
 			estado = "—"
 		}
 		lines = append(lines, fmt.Sprintf("%s%s%s [%s]", prefix, connector, node.Name, estado))
 	} else {
-		lines = append(lines, fmt.Sprintf("%s%s%s [%d/%d]", prefix, connector, node.Name, node.Completed, node.Total))
+		lines = append(lines, fmt.Sprintf("%s%s%s [%d]", prefix, connector, node.Name, node.Total))
 		for i, child := range node.Children {
 			isChildLast := i == len(node.Children)-1
 			lines = append(lines, renderChild(child, childPrefix, isChildLast)...)
