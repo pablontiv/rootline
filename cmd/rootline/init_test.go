@@ -375,8 +375,8 @@ func TestInitEmitsSectionFields(t *testing.T) {
 	}
 
 	// "## Context" appears in 5/5 = 100% → required_section at 0.80 threshold
-	if !strings.Contains(out, "type: section") {
-		t.Errorf("expected 'type: section' in output, got:\n%s", out)
+	if !strings.Contains(out, "type: string") {
+		t.Errorf("expected 'type: string' in output, got:\n%s", out)
 	}
 	if !strings.Contains(out, "context:") {
 		t.Errorf("expected 'context:' field name in output, got:\n%s", out)
@@ -418,8 +418,8 @@ func TestInitSectionFieldsWrittenToFile(t *testing.T) {
 	}
 	s := string(content)
 
-	if !strings.Contains(s, "type: section") {
-		t.Errorf("expected 'type: section' in .stem, got:\n%s", s)
+	if !strings.Contains(s, "type: string") {
+		t.Errorf("expected 'type: string' in .stem, got:\n%s", s)
 	}
 	if !strings.Contains(s, "context:") {
 		t.Errorf("expected 'context:' field in .stem, got:\n%s", s)

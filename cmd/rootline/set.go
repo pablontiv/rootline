@@ -259,32 +259,8 @@ func runSet(cmd *cobra.Command, args []string) error {
 
 // buildProposal creates a Proposal from a fieldOp, consulting the schema to determine type.
 func buildProposal(op fieldOp, relPath string, effective *rules.StemFile) (proposal.Proposal, error) {
-	// Check if this is a section field.
-	if effective != nil {
-		if sf, ok := effective.Schema[op.Field]; ok && sf.Type == "section" {
-			heading := sf.Heading
-			if heading == "" {
-				heading = "## " + op.Field
-			}
-			mode := "replace"
-			if op.Append {
-				mode = "append"
-			} else if setCreate {
-				mode = "create"
-			}
-			return proposal.Proposal{
-				Type:    proposal.SetSection,
-				Field:   op.Field,
-				Heading: heading,
-				Value:   op.Value,
-				Mode:    mode,
-				Paths:   []string{relPath},
-			}, nil
-		}
-	}
-
 	if op.Append {
-		return proposal.Proposal{}, fmt.Errorf("append (+=) is only supported for section fields; %q is not a section", op.Field)
+		return proposal.Proposal{}, fmt.Errorf("append (+=) is no longer supported (type:section has been removed)")
 	}
 
 	// Frontmatter field.

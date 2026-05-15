@@ -2,7 +2,6 @@ package rules
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -914,50 +913,6 @@ func TestValidate_Requires_NoMatchBackwardCompat(t *testing.T) {
 	}
 }
 
-func TestValidate_RequiredSectionMissing(t *testing.T) {
-	stem := &StemFile{
-		Version: 2,
-		Schema: map[string]SchemaField{
-			"estado":   {Type: "enum", Values: []string{"bloqueado"}, Required: true},
-			"contexto": {Type: "section", Heading: "## Contexto", Required: true},
-		},
-	}
-	rec := &extract.Record{
-		Path:        "test.md",
-		Frontmatter: map[string]any{"estado": "bloqueado"},
-		Sections:    map[string]string{}, // missing "## Contexto"
-	}
-	errs := Validate(context.Background(), rec, stem)
-	found := false
-	for _, e := range errs {
-		if strings.Contains(e.Message, "contexto") || strings.Contains(e.Message, "Contexto") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected validation error for missing required section 'contexto', got: %v", errs)
-	}
-}
-
-func TestValidate_RequiredSectionPresent(t *testing.T) {
-	stem := &StemFile{
-		Version: 2,
-		Schema: map[string]SchemaField{
-			"contexto": {Type: "section", Heading: "## Contexto", Required: true},
-		},
-	}
-	rec := &extract.Record{
-		Path:     "test.md",
-		Sections: map[string]string{"## Contexto": "Some content"},
-	}
-	errs := Validate(context.Background(), rec, stem)
-	for _, e := range errs {
-		if strings.Contains(e.Message, "contexto") {
-			t.Errorf("unexpected validation error: %v", e)
-		}
-	}
-}
 
 func TestValidate_LinkFieldWithoutWikilink(t *testing.T) {
 	stem := &StemFile{

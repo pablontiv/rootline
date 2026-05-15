@@ -31,8 +31,7 @@ schema:
     type: string
     required: false
   investigacion:
-    type: section
-    heading: "## Investigacion"
+    type: string
     required: false
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
@@ -107,65 +106,8 @@ func TestSetInvalidEnumValue(t *testing.T) {
 	}
 }
 
-func TestSetSectionWithCreate(t *testing.T) {
-	dir := setupSetTestDir(t)
-	// Create a doc without the investigacion section
-	target := filepath.Join(dir, "nosection.md")
-	mustWriteFile(t, target, []byte("---\nestado: Pending\ntipo: test\n---\n# No Section\n"), 0644)
 
-	out, err := runCmd(t, "set", "--create", "--no-validate", target, "investigacion=Decision: GO")
-	if err != nil {
-		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
-	}
 
-	content := string(mustReadFile(t, target))
-	if !strings.Contains(content, "## Investigacion") {
-		t.Errorf("expected '## Investigacion' heading in file, got:\n%s", content)
-	}
-	if !strings.Contains(content, "Decision: GO") {
-		t.Errorf("expected 'Decision: GO' in file, got:\n%s", content)
-	}
-}
-
-func TestSetSectionReplace(t *testing.T) {
-	dir := setupSetTestDir(t)
-	target := filepath.Join(dir, "doc.md")
-
-	out, err := runCmd(t, "set", "--no-validate", target, "investigacion=New findings here")
-	if err != nil {
-		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
-	}
-
-	content := string(mustReadFile(t, target))
-	if !strings.Contains(content, "New findings here") {
-		t.Errorf("expected 'New findings here' in file, got:\n%s", content)
-	}
-	// The old content should be replaced
-	if strings.Contains(content, "Initial findings here") {
-		t.Errorf("expected old content to be replaced, got:\n%s", content)
-	}
-}
-
-func TestSetSectionAppend(t *testing.T) {
-	dir := setupSetTestDir(t)
-	target := filepath.Join(dir, "doc.md")
-
-	out, err := runCmd(t, "set", "--no-validate", target, "investigacion+=Additional evidence")
-	if err != nil {
-		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
-	}
-
-	content := string(mustReadFile(t, target))
-	if !strings.Contains(content, "Initial findings here") {
-		t.Errorf("expected original content preserved, got:\n%s", content)
-	}
-	if !strings.Contains(content, "Additional evidence") {
-		t.Errorf("expected appended content, got:\n%s", content)
-	}
-	if !strings.Contains(out, "append section") {
-		t.Errorf("expected 'append section' in output, got: %s", out)
-	}
-}
 
 func TestSetFromFile(t *testing.T) {
 	dir := setupSetTestDir(t)
@@ -214,8 +156,8 @@ func TestSetAppendNonSection(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for append on non-section field")
 	}
-	if !strings.Contains(err.Error(), "only supported for section") {
-		t.Errorf("expected 'only supported for section' error, got: %v", err)
+	if !strings.Contains(err.Error(), "no longer supported") {
+		t.Errorf("expected 'no longer supported' error, got: %v", err)
 	}
 }
 

@@ -113,7 +113,7 @@ func setupMigrateScaffoldDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 
-	// .stem with a required section
+	// .stem with a required field
 	stemContent := `version: 2
 scope:
   match: "*.md"
@@ -123,8 +123,7 @@ schema:
     required: true
     values: [Pending, Completed]
   notes:
-    type: section
-    heading: "## Notes"
+    type: string
     required: true
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)

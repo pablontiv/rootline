@@ -584,49 +584,6 @@ schema:
 	}
 }
 
-func TestParseStem_SectionType(t *testing.T) {
-	raw := `
-version: 2
-schema:
-    estado:
-        type: enum
-        values: [bloqueado, listo]
-        required: true
-    contexto:
-        type: section
-        heading: "## Contexto"
-        required: true
-    investigacion:
-        type: section
-        heading: "## Investigación"
-        required: false
-        default: "<!-- TODO: Describa los hallazgos de la investigación -->"
-`
-	stem, err := ParseStem("test.stem", []byte(raw))
-	if err != nil {
-		t.Fatalf("ParseStem: %v", err)
-	}
-	ctx := stem.Schema["contexto"]
-	if ctx.Type != "section" {
-		t.Errorf("contexto type = %q, want section", ctx.Type)
-	}
-	if ctx.Heading != "## Contexto" {
-		t.Errorf("contexto heading = %q, want '## Contexto'", ctx.Heading)
-	}
-	if !ctx.Required {
-		t.Error("contexto should be required")
-	}
-	inv := stem.Schema["investigacion"]
-	if inv.Heading != "## Investigación" {
-		t.Errorf("investigacion heading = %q", inv.Heading)
-	}
-	if inv.Required {
-		t.Error("investigacion should not be required")
-	}
-	if inv.Default != "<!-- TODO: Describa los hallazgos de la investigación -->" {
-		t.Errorf("investigacion default = %q", inv.Default)
-	}
-}
 
 func TestParseStem_Domain(t *testing.T) {
 	content := []byte(`

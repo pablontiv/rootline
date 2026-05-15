@@ -45,7 +45,7 @@ func GenerateFlatSchema(ctx context.Context, dir string, records []*extract.Reco
 		fieldName := sectionFieldName(inf.Field)
 		heading := "## " + inf.Field
 		sf := rules.SchemaField{
-			Type:    "section",
+			Type:    "string",
 			Heading: heading,
 		}
 		if inf.Type == "required_section" {
