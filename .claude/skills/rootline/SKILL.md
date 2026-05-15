@@ -105,7 +105,7 @@ rootline validate <file.md> -o json
 git diff -- <file.md>
 ```
 
-Use `field+=value` for section append and `--create` only when the user wants a missing section created. `--create` does not create files — use `rootline new` to scaffold new documents. `--no-validate` skips post-mutation validation only; pre-validation of enum constraints always runs.
+Use `--create` only when the user wants a missing field created with a value. `--create` does not create files — use `rootline new` to scaffold new documents. `--no-validate` skips post-mutation validation only; pre-validation of enum constraints always runs. Note: `type: section` and section append (`+=`) are removed; use `source: body.section[...]` + `type: string` in the `.stem` instead.
 
 ### Analyze Existing Documents
 

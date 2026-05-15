@@ -10,7 +10,6 @@ Use `describe` to show the effective `.stem` schema for exactly one path.
 rootline describe <path> -o json
 rootline describe <path> -o table
 rootline describe <dir> --field schema.id.next
-rootline describe <path> --by-domain lifecycle_state -o json
 ```
 
 `<path>` is required. It may be a file or directory.
