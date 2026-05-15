@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: task
 ---
 # T004: Refactor `tree.go` — Frontmatter map, remove Completed/Estado hardcodings
