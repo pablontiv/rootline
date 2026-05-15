@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T008: Remove remaining hardcodings in stats, trace, analyze, proposal, schema_gen, migrate
