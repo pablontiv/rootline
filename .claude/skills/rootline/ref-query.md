@@ -64,7 +64,7 @@ Without `--select` (full records):
 }
 ```
 
-With `--select "path,estado,title"` (compact projection):
+With `--select "path,estado,titulo"` (compact projection):
 ```json
 {
   "version": 1,
@@ -73,7 +73,7 @@ With `--select "path,estado,title"` (compact projection):
     {
       "path": "docs/T001-task.md",
       "estado": "Pending",
-      "title": "T001: some task"
+      "titulo": "T001: some task"
     }
   ],
   "meta": { "count": 1 }
@@ -104,12 +104,12 @@ rootline query docs/roadmap --select path,estado --output jsonl | jq -r '.path'
 Emit CSV with header row — columns follow `--select` field order:
 
 ```bash
-rootline query docs/roadmap --select path,estado,title --output csv
+rootline query docs/roadmap --select path,estado,titulo --output csv
 ```
 
 Output:
 ```
-path,estado,title
+path,estado,titulo
 docs/T001-task.md,Pending,T001: some task
 docs/T002-task.md,Completed,T002: another task
 ```
@@ -121,19 +121,18 @@ Missing or nil fields render as empty columns. CSV quoting handles commas, tabs,
 Use `--select` for compact output with only specified fields. Examples:
 
 ```bash
-rootline query docs/roadmap --select path,estado,title
-rootline query docs/roadmap --where "estado == 'In Progress'" --select path,title,links
+rootline query docs/roadmap --select path,estado,titulo
+rootline query docs/roadmap --where "estado == 'In Progress'" --select path,titulo,links
 ```
 
 Fields available in projection:
 - `path` — document path relative to scan root
 - `estado`, `tipo`, etc. — any frontmatter field
-- `derived_field` — any derived field from `.stem`
-- `title` — extracted from first Markdown heading (`# Heading`)
+- `titulo` — derived field from `.stem` source extraction (e.g., `source: body.h1`)
 - `links` — array of wiki-link references
 - Missing fields are omitted from the projected row
 
-`title` is a special computed field extracted from the first `# Heading` in the document body. If no heading exists, it is omitted from the row.
+Derived fields are populated via `.stem` `source:` rules. For example, `titulo: {source: body.h1}` extracts the first Markdown heading. If a source cannot be extracted, the field is omitted from the row.
 
 ## tree
 
