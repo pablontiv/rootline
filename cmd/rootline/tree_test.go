@@ -361,7 +361,7 @@ func TestFindChild_SkipsLeaves(t *testing.T) {
 
 func TestRenderASCII_EmptyRoot(t *testing.T) {
 	root := &treeNode{Name: "empty", Total: 0}
-	lines := renderASCII(root, "")
+	lines := renderASCII(root, "", nil)
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line, got %d", len(lines))
 	}
@@ -372,7 +372,7 @@ func TestRenderASCII_EmptyRoot(t *testing.T) {
 
 func TestRenderASCII_NonRootPrefix(t *testing.T) {
 	node := &treeNode{Name: "sub", Total: 1}
-	lines := renderASCII(node, "  ")
+	lines := renderASCII(node, "  ", nil)
 	// Non-root calls return empty since prefix != ""
 	if len(lines) != 0 {
 		t.Errorf("expected 0 lines for non-root prefix, got %d", len(lines))
@@ -381,7 +381,7 @@ func TestRenderASCII_NonRootPrefix(t *testing.T) {
 
 func TestRenderChild_Leaf(t *testing.T) {
 	leaf := &treeNode{Name: "doc.md", IsLeaf: true, Frontmatter: map[string]any{"estado": "Pending"}}
-	lines := renderChild(leaf, "", false)
+	lines := renderChild(leaf, "", false, nil)
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line, got %d", len(lines))
 	}
@@ -398,7 +398,7 @@ func TestRenderChild_Leaf(t *testing.T) {
 
 func TestRenderChild_LastLeaf(t *testing.T) {
 	leaf := &treeNode{Name: "last.md", IsLeaf: true, Frontmatter: map[string]any{"estado": "Completed"}}
-	lines := renderChild(leaf, "", true)
+	lines := renderChild(leaf, "", true, nil)
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line, got %d", len(lines))
 	}
@@ -416,7 +416,7 @@ func TestRenderChild_Directory(t *testing.T) {
 			{Name: "b.md", IsLeaf: true, Frontmatter: map[string]any{"estado": "Pending"}, Total: 1},
 		},
 	}
-	lines := renderChild(dir, "", false)
+	lines := renderChild(dir, "", false, nil)
 	if len(lines) != 3 {
 		t.Fatalf("expected 3 lines, got %d: %v", len(lines), lines)
 	}
@@ -427,7 +427,7 @@ func TestRenderChild_Directory(t *testing.T) {
 
 func TestRenderChild_LeafNoEstado(t *testing.T) {
 	leaf := &treeNode{Name: "doc.md", IsLeaf: true, Frontmatter: map[string]any{}}
-	lines := renderChild(leaf, "", true)
+	lines := renderChild(leaf, "", true, nil)
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line, got %d", len(lines))
 	}

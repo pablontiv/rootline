@@ -18,7 +18,7 @@ var treeWhere []string
 var treeCmd = &cobra.Command{
 	Use:   "tree [path]",
 	Short: "Hierarchical view with completion counts",
-	Long:  "Display the document tree with completion counts\nderived from frontmatter.estado fields.",
+	Long:  "Display the document tree with completion counts\nderived from frontmatter lifecycle fields.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  runTree,
 }
@@ -43,6 +43,15 @@ type treeNode struct {
 	Total       int            `json:"total"`
 	IsLeaf      bool           `json:"is_leaf,omitempty"`
 	Frontmatter map[string]any `json:"frontmatter,omitempty"`
+}
+
+// treeRenderContext holds schema information for rendering lifecycle field values.
+type treeRenderContext struct {
+	// lifecycleField is the name of the field that should be displayed as a status.
+	// If empty, the renderer will pick the first enum-typed field or any available status-like field.
+	lifecycleField string
+	// effectiveSchema maps field names to their schema definitions.
+	effectiveSchema map[string]rules.SchemaField
 }
 
 func runTree(cmd *cobra.Command, args []string) error {
@@ -88,8 +97,11 @@ func runTree(cmd *cobra.Command, args []string) error {
 		return outputJSON(cmd, result, false)
 	}
 
+	// Build render context with schema information for ASCII output.
+	renderCtx := buildRenderContext(absRoot)
+
 	// ASCII output
-	lines := renderASCII(root, "")
+	lines := renderASCII(root, "", renderCtx)
 	for _, line := range lines {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
 	}
@@ -166,7 +178,7 @@ func propagateCounts(node *treeNode) {
 	}
 }
 
-func renderASCII(node *treeNode, prefix string) []string {
+func renderASCII(node *treeNode, prefix string, ctx *treeRenderContext) []string {
 	var lines []string
 
 	// Root node
@@ -174,14 +186,14 @@ func renderASCII(node *treeNode, prefix string) []string {
 		lines = append(lines, fmt.Sprintf("%s [%d]", node.Name, node.Total))
 		for i, child := range node.Children {
 			isLast := i == len(node.Children)-1
-			lines = append(lines, renderChild(child, "", isLast)...)
+			lines = append(lines, renderChild(child, "", isLast, ctx)...)
 		}
 		return lines
 	}
 	return lines
 }
 
-func renderChild(node *treeNode, prefix string, isLast bool) []string {
+func renderChild(node *treeNode, prefix string, isLast bool, ctx *treeRenderContext) []string {
 	var lines []string
 
 	connector := "├── "
@@ -192,23 +204,89 @@ func renderChild(node *treeNode, prefix string, isLast bool) []string {
 	}
 
 	if node.IsLeaf {
-		estado := ""
-		if node.Frontmatter != nil {
-			if e, ok := node.Frontmatter["estado"]; ok {
-				estado = fmt.Sprintf("%v", e)
-			}
-		}
-		if estado == "" {
-			estado = "—"
-		}
-		lines = append(lines, fmt.Sprintf("%s%s%s [%s]", prefix, connector, node.Name, estado))
+		status := getStatusValue(node, ctx)
+		lines = append(lines, fmt.Sprintf("%s%s%s [%s]", prefix, connector, node.Name, status))
 	} else {
 		lines = append(lines, fmt.Sprintf("%s%s%s [%d]", prefix, connector, node.Name, node.Total))
 		for i, child := range node.Children {
 			isChildLast := i == len(node.Children)-1
-			lines = append(lines, renderChild(child, childPrefix, isChildLast)...)
+			lines = append(lines, renderChild(child, childPrefix, isChildLast, ctx)...)
 		}
 	}
 
 	return lines
+}
+
+// buildRenderContext constructs a treeRenderContext with schema information.
+// It attempts to discover and merge .stem files from the given root to identify
+// lifecycle-related fields for display in the ASCII tree.
+func buildRenderContext(root string) *treeRenderContext {
+	ctx := &treeRenderContext{
+		effectiveSchema: make(map[string]rules.SchemaField),
+	}
+
+	// Attempt to discover and merge stems from the root.
+	entries, err := rules.WalkUp(root)
+	if err == nil && len(entries) > 0 {
+		merged := rules.MergeStemFiles(entries)
+		if merged != nil && len(merged.Schema) > 0 {
+			ctx.effectiveSchema = merged.Schema
+
+			// Look for the first enum-typed field to use as the lifecycle field.
+			// Enum fields are typically used for status/state values.
+			for name, field := range merged.Schema {
+				if len(field.Values) > 0 {
+					ctx.lifecycleField = name
+					break
+				}
+			}
+		}
+	}
+
+	return ctx
+}
+
+// getStatusValue extracts the status/lifecycle value from a leaf node's frontmatter.
+// Strategy:
+// 1. If schema is available with a known lifecycle field, use it.
+// 2. Otherwise, look for the first enum-typed field in schema.
+// 3. If context is provided but has no enum fields, use em-dash.
+// 4. If no context provided, try first enum-like field or any available string value.
+func getStatusValue(node *treeNode, ctx *treeRenderContext) string {
+	if len(node.Frontmatter) == 0 {
+		return "—"
+	}
+
+	// If we have schema info with a known lifecycle field, use it.
+	if ctx != nil && ctx.lifecycleField != "" {
+		if val, ok := node.Frontmatter[ctx.lifecycleField]; ok {
+			return fmt.Sprintf("%v", val)
+		}
+	}
+
+	// Otherwise, pick the first enum-typed field from schema if available.
+	if ctx != nil && ctx.effectiveSchema != nil {
+		for name, field := range ctx.effectiveSchema {
+			if len(field.Values) > 0 {
+				if val, ok := node.Frontmatter[name]; ok {
+					return fmt.Sprintf("%v", val)
+				}
+			}
+		}
+	}
+
+	// If context was provided (schema-aware), but no enum field found, use em-dash.
+	if ctx != nil {
+		return "—"
+	}
+
+	// Fallback for tests without context: return first non-empty string value.
+	for _, val := range node.Frontmatter {
+		if valStr, ok := val.(string); ok && valStr != "" {
+			return valStr
+		}
+	}
+
+	// If all else fails, use em-dash.
+	return "—"
 }

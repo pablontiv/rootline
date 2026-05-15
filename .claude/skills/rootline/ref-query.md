@@ -144,7 +144,7 @@ rootline tree <dir> --where "estado != 'Completed'" -o table
 rootline tree <dir> --where "isIndex == false" -o json
 ```
 
-Use table output for humans and JSON for programmatic handling.
+Use table output for humans and JSON for programmatic handling. Table format (`-o table`) renders ASCII brackets with the lifecycle field value (e.g., `[Completed]`, `[In Progress]`). The field name is resolved from the stem schema — not hardcoded to `"estado"`. JSON output (`-o json`) is the default and returns version 2 with `frontmatter` and derived fields on each node.
 
 ## stats
 

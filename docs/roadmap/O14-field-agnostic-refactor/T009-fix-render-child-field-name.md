@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: task
 ---
 # T009: Fix `renderChild()` — remove hardcoded "estado" from ASCII display
