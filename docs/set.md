@@ -3,7 +3,7 @@ estado: Completed
 ---
 # Set Command
 
-`rootline set` mutates frontmatter fields and document sections with schema validation. It is the primary mutation command — changes are validated against the effective `.stem` schema before and after application, with automatic rollback on failure.
+`rootline set` mutates frontmatter fields with schema validation. It is the primary mutation command — changes are validated against the effective `.stem` schema before and after application, with automatic rollback on failure.
 
 ## Synopsis
 
@@ -22,18 +22,16 @@ rootline set <file> <field=value> [<field=value>...] [flags]
 
 | Operator | Syntax | Description |
 |----------|--------|-------------|
-| Set | `field=value` | Set a frontmatter field or section to the given value |
-| Append | `field+=content` | Append content to an existing section body |
+| Set | `field=value` | Set a frontmatter field to the given value |
 | From file | `field=@path` | Read value from the file at `path` and set it |
 
-For frontmatter fields, `field` is the YAML key name. For sections, `field` is the full heading string (e.g., `"## Summary"`).
+For frontmatter fields, `field` is the YAML key name.
 
 ## Flags
 
 | Flag | Description |
 |------|-------------|
 | `--dry-run` | Show proposed changes without writing to disk |
-| `--create` | Create sections that don't exist (does not create files; use `rootline new` to scaffold new documents) |
 | `--no-validate` | Skip post-mutation validation (pre-validation of enum constraints always runs) |
 
 ## Pipeline
@@ -64,18 +62,6 @@ rootline set docs/api/overview.md estado=Completed
 rootline set docs/api/overview.md estado=Completed tipo=documentation
 ```
 
-### Set a section body
-
-```bash
-rootline set docs/api/overview.md '## Summary=This section describes the API.'
-```
-
-### Append to a section
-
-```bash
-rootline set docs/api/overview.md '## Changelog+=- Added endpoint /v2/status'
-```
-
 ### Set value from a file
 
 ```bash
@@ -86,12 +72,6 @@ rootline set docs/api/overview.md descripcion=@notes.txt
 
 ```bash
 rootline set docs/api/overview.md estado=Pending --dry-run
-```
-
-### Create a section that doesn't exist
-
-```bash
-rootline set docs/api/overview.md --create notes="Initial notes."
 ```
 
 ### Skip validation (advanced)
@@ -122,5 +102,3 @@ With `--dry-run`, `rootline set` prints a diff-style preview without modifying a
 ## Notes
 
 - YAML AST preservation: when writing frontmatter, Rootline uses the YAML AST parser to preserve existing comments and formatting.
-- Section mutations require AST extraction to be enabled (default for markdown files with body content).
-- `--create` allows adding sections that don't yet exist in the document body. It does not create new files; use `rootline new` to scaffold a new document from the schema.
