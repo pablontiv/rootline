@@ -52,10 +52,6 @@ Batch:
 
 Each issue includes `rule`, `field`, `message`, `source`, `severity`, and optional `suggestion`.
 
-### Section Fields
-
-`type: section` fields in `.stem` are validated against the document body (not frontmatter). Both single-file and `--all` modes use AST extraction, so required sections are detected correctly in all validate modes.
-
 ### Reporting Format
 
 Use this exact shape in responses:

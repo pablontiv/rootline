@@ -38,7 +38,7 @@ Use `Read` only for body content the CLI does not expose, a small error context,
 | Repair validation issues | `fix` | dir/all: `rootline fix --all <dir> --dry-run -o json`; file: `rootline fix file.md --dry-run` |
 | Inspect schema | `describe` | `rootline describe <path> -o json` |
 | Create document | `new` | `rootline new <file.md> --dry-run` then `rootline new <file.md>` |
-| Set fields/sections | `set` | `rootline set --dry-run file.md field=value` then apply without `--dry-run` |
+| Set fields | `set` | `rootline set --dry-run file.md field=value` then apply without `--dry-run` |
 | Search records | `query` | `rootline query <dir> --where "estado == 'Pending'" -o json` |
 | Show hierarchy | `tree` | `rootline tree <dir> --where "isIndex == false" -o table` |
 | Count records | `stats` | `rootline stats <dir> --where "tipo == 'task'" -o json` |
