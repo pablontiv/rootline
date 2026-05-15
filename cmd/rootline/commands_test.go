@@ -373,9 +373,7 @@ func TestStatsJSON(t *testing.T) {
 	if result.Total != 2 {
 		t.Errorf("expected 2 total, got %d", result.Total)
 	}
-	if result.ByEstado["Pending"] != 1 {
-		t.Errorf("expected 1 Pending, got %d", result.ByEstado["Pending"])
-	}
+	// ByEstado and ByTipo are now empty (field-agnostic) — only total matters
 }
 
 func TestStatsWhere(t *testing.T) {
@@ -410,9 +408,7 @@ func TestStatsTable(t *testing.T) {
 	if !strings.Contains(out, "Total:") {
 		t.Errorf("expected Total: in table output, got: %s", out)
 	}
-	if !strings.Contains(out, "By Estado:") {
-		t.Errorf("expected By Estado: section")
-	}
+	// Table no longer shows By Estado/By Tipo — field-agnostic
 }
 
 // --- Tree tests ---
@@ -554,18 +550,6 @@ func TestOutputJSONWithField(t *testing.T) {
 	out = strings.TrimSpace(out)
 	if out != "2" {
 		t.Errorf("expected 2 with --field total, got: %s", out)
-	}
-}
-
-func TestOutputJSONWithNestedField(t *testing.T) {
-	dir := setupTestDir(t)
-	out, err := runCmd(t, "stats", dir, "--field", "by_estado.Pending")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	out = strings.TrimSpace(out)
-	if out != "1" {
-		t.Errorf("expected 1 with --field by_estado.Pending, got: %s", out)
 	}
 }
 

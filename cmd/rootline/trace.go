@@ -91,13 +91,7 @@ func runTrace(cmd *cobra.Command, args []string) error {
 	}
 
 	// Tree format output.
-	cmd.Printf("%s", relFile)
-	if rec, ok := g.Nodes[relFile]; ok {
-		if estado, ok := rec.EffectiveField("estado"); ok {
-			cmd.Printf(" (%s)", estado)
-		}
-	}
-	cmd.Println()
+	cmd.Printf("%s\n", relFile)
 
 	for _, node := range result.Nodes {
 		indent := strings.Repeat("  ", node.Depth)
@@ -106,9 +100,6 @@ func runTrace(cmd *cobra.Command, args []string) error {
 			arrow = "←"
 		}
 		cmd.Printf("%s%s %s", indent, arrow, node.Path)
-		if node.Estado != "" {
-			cmd.Printf(" (%s)", node.Estado)
-		}
 		if node.Via != "" {
 			cmd.Printf(" [via %s]", node.Via)
 		}

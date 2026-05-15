@@ -293,36 +293,6 @@ func TestFixPipeline_ExtractBody(t *testing.T) {
 	}
 }
 
-func TestFixPipeline_InferFromChildren(t *testing.T) {
-	root := setupProject(t, map[string]string{
-		".stem":          "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed, \"In Progress\"]\n    required: true\n",
-		"S001/README.md": "---\n\n---\n# Story\n",
-		"S001/T001.md":   "---\nestado: Completed\n---\n# Task 1\n",
-		"S001/T002.md":   "---\nestado: Completed\n---\n# Task 2\n",
-	})
-
-	ctx := context.Background()
-	records := scanAndAggregate(t, ctx, root)
-	allErrs := collectErrors(ctx, root, records)
-	effective := richestStem(root, records)
-
-	report := proposal.Analyze(records, effective, allErrs)
-	p := requireProposal(t, report, proposal.InferFromChildren)
-	if p.Value != "Completed" {
-		t.Errorf("infer value = %q, want Completed", p.Value)
-	}
-
-	if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
-		t.Fatalf("apply: %v", err)
-	}
-
-	records2 := scanAndAggregate(t, ctx, root)
-	allErrs2 := collectErrors(ctx, root, records2)
-	if len(allErrs2) > 0 {
-		t.Errorf("re-validate still has errors: %v", allErrs2)
-	}
-}
-
 func TestFixPipeline_CorrectLink(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		".stem":                 "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Completed]\n    required: true\nlinks:\n  allowed: [blocks]\n  blocks:\n    target: \"^T\\\\d{3}-\"\n",

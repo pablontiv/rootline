@@ -686,8 +686,9 @@ schema:
 	if !strings.Contains(rootStr, "aggregate:") {
 		t.Errorf("expected aggregate section in root .stem, got:\n%s", rootStr)
 	}
-	if !strings.Contains(rootStr, "descendants") {
-		t.Errorf("expected descendants-based expression, got:\n%s", rootStr)
+	// Field-agnostic: simple positional fallback (first value)
+	if !strings.Contains(rootStr, `"Pending"`) {
+		t.Errorf("expected first value as default, got:\n%s", rootStr)
 	}
 }
 

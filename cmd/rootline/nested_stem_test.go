@@ -179,15 +179,7 @@ func TestStatsNestedStem_CountsAll(t *testing.T) {
 	if result.Total != 4 {
 		t.Errorf("total = %d, want 4", result.Total)
 	}
-	if result.ByEstado["Pending"] != 2 {
-		t.Errorf("Pending = %d, want 2", result.ByEstado["Pending"])
-	}
-	if result.ByEstado["Completed"] != 2 {
-		t.Errorf("Completed = %d, want 2", result.ByEstado["Completed"])
-	}
-	if result.ByTipo["feature"] != 1 {
-		t.Errorf("feature = %d, want 1", result.ByTipo["feature"])
-	}
+	// ByEstado and ByTipo are now empty (field-agnostic) — only total matters
 }
 
 func TestQueryNestedStem_WithWhere(t *testing.T) {

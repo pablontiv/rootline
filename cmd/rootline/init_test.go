@@ -349,8 +349,9 @@ func TestInitAutoHierarchy_GeneratesAggregate(t *testing.T) {
 	if !strings.Contains(s, "estado:") {
 		t.Errorf("expected estado field in aggregate section, got:\n%s", s)
 	}
-	if !strings.Contains(s, "descendants") {
-		t.Errorf("expected descendants-based expression, got:\n%s", s)
+	// Field-agnostic: uses first value as default
+	if !strings.Contains(s, `"In Progress"`) && !strings.Contains(s, `"Pending"`) {
+		t.Errorf("expected first value as default, got:\n%s", s)
 	}
 }
 

@@ -170,9 +170,10 @@ func generateAggregateExpressions(rootSchema map[string]rules.SchemaField) map[s
 	return result
 }
 
-// generateAggregateExpr produces an aggregate expression for a single enum field.
-// The expression uses ternary chains with all()/any() over descendants.
+// generateAggregateExpr generates a field-agnostic aggregate expression.
+// Without semantic keyword matching, we can only construct simple positional expressions.
 // Returns "" for non-enum fields.
+// This is a simplified version that does not infer semantic meaning from value names.
 func generateAggregateExpr(fieldName string, sf rules.SchemaField) string {
 	if sf.Type != "enum" || len(sf.Values) == 0 {
 		return ""
@@ -182,136 +183,13 @@ func generateAggregateExpr(fieldName string, sf rules.SchemaField) string {
 		return fmt.Sprintf("%q", sf.Values[0])
 	}
 
-	classified := classifyEnumValues(sf.Values)
-
-	var lines []string
-
-	// Terminal values use all() — "everything is done".
-	for _, v := range classified.terminal {
-		lines = append(lines, fmt.Sprintf(
-			"all(descendants, {.%s == %q}) ? %q",
-			fieldName, v, v,
-		))
-	}
-
-	// Negative values use any() — high priority.
-	for _, v := range classified.negative {
-		lines = append(lines, fmt.Sprintf(
-			"any(descendants, {.%s == %q}) ? %q",
-			fieldName, v, v,
-		))
-	}
-
-	// Active values use any().
-	for _, v := range classified.active {
-		lines = append(lines, fmt.Sprintf(
-			"any(descendants, {.%s == %q}) ? %q",
-			fieldName, v, v,
-		))
-	}
-
-	// Neutral values use any() — except the last which becomes default.
-	for _, v := range classified.neutral {
-		lines = append(lines, fmt.Sprintf(
-			"any(descendants, {.%s == %q}) ? %q",
-			fieldName, v, v,
-		))
-	}
-
-	// The default is the lowest-priority classified value.
+	// Without semantic classification, we use the first value as default
+	// and build a simple expression. Proper aggregate logic must be
+	// explicitly configured in .stem files by the user.
 	defaultVal := sf.Values[0]
-	switch {
-	case len(classified.neutral) > 0:
-		defaultVal = classified.neutral[0]
-	case len(classified.active) > 0:
-		defaultVal = classified.active[0]
-	case len(classified.negative) > 0:
-		defaultVal = classified.negative[0]
-	case len(classified.terminal) > 0:
-		defaultVal = classified.terminal[0]
-	}
 
-	// Remove the last any() line that matches the default — it becomes the fallback.
-	// Find the line that matches the default value.
-	defaultLine := fmt.Sprintf(
-		"any(descendants, {.%s == %q}) ? %q",
-		fieldName, defaultVal, defaultVal,
-	)
-	filteredLines := make([]string, 0, len(lines))
-	for _, l := range lines {
-		if l != defaultLine {
-			filteredLines = append(filteredLines, l)
-		}
-	}
-
-	// Build multi-line expression.
-	var b strings.Builder
-	for i, line := range filteredLines {
-		if i > 0 {
-			b.WriteString(" :\n")
-		}
-		b.WriteString(line)
-	}
-	if len(filteredLines) > 0 {
-		b.WriteString(" :\n")
-	}
-	fmt.Fprintf(&b, "%q", defaultVal)
-
-	return b.String()
-}
-
-// enumClassification groups enum values by their semantic role.
-type enumClassification struct {
-	terminal []string
-	negative []string
-	active   []string
-	neutral  []string
-}
-
-// classifyEnumValues sorts enum values into semantic classes using keyword matching.
-// If no keywords match any value, falls back to positional: last = terminal, first = default.
-func classifyEnumValues(values []string) enumClassification {
-	var c enumClassification
-
-	terminalKW := []string{"completed", "completado", "done", "closed", "obsolete", "obsoleto"}
-	negativeKW := []string{"blocked", "bloqueada", "hold", "diferida", "paused"}
-	activeKW := []string{"in progress", "en progreso", "active"}
-
-	anyMatched := false
-	for _, v := range values {
-		lower := strings.ToLower(v)
-		switch {
-		case containsKeyword(lower, terminalKW):
-			c.terminal = append(c.terminal, v)
-			anyMatched = true
-		case containsKeyword(lower, negativeKW):
-			c.negative = append(c.negative, v)
-			anyMatched = true
-		case containsKeyword(lower, activeKW):
-			c.active = append(c.active, v)
-			anyMatched = true
-		default:
-			c.neutral = append(c.neutral, v)
-		}
-	}
-
-	// Fallback: no keywords matched at all → positional.
-	if !anyMatched {
-		c.terminal = []string{values[len(values)-1]}
-		c.neutral = values[:len(values)-1]
-	}
-
-	return c
-}
-
-// containsKeyword reports whether s contains any of the keywords.
-func containsKeyword(s string, keywords []string) bool {
-	for _, kw := range keywords {
-		if strings.Contains(s, kw) {
-			return true
-		}
-	}
-	return false
+	// Return a simple positional fallback (no semantic inference)
+	return fmt.Sprintf("%q", defaultVal)
 }
 
 // sectionFieldName converts a heading text to a .stem field name:

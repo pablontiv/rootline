@@ -452,77 +452,13 @@ func detectExtractBody(records []*extract.Record, effective *rules.StemFile, err
 	return proposals
 }
 
-// detectInferFromChildren finds README files with missing required fields
-// that can be inferred from child document estados.
+// detectInferFromChildren has been removed as part of O14 field-agnostic refactor.
+// The function assumed a hardcoded "estado" field and inferred parent estado from children,
+// which conflicts with field-agnostic design. Parent field values must now be
+// explicitly configured via .stem aggregate expressions.
 func detectInferFromChildren(records []*extract.Record, effective *rules.StemFile, errs map[string][]rules.ValidationError) []Proposal {
-	var proposals []Proposal
-
-	// Build a map of records by path.
-	recordMap := make(map[string]*extract.Record)
-	for _, rec := range records {
-		recordMap[rec.Path] = rec
-	}
-
-	for path, pathErrs := range errs {
-		// Only README files are candidates for child inference.
-		if !strings.HasSuffix(path, "README.md") {
-			continue
-		}
-
-		// Check if body already has the field — if so, extract_body will handle it.
-		rec, ok := recordMap[path]
-		if ok && rec.Body != "" {
-			bodyFields := extract.ScanBodyFields(rec.Body)
-			hasBodyHint := false
-			for _, e := range pathErrs {
-				if e.Rule == "required" {
-					if _, found := bodyFields[e.Field]; found {
-						hasBodyHint = true
-						break
-					}
-				}
-			}
-			if hasBodyHint {
-				continue // extract_body will handle this
-			}
-		}
-
-		// Find child records (same directory prefix, excluding the README itself).
-		dir := strings.TrimSuffix(path, "README.md")
-		var childEstados []string
-		for _, child := range records {
-			if child.Path == path {
-				continue
-			}
-			if !strings.HasPrefix(child.Path, dir) {
-				continue
-			}
-			if estado, ok := child.Frontmatter["estado"]; ok {
-				if s, ok := estado.(string); ok {
-					childEstados = append(childEstados, s)
-				}
-			}
-		}
-
-		if len(childEstados) == 0 {
-			continue
-		}
-
-		for _, e := range pathErrs {
-			if e.Rule != "required" || e.Field != "estado" {
-				continue
-			}
-			inferred := InferEstado(childEstados)
-			proposals = append(proposals, Proposal{
-				Type:        InferFromChildren,
-				Field:       e.Field,
-				Description: fmt.Sprintf("infer %q from %d child documents", inferred, len(childEstados)),
-				Paths:       []string{path},
-				Value:       inferred,
-			})
-		}
-	}
-	return proposals
+	// No inference — users must define aggregates in .stem
+	return nil
 }
 
 // detectAddField finds required fields that are missing from records.

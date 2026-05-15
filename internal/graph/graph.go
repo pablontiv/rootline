@@ -187,11 +187,10 @@ type TraceOptions struct {
 
 // TraceNode represents a node discovered during trace traversal.
 type TraceNode struct {
-	Path   string `json:"path"`
-	Estado string `json:"estado,omitempty"`
-	Depth  int    `json:"depth"`
-	Via    string `json:"via,omitempty"`  // edge type that led here
-	From   string `json:"from,omitempty"` // source record path
+	Path  string `json:"path"`
+	Depth int    `json:"depth"`
+	Via   string `json:"via,omitempty"`  // edge type that led here
+	From  string `json:"from,omitempty"` // source record path
 }
 
 // TraceResult is the output of a trace traversal.
@@ -254,11 +253,6 @@ func (g *Graph) Trace(start string, opts TraceOptions) *TraceResult {
 				Depth: item.depth,
 				Via:   item.via,
 				From:  item.from,
-			}
-			if rec, ok := g.Nodes[item.path]; ok {
-				if estado, ok := rec.EffectiveField("estado"); ok {
-					node.Estado, _ = estado.(string)
-				}
 			}
 			result.Nodes = append(result.Nodes, node)
 		}

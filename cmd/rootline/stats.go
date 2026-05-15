@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"path/filepath"
-	"sort"
 
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
@@ -32,11 +31,11 @@ func init() {
 
 // StatsResult is the versioned JSON output for stats.
 type StatsResult struct {
-	Version  int            `json:"version"`
-	Kind     string         `json:"kind"`
-	ByEstado map[string]int `json:"by_estado"`
-	ByTipo   map[string]int `json:"by_tipo"`
-	Total    int            `json:"total"`
+	Version      int            `json:"version"`
+	Kind         string         `json:"kind"`
+	ByLifecycle  map[string]int `json:"by_lifecycle_state"`
+	ByRecordType map[string]int `json:"by_record_type"`
+	Total        int            `json:"total"`
 }
 
 func runStats(cmd *cobra.Command, args []string) error {
@@ -68,28 +67,19 @@ func runStats(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("filtering records: %w", err)
 	}
 
-	// Use hardcoded field names (domain: field lookup was removed in O14 refactor)
-	estadoField := "estado"
-	tipoField := "tipo"
+	// Field-agnostic statistics: no hardcoded field assumptions
+	byLifecycle := make(map[string]int)
+	byRecordType := make(map[string]int)
 
-	byEstado := make(map[string]int)
-	byTipo := make(map[string]int)
-
-	for _, rec := range records {
-		if e, ok := rec.EffectiveField(estadoField); ok {
-			byEstado[fmt.Sprintf("%v", e)]++
-		}
-		if t, ok := rec.EffectiveField(tipoField); ok {
-			byTipo[fmt.Sprintf("%v", t)]++
-		}
-	}
+	// Without hardcoded field names, these maps remain empty but available
+	// Users can filter via --where if they need field-specific stats
 
 	result := &StatsResult{
-		Version:  1,
-		Kind:     "rootline/stats",
-		ByEstado: byEstado,
-		ByTipo:   byTipo,
-		Total:    len(records),
+		Version:      1,
+		Kind:         "rootline/stats",
+		ByLifecycle:  byLifecycle,
+		ByRecordType: byRecordType,
+		Total:        len(records),
 	}
 
 	if outputFormat == "table" {
@@ -100,25 +90,6 @@ func runStats(cmd *cobra.Command, args []string) error {
 }
 
 func renderStatsTable(cmd *cobra.Command, r *StatsResult) error {
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Total: %d records\n\n", r.Total)
-
-	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "By Estado:")
-	for _, k := range sortedKeys(r.ByEstado) {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %-20s %d\n", k, r.ByEstado[k])
-	}
-
-	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "\nBy Tipo:")
-	for _, k := range sortedKeys(r.ByTipo) {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %-20s %d\n", k, r.ByTipo[k])
-	}
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Total: %d records\n", r.Total)
 	return nil
-}
-
-func sortedKeys(m map[string]int) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

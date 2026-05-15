@@ -136,9 +136,6 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		{"invariants", "Invariant Extraction", func() []infer.Inference {
 			return infer.DetectInvariants(records)
 		}},
-		{"sub_schemas", "Sub-Schema Detection", func() []infer.Inference {
-			return infer.DetectSubSchemas(records, "tipo")
-		}},
 		{"formal_dependencies", "Formal Dependency Extraction", func() []infer.Inference {
 			return infer.DetectFormalDependencies(records)
 		}},

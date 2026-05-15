@@ -18,26 +18,3 @@ func mapValue(val string) string {
 	}
 	return val
 }
-
-// InferEstado infers a parent estado from child estados.
-// All Completed → Completed, all Pending → Pending, mixed → In Progress.
-// Empty slice → Pending.
-func InferEstado(childEstados []string) string {
-	if len(childEstados) == 0 {
-		return "Pending"
-	}
-
-	allSame := true
-	first := childEstados[0]
-	for _, e := range childEstados[1:] {
-		if e != first {
-			allSame = false
-			break
-		}
-	}
-
-	if allSame {
-		return first
-	}
-	return "In Progress"
-}
