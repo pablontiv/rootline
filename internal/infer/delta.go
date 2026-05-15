@@ -48,18 +48,13 @@ func isCovered(inf Inference, stem *rules.StemFile) bool {
 			return true
 		}
 
-	case "missing_domain":
-		if sf, ok := stem.Schema[inf.Field]; ok && sf.Domain != "" {
-			return true
-		}
-
 	case "enum_without_values":
 		if sf, ok := stem.Schema[inf.Field]; ok && sf.Type == "enum" && len(sf.Values) > 0 {
 			return true
 		}
 
 	case "untyped_field":
-		if sf, ok := stem.Schema[inf.Field]; ok && (sf.Type != "" || sf.Domain != "") {
+		if sf, ok := stem.Schema[inf.Field]; ok && sf.Type != "" {
 			return true
 		}
 

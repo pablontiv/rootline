@@ -438,7 +438,6 @@ estado: Pending
 
 // TestSet_RequiredSectionValidation verifies that validation catches a missing
 
-
 // TestSet_RollbackOnInvalidValue verifies that setting an enum field to an
 // invalid value causes the command to fail AND leaves the file unchanged.
 // This test exercises the pre-validation guard in the set command by running

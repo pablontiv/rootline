@@ -167,8 +167,6 @@ type SchemaField struct {
 	// Section fields (type: section)
 	Heading string `yaml:"heading" json:"heading,omitempty"`
 	Ordered *int   `yaml:"ordered" json:"ordered,omitempty"`
-	// Domain: semantic type (e.g., lifecycle_state, record_type, identifier)
-	Domain string `yaml:"domain" json:"domain,omitempty"`
 }
 
 // schemaFieldRaw is the intermediate type for YAML unmarshaling.
@@ -186,7 +184,6 @@ type schemaFieldRaw struct {
 	Match    *FieldMatch  `yaml:"match"`
 	Heading  string       `yaml:"heading"`
 	Ordered  *int         `yaml:"ordered"`
-	Domain   string       `yaml:"domain"`
 }
 
 // UnmarshalYAML implements custom unmarshaling for SchemaField.
@@ -209,7 +206,6 @@ func (sf *SchemaField) UnmarshalYAML(value *yaml.Node) error {
 	sf.Match = raw.Match
 	sf.Heading = raw.Heading
 	sf.Ordered = raw.Ordered
-	sf.Domain = raw.Domain
 
 	// Parse "required" field: bool or {match: [...]}
 	switch raw.Required.Kind {
@@ -281,9 +277,6 @@ func ParseStem(path string, content []byte) (*StemFile, error) {
 		}
 		stem.Schema[name] = field
 	}
-
-	// Resolve domain-based type inference
-	stem.Schema = ResolveDomainType(stem.Schema)
 
 	// Tag source and default severity on validation rules
 	for i := range stem.Validate {

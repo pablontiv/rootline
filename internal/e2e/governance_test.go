@@ -23,15 +23,7 @@ func TestGovernance_AnalyzePipeline(t *testing.T) {
 
 	report := runAnalyze(t, root)
 
-	// Verify domain_coverage category exists.
-	domainCat := findCategory(report, "domain_coverage")
-	if domainCat == nil {
-		t.Fatal("expected domain_coverage category in report")
-	}
-	// Should flag estado and tipo (no domain).
-	if domainCat.InferenceCount < 2 {
-		t.Errorf("expected at least 2 missing_domain inferences, got %d", domainCat.InferenceCount)
-	}
+	// Note: domain_coverage is no longer available after O14 refactor (domain: field removed)
 
 	// Verify schema_coverage category exists.
 	schemaCat := findCategory(report, "schema_coverage")
@@ -55,13 +47,6 @@ func TestGovernance_AnalyzePipeline(t *testing.T) {
 	valCat := findCategory(report, "validation_gaps")
 	if valCat == nil {
 		t.Fatal("expected validation_gaps category in report")
-	}
-
-	// Verify agent gating on domain inferences.
-	for _, inf := range domainCat.Inferences {
-		if !inf.RequiresAgent {
-			t.Errorf("missing_domain should be agent-required, got RequiresAgent=false for %s", inf.Field)
-		}
 	}
 
 	// Verify summary includes governance counts.

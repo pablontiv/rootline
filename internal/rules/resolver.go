@@ -239,16 +239,6 @@ func ResolveLayered(path string, root string, monotonic bool) (*LayeredResolutio
 					Operation: "define",
 				})
 			}
-
-			// Record domain constraint
-			if field.Domain != "" {
-				lr.Layers = append(lr.Layers, LayerConstraint{
-					StemPath:  entry.Path,
-					Field:     fieldName + ".domain",
-					Value:     field.Domain,
-					Operation: "define",
-				})
-			}
 		}
 
 		// Validate monotonic constraints if enabled and not the first (root) level.
@@ -328,15 +318,6 @@ func validateMonotonicConstraints(parentStem, childStem *StemFile, childPath str
 			}
 		}
 
-		// Domain constraint: immutable once set
-		if parentField.Domain != "" && childField.Domain != "" && childField.Domain != parentField.Domain {
-			lr.Conflicts = append(lr.Conflicts, LayerConstraint{
-				StemPath:  childPath,
-				Field:     fieldName + ".domain",
-				Value:     childField.Domain + " (parent: " + parentField.Domain + ")",
-				Operation: "conflict",
-			})
-		}
 	}
 }
 

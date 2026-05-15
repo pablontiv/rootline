@@ -311,85 +311,8 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		return nil, ctx.Err()
 	}
 
-	// Check 9: Domain type compatibility (core domain vs declared type)
-	for sf, stem := range parsedStems {
-		relPath, _ := filepath.Rel(absRoot, sf)
-		for fieldName, field := range stem.Schema {
-			if field.Domain == "" {
-				continue
-			}
-			def := LookupDomain(field.Domain)
-			if def == nil {
-				// Custom domain (with "/") — require explicit type
-				if IsCustomDomain(field.Domain) && field.Type == "" {
-					checks = append(checks, StemHealthCheck{
-						Name:    "domain-custom-no-type",
-						Status:  "fail",
-						Message: fmt.Sprintf("custom domain %q on field %q requires an explicit type", field.Domain, fieldName),
-						Path:    relPath,
-						Field:   fieldName,
-					})
-				}
-				continue
-			}
-			// Core domain: check type compatibility (only if type was explicitly declared in this stem,
-			// not inferred — we detect this by checking the raw content)
-			if field.Type != "" && field.Type != def.BaseType {
-				checks = append(checks, StemHealthCheck{
-					Name:    "domain-type-compat",
-					Status:  "warn",
-					Message: fmt.Sprintf("field %q has domain %q (base type %q) but declared type %q", fieldName, field.Domain, def.BaseType, field.Type),
-					Path:    relPath,
-					Field:   fieldName,
-				})
-			}
-			// Check required attrs
-			for _, attr := range def.RequiredAttrs {
-				if !fieldHasAttr(field, attr) {
-					checks = append(checks, StemHealthCheck{
-						Name:    "domain-missing-attrs",
-						Status:  "warn",
-						Message: fmt.Sprintf("field %q with domain %q is missing required attribute %q", fieldName, field.Domain, attr),
-						Path:    relPath,
-						Field:   fieldName,
-					})
-				}
-			}
-		}
-	}
-
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
-	}
-
-	// Check 10: Domain uniqueness within effective scope
-	for sf, stem := range parsedStems {
-		relPath, _ := filepath.Rel(absRoot, sf)
-		// Collect fields with domains in this stem
-		byDomain := make(map[string][]domainEntry)
-		for fieldName, field := range stem.Schema {
-			if field.Domain != "" {
-				byDomain[field.Domain] = append(byDomain[field.Domain], domainEntry{fieldName, field})
-			}
-		}
-		for domain, entries := range byDomain {
-			if len(entries) < 2 {
-				continue
-			}
-			// Check if match patterns overlap
-			if matchPatternsOverlap(entries) {
-				names := make([]string, len(entries))
-				for i, e := range entries {
-					names[i] = e.fieldName
-				}
-				checks = append(checks, StemHealthCheck{
-					Name:    "domain-duplicate-scope",
-					Status:  "fail",
-					Message: fmt.Sprintf("domain %q assigned to multiple fields with overlapping scope: %s", domain, strings.Join(names, ", ")),
-					Path:    relPath,
-				})
-			}
-		}
 	}
 
 	if ctx.Err() != nil {
@@ -441,50 +364,4 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 	}
 
 	return &StemHealthResult{Checks: checks}, nil
-}
-
-// fieldHasAttr checks if a SchemaField has a given attribute set.
-func fieldHasAttr(f SchemaField, attr string) bool {
-	switch attr {
-	case "values":
-		return len(f.Values) > 0
-	case "prefix":
-		return f.Prefix != ""
-	case "digits":
-		return f.Digits > 0
-	default:
-		return false
-	}
-}
-
-// domainEntry pairs a field name with its SchemaField for domain checks.
-type domainEntry struct {
-	fieldName string
-	field     SchemaField
-}
-
-// matchPatternsOverlap checks if any entries have overlapping match patterns.
-// Two fields overlap if: both have no match (global), or both share the same
-// match pattern(s). Conservative: distinct patterns are treated as non-overlapping.
-func matchPatternsOverlap(entries []domainEntry) bool {
-	for i := 0; i < len(entries); i++ {
-		for j := i + 1; j < len(entries); j++ {
-			a, b := entries[i].field, entries[j].field
-			if a.Match == nil && b.Match == nil {
-				return true // both global
-			}
-			if a.Match == nil || b.Match == nil {
-				return true // one global, one scoped — global overlaps everything
-			}
-			// Both have match patterns — check for shared patterns
-			for _, pa := range a.Match.Patterns {
-				for _, pb := range b.Match.Patterns {
-					if pa == pb {
-						return true
-					}
-				}
-			}
-		}
-	}
-	return false
 }

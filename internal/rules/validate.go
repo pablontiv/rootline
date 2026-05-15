@@ -42,7 +42,6 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 			continue
 		}
 
-
 		// required: true → field must exist
 		if field.Required && !exists {
 			// Layer 1: Skip for aggregate-computed fields on index files.

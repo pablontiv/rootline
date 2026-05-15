@@ -62,16 +62,8 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 
 	result := rules.NewDescribeResult(relPath, entries, effective)
 
-	// Filter by domain if requested
-	if byDomainFlag != "" {
-		filtered := make(map[string]rules.SchemaField)
-		for name, field := range result.Schema {
-			if field.Domain == byDomainFlag {
-				filtered[name] = field
-			}
-		}
-		result.Schema = filtered
-	}
+	// Note: domain: filtering was removed in O14 refactor
+	// byDomainFlag is no longer supported
 
 	// Add hint when no schema is found
 	if effective == nil || len(effective.Schema) == 0 {
@@ -105,9 +97,6 @@ func renderDescribeTable(cmd *cobra.Command, r *rules.DescribeResult) error {
 			vals = strings.Join(f.Values, ", ")
 		}
 		typeStr := f.Type
-		if f.Domain != "" {
-			typeStr = fmt.Sprintf("%s (%s)", f.Type, f.Domain)
-		}
 		rows = append(rows, []string{k, typeStr, req, vals, f.Source})
 	}
 

@@ -913,7 +913,6 @@ func TestValidate_Requires_NoMatchBackwardCompat(t *testing.T) {
 	}
 }
 
-
 func TestValidate_LinkFieldWithoutWikilink(t *testing.T) {
 	stem := &StemFile{
 		Schema: map[string]SchemaField{

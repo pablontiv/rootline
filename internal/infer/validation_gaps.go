@@ -48,12 +48,12 @@ func DetectValidationGaps(stem *rules.StemFile, records []*extract.Record, prior
 			})
 		}
 
-		if sf.Type == "" && sf.Domain == "" {
+		if sf.Type == "" {
 			inferences = append(inferences, Inference{
 				Type:    "untyped_field",
 				Source:  sf.Source,
 				Field:   name,
-				Message: fmt.Sprintf("Field %q has no type and no domain — rootline cannot validate it", name),
+				Message: fmt.Sprintf("Field %q has no type — rootline cannot validate it", name),
 			})
 		}
 

@@ -106,9 +106,6 @@ func TestSetInvalidEnumValue(t *testing.T) {
 	}
 }
 
-
-
-
 func TestSetFromFile(t *testing.T) {
 	dir := setupSetTestDir(t)
 	target := filepath.Join(dir, "doc.md")

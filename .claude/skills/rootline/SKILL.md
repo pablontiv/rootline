@@ -1,6 +1,6 @@
 ---
 name: rootline
-description: Use when working with Markdown records governed by .stem schemas or when the user asks to validate, fix, query, inspect, scaffold, mutate, analyze, apply, graph, or trace Rootline data, even if they do not name Rootline. Do not use for roadmap decomposition or Go debugging.
+description: Use when working with Markdown records governed by .stem schemas or when the user asks to validate, fix, query, inspect, scaffold, mutate, analyze, apply, graph, or trace Rootline data, even if they do not name Rootline. Do not use for roadmap decomposition or Go debugging. Domain: semantic field declarations removed in T006 (O14 refactor).
 updated: 2026-05-14
 ---
 

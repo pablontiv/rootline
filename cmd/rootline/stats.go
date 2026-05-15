@@ -8,7 +8,6 @@ import (
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
-	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
 )
 
@@ -69,20 +68,9 @@ func runStats(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("filtering records: %w", err)
 	}
 
-	// Resolve field names via domain lookup with fallback to hardcoded names
+	// Use hardcoded field names (domain: field lookup was removed in O14 refactor)
 	estadoField := "estado"
 	tipoField := "tipo"
-	entries, walkErr := rules.WalkUp(absRoot)
-	if walkErr == nil {
-		if eff := rules.MergeStemFiles(entries); eff != nil {
-			if name, found := rules.FindFieldByDomain(eff.Schema, "lifecycle_state", absRoot); found {
-				estadoField = name
-			}
-			if name, found := rules.FindFieldByDomain(eff.Schema, "record_type", absRoot); found {
-				tipoField = name
-			}
-		}
-	}
 
 	byEstado := make(map[string]int)
 	byTipo := make(map[string]int)

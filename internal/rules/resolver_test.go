@@ -625,69 +625,6 @@ schema:
 	}
 }
 
-func TestResolveLayered_MonotonicDomainImmutable(t *testing.T) {
-	root := t.TempDir()
-
-	// Create .git marker.
-	gitDir := filepath.Join(root, ".git")
-	if err := os.MkdirAll(gitDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create root .stem with domain=lifecycle_state.
-	rootStem := filepath.Join(root, ".stem")
-	rootContent := []byte(`version: 2
-schema:
-  status:
-    type: enum
-    domain: lifecycle_state
-    values: [draft, published]
-`)
-	if err := os.WriteFile(rootStem, rootContent, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create child .stem that changes domain (invalid in monotonic mode).
-	subDir := filepath.Join(root, "tasks")
-	if err := os.MkdirAll(subDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	subStem := filepath.Join(subDir, ".stem")
-	subContent := []byte(`version: 2
-schema:
-  status:
-    type: enum
-    domain: record_type
-    values: [pending, completed]
-`)
-	if err := os.WriteFile(subStem, subContent, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	targetPath := filepath.Join(subDir, "task.md")
-
-	lr, err := ResolveLayered(targetPath, root, true)
-	if err != nil {
-		t.Fatalf("ResolveLayered() error: %v", err)
-	}
-
-	// Should have a conflict for domain change.
-	if len(lr.Conflicts) == 0 {
-		t.Fatal("expected conflict for domain redefinition in monotonic mode")
-	}
-
-	found := false
-	for _, conflict := range lr.Conflicts {
-		if conflict.Field == "status.domain" && conflict.Operation == "conflict" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected status.domain conflict, got conflicts: %+v", lr.Conflicts)
-	}
-}
-
 func TestResolveLayered_MonotonicStructuralTightening(t *testing.T) {
 	root := t.TempDir()
 

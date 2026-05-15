@@ -119,20 +119,6 @@ func TestFilterCoveredInferences_UnknownTypePassesThrough(t *testing.T) {
 	}
 }
 
-func TestIsCovered_MissingDomain(t *testing.T) {
-	stem := &rules.StemFile{
-		Schema: map[string]rules.SchemaField{
-			"estado": {Type: "enum", Domain: "lifecycle_state"},
-		},
-	}
-	if !isCovered(Inference{Type: "missing_domain", Field: "estado"}, stem) {
-		t.Error("missing_domain should be covered when field has domain")
-	}
-	if isCovered(Inference{Type: "missing_domain", Field: "titulo"}, stem) {
-		t.Error("missing_domain should not be covered for unknown field")
-	}
-}
-
 func TestIsCovered_EnumWithoutValues(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
