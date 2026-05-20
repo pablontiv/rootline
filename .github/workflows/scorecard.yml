@@ -12,8 +12,33 @@ permissions:
 
 jobs:
   scorecard:
-    uses: pablontiv/crossbeam/.github/workflows/scorecard.yml@v1
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
       id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6db9a6b7c67862cd61e8cca06d2d1
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code-scanning
+        uses: github/codeql-action/upload-sarif@b1bff81932f5cdfc8695c7752dcee935dcd061c8
+        with:
+          sarif_file: results.sarif
