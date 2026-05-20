@@ -4,11 +4,15 @@ on:
   schedule:
     - cron: '0 4 * * *'
 
-permissions: read-all
+permissions:
+  contents: read
+  security-events: write
+  id-token: write
 
 jobs:
   scorecard:
     uses: pablontiv/crossbeam/.github/workflows/scorecard.yml@v1
     permissions:
+      contents: read
       security-events: write
       id-token: write
