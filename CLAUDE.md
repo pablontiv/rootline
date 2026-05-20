@@ -125,7 +125,7 @@ CI/CD uses shared reusable workflows from `pablontiv/crossbeam@v1`:
 - `gitleaks.yml` — secret scanning
 - `go-release.yml` — auto-tag + goreleaser release
 - `codeql.yml` — CodeQL security scanning (Go)
-- `scorecard.yml` — OpenSSF Scorecard
+- `scorecard.yml` — OpenSSF Scorecard (runs nightly; also dispatchable manually via `gh workflow run "OpenSSF Scorecard"`)
 
 `docs-validate` is repo-specific (runs `rootline validate --all docs/epics/`) and stays inline in `ci.yml`.
 
