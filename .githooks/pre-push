@@ -52,6 +52,18 @@ while read local_ref local_sha remote_ref remote_sha; do
     fi
   fi
 
+  # Check coverage floors if any Go source files changed (skip docs-only pushes).
+  # Requires just coverage-check to be available (added by T006).
+  if git diff --name-only "$range" -- '*.go' 2>/dev/null | grep -q .; then
+    echo "Checking coverage..."
+    if ! just coverage-check > /tmp/rootline-cov.log 2>&1; then
+      cat /tmp/rootline-cov.log
+      echo "Coverage below threshold. Run: just coverage-check"
+      exit 1
+    fi
+    echo "Coverage check passed."
+  fi
+
 done
 
 # Install the project Rootline skill to the Claude user scope.

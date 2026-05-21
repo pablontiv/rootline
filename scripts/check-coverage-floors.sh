@@ -3,6 +3,10 @@ set -euo pipefail
 
 # Check coverage against per-package floors
 # Usage: check-coverage-floors.sh <coverage.out> <.coverage-floors.toml>
+#
+# Computes statement-level coverage per package directly from the coverage
+# profile (mode: set/count/atomic). Skips packages with no source statements
+# (e.g. test-only packages like internal/e2e).
 
 COVERAGE_OUT="${1:-coverage.out}"
 FLOORS_TOML="${2:-.coverage-floors.toml}"
@@ -41,47 +45,49 @@ while IFS= read -r line; do
     fi
 done < "$FLOORS_TOML"
 
-# Function to get coverage for a package
+# Compute statement-level coverage per package from the coverage profile.
+# Coverage profile lines: <file>:<start>,<end> <stmts> <count>
+# Aggregate covered/total statements per package prefix.
 get_package_coverage() {
     local pkg="$1"
-    # Use 'go tool cover -func' to get per-function coverage
-    # Lines are formatted: github.com/pablontiv/rootline/<pkg>/file.go:func  N  X.X%
-    local coverage_lines
-    coverage_lines=$(go tool cover -func="$COVERAGE_OUT" | grep "github.com/pablontiv/rootline/${pkg}/" || true)
+    local module_prefix="github.com/pablontiv/rootline/${pkg}/"
 
-    if [[ -z "$coverage_lines" ]]; then
-        # Package not in coverage (e.g., test build failed)
-        echo "0.0"
-        return
-    fi
-
-    # Extract percentages, remove '%' suffix, compute average
-    local total=0.0
-    local count=0
-    while IFS= read -r line; do
-        if [[ -n "$line" ]]; then
-            # Extract percentage value (last field minus %)
-            local pct
-            pct=$(echo "$line" | awk '{print $NF}' | sed 's/%$//')
-            total=$(awk "BEGIN {print $total + $pct}")
-            ((count++))
-        fi
-    done <<< "$coverage_lines"
-
-    if [[ $count -gt 0 ]]; then
-        awk "BEGIN {printf \"%.1f\", $total / $count}"
-    else
-        echo "0.0"
-    fi
+    # awk: sum stmts where count>0 (covered) and total stmts per package prefix
+    awk -v prefix="$module_prefix" '
+    /^mode:/ { next }
+    {
+        # field 1: file:startline.col,endline.col
+        split($1, parts, ":")
+        filepath = parts[1]
+        if (index(filepath, prefix) != 1) next
+        stmts = $2
+        count = $3
+        total += stmts
+        if (count > 0) covered += stmts
+    }
+    END {
+        if (total == 0) {
+            print "SKIP"
+        } else {
+            printf "%.1f\n", 100 * covered / total
+        }
+    }
+    ' "$COVERAGE_OUT"
 }
 
 # Check coverage for each package
 echo "Coverage Report:"
 echo "================"
-declare -a FAILED_PACKAGES
+declare -a FAILED_PACKAGES=()
 for pkg in "${PACKAGES[@]}"; do
     cov=$(get_package_coverage "$pkg")
-    # Compare: bash arithmetic requires integers, so we'll use awk
+
+    if [[ "$cov" == "SKIP" ]]; then
+        echo "SKIP: $pkg (no source statements — test-only package)"
+        continue
+    fi
+
+    # Compare using awk
     below_threshold=$(awk "BEGIN {print ($cov < $DEFAULT_FLOOR)}")
 
     if [[ "$below_threshold" == "1" ]]; then
