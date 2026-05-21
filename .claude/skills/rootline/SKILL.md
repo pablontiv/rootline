@@ -19,6 +19,8 @@ rg -n "Use:|Flags\(\)" cmd/rootline/<command>.go
 
 Use `Read` only for body content the CLI does not expose, a small error context, or editing review.
 
+Local coverage check: `just coverage-check` (requires `.coverage-floors.toml`).
+
 ## Deterministic Execution Rules
 
 1. **Resolve target**: if a command reads or mutates an existing path, verify the path exists. If absent, stop and report the missing path; do not choose a substitute.
