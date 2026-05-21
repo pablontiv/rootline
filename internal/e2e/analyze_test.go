@@ -67,7 +67,6 @@ func runAnalyze(t *testing.T, root string) *infer.AnalyzeReport {
 		stem = rules.MergeStemFiles(stemEntries)
 	}
 
-	report.AddCategory("domain_coverage", "Domain Coverage", infer.DetectMissingDomains(stem), agentTypes)
 	report.AddCategory("schema_coverage", "Schema Coverage", infer.DetectMissingSchemata(root), agentTypes)
 
 	// Collect prior inferences for deduplication.

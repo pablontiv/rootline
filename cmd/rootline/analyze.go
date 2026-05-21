@@ -145,9 +145,6 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		{"structural", "Structural Rule Detection", func() []infer.Inference {
 			return infer.DetectStructural(root)
 		}},
-		{"domain_coverage", "Domain Coverage", func() []infer.Inference {
-			return infer.DetectMissingDomains(stem)
-		}},
 		{"schema_coverage", "Schema Coverage", func() []infer.Inference {
 			return infer.DetectMissingSchemata(root)
 		}},

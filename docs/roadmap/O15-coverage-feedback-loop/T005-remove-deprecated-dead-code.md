@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: task
 ---
 # T005: Eliminar código deprecado/muerto que arrastra coverage

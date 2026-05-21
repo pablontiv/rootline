@@ -82,10 +82,6 @@ func resetFlags() {
 	setDryRun = false
 	setCreate = false
 	setNoValidate = false
-	traceReverse = false
-	traceDepth = 0
-	traceType = ""
-	traceFormat = "tree"
 	schemaProposeIncremental = false
 	schemaApplyReport = ""
 	schemaApplyDryRun = false
