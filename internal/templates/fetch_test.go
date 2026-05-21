@@ -289,3 +289,236 @@ func TestFetchTemplate_InvalidYAML(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// ── Additional tests for uncovered branches ─────────────────────────────────
+
+func TestFetchFromURL_WithTag(t *testing.T) {
+	// Test cloning with a specific tag/branch.
+	stemContent := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"
+	repoDir := makeFixtureRepo(t, map[string]string{
+		".stem": stemContent,
+	})
+
+	// Create a tag in the repo.
+	runGit(t, repoDir, "tag", "v1.0.0")
+
+	dest := t.TempDir()
+	files, err := FetchFromURL("file://"+repoDir, "v1.0.0", dest, false, false)
+	if err != nil {
+		t.Fatalf("FetchFromURL with tag: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(files))
+	}
+
+	// Verify the file was written.
+	destStem := filepath.Join(dest, ".stem")
+	data, err := os.ReadFile(destStem)
+	if err != nil {
+		t.Fatalf("reading dest .stem: %v", err)
+	}
+	if string(data) != stemContent {
+		t.Fatalf("content mismatch")
+	}
+}
+
+func TestFetchFromURL_BadTag(t *testing.T) {
+	// Test cloning with a tag that doesn't exist.
+	stemContent := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"
+	repoDir := makeFixtureRepo(t, map[string]string{
+		".stem": stemContent,
+	})
+
+	dest := t.TempDir()
+	_, err := FetchFromURL("file://"+repoDir, "nonexistent-tag", dest, false, false)
+	if err == nil {
+		t.Fatal("expected error for nonexistent tag")
+	}
+	if !strings.Contains(err.Error(), "git clone failed") {
+		t.Fatalf("expected git clone error, got: %v", err)
+	}
+}
+
+func TestFetchFromURL_InvalidURL(t *testing.T) {
+	// Test cloning from an invalid URL.
+	dest := t.TempDir()
+	_, err := FetchFromURL("file:///nonexistent/path/to/repo", "", dest, false, false)
+	if err == nil {
+		t.Fatal("expected error for invalid URL")
+	}
+	if !strings.Contains(err.Error(), "git clone failed") {
+		t.Fatalf("expected git clone error, got: %v", err)
+	}
+}
+
+func TestFetchFromURL_DestReadOnlyError(t *testing.T) {
+	// Test when destination directory is read-only (copy fails).
+	stemContent := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"
+	repoDir := makeFixtureRepo(t, map[string]string{
+		".stem": stemContent,
+	})
+
+	dest := t.TempDir()
+	// Make dest read-only to trigger mkdir error.
+	if err := os.Chmod(dest, 0555); err != nil { //nolint:gosec
+		t.Fatalf("chmod: %v", err)
+	}
+	defer func() { _ = os.Chmod(dest, 0755) }() //nolint:gosec
+
+	_, err := FetchFromURL("file://"+repoDir, "", dest, false, false)
+	if err == nil {
+		t.Fatal("expected error when dest is not writable")
+	}
+	// Should fail during mkdir or copy.
+	if !strings.Contains(err.Error(), "creating directory") && !strings.Contains(err.Error(), "copying") {
+		t.Fatalf("expected mkdir or copy error, got: %v", err)
+	}
+}
+
+func TestFetchFromURL_MultipleStemFiles(t *testing.T) {
+	// Test repo with multiple .stem files in different directories.
+	stemContent := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"
+	repoDir := makeFixtureRepo(t, map[string]string{
+		".stem":          stemContent,
+		"dir1/.stem":     stemContent,
+		"dir2/.stem":     stemContent,
+		"dir2/sub/.stem": stemContent,
+	})
+
+	dest := t.TempDir()
+	files, err := FetchFromURL("file://"+repoDir, "", dest, false, false)
+	if err != nil {
+		t.Fatalf("FetchFromURL: %v", err)
+	}
+	if len(files) != 4 {
+		t.Fatalf("expected 4 files, got %d: %v", len(files), files)
+	}
+
+	// Verify all files exist.
+	expectedPaths := []string{".stem", "dir1/.stem", "dir2/.stem", "dir2/sub/.stem"}
+	for _, p := range expectedPaths {
+		fullPath := filepath.Join(dest, p)
+		if _, err := os.Stat(fullPath); err != nil {
+			t.Fatalf("expected file %s to exist: %v", p, err)
+		}
+	}
+}
+
+func TestFetchTemplate_WithGitHubURL(t *testing.T) {
+	// Test that FetchTemplate resolves refs to GitHub URLs.
+	// This will fail at clone time (no network), but we can verify the error
+	// is a clone error, not a ref parsing error.
+	dest := t.TempDir()
+	_, err := FetchTemplate("owner/repo@v1.0.0", dest, false, false)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	// Should get a clone error (network/404), not a ref error.
+	if strings.Contains(err.Error(), "invalid template ref") {
+		t.Fatalf("expected clone error, not ref error: %v", err)
+	}
+}
+
+func TestCopyFile_DestDirNotExist(t *testing.T) {
+	// Test copyFile when dest dir doesn't exist (should fail, not auto-create).
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	dst := filepath.Join(dir, "nonexistent/dst.txt")
+	content := "hello\n"
+	if err := os.WriteFile(src, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// copyFile should fail because dir doesn't exist.
+	err := copyFile(src, dst)
+	if err == nil {
+		t.Fatal("expected error when dest dir doesn't exist")
+	}
+}
+
+func TestCopyFile_SrcOpenError(t *testing.T) {
+	// Test copyFile when src cannot be read.
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	dst := filepath.Join(dir, "dst.txt")
+
+	// Don't create src, so Open fails.
+	err := copyFile(src, dst)
+	if err == nil {
+		t.Fatal("expected error when src doesn't exist")
+	}
+}
+
+func TestCopyFile_DstCreateError(t *testing.T) {
+	// Test copyFile when dest cannot be created (parent dir read-only).
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	dst := filepath.Join(dir, "ro_dir/dst.txt")
+
+	if err := os.WriteFile(src, []byte("content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create read-only dir.
+	roDir := filepath.Join(dir, "ro_dir")
+	if err := os.Mkdir(roDir, 0555); err != nil { //nolint:gosec
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(roDir, 0755) }() //nolint:gosec
+
+	err := copyFile(src, dst)
+	if err == nil {
+		t.Fatal("expected error when dest dir is read-only")
+	}
+}
+
+func TestFetchFromURL_EmptyRepo(t *testing.T) {
+	// Test repo with no commits (bare repo).
+	repoDir := t.TempDir()
+	runGit(t, repoDir, "init")
+	// Don't add any files or commits.
+
+	dest := t.TempDir()
+	_, err := FetchFromURL("file://"+repoDir, "", dest, false, false)
+	if err == nil {
+		t.Fatal("expected error for empty repo with no .stem files")
+	}
+	if !strings.Contains(err.Error(), "no .stem files found") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFetchTemplate_EmptyRef(t *testing.T) {
+	// Test FetchTemplate with empty ref.
+	dest := t.TempDir()
+	_, err := FetchTemplate("", dest, false, false)
+	if err == nil {
+		t.Fatal("expected error for empty ref")
+	}
+	if !strings.Contains(err.Error(), "invalid template ref") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCopyFile_IOCopyError(t *testing.T) {
+	// Test copyFile when io.Copy fails (e.g., due to write error).
+	// We simulate this by creating a source that's readable but then
+	// making the destination unwritable after creation.
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	dst := filepath.Join(dir, "dst.txt")
+
+	srcContent := "test content for copy\n"
+	if err := os.WriteFile(src, []byte(srcContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create dst as a directory instead of file, which will cause Create to fail.
+	if err := os.Mkdir(dst, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := copyFile(src, dst)
+	if err == nil {
+		t.Fatal("expected error when dst is a directory")
+	}
+}
