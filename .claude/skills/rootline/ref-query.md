@@ -1,4 +1,4 @@
-# Query, Exploration, Explain, and Trace Reference
+# Query, Exploration, and Explain Reference
 
 ## Shared Filter Syntax
 
@@ -174,26 +174,3 @@ Report:
 - expression when present
 - errors
 
-## trace
-
-Use `trace` for reference-chain traversal from one document. Use `graph` for whole-repo topology.
-
-### Usage
-
-```bash
-rootline trace <file.md> --format json
-rootline trace <file.md> --reverse --format json
-rootline trace <file.md> --depth 2 --type blocks --format json
-rootline trace <file.md> --format tree
-```
-
-`trace` requires a `.git` directory above the file because it computes paths relative to the repo root.
-
-### Flags
-
-| Flag | Use |
-|---|---|
-| `--reverse` | find documents that reference the starting file |
-| `--depth N` | maximum BFS depth; `0` means unlimited |
-| `--type <edge>` | follow only one wiki-link edge type |
-| `--format tree|json` | output format |

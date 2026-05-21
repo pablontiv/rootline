@@ -1,7 +1,7 @@
 ---
 name: rootline
-description: Use when working with Markdown records governed by .stem schemas or when the user asks to validate, fix, query, inspect, scaffold, mutate, analyze, apply, graph, or trace Rootline data, even if they do not name Rootline. Do not use for roadmap decomposition or Go debugging. Domain: semantic field declarations removed in T006 (O14 refactor).
-updated: 2026-05-14
+description: Use when working with Markdown records governed by .stem schemas or when the user asks to validate, fix, query, inspect, scaffold, mutate, analyze, apply, or graph Rootline data, even if they do not name Rootline. Do not use for roadmap decomposition or Go debugging. Domain: semantic field declarations removed in T006 (O14 refactor).
+updated: 2026-05-21
 ---
 
 # Rootline CLI Operations
@@ -43,7 +43,6 @@ Use `Read` only for body content the CLI does not expose, a small error context,
 | Show hierarchy | `tree` | `rootline tree <dir> --where "isIndex == false" -o table` |
 | Count records | `stats` | `rootline stats <dir> --where "tipo == 'task'" -o json` |
 | Explain field origins | `explain` | `rootline explain file.md -o json` |
-| Follow reference chains | `trace` | `rootline trace file.md --format json` |
 | Graph wiki-links | `graph` | JSON: `rootline graph <dir> -o json`; Mermaid: `rootline graph <dir> -o table --format mermaid` |
 | Infer schema | `init` | `rootline init <dir> --dry-run` then `rootline init <dir>` |
 | Analyze patterns | `analyze` | `rootline analyze <dir> -o json` |
@@ -122,5 +121,5 @@ Read only the relevant file:
 
 - Validation and repair: `ref-validate.md`
 - Schema inspection and scaffolding: `ref-schema.md`
-- Query, tree, stats, explain, trace: `ref-query.md`
+- Query, tree, stats, explain: `ref-query.md`
 - Graph, migrate, init, analyze, apply: `ref-advanced.md`
