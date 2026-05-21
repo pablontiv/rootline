@@ -21,11 +21,11 @@ test:
 # Show coverage per package and total
 coverage:
     go test ./... -coverprofile=coverage.out
-    go tool cover -func=coverage.out
+    go run github.com/pablontiv/picokit/cmd/pkcov report
 
 # Check coverage meets per-package floors
 coverage-check: coverage
-    scripts/check-coverage-floors.sh coverage.out .coverage-floors.toml
+    go run github.com/pablontiv/picokit/cmd/pkcov check
 
 # Validate docs
 validate:

@@ -131,7 +131,7 @@ CI/CD uses shared reusable workflows from `pablontiv/crossbeam@v1`:
 
 `docs-validate` is repo-specific (runs `rootline validate --all docs/epics/`) and stays inline in `ci.yml`.
 
-**Coverage gates**: The 85% threshold in CI (`coverage-threshold: 85` in crossbeam) is mirrored locally via `.coverage-floors.toml` (`default = 85`, uniform across all packages). The pre-push hook (`.githooks/pre-push`) runs `just coverage-check` automatically whenever any `.go` file is included in the push — this blocks the push before CI even runs. Do **not** bypass with `git push --no-verify` except in documented emergencies with an explanation in the commit message.
+**Coverage gates**: The 85% threshold in CI (`coverage-threshold: 85` in crossbeam) is mirrored locally via `.coverage-floors.toml` (`default = 85`, uniform across all packages). The local gate runs via `pkcov` from `github.com/pablontiv/picokit` (see [`picokit/docs/coverage-spec.md`](https://github.com/pablontiv/picokit/blob/main/docs/coverage-spec.md)); rootline cumple coverage-spec v1.0. The pre-push hook (`.githooks/pre-push`) runs `just coverage-check` automatically whenever any `.go` file is included in the push — this blocks the push before CI even runs. Do **not** bypass with `git push --no-verify` except in documented emergencies with an explanation in the commit message.
 
 ## Module Path
 
