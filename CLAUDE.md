@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Rootline is a **file-based database and constraint engine** for structured documentation, written in Go. It treats the filesystem as a database: directories are tables, files are records, metadata comes from YAML frontmatter, and structure is inherited via `.stem` files with parent-to-child merge semantics.
 
-**Status**: CLI engine complete — all core commands functional. 16 inference detectors (13 data + 3 governance). Requires Go 1.25+.
+**Status**: CLI engine complete — all core commands functional. 15 inference detectors (13 data + 2 governance). Requires Go 1.25+.
 
 ## Build & Test Commands
 
@@ -16,6 +16,8 @@ just test               # go test ./... -race
 just fmt                # gofmt -l -w
 just validate           # rootline validate --all docs/epics/
 just fix-docs           # rootline fix --all docs/epics/
+just coverage           # go test ./... -coverprofile; show per-package table
+just coverage-check     # coverage + check all packages ≥85% (per .coverage-floors.toml)
 ```
 
 Run a single test: `go test ./internal/extract/ -run TestName`
