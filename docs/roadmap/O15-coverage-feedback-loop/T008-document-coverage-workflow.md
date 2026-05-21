@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: task
 ---
 # T008: Documentar el coverage workflow en CLAUDE.md

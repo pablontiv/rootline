@@ -12,12 +12,12 @@ Rootline is a **file-based database and constraint engine** for structured docum
 
 ```bash
 just check              # gofmt check + golangci-lint + go build
-just test               # go test ./... -race
+just test               # go test ./... -race  (no coverage measurement — fast cycle)
 just fmt                # gofmt -l -w
 just validate           # rootline validate --all docs/epics/
 just fix-docs           # rootline fix --all docs/epics/
-just coverage           # go test ./... -coverprofile; show per-package table
-just coverage-check     # coverage + check all packages ≥85% (per .coverage-floors.toml)
+just coverage           # go test ./... -coverprofile; print per-package table + total
+just coverage-check     # like coverage, but exits 1 if any package < 85% (per .coverage-floors.toml)
 ```
 
 Run a single test: `go test ./internal/extract/ -run TestName`
@@ -130,6 +130,8 @@ CI/CD uses shared reusable workflows from `pablontiv/crossbeam@v1`:
 - `scorecard.yml` — OpenSSF Scorecard, inlined locally rather than via crossbeam because the v1 reusable caps workflow permissions at `read-all`, conflicting with the `security-events: write` the job needs. The Scorecard action additionally rejects publish when `security-events: write` is set at the workflow level — write permissions must live only at the job level (top-level stays `contents: read`). Actions are pinned by SHA (Scorecard best practice); if a pin becomes unresolvable, re-pin via `gh api repos/<owner>/<repo>/git/refs/tags/<version> --jq .object.sha`. Runs nightly; also dispatchable via `gh workflow run "OpenSSF Scorecard"`.
 
 `docs-validate` is repo-specific (runs `rootline validate --all docs/epics/`) and stays inline in `ci.yml`.
+
+**Coverage gates**: The 85% threshold in CI (`coverage-threshold: 85` in crossbeam) is mirrored locally via `.coverage-floors.toml` (`default = 85`, uniform across all packages). The pre-push hook (`.githooks/pre-push`) runs `just coverage-check` automatically whenever any `.go` file is included in the push — this blocks the push before CI even runs. Do **not** bypass with `git push --no-verify` except in documented emergencies with an explanation in the commit message.
 
 ## Module Path
 
