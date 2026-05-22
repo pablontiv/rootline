@@ -12,7 +12,7 @@ require (
 
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/pablontiv/picokit v0.2.0 // indirect
+	github.com/pablontiv/picokit v0.4.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 )
