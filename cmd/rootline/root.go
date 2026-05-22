@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version is set at build time via ldflags.
-var version = "0.9.87"
+// Version is set at build time via ldflags; "dev" for local builds.
+var version = "dev"
 
 var (
 	outputFormat string

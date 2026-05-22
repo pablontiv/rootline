@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: task
 ---
 # T001: Wirear `picokit/autoupdate` en el entry point del CLI
