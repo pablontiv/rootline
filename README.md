@@ -328,6 +328,12 @@ AI assistants and automation should call the Rootline CLI directly and consume s
 
 ---
 
+## Updating
+
+Release builds auto-update in the background using a staged async pattern — the new binary is downloaded during run N and applied at the start of run N+1. Local builds (`version == "dev"`) skip this entirely. See [docs/auto-update.md](docs/auto-update.md) for details.
+
+---
+
 ## Development
 
 ```bash
