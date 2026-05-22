@@ -2,7 +2,6 @@ done_statuses = ['Completed', 'Obsolete']
 active_statuses = ['Pending', 'Specified', 'In Progress']
 leaf_filter = 'isIndex == false'
 outcome_close_verify = []
-pr_merge_strategy = 'squash'
 commit_style = 'conventional'
 auto_push = true
 loop_max_tasks = 0
@@ -18,3 +17,8 @@ in_progress = 'In Progress'
 completed = 'Completed'
 blocked = 'Blocked'
 obsolete = 'Obsolete'
+
+[gitflow]
+branch_style = 'push directly to master; no feature branches'
+pr_title_style = 'conventional commits: <type>(<scope>): <subject> where scope is OXX or direct'
+pr_body_style = 'not used (pr_mode = false); commits are squash-merged via direct push'
