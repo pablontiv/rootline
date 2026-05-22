@@ -6,7 +6,6 @@ packages = [
   "internal/e2e",
   "internal/extract",
   "internal/fix",
-  "internal/fuzzy",
   "internal/graph",
   "internal/index",
   "internal/infer",

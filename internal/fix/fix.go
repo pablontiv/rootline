@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pablontiv/picokit/fuzzy"
 	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/fuzzy"
 	"github.com/pablontiv/rootline/internal/proposal"
 	"github.com/pablontiv/rootline/internal/rules"
 	"gopkg.in/yaml.v3"

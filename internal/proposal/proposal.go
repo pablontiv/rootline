@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pablontiv/picokit/fuzzy"
 	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/fuzzy"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/migrate"
 	"github.com/pablontiv/rootline/internal/rules"

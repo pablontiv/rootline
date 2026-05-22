@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/expr-lang/expr"
-	"github.com/pablontiv/rootline/internal/fuzzy"
+	"github.com/pablontiv/picokit/fuzzy"
 )
 
 // FieldWarning reports an unknown field name in a where expression with an optional suggestion.

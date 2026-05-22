@@ -1,5 +1,5 @@
 ---
-estado: Specified
+estado: Completed
 tipo: task
 ---
 # T008: Migrar `internal/fuzzy` a `picokit/fuzzy` y borrar el duplicado
