@@ -120,6 +120,10 @@ Releases are fully automated via CI. On push to `master`, the `go-release` reusa
 
 No manual release steps are needed — just push to master with conventional commit messages. The Justfile contains only development recipes (`check`, `test`, `fmt`, `validate`). Release logic lives in crossbeam shared workflows.
 
+## Auto-update
+
+`rootline` uses `picokit/autoupdate` to check for and apply new releases automatically. On each run, it fetches the latest release in the background (goroutine + WaitGroup) and applies any staged update on the next invocation. Local builds (`version == "dev"`) skip all network and cache operations. No opt-out env var — controlled only by build-time version injection.
+
 ## CI Workflows
 
 CI/CD uses shared reusable workflows from `pablontiv/crossbeam@v1`:
