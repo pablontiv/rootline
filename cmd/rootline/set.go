@@ -260,7 +260,7 @@ func runSet(cmd *cobra.Command, args []string) error {
 // buildProposal creates a Proposal from a fieldOp, consulting the schema to determine type.
 func buildProposal(op fieldOp, relPath string, effective *rules.StemFile) (proposal.Proposal, error) {
 	if op.Append {
-		return proposal.Proposal{}, fmt.Errorf("append (+=) is no longer supported (type:section has been removed)")
+		return proposal.Proposal{}, fmt.Errorf("append (+=) is no longer supported")
 	}
 
 	// Frontmatter field.
