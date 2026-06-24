@@ -20,7 +20,7 @@ func TestDeriveAllWithResolver(t *testing.T) {
 		},
 	}
 
-	resolver := func(dir string) *rules.StemFile {
+	resolver := func(dir, recordPath string) *rules.StemFile {
 		return stem
 	}
 
@@ -50,7 +50,7 @@ func TestDeriveAllNoDerive(t *testing.T) {
 		{Path: "a.md", Frontmatter: map[string]any{"titulo": "Hello"}},
 	}
 	stem := &rules.StemFile{} // no derive
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	DeriveAll(context.Background(), records, "/root", resolver)
 	if records[0].Derived != nil {
@@ -70,7 +70,7 @@ func TestDeriveAllWithChildren(t *testing.T) {
 			"sibling_count": "len(children)",
 		},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	DeriveAll(context.Background(), records, "/root", resolver)
 
@@ -84,7 +84,7 @@ func TestDeriveAllResolverReturnsNil(t *testing.T) {
 	records := []*extract.Record{
 		{Path: "a.md", Frontmatter: map[string]any{}},
 	}
-	resolver := func(dir string) *rules.StemFile { return nil }
+	resolver := func(dir, recordPath string) *rules.StemFile { return nil }
 
 	DeriveAll(context.Background(), records, "/root", resolver)
 	if records[0].Derived != nil {
@@ -115,5 +115,5 @@ func TestDefaultResolver(t *testing.T) {
 	dir := t.TempDir()
 	resolver := DefaultResolver()
 	// No .stem in temp dir — should not panic.
-	_ = resolver(dir)
+	_ = resolver(dir, "")
 }

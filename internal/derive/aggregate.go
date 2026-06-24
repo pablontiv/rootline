@@ -47,9 +47,6 @@ func AggregateAll(ctx context.Context, records []*extract.Record, root string, r
 		return strings.Count(indexRecords[i].Path, "/") > strings.Count(indexRecords[j].Path, "/")
 	})
 
-	// Cache effective stems per directory.
-	stemCache := make(map[string]*rules.StemFile)
-
 	for _, idx := range indexRecords {
 		// Check for context cancellation between records.
 		if ctx.Err() != nil {
@@ -59,11 +56,7 @@ func AggregateAll(ctx context.Context, records []*extract.Record, root string, r
 		absPath := filepath.Join(root, idx.Path)
 		dir := filepath.Dir(absPath)
 
-		eff, ok := stemCache[dir]
-		if !ok {
-			eff = resolver(dir)
-			stemCache[dir] = eff
-		}
+		eff := resolver(dir, idx.Path)
 
 		if eff == nil || len(eff.Aggregate) == 0 {
 			continue

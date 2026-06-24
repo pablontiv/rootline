@@ -20,7 +20,7 @@ func TestAggregateAll_BasicEstado(t *testing.T) {
 			"estado": `all(descendants, {.estado == "Completed"}) ? "Completed" : estado`,
 		},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
@@ -46,7 +46,7 @@ func TestAggregateAll_NotAllCompleted(t *testing.T) {
 			"estado": `all(descendants, {.estado == "Completed"}) ? "Completed" : any(descendants, {.estado == "Blocked"}) ? "Blocked" : estado`,
 		},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
@@ -73,7 +73,7 @@ func TestAggregateAll_MultiLevel(t *testing.T) {
 			"estado": `all(descendants, {.estado == "Completed"}) ? "Completed" : estado`,
 		},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
@@ -102,7 +102,7 @@ func TestAggregateAll_ChildrenVariable(t *testing.T) {
 			"child_count": "len(children)",
 		},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
@@ -125,7 +125,7 @@ func TestAggregateAll_NoConfig(t *testing.T) {
 	}
 
 	stem := &rules.StemFile{} // no aggregate
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
@@ -144,7 +144,7 @@ func TestAggregateAll_NoIndexFiles(t *testing.T) {
 	stem := &rules.StemFile{
 		Aggregate: map[string]any{"estado": `"Completed"`},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
@@ -179,7 +179,7 @@ func TestAggregateAll_EmptyDescendants(t *testing.T) {
 			"estado": `len(descendants) == 0 ? estado : all(descendants, {.estado == "Completed"}) ? "Completed" : estado`,
 		},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)
@@ -205,7 +205,7 @@ func TestAggregateAll_RootReadme(t *testing.T) {
 			"estado": `all(descendants, {.estado == "Completed"}) ? "Completed" : "In Progress"`,
 		},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 	AggregateAll(context.Background(), records, "/root", resolver)

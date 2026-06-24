@@ -2,6 +2,8 @@ package derive
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -15,7 +17,7 @@ func TestEnrichBuiltins_IndexDetection(t *testing.T) {
 		{Path: "dir/T002.md", Type: "markdown", Frontmatter: map[string]any{}},
 	}
 
-	resolver := func(dir string) *rules.StemFile { return &rules.StemFile{} }
+	resolver := func(dir, recordPath string) *rules.StemFile { return &rules.StemFile{} }
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived["isIndex"] != true {
@@ -40,7 +42,7 @@ func TestEnrichBuiltins_CustomRequireIndex(t *testing.T) {
 			Subdirs: rules.SubdirRules{RequireIndex: "index.md"},
 		},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived["isIndex"] != true {
@@ -74,7 +76,7 @@ func TestEnrichBuiltins_SurvivesDeriveAll(t *testing.T) {
 			"slug": "lower(titulo)",
 		},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	// Pipeline: DeriveAll → EnrichBuiltins (real order)
 	DeriveAll(context.Background(), records, "/root", resolver)
@@ -207,7 +209,7 @@ func TestEnrichBuiltins_SourceExtraction_BodyH1(t *testing.T) {
 			},
 		},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 
@@ -234,7 +236,7 @@ func TestEnrichBuiltins_SourceExtraction_BodySection(t *testing.T) {
 			},
 		},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 
@@ -260,12 +262,56 @@ func TestEnrichBuiltins_SourceExtraction_NoExtract(t *testing.T) {
 			},
 		},
 	}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
 	EnrichBuiltins(context.Background(), records, "/root", resolver)
 
 	// No Extract directive, so campo should not be in Derived
 	if _, ok := records[0].Derived["campo"]; ok {
 		t.Errorf("campo should not be derived without Extract directive")
+	}
+}
+
+func TestEnrichBuiltins_SourceFieldRespectsMatchScope(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// .stem: "resumen" is source-extracted from a body section, scoped to F* records only.
+	stem := `version: 2
+scope:
+  match: "*.md"
+schema:
+  resumen:
+    type: string
+    source: body.section["## Resumen"]
+    match: ["F*"]
+`
+	if err := os.WriteFile(filepath.Join(dir, ".stem"), []byte(stem), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fMatch := &extract.Record{
+		Path:        "F01.md",
+		Type:        "markdown",
+		Body:        "# Title\n\n## Resumen\n\nfeature summary",
+		Frontmatter: map[string]any{},
+		Derived:     map[string]any{},
+	}
+	tNoMatch := &extract.Record{
+		Path:        "T01.md",
+		Type:        "markdown",
+		Body:        "# Title\n\n## Resumen\n\ntask summary",
+		Frontmatter: map[string]any{},
+		Derived:     map[string]any{},
+	}
+
+	EnrichBuiltins(context.Background(), []*extract.Record{fMatch, tNoMatch}, dir, DefaultResolver())
+
+	if _, ok := fMatch.Derived["resumen"]; !ok {
+		t.Errorf("matching record F01 should have source-derived 'resumen'")
+	}
+	if v, ok := tNoMatch.Derived["resumen"]; ok {
+		t.Errorf("non-matching record T01 must NOT get 'resumen' (match-scope leak), got %v", v)
 	}
 }

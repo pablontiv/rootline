@@ -8,20 +8,17 @@ import (
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
-// StemResolver returns the effective .stem for a directory.
-type StemResolver func(dir string) *rules.StemFile
+// StemResolver returns the effective .stem for a record, respecting match-scoped schema fields.
+type StemResolver func(dir, recordPath string) *rules.StemFile
 
 // DeriveAll runs derivation on all records, grouping children by parent
-// directory. For each record it resolves the effective .stem, collects
-// sibling records as children (for aggregation builtins), and evaluates
+// directory. For each record it resolves the effective .stem per-record,
+// collects sibling records as children (for aggregation builtins), and evaluates
 // derive expressions. Errors are silently skipped (derivation is best-effort).
 //
-// Note: Derivation uses directory-level schema resolution (merged stems per directory)
-// rather than per-record resolution. This is intentional because:
-// - Derivation expressions (expr-lang) operate on computed fields, not schema enforcement
-// - Aggregation builtins (children) group records by parent directory, not record type
-// - Match-scoped fields affect schema validation, not derivation
-// If per-record scoping becomes necessary, use ResolveForRecord(dir, recordPath) instead.
+// Note: Resolution is per-record via ResolveForRecord so that match:-scoped
+// schema fields apply only to records they match. Derive and Aggregate rules are
+// unaffected by match filtering and behave identically per record.
 func DeriveAll(ctx context.Context, records []*extract.Record, root string, resolver StemResolver) {
 	if resolver == nil {
 		return
@@ -37,9 +34,6 @@ func DeriveAll(ctx context.Context, records []*extract.Record, root string, reso
 	// Build a record resolver for linked field injection.
 	recResolver := NewMapResolver(records)
 
-	// Cache effective stems per directory (merged schema, not per-record filtered).
-	stemCache := make(map[string]*rules.StemFile)
-
 	for _, rec := range records {
 		// Check for context cancellation between records.
 		if ctx.Err() != nil {
@@ -49,11 +43,7 @@ func DeriveAll(ctx context.Context, records []*extract.Record, root string, reso
 		absPath := filepath.Join(root, rec.Path)
 		dir := filepath.Dir(absPath)
 
-		eff, ok := stemCache[dir]
-		if !ok {
-			eff = resolver(dir)
-			stemCache[dir] = eff
-		}
+		eff := resolver(dir, rec.Path)
 
 		if eff == nil || len(eff.Derive) == 0 {
 			continue
@@ -74,14 +64,14 @@ func DeriveAll(ctx context.Context, records []*extract.Record, root string, reso
 	}
 }
 
-// DefaultResolver creates a StemResolver that uses WalkUp + MergeStemFiles.
+// DefaultResolver creates a StemResolver that uses ResolveForRecord for per-record resolution.
 func DefaultResolver() StemResolver {
-	return func(dir string) *rules.StemFile {
-		entries, err := rules.WalkUp(dir)
+	return func(dir, recordPath string) *rules.StemFile {
+		stem, err := rules.ResolveForRecord(dir, recordPath)
 		if err != nil {
 			return nil
 		}
-		return rules.MergeStemFiles(entries)
+		return stem
 	}
 }
 

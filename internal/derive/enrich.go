@@ -22,8 +22,6 @@ func EnrichBuiltins(ctx context.Context, records []*extract.Record, root string,
 		return
 	}
 
-	stemCache := make(map[string]*rules.StemFile)
-
 	for _, rec := range records {
 		if ctx.Err() != nil {
 			return
@@ -32,11 +30,7 @@ func EnrichBuiltins(ctx context.Context, records []*extract.Record, root string,
 		absPath := filepath.Join(root, rec.Path)
 		dir := filepath.Dir(absPath)
 
-		eff, ok := stemCache[dir]
-		if !ok {
-			eff = resolver(dir)
-			stemCache[dir] = eff
-		}
+		eff := resolver(dir, rec.Path)
 
 		if rec.Derived == nil {
 			rec.Derived = make(map[string]any)
