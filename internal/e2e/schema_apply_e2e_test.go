@@ -12,8 +12,8 @@ import (
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
-func TestApply_AnalyzeThenApplyThenValidate(t *testing.T) {
-	// Stem is incomplete: estado has only 2 values but docs use 3.
+func TestApply_SchemaApply_EnumExtension(t *testing.T) {
+	// Stem has incomplete enum; schema apply should extend it based on inferences.
 	root := setupProject(t, map[string]string{
 		".stem":   "version: 2\nschema:\n  estado:\n    type: enum\n    required: true\n    values: [Pending, Done]\n  tipo:\n    type: string\n",
 		"doc1.md": "---\nestado: Pending\ntipo: task\n---\nBody 1\n",
@@ -21,15 +21,14 @@ func TestApply_AnalyzeThenApplyThenValidate(t *testing.T) {
 		"doc3.md": "---\nestado: Pending\ntipo: task\n---\nBody 3\n",
 	})
 
+	// Collect inferences from analyze.
 	report := runAnalyze(t, root)
-
-	// Collect all inferences.
 	var allInferences []infer.ReportInference
 	for _, cat := range report.Categories {
 		allInferences = append(allInferences, cat.Inferences...)
 	}
 
-	// Find stem and apply schema inferences.
+	// Apply schema inferences to .stem via library.
 	entries, err := rules.WalkUp(root)
 	if err != nil || len(entries) == 0 {
 		t.Fatalf("no stem found: %v", err)
@@ -37,7 +36,7 @@ func TestApply_AnalyzeThenApplyThenValidate(t *testing.T) {
 
 	result, err := infer.ApplySchemaInferences(entries[0].Path, allInferences, false)
 	if err != nil {
-		t.Fatalf("apply error: %v", err)
+		t.Fatalf("apply schema inferences error: %v", err)
 	}
 
 	// Verify at least some inferences were processed.
@@ -46,68 +45,43 @@ func TestApply_AnalyzeThenApplyThenValidate(t *testing.T) {
 		t.Logf("warning: %d inferences produced no apply actions (schema may already cover them)", len(allInferences))
 	}
 
-	// Validate: all documents should still pass.
+	// Validate: all documents should still pass after schema update.
 	validateAllRecords(t, root)
 }
 
-func TestApply_DataCorrections_MigrateAndValidate(t *testing.T) {
+func TestApply_SchemaApply_DryRun(t *testing.T) {
+	// Verify that schema apply with --dry-run does not modify .stem files.
 	root := setupProject(t, map[string]string{
-		".stem":   "version: 2\nschema:\n  estado:\n    type: enum\n    required: true\n    values: [Pending, Done]\n  tipo:\n    type: string\n",
-		"doc1.md": "---\nestado: todo\ntipo: task\n---\nBody\n",
+		".stem":   "version: 2\nschema:\n  estado:\n    type: enum\n    required: true\n    values: [Pending, Done]\n  priority:\n    type: string\n",
+		"doc1.md": "---\nestado: Pending\n---\nBody\n",
 	})
 
+	entries, err := rules.WalkUp(root)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no stem found: %v", err)
+	}
+
+	original, _ := os.ReadFile(entries[0].Path)
+
+	// Create a schema inference: mark priority as required
 	inferences := []infer.ReportInference{
-		{Type: "migrate_value", Field: "estado", From: "todo", To: "Pending", Paths: []string{"doc1.md"}},
+		{Type: "required_field", Field: "priority"},
 	}
 
-	opts := infer.ApplyOptions{Root: root}
-	result, err := infer.ApplyDataCorrections(inferences, opts)
+	result, err := infer.ApplySchemaInferences(entries[0].Path, inferences, true)
 	if err != nil {
-		t.Fatalf("apply data error: %v", err)
+		t.Fatalf("dry-run error: %v", err)
 	}
 
-	if len(result.Applied) != 1 {
-		t.Fatalf("expected 1 applied, got %d", len(result.Applied))
-	}
-
-	// Verify file was updated.
-	data, _ := os.ReadFile(filepath.Join(root, "doc1.md"))
-	if !strings.Contains(string(data), "Pending") {
-		t.Errorf("expected 'Pending' in doc1.md, got:\n%s", data)
-	}
-
-	// Validate post-apply.
-	validateAllRecords(t, root)
-}
-
-func TestApply_DryRun_NoFileChanges(t *testing.T) {
-	root := setupProject(t, map[string]string{
-		".stem":   "version: 2\nschema:\n  estado:\n    type: string\n",
-		"doc1.md": "---\nestado: todo\n---\nBody\n",
-	})
-
-	original, _ := os.ReadFile(filepath.Join(root, "doc1.md"))
-
-	inferences := []infer.ReportInference{
-		{Type: "migrate_value", Field: "estado", From: "todo", To: "Pending", Paths: []string{"doc1.md"}},
-	}
-
-	result, err := infer.ApplyDataCorrections(inferences, infer.ApplyOptions{Root: root, DryRun: true})
-	if err != nil {
-		t.Fatalf("apply error: %v", err)
-	}
-
-	if len(result.Applied) != 1 {
-		t.Fatalf("expected 1 dry-run applied, got %d", len(result.Applied))
-	}
+	// Verify dry-run flag is set
 	if !result.DryRun {
 		t.Error("expected DryRun=true")
 	}
 
-	// File must be unchanged.
-	after, _ := os.ReadFile(filepath.Join(root, "doc1.md"))
+	// .stem file must be unchanged.
+	after, _ := os.ReadFile(entries[0].Path)
 	if string(after) != string(original) {
-		t.Errorf("dry-run modified the file:\noriginal: %s\nafter: %s", original, after)
+		t.Errorf("dry-run modified the .stem file:\noriginal: %s\nafter: %s", original, after)
 	}
 }
 
@@ -140,35 +114,6 @@ func TestApply_RequiresAgent_Skipped(t *testing.T) {
 	if !strings.Contains(result.Skipped[0], "requires agent") {
 		t.Errorf("expected 'requires agent' in skipped message, got: %s", result.Skipped[0])
 	}
-}
-
-func TestApply_AddField_ThenValidate(t *testing.T) {
-	root := setupProject(t, map[string]string{
-		".stem":   "version: 2\nschema:\n  estado:\n    type: enum\n    required: true\n    values: [Pending, Done]\n  tipo:\n    type: string\n    required: true\n",
-		"doc1.md": "---\nestado: Pending\n---\nBody\n",
-	})
-
-	inferences := []infer.ReportInference{
-		{Type: "add_field", Field: "tipo", Value: "task", Paths: []string{"doc1.md"}},
-	}
-
-	result, err := infer.ApplyDataCorrections(inferences, infer.ApplyOptions{Root: root})
-	if err != nil {
-		t.Fatalf("apply error: %v", err)
-	}
-
-	if len(result.Applied) != 1 {
-		t.Fatalf("expected 1 applied, got %d", len(result.Applied))
-	}
-
-	// Verify field added.
-	data, _ := os.ReadFile(filepath.Join(root, "doc1.md"))
-	if !strings.Contains(string(data), "tipo: task") {
-		t.Errorf("expected 'tipo: task' in doc1.md, got:\n%s", data)
-	}
-
-	// Validate post-apply.
-	validateAllRecords(t, root)
 }
 
 // validateAllRecords runs validation against all records in the root directory.

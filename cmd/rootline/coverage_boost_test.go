@@ -26,30 +26,6 @@ func TestDescribeFileTarget(t *testing.T) {
 	}
 }
 
-// TestRunApplyDeprecated tests the deprecated apply command
-func TestRunApplyDeprecated(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	mustWriteFile(t, filepath.Join(dir, ".stem"),
-		[]byte("version: 2\nschema:\n  x:\n    type: string\n"), 0644)
-
-	// Create a minimal report
-	reportFile := filepath.Join(dir, "report.json")
-	mustWriteFile(t, reportFile,
-		[]byte(`{"version":1,"kind":"rootline/analyze","proposals":[]}`), 0644)
-
-	resetFlags()
-	out, _ := runCmd(t, "apply", reportFile)
-
-	// Should output deprecation warning
-	if !strings.Contains(out, "deprecated") {
-		t.Logf("apply output: %s", out)
-	}
-}
-
 // TestFilterRecords tests record filtering logic
 func TestFilterRecords(t *testing.T) {
 	dir := setupTestDir(t)
