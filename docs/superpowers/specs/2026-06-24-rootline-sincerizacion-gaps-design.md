@@ -98,24 +98,26 @@ no pierde funcionalidad tras Option D (schema apply consumes analyze reports).
 
 ---
 
-## Fase 3 — Resolución per-record en derive/aggregate
+## Fase 3 — Resolución per-record en derive/enrich
 
-**Objetivo:** que campos derivados/agregados respeten el schema efectivo **por record** en islas
+**Objetivo:** que campos derivados/extraídos respeten el schema efectivo **por record** en islas
 multi-nivel con `match:` distintos, no el merge directorio-nivel.
 
 **Cambios:**
 
-- `internal/derive/pipeline.go` (`DeriveAll`) y `internal/derive/aggregate.go` (`AggregateAll`):
-  cambiar de `DefaultResolver()` a resolución per-record vía `ResolveForRecord(dir, recordPath)`
-  (ya existe; usado en describe/validate/fix/set/repair). Es **más restrictivo** (filtra campos
-  no-match) → no debería romper golden tests; confirmar con `just test`.
-- Agregar el test faltante junto a `internal/derive/pipeline_test.go`: escenario multi-`.stem` a
-  distintos niveles con `match:` divergentes, donde el merge directorio-nivel produciría un valor
-  derivado/agregado incorrecto y per-record lo corrige.
+- `internal/derive/enrich.go` (`EnrichBuiltins`): usa resolución per-record vía `ResolveForRecord(dir, recordPath)`
+  (línea 33) para extraer campos `source:` (como `source: body.h1`) escoped por `match:`. Así, un campo
+  derivado con `match:` solo se extrae en records coincidentes, no en toda la isla. Esta es la **verdadera
+  fix observable** (extracciones respetan `match:`).
+- `internal/derive/pipeline.go` (`DeriveRecord`) y `internal/derive/aggregate.go` (`AggregateAll`): usan solo
+  los mapas `Derive` y `Aggregate` de la schema, que match-filtering ya no afecta (no acceden a Schema
+  directamente). El cambio a `ResolveForRecord` es **consistency no-op**: derive/aggregate no tienen
+  comportamiento visible distinto, solo siguen el mismo patrón que enrich para coherencia arquitectónica.
+- Verificación: `record.go:50`, `enrich.go:47-67` prueban la extracción per-record; `hierarchy.go` (infer)
+  solo filtra Schema en el pipeline (no Derive/Aggregate).
 
-**Verificación:** el test nuevo falla con `DefaultResolver` y pasa con `ResolveForRecord`;
-`just test` verde; `rootline query`/`describe` con derive+aggregate sobre fixture multi-nivel da los
-valores per-record correctos.
+**Verificación:** `just check` + `just test` verdes; no debería romper golden tests pues DeriveRecord/AggregateAll
+comportamiento es invariante (solo acceden a Derive/Aggregate maps, no Schema).
 
 ---
 
