@@ -39,7 +39,6 @@ func runAnalyze(t *testing.T, root string) *infer.AnalyzeReport {
 	agentTypes := map[string]bool{
 		"informal_dependency_candidate": true,
 		"unverified_traceability":       true,
-		"missing_domain":                true,
 		"implicit_schema":               true,
 		"naming_inconsistency":          true,
 		"enum_without_values":           true,
