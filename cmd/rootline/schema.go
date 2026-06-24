@@ -201,12 +201,22 @@ func runSchemaPropose(cmd *cobra.Command, args []string) error {
 func runSchemaApply(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
-	// Read and parse the schema proposals report.
+	// Read report data
 	data, err := os.ReadFile(schemaApplyReport)
 	if err != nil {
 		return fmt.Errorf("reading report file: %w", err)
 	}
 
+	// Probe report kind to dispatch
+	var probe struct {
+		Kind string `json:"kind"`
+	}
+	_ = json.Unmarshal(data, &probe)
+	if probe.Kind == "analyze" {
+		return runSchemaApplyFromAnalyze(cmd, data)
+	}
+
+	// Parse as SchemaProposalsReport for the proposals path
 	var report SchemaProposalsReport
 	if err := json.Unmarshal(data, &report); err != nil {
 		return fmt.Errorf("parsing report: %w", err)
@@ -248,27 +258,102 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		}
 
 		// Process based on operation type.
-		switch proposal.Operation {
-		case "create_stem":
+		if proposal.Operation == "create_stem" {
 			// Create a new .stem file at target.
 			if err := infer.ScaffoldSchema(filepath.Dir(proposal.Target), schemaApplyDryRun); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("scaffold %s: %v", proposal.Target, err))
 			} else {
 				result.Applied = append(result.Applied, fmt.Sprintf("create_stem: %s", proposal.Target))
 			}
-
-		case "update_stem":
-			// Update existing .stem file.
-			// Note: ApplySchemaInferences expects ReportInference, not SchemaProposal.
-			// For now, we'll record that the operation would be applied but skip actual update
-			// since SchemaProposal doesn't have the detailed inference data needed.
-			result.Applied = append(result.Applied, fmt.Sprintf("update_stem: %s", proposal.Target))
 		}
 	}
 
 	// If not dry-run, run validation.
 	if !schemaApplyDryRun {
 		validationResult := runPostApplyValidation(ctx, scanRoot)
+		result.ValidationSummary = validationResult
+	}
+
+	// Output result.
+	if outputFormat == "table" {
+		return renderSchemaApplyTable(cmd, result)
+	}
+	return outputJSON(cmd, result, false)
+}
+
+// runSchemaApplyFromAnalyze processes an analyze report and applies schema-modifying inferences to .stem files.
+// Mirrors apply.go's schema half: resolves closest .stem, filters schema-modifying inferences, calls ApplySchemaInferences.
+func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
+	ctx := cmd.Context()
+
+	var report infer.AnalyzeReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		return fmt.Errorf("parsing analyze report: %w", err)
+	}
+
+	// Validate report version and kind.
+	if report.Version != 1 {
+		return fmt.Errorf("unsupported report version: %d (expected 1)", report.Version)
+	}
+	if report.Kind != "analyze" {
+		return fmt.Errorf("wrong report kind: %s (expected analyze)", report.Kind)
+	}
+
+	// Resolve root path from report path.
+	root, err := filepath.Abs(report.Path)
+	if err != nil {
+		return fmt.Errorf("resolving path: %w", err)
+	}
+
+	// Resolve closest .stem for the report path.
+	res, resolveErr := rules.Resolve(root, root)
+	if resolveErr != nil {
+		return fmt.Errorf("resolving stems for %s: %w", report.Path, resolveErr)
+	}
+
+	if len(res.Chain) == 0 {
+		return fmt.Errorf("no .stem found for %s", report.Path)
+	}
+
+	// Use the closest (leaf-most) stem file for schema modifications.
+	closestStem := res.ClosestStem()
+	if closestStem == nil {
+		return fmt.Errorf("no stem available for %s", report.Path)
+	}
+	stemPath := closestStem.Path
+
+	// Separate schema-modifying inferences from data-correction inferences.
+	// Schema-modifying: enum_values, required_field, constant_field, field_type, untyped_field, sequence_incomplete
+	// Data-correction: migrate_value, correct_value, add_field (these go to repair apply, not here)
+	var schemaInferences []infer.ReportInference
+	for _, cat := range report.Categories {
+		for _, inf := range cat.Inferences {
+			switch inf.Type {
+			case "enum_values", "required_field", "constant_field", "field_type", "untyped_field", "sequence_incomplete":
+				schemaInferences = append(schemaInferences, inf)
+			}
+		}
+	}
+
+	// Apply schema modifications to .stem
+	schemaResult, err := infer.ApplySchemaInferences(stemPath, schemaInferences, schemaApplyDryRun)
+	if err != nil {
+		return fmt.Errorf("applying schema: %w", err)
+	}
+
+	// Format result as SchemaApplyResult
+	result := &SchemaApplyResult{
+		Version: 1,
+		Kind:    "rootline/schema-apply",
+		DryRun:  schemaApplyDryRun,
+		Applied: schemaResult.Applied,
+		Skipped: schemaResult.Skipped,
+		Errors:  []string{},
+	}
+
+	// If not dry-run, run validation.
+	if !schemaApplyDryRun {
+		validationResult := runPostApplyValidation(ctx, root)
 		result.ValidationSummary = validationResult
 	}
 

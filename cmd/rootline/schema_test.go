@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -510,6 +511,67 @@ func TestSchemaApplyResultStructure(t *testing.T) {
 	}
 	if result.Skipped == nil {
 		t.Error("skipped is nil")
+	}
+}
+
+// TestSchemaApply_AnalyzeReport_ExtendsEnum tests that schema apply consumes an analyze report and extends enum values.
+func TestSchemaApply_AnalyzeReport_ExtendsEnum(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stem := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Done]\n"
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stem), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\nestado: Pending\n---\n# A\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\nestado: Blocked\n---\n# B\n"), 0644)
+
+	out, err := runCmd(t, "analyze", dir)
+	if err != nil {
+		t.Fatalf("analyze: %v\n%s", err, out)
+	}
+	reportFile := filepath.Join(dir, "report.json")
+	mustWriteFile(t, reportFile, []byte(out), 0644)
+
+	if _, err := runCmd(t, "schema", "apply", "--report", reportFile); err != nil {
+		t.Fatalf("schema apply: %v", err)
+	}
+	got := string(mustReadFile(t, filepath.Join(dir, ".stem")))
+	if !strings.Contains(got, "Blocked") {
+		t.Fatalf("expected enum extended with Blocked, got:\n%s", got)
+	}
+}
+
+// TestSchemaApply_AnalyzeReport_DryRunNoWrite tests that --dry-run prevents writes when applying analyze report.
+func TestSchemaApply_AnalyzeReport_DryRunNoWrite(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stem := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Done]\n"
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stem), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\nestado: Pending\n---\n# A\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\nestado: Blocked\n---\n# B\n"), 0644)
+
+	// Record initial .stem content
+	initialStem := mustReadFile(t, filepath.Join(dir, ".stem"))
+
+	out, err := runCmd(t, "analyze", dir)
+	if err != nil {
+		t.Fatalf("analyze: %v\n%s", err, out)
+	}
+	reportFile := filepath.Join(dir, "report.json")
+	mustWriteFile(t, reportFile, []byte(out), 0644)
+
+	if _, err := runCmd(t, "schema", "apply", "--report", reportFile, "--dry-run"); err != nil {
+		t.Fatalf("schema apply --dry-run: %v", err)
+	}
+
+	// Verify .stem is unchanged
+	finalStem := mustReadFile(t, filepath.Join(dir, ".stem"))
+	if string(initialStem) != string(finalStem) {
+		t.Fatalf("dry-run modified .stem:\nbefore: %s\nafter: %s", initialStem, finalStem)
 	}
 }
 
