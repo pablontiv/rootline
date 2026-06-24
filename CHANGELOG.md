@@ -18,7 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 - `schema propose` and `schema apply` commands for schema proposal workflow
 - `repair apply` for data-only bulk repair from proposals report
 - `graph --open` renders interactive Mermaid diagram in browser
-- 16 inference detectors (13 data + 3 governance: domain coverage, schema coverage, validation gaps)
+- 14 inference detectors (12 data + 2 governance: schema coverage, validation gaps)
 - `analyze --incremental` to filter inferences covered by existing `.stem`
 - `query --select` for compact row projections with `jsonl`/`csv` output
 - `rootline explain` for field provenance display

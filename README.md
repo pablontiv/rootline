@@ -182,7 +182,7 @@ rootline set <file> field=value [...]     # Mutate frontmatter and sections with
 rootline fix [file|--all]                 # Auto-repair: add fields, fix enums, propose changes
 rootline validate --all --where 'expr'   # Validate only records matching filter
 rootline migrate [path]                   # Detect schema changes, rename, split, --to-v2, --from-levels
-rootline analyze [path] [--incremental]   # Run 16 detectors (data + governance), produce report
+rootline analyze [path] [--incremental]   # Run 14 detectors (12 data + 2 governance), produce report
 rootline schema apply --report <file>     # Apply schema proposals to .stem files
 rootline repair apply --report <file>     # Apply data-only repairs to document frontmatter
 rootline apply [file] [--dry-run]         # Deprecated legacy mixed apply; prefer schema/repair apply

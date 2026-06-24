@@ -93,7 +93,7 @@ Rootline commands organize into six responsibility lanes:
 #### Lane 2: Governance & Validation
 | Command | Mutates | Purpose |
 |---------|---------|---------|
-| `analyze [directory]` | None | Run 16 inference detectors (13 data + 3 governance) and return structured report |
+| `analyze [directory]` | None | Run 14 inference detectors (12 data + 2 governance) and return structured report |
 | MCP: `fix` | None | Analyze validation errors and return fix proposals (always dry-run, never modifies) |
 
 #### Lane 3: Data Repair
