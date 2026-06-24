@@ -280,6 +280,16 @@ Rootline is designed as a **structured knowledge source for AI assistants**. All
 
 AI assistants and automation should call the Rootline CLI directly and consume stable JSON output from commands such as `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`, `trace`, and `new`.
 
+### Engine vs. agent: division of labor
+
+Rootline's engine decides everything resolvable **from form** — frequency
+thresholds (a field present in ≥80% of records is `required`), unanimous or
+majority value agreement, and structural conventions (directory naming, type
+consistency). Decisions that need **meaning** — is this value semantically the
+same as that one? — are not guessed: `analyze` marks those proposals
+`requires_agent` for a human or agent to resolve. The report exposes
+**percentage evidence, not opinions**; consumers apply their own thresholds.
+
 ---
 
 ## Documentation
