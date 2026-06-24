@@ -3,7 +3,6 @@ package infer
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -16,12 +15,6 @@ type ApplyResult struct {
 	Applied []string `json:"applied"`
 	Skipped []string `json:"skipped"`
 	DryRun  bool     `json:"dry_run,omitempty"`
-}
-
-// ApplyOptions controls apply behavior.
-type ApplyOptions struct {
-	DryRun bool
-	Root   string // absolute path to the report directory
 }
 
 // ApplySchemaInferences applies schema-modifying inferences to a .stem file.
@@ -112,179 +105,6 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 
 	result.DryRun = dryRun
 	return result, nil
-}
-
-// ApplyDataCorrections applies data-modifying inferences to document files.
-// Handles migrate_value, correct_value, and add_field inference types.
-func ApplyDataCorrections(inferences []ReportInference, opts ApplyOptions) (*ApplyResult, error) {
-	result := &ApplyResult{DryRun: opts.DryRun}
-
-	for _, inf := range inferences {
-		if inf.RequiresAgent {
-			result.Skipped = append(result.Skipped, fmt.Sprintf("%s: %s (requires agent)", inf.Type, inf.Message))
-			continue
-		}
-
-		switch inf.Type {
-		case "migrate_value":
-			msgs, err := applyDocCorrection(inf, opts)
-			if err != nil {
-				return nil, fmt.Errorf("migrate_value %s: %w", inf.Field, err)
-			}
-			result.Applied = append(result.Applied, msgs...)
-
-		case "correct_value":
-			msgs, err := applyDocCorrection(inf, opts)
-			if err != nil {
-				return nil, fmt.Errorf("correct_value %s: %w", inf.Field, err)
-			}
-			result.Applied = append(result.Applied, msgs...)
-
-		case "add_field":
-			msgs, err := applyAddField(inf, opts)
-			if err != nil {
-				return nil, fmt.Errorf("add_field %s: %w", inf.Field, err)
-			}
-			result.Applied = append(result.Applied, msgs...)
-		}
-	}
-
-	return result, nil
-}
-
-// applyDocCorrection handles migrate_value and correct_value by rewriting frontmatter.
-func applyDocCorrection(inf ReportInference, opts ApplyOptions) ([]string, error) {
-	if len(inf.Paths) == 0 || inf.Field == "" {
-		return nil, nil
-	}
-
-	var msgs []string
-	for _, relPath := range inf.Paths {
-		absPath := filepath.Join(opts.Root, relPath)
-		content, err := os.ReadFile(absPath)
-		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", relPath, err)
-		}
-
-		fm := parseFrontmatter(string(content))
-		if fm == nil {
-			continue
-		}
-
-		currentVal := fmt.Sprintf("%v", fm[inf.Field])
-		if currentVal != inf.From {
-			continue
-		}
-
-		fm[inf.Field] = inf.To
-		desc := fmt.Sprintf("%s: %s %q→%q in %s", inf.Type, inf.Field, inf.From, inf.To, relPath)
-
-		if opts.DryRun {
-			msgs = append(msgs, desc)
-			continue
-		}
-
-		newContent := rewriteFrontmatter(string(content), fm)
-		if err := os.WriteFile(absPath, []byte(newContent), 0o644); err != nil { //nolint:gosec // apply writes report-selected paths under the caller-provided root
-			return nil, fmt.Errorf("writing %s: %w", relPath, err)
-		}
-		msgs = append(msgs, desc)
-	}
-	return msgs, nil
-}
-
-// applyAddField adds a missing field with a default value to documents.
-func applyAddField(inf ReportInference, opts ApplyOptions) ([]string, error) {
-	if len(inf.Paths) == 0 || inf.Field == "" {
-		return nil, nil
-	}
-
-	var msgs []string
-	for _, relPath := range inf.Paths {
-		absPath := filepath.Join(opts.Root, relPath)
-		content, err := os.ReadFile(absPath)
-		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", relPath, err)
-		}
-
-		fm := parseFrontmatter(string(content))
-		if fm == nil {
-			fm = make(map[string]any)
-		}
-
-		if _, exists := fm[inf.Field]; exists {
-			continue
-		}
-
-		value := inf.Value
-		if value == "" {
-			value = inf.To
-		}
-		fm[inf.Field] = value
-		desc := fmt.Sprintf("add_field: %s=%q in %s", inf.Field, value, relPath)
-
-		if opts.DryRun {
-			msgs = append(msgs, desc)
-			continue
-		}
-
-		newContent := rewriteFrontmatter(string(content), fm)
-		if err := os.WriteFile(absPath, []byte(newContent), 0o644); err != nil { //nolint:gosec // apply writes report-selected paths under the caller-provided root
-			return nil, fmt.Errorf("writing %s: %w", relPath, err)
-		}
-		msgs = append(msgs, desc)
-	}
-	return msgs, nil
-}
-
-// rewriteFrontmatter rebuilds a markdown file with updated frontmatter.
-func rewriteFrontmatter(original string, fm map[string]any) string {
-	if !strings.HasPrefix(original, "---\n") {
-		var b strings.Builder
-		b.WriteString("---\n")
-		fmBytes, err := yaml.Marshal(fm)
-		if err == nil {
-			b.Write(fmBytes)
-		}
-		b.WriteString("---\n")
-		b.WriteString(original)
-		return b.String()
-	}
-
-	endIdx := strings.Index(original[4:], "\n---\n")
-	if endIdx == -1 {
-		return original
-	}
-	body := original[4+endIdx+5:]
-
-	var b strings.Builder
-	b.WriteString("---\n")
-	fmBytes, err := yaml.Marshal(fm)
-	if err == nil {
-		b.Write(fmBytes)
-	}
-	b.WriteString("---\n")
-	b.WriteString(body)
-	return b.String()
-}
-
-// parseFrontmatter extracts YAML frontmatter from markdown content.
-func parseFrontmatter(content string) map[string]any {
-	if !strings.HasPrefix(content, "---\n") {
-		return nil
-	}
-	endIdx := strings.Index(content[4:], "\n---\n")
-	if endIdx == -1 {
-		endIdx = strings.Index(content[4:], "\n---")
-		if endIdx == -1 {
-			return nil
-		}
-	}
-	var fm map[string]any
-	if err := yaml.Unmarshal([]byte(content[4:4+endIdx]), &fm); err != nil {
-		return nil
-	}
-	return fm
 }
 
 // findSchemaFieldNode navigates doc → schema → fieldName and returns the field's mapping node.
