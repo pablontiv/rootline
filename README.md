@@ -13,7 +13,6 @@ A **file-based database and constraint engine** for structured documentation. `.
 | Columns | Frontmatter fields |
 | DDL Schema | `.stem` file |
 | Constraint | Validation rule (`required`, `enum`, `exists`) |
-| Domain type | `domain:` property (semantic type) |
 
 ---
 
@@ -116,11 +115,12 @@ A `.stem` file is the DDL schema for a directory. It defines what fields exist, 
 version: 2
 
 schema:
-  title: { type: string, required: true, domain: title }
+  title: { type: string, required: true }
   status:
-    domain: lifecycle_state          # semantic type — implies type: enum
+    type: enum
     values: [draft, review, published]
     default: draft
+    required: true
   ejecutable_en: { type: string, required: true, match: "T*" }
   "## Summary": { type: section, required: true }
   "## Changelog": { type: section, default: "<!-- TODO -->" }
@@ -133,29 +133,6 @@ links:
 ```
 
 > Sections (`type: section`) are first-class schema fields — validated, defaulted, and queryable alongside frontmatter.
-
-### Domain Types
-
-Fields can declare a `domain:` — a semantic type that says what a field **means**, independent of its name. This is the rootline equivalent of SQL `DOMAIN` or JSON Schema `format`.
-
-```yaml
-schema:
-  mi_estado:
-    domain: lifecycle_state        # "this field IS the lifecycle state"
-    values: [borrador, activo, cerrado]
-  id:
-    domain: identifier             # implies type: sequence
-    prefix: "T"
-    digits: 3
-```
-
-**12 core domains**: `lifecycle_state`, `record_type`, `identifier`, `title`, `created_date`, `due_date`, `owner`, `parent_ref`, `priority`, `description`, `confidence`, `source`. Custom domains use namespaced format: `acme/sprint_velocity`.
-
-**Why domains matter**:
-- **Type inference**: `domain: lifecycle_state` implies `type: enum` — no need to declare both
-- **Virtual aliases**: `rootline query --where 'lifecycle_state == "activo"'` works regardless of the field's actual name
-- **Consumer tools**: AI agents resolve fields by domain, not by name — works across projects with different naming conventions
-- **Governance**: `rootline analyze` flags fields without domains as governance gaps
 
 ---
 
