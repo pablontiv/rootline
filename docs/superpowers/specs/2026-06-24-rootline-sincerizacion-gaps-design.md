@@ -26,7 +26,7 @@ código muerto/deprecado, después el cambio de comportamiento, y al final la fe
 | Subsistema `domain:` **removido** en O14 | `internal/rules/domains.go` no existe; `internal/e2e/governance_test.go:26` |
 | `DetectSubSchemas` removido a propósito (anti field-agnostic) | `internal/infer/subschema_detection.go` (solo comentario-tumba) |
 | `missing_domain` es **código muerto** | `cmd/rootline/analyze.go:44`, `internal/e2e/analyze_test.go:42`; ningún detector lo emite |
-| `apply` deprecado, cubierto 100% por `schema apply` + `repair apply` | `cmd/rootline/apply.go:38`, `schema.go:88`, `repair.go:32`; borrarlo no pierde nada |
+| `apply` removido; reemplazado por `schema apply` + `repair apply` | `cmd/rootline/apply.go` (deleteable); `schema.go:88` applies schema inferences from analyze reports; `repair.go:32` applies data repairs |
 | derive/aggregate usan `DefaultResolver` (merge-only), no per-record | `internal/derive/pipeline.go:77`, `aggregate.go:162`; `ResolveForRecord` ya existe y se usa en describe/validate/fix/set/repair |
 | Extractor interface pluggable pero writes hardcodean frontmatter `---` | `internal/extract/extract.go:21`, `registry.go`; `fix/fix.go:122`, `infer/apply.go:241`, `migrate/rename.go` |
 | `type: section` **sigue vivo** (verificado end-to-end); O14 removió solo el append `+=` | `new.go:144-160` emite la sección si es required/default; `describe` la expone; `rules.go:167-169` la parsea; `set.go:263` y `SKILL.md:109` afirman erróneamente que `type:section` fue removido |
@@ -75,8 +75,10 @@ wiki-ingest tras corregir las fuentes del repo. No editar a mano.
 
 ## Fase 2 — Remover el comando `apply` deprecado
 
-**Objetivo:** eliminar `apply`; `schema apply` + `repair apply` ya lo cubren (scaffold + schema +
-data). Verificado: borrarlo no pierde funcionalidad.
+**Objetivo:** eliminar `apply` CLI. Capacidades preservadas: `schema apply --report <analyze.json>` 
+consumes inference reports from `analyze` to apply schema-field changes to `.stem` files (replaces the 
+legacy `update_stem` capability); `repair apply --report` applies data repairs. Verificado: borrarlo 
+no pierde funcionalidad tras Option D (schema apply consumes analyze reports).
 
 **Cambios:**
 
