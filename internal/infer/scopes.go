@@ -45,6 +45,10 @@ func GroupByScope(records []*extract.Record, root string, resolve StemResolver) 
 // DefaultStemResolver resolves each directory's effective stem via WalkUp +
 // MergeStemFiles, caching per directory to avoid re-walking per record. The
 // group key is the leaf-most .stem path.
+//
+// The cache is unsynchronized and is intended for sequential use within a
+// single command's detector loop (e.g. analyze, schema propose), not for
+// concurrent callers from multiple goroutines.
 func DefaultStemResolver() StemResolver {
 	type entry struct {
 		stem *rules.StemFile
