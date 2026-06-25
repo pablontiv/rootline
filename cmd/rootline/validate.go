@@ -178,6 +178,9 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		}
 		errs := rules.Validate(ctx, rec, effective)
 		errs = append(errs, rules.ExtractionErrors(rec)...)
+		if content, readErr := os.ReadFile(absPath); readErr == nil {
+			errs = append(errs, rules.ValidateStructure(content, rec.Path)...)
+		}
 
 		results = append(results, rules.NewValidationResult(rec.Path, errs))
 
