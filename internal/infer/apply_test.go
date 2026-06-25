@@ -503,17 +503,29 @@ func TestApplySchemaInferences_DefaultNotInSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// constant_field for field NOT in schema → should not find node → no change.
+	// constant_field for a field NOT in schema → field is CREATED with default.
 	inferences := []ReportInference{
-		{Type: "constant_field", Field: "nonexistent", Value: "Pending"},
+		{Type: "constant_field", Field: "estado", Value: "Pending"},
 	}
 
 	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
-	if len(result.Applied) != 0 {
-		t.Errorf("expected 0 applied, got %d", len(result.Applied))
+	if len(result.Applied) != 1 {
+		t.Fatalf("expected 1 applied (field created), got %d: %v", len(result.Applied), result.Applied)
+	}
+	if !strings.Contains(result.Applied[0], "add_field: estado") {
+		t.Errorf("expected add_field message, got %q", result.Applied[0])
+	}
+
+	data, _ := os.ReadFile(stemPath)
+	stem, err := rules.ParseStem(stemPath, data)
+	if err != nil {
+		t.Fatalf("re-parse after grow: %v", err)
+	}
+	if stem.Schema["estado"].Default != "Pending" {
+		t.Errorf("expected created field default 'Pending', got %q", stem.Schema["estado"].Default)
 	}
 }
 

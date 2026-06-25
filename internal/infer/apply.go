@@ -70,8 +70,12 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 			}
 
 		case "constant_field":
-			if applyDefaultValueNode(&doc, stem, inf) {
-				result.Applied = append(result.Applied, fmt.Sprintf("add_default: %s=%s", inf.Field, inf.Value))
+			if applied, created := applyDefaultValueNode(&doc, stem, inf); applied {
+				if created {
+					result.Applied = append(result.Applied, fmt.Sprintf("add_field: %s (default=%s)", inf.Field, inf.Value))
+				} else {
+					result.Applied = append(result.Applied, fmt.Sprintf("add_default: %s=%s", inf.Field, inf.Value))
+				}
 				modified = true
 			}
 
@@ -286,19 +290,19 @@ func applyRequiredFieldNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInfe
 	return true, created
 }
 
-func applyDefaultValueNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) bool {
+func applyDefaultValueNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) (bool, bool) {
 	sf, ok := stem.Schema[inf.Field]
-	if !ok || sf.Default != "" {
-		return false
+	if ok && sf.Default != "" {
+		return false, false
 	}
 
-	fieldNode := findSchemaFieldNode(doc, inf.Field)
+	fieldNode, created := ensureSchemaFieldNode(doc, inf.Field)
 	if fieldNode == nil {
-		return false
+		return false, false
 	}
 
 	setFieldProperty(fieldNode, "default", inf.Value)
-	return true
+	return true, created
 }
 
 func applyFieldTypeNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) (bool, bool) {
