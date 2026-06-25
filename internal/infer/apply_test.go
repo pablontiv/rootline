@@ -496,17 +496,29 @@ func TestApplySchemaInferences_FieldTypeNotInSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// field_type for field NOT in schema → should return false.
+	// field_type for a field NOT in schema → field is now CREATED.
 	inferences := []ReportInference{
-		{Type: "field_type", Field: "nonexistent", Value: "integer"},
+		{Type: "field_type", Field: "nuevo", Value: "integer"},
 	}
 
 	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
-	if len(result.Applied) != 0 {
-		t.Errorf("expected 0 applied, got %d", len(result.Applied))
+	if len(result.Applied) != 1 {
+		t.Fatalf("expected 1 applied (field created), got %d: %v", len(result.Applied), result.Applied)
+	}
+	if !strings.Contains(result.Applied[0], "add_field: nuevo") {
+		t.Errorf("expected add_field message, got %q", result.Applied[0])
+	}
+
+	data, _ := os.ReadFile(stemPath)
+	stem, err := rules.ParseStem(stemPath, data)
+	if err != nil {
+		t.Fatalf("re-parse after grow: %v", err)
+	}
+	if stem.Schema["nuevo"].Type != "integer" {
+		t.Errorf("expected created field type 'integer', got %q", stem.Schema["nuevo"].Type)
 	}
 }
 

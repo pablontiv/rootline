@@ -67,15 +67,13 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 				modified = true
 			}
 
-		case "field_type":
-			if applyFieldTypeNode(&doc, stem, inf) {
-				result.Applied = append(result.Applied, fmt.Sprintf("set_type: %s=%s", inf.Field, inf.Value))
-				modified = true
-			}
-
-		case "untyped_field":
-			if applyFieldTypeNode(&doc, stem, inf) {
-				result.Applied = append(result.Applied, fmt.Sprintf("set_type: %s=%s", inf.Field, inf.Value))
+		case "field_type", "untyped_field":
+			if applied, created := applyFieldTypeNode(&doc, stem, inf); applied {
+				if created {
+					result.Applied = append(result.Applied, fmt.Sprintf("add_field: %s (type=%s)", inf.Field, inf.Value))
+				} else {
+					result.Applied = append(result.Applied, fmt.Sprintf("set_type: %s=%s", inf.Field, inf.Value))
+				}
 				modified = true
 			}
 
@@ -282,19 +280,19 @@ func applyDefaultValueNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInfer
 	return true
 }
 
-func applyFieldTypeNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) bool {
+func applyFieldTypeNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) (bool, bool) {
 	sf, ok := stem.Schema[inf.Field]
 	if ok && sf.Type != "" {
-		return false
+		return false, false
 	}
 
-	fieldNode := findSchemaFieldNode(doc, inf.Field)
+	fieldNode, created := ensureSchemaFieldNode(doc, inf.Field)
 	if fieldNode == nil {
-		return false
+		return false, false
 	}
 
 	setFieldProperty(fieldNode, "type", inf.Value)
-	return true
+	return true, created
 }
 
 func parseValueList(s string) []string {
