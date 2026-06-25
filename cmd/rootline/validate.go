@@ -102,6 +102,7 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 
 		// Validate
 		errs = append(errs, rules.Validate(ctx, record, effective)...)
+		errs = append(errs, rules.ExtractionErrors(record)...)
 		errs = append(errs, structErrs...)
 
 		results = append(results, rules.NewValidationResult(file, errs))
@@ -176,6 +177,7 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 			continue
 		}
 		errs := rules.Validate(ctx, rec, effective)
+		errs = append(errs, rules.ExtractionErrors(rec)...)
 
 		results = append(results, rules.NewValidationResult(rec.Path, errs))
 
