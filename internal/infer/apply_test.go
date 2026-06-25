@@ -700,3 +700,92 @@ func TestScaffoldSchema_NoMarkdown(t *testing.T) {
 		t.Error("expected error when no markdown files found")
 	}
 }
+
+func TestApplySchemaInferences_GrowMultiplePropsSameNewField(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	if err := os.WriteFile(stemPath, []byte("version: 2\nschema:\n  estado:\n    type: string\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Same NEW field referenced by three inferences in one run.
+	inferences := []ReportInference{
+		{Type: "field_type", Field: "prioridad", Value: "string"},
+		{Type: "required_field", Field: "prioridad"},
+		{Type: "constant_field", Field: "prioridad", Value: "media"},
+	}
+
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
+	if err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+	if len(result.Applied) != 3 {
+		t.Fatalf("expected 3 applied, got %d: %v", len(result.Applied), result.Applied)
+	}
+
+	data, _ := os.ReadFile(stemPath)
+	stem, err := rules.ParseStem(stemPath, data)
+	if err != nil {
+		t.Fatalf("re-parse after grow: %v", err)
+	}
+	sf := stem.Schema["prioridad"]
+	if sf.Type != "string" || !sf.Required || sf.Default != "media" {
+		t.Errorf("expected one node with type+required+default, got %+v", sf)
+	}
+}
+
+func TestApplySchemaInferences_GrowStemWithoutSchemaKey(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	// Minimal .stem with no schema: key at all.
+	if err := os.WriteFile(stemPath, []byte("version: 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	inferences := []ReportInference{
+		{Type: "field_type", Field: "estado", Value: "string"},
+	}
+
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
+	if err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+	if len(result.Applied) != 1 {
+		t.Fatalf("expected 1 applied, got %d: %v", len(result.Applied), result.Applied)
+	}
+
+	data, _ := os.ReadFile(stemPath)
+	stem, err := rules.ParseStem(stemPath, data)
+	if err != nil {
+		t.Fatalf("re-parse after creating schema key: %v", err)
+	}
+	if stem.Schema["estado"].Type != "string" {
+		t.Errorf("expected created field under new schema key, got %+v", stem.Schema)
+	}
+}
+
+func TestApplySchemaInferences_GrowDryRunDoesNotWrite(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	original := "version: 2\nschema:\n  estado:\n    type: string\n"
+	if err := os.WriteFile(stemPath, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	inferences := []ReportInference{
+		{Type: "field_type", Field: "nuevo", Value: "integer"},
+	}
+
+	result, err := ApplySchemaInferences(stemPath, inferences, true)
+	if err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+	if len(result.Applied) != 1 || !result.DryRun {
+		t.Fatalf("expected 1 applied + DryRun, got applied=%v dryRun=%v", result.Applied, result.DryRun)
+	}
+
+	data, _ := os.ReadFile(stemPath)
+	if string(data) != original {
+		t.Errorf("dry-run must not modify the file, got:\n%s", data)
+	}
+}
