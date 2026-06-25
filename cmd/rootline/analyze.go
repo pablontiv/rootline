@@ -74,6 +74,8 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scanning: %w", err)
 	}
 
+	gapsResolver := infer.DefaultStemResolver()
+
 	derive.DeriveAllSimple(ctx, records, root)
 	derive.EnrichBuiltinsSimple(ctx, records, root)
 	derive.AggregateAllSimple(ctx, records, root)
@@ -156,7 +158,7 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 					})
 				}
 			}
-			return infer.DetectValidationGaps(stem, records, prior)
+			return infer.DetectValidationGaps(records, prior, root, gapsResolver)
 		}},
 	}
 

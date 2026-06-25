@@ -60,12 +60,6 @@ func runAnalyze(t *testing.T, root string) *infer.AnalyzeReport {
 	report.AddCategory("cross_refs", "Cross References", infer.DetectCrossReferences(records, root), agentTypes)
 
 	// Governance detectors.
-	var stem *rules.StemFile
-	stemEntries, walkErr := rules.WalkUp(root)
-	if walkErr == nil && len(stemEntries) > 0 {
-		stem = rules.MergeStemFiles(stemEntries)
-	}
-
 	report.AddCategory("schema_coverage", "Schema Coverage", infer.DetectMissingSchemata(root), agentTypes)
 
 	// Collect prior inferences for deduplication.
@@ -75,7 +69,8 @@ func runAnalyze(t *testing.T, root string) *infer.AnalyzeReport {
 			priorInfs = append(priorInfs, infer.Inference{Type: ri.Type, Field: ri.Field, Value: ri.Value})
 		}
 	}
-	report.AddCategory("validation_gaps", "Validation Gaps", infer.DetectValidationGaps(stem, records, priorInfs), agentTypes)
+	gapsResolver := infer.DefaultStemResolver()
+	report.AddCategory("validation_gaps", "Validation Gaps", infer.DetectValidationGaps(records, priorInfs, root, gapsResolver), agentTypes)
 
 	report.Finalize()
 	return report

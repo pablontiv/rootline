@@ -10,9 +10,9 @@ import (
 
 const requiredUsageThreshold = 0.80
 
-// DetectValidationGaps checks schema fields for insufficient validation rules.
+// detectGapsForScope checks schema fields for insufficient validation rules.
 // priorInferences is used for deduplication against data-inference detectors.
-func DetectValidationGaps(stem *rules.StemFile, records []*extract.Record, priorInferences []Inference) []Inference {
+func detectGapsForScope(stem *rules.StemFile, records []*extract.Record, priorInferences []Inference) []Inference {
 	if stem == nil || len(stem.Schema) == 0 {
 		return nil
 	}
@@ -105,4 +105,27 @@ func DetectValidationGaps(stem *rules.StemFile, records []*extract.Record, prior
 	}
 
 	return inferences
+}
+
+// DetectValidationGaps runs the per-scope schema-gap checks across every .stem
+// scope in the tree (grouped by GroupByScope), deduplicating findings by
+// (Type, Field, Source) since inherited fields appear in multiple scopes.
+func DetectValidationGaps(records []*extract.Record, prior []Inference, root string, resolve StemResolver) []Inference {
+	groups := GroupByScope(records, root, resolve)
+	seen := make(map[string]bool)
+	var out []Inference
+	for _, g := range groups {
+		if g.Stem == nil || len(g.Stem.Schema) == 0 {
+			continue
+		}
+		for _, inf := range detectGapsForScope(g.Stem, g.Records, prior) {
+			k := inf.Type + "|" + inf.Field + "|" + inf.Source
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			out = append(out, inf)
+		}
+	}
+	return out
 }
