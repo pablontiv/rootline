@@ -245,17 +245,33 @@ func TestApplySchemaInferences_EnumNoField(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// enum_values for a field not in the schema → skipped.
+	// enum_values for a field not in the schema → field is CREATED as enum.
 	inferences := []ReportInference{
-		{Type: "enum_values", Field: "nonexistent", Value: "[a b]"},
+		{Type: "enum_values", Field: "prioridad", Value: "[alta media baja]"},
 	}
 
 	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
-	if len(result.Applied) != 0 {
-		t.Errorf("expected 0 applied for nonexistent field, got %d", len(result.Applied))
+	if len(result.Applied) != 1 {
+		t.Fatalf("expected 1 applied (enum field created), got %d: %v", len(result.Applied), result.Applied)
+	}
+	if !strings.Contains(result.Applied[0], "add_field: prioridad") {
+		t.Errorf("expected add_field message, got %q", result.Applied[0])
+	}
+
+	data, _ := os.ReadFile(stemPath)
+	stem, err := rules.ParseStem(stemPath, data)
+	if err != nil {
+		t.Fatalf("re-parse after grow: %v", err)
+	}
+	sf := stem.Schema["prioridad"]
+	if sf.Type != "enum" {
+		t.Errorf("expected created field type 'enum', got %q", sf.Type)
+	}
+	if len(sf.Values) != 3 {
+		t.Errorf("expected 3 enum values, got %v", sf.Values)
 	}
 }
 

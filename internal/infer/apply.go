@@ -50,8 +50,12 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 
 		switch inf.Type {
 		case "enum_values":
-			if applyEnumExtensionNode(&doc, stem, inf) {
-				result.Applied = append(result.Applied, fmt.Sprintf("extend_enum: %s", inf.Field))
+			if applied, created := applyEnumExtensionNode(&doc, stem, inf); applied {
+				if created {
+					result.Applied = append(result.Applied, fmt.Sprintf("add_field: %s (enum)", inf.Field))
+				} else {
+					result.Applied = append(result.Applied, fmt.Sprintf("extend_enum: %s", inf.Field))
+				}
 				modified = true
 			}
 
@@ -202,17 +206,14 @@ func setFieldProperty(node *yaml.Node, key, value string) {
 	)
 }
 
-func applyEnumExtensionNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) bool {
-	sf, ok := stem.Schema[inf.Field]
-	if !ok {
-		return false
-	}
-
+func applyEnumExtensionNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) (bool, bool) {
 	inferredValues := parseValueList(inf.Value)
 	if len(inferredValues) == 0 {
-		return false
+		return false, false
 	}
 
+	// Zero value when the field is absent → empty existing set → all inferred are new.
+	sf := stem.Schema[inf.Field]
 	existing := make(map[string]bool)
 	for _, v := range sf.Values {
 		existing[v] = true
@@ -225,15 +226,31 @@ func applyEnumExtensionNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInfe
 		}
 	}
 	if len(newValues) == 0 {
-		return false
+		return false, false
 	}
 
-	// Find the field node and add values to its "values" sequence.
-	fieldNode := findSchemaFieldNode(doc, inf.Field)
+	fieldNode, created := ensureSchemaFieldNode(doc, inf.Field)
 	if fieldNode == nil {
-		return false
+		return false, false
 	}
 
+	if created {
+		// New field: declare it as an enum with a fresh values sequence.
+		setFieldProperty(fieldNode, "type", "enum")
+		valuesNode := &yaml.Node{Kind: yaml.SequenceNode}
+		for _, v := range newValues {
+			valuesNode.Content = append(valuesNode.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Value: v},
+			)
+		}
+		fieldNode.Content = append(fieldNode.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: "values"},
+			valuesNode,
+		)
+		return true, true
+	}
+
+	// Existing field: append to its values sequence.
 	for i := 0; i < len(fieldNode.Content)-1; i += 2 {
 		if fieldNode.Content[i].Value == "values" {
 			valuesNode := fieldNode.Content[i+1]
@@ -243,11 +260,11 @@ func applyEnumExtensionNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInfe
 						&yaml.Node{Kind: yaml.ScalarNode, Value: v},
 					)
 				}
-				return true
+				return true, false
 			}
 		}
 	}
-	return false
+	return false, false
 }
 
 func applyRequiredFieldNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) bool {
