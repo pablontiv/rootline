@@ -522,6 +522,74 @@ func TestFindSchemaFieldNode_RootNotMapping(t *testing.T) {
 	}
 }
 
+func TestEnsureSchemaFieldNode_ExistingField(t *testing.T) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte("version: 2\nschema:\n  tipo:\n    type: string\n"), &doc); err != nil {
+		t.Fatal(err)
+	}
+	node, created := ensureSchemaFieldNode(&doc, "tipo")
+	if node == nil {
+		t.Fatal("expected non-nil node for existing field")
+	}
+	if created {
+		t.Error("expected created=false for existing field")
+	}
+}
+
+func TestEnsureSchemaFieldNode_CreatesField(t *testing.T) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte("version: 2\nschema:\n  tipo:\n    type: string\n"), &doc); err != nil {
+		t.Fatal(err)
+	}
+	node, created := ensureSchemaFieldNode(&doc, "nuevo")
+	if node == nil || !created {
+		t.Fatalf("expected created node, got node=%v created=%v", node, created)
+	}
+	if node.Kind != yaml.MappingNode {
+		t.Errorf("expected empty mapping node, got kind %v", node.Kind)
+	}
+	// The new field must be reachable via findSchemaFieldNode now.
+	if findSchemaFieldNode(&doc, "nuevo") == nil {
+		t.Error("created field not found in schema mapping")
+	}
+}
+
+func TestEnsureSchemaFieldNode_CreatesSchemaKey(t *testing.T) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte("version: 2\n"), &doc); err != nil {
+		t.Fatal(err)
+	}
+	node, created := ensureSchemaFieldNode(&doc, "estado")
+	if node == nil || !created {
+		t.Fatalf("expected created node, got node=%v created=%v", node, created)
+	}
+	if findSchemaFieldNode(&doc, "estado") == nil {
+		t.Error("field not reachable after creating schema key")
+	}
+}
+
+func TestEnsureSchemaFieldNode_SchemaNotMapping(t *testing.T) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte("version: 2\nschema: not_a_mapping\n"), &doc); err != nil {
+		t.Fatal(err)
+	}
+	node, created := ensureSchemaFieldNode(&doc, "estado")
+	if node != nil || created {
+		t.Errorf("expected (nil, false) for non-mapping schema, got node=%v created=%v", node, created)
+	}
+}
+
+func TestEnsureSchemaFieldNode_RootNotMapping(t *testing.T) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte("just a string"), &doc); err != nil {
+		t.Fatal(err)
+	}
+	node, created := ensureSchemaFieldNode(&doc, "anything")
+	if node != nil || created {
+		t.Errorf("expected (nil, false) for non-mapping root, got node=%v created=%v", node, created)
+	}
+}
+
 func TestApplySchemaInferences_ReadError(t *testing.T) {
 	_, err := ApplySchemaInferences("/nonexistent/.stem", nil, false)
 	if err == nil {

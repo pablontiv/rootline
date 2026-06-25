@@ -138,6 +138,54 @@ func findSchemaFieldNode(doc *yaml.Node, fieldName string) *yaml.Node {
 	return nil
 }
 
+// ensureSchemaFieldNode navigates doc → schema → fieldName, creating the
+// schema mapping and/or the field's mapping node if absent. The returned bool
+// is true when the field node was newly created. Returns (nil, false) only when
+// the root or an existing schema value is not a mapping.
+func ensureSchemaFieldNode(doc *yaml.Node, fieldName string) (*yaml.Node, bool) {
+	root := doc
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		root = root.Content[0]
+	}
+	if root.Kind != yaml.MappingNode {
+		return nil, false
+	}
+
+	// Find or create the "schema" key.
+	var schemaNode *yaml.Node
+	for i := 0; i < len(root.Content)-1; i += 2 {
+		if root.Content[i].Value == "schema" {
+			schemaNode = root.Content[i+1]
+			break
+		}
+	}
+	if schemaNode == nil {
+		schemaNode = &yaml.Node{Kind: yaml.MappingNode}
+		root.Content = append(root.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: "schema"},
+			schemaNode,
+		)
+	}
+	if schemaNode.Kind != yaml.MappingNode {
+		return nil, false
+	}
+
+	// Find an existing field node.
+	for i := 0; i < len(schemaNode.Content)-1; i += 2 {
+		if schemaNode.Content[i].Value == fieldName {
+			return schemaNode.Content[i+1], false
+		}
+	}
+
+	// Create a new empty field mapping.
+	fieldNode := &yaml.Node{Kind: yaml.MappingNode}
+	schemaNode.Content = append(schemaNode.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Value: fieldName},
+		fieldNode,
+	)
+	return fieldNode, true
+}
+
 // setFieldProperty sets or adds a scalar property on a mapping node.
 func setFieldProperty(node *yaml.Node, key, value string) {
 	if node.Kind != yaml.MappingNode {
