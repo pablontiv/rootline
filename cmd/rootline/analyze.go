@@ -89,15 +89,6 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	// Build report.
 	report := infer.NewAnalyzeReport(scanRoot)
 
-	// Load stem for governance detectors and incremental filtering.
-	// Intentionally uses root-level stem (not per-record resolution) because governance
-	// detectors analyze patterns at the repository level (domain coverage, schema coverage,
-	// validation gaps) rather than per-record constraints.
-	var stem *rules.StemFile
-	entries, walkErr := rules.WalkUp(root)
-	if walkErr == nil && len(entries) > 0 {
-		stem = rules.MergeStemFiles(entries)
-	}
 	if analyzeIncremental {
 		report.Incremental = true
 	}
@@ -164,8 +155,8 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 
 	for _, cat := range categories {
 		inferences := safeRunDetector(ctx, cat.id, cat.run)
-		if analyzeIncremental && stem != nil {
-			inferences = infer.FilterCoveredInferences(inferences, stem)
+		if analyzeIncremental {
+			inferences = infer.FilterCoveredInferences(inferences, records, root, gapsResolver)
 		}
 		report.AddCategory(cat.id, cat.name, inferences, agentRequiredTypes)
 	}

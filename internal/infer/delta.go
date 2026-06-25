@@ -1,24 +1,51 @@
 package infer
 
 import (
+	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
-// FilterCoveredInferences removes inferences that are already covered
-// by the existing .stem schema. Returns only uncovered (delta) inferences.
-func FilterCoveredInferences(inferences []Inference, stem *rules.StemFile) []Inference {
-	if stem == nil || len(stem.Schema) == 0 {
-		return inferences
-	}
-
+// FilterCoveredInferences removes inferences already covered by the existing
+// per-scope .stem schema. An inference for a field is covered iff EVERY scope
+// that is relevant to that field (the field is in the scope's schema or in one
+// of its records) covers it via isCovered. Conservative: if any relevant scope
+// is uncovered, the inference is kept. Reduces to the single-stem behavior when
+// there is one scope.
+func FilterCoveredInferences(inferences []Inference, records []*extract.Record, root string, resolve StemResolver) []Inference {
+	groups := GroupByScope(records, root, resolve)
 	var deltas []Inference
 	for _, inf := range inferences {
-		if isCovered(inf, stem) {
+		if coveredEverywhere(inf, groups) {
 			continue
 		}
 		deltas = append(deltas, inf)
 	}
 	return deltas
+}
+
+func coveredEverywhere(inf Inference, groups []ScopeGroup) bool {
+	relevant := false
+	for _, g := range groups {
+		if g.Stem == nil {
+			continue
+		}
+		_, inSchema := g.Stem.Schema[inf.Field]
+		inRecords := false
+		for _, rec := range g.Records {
+			if _, ok := rec.Frontmatter[inf.Field]; ok {
+				inRecords = true
+				break
+			}
+		}
+		if !inSchema && !inRecords {
+			continue
+		}
+		relevant = true
+		if !isCovered(inf, g.Stem) {
+			return false
+		}
+	}
+	return relevant
 }
 
 func isCovered(inf Inference, stem *rules.StemFile) bool {

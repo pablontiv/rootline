@@ -3,6 +3,7 @@ package e2e
 import (
 	"testing"
 
+	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/rules"
 )
@@ -20,12 +21,13 @@ func TestAnalyzeIncremental_FiltersCoveredInferences(t *testing.T) {
 	fullReport := runAnalyze(t, root)
 	fullTotal := fullReport.Summary.TotalInferences
 
-	// Load stem and filter.
-	entries, err := rules.WalkUp(root)
-	if err != nil {
-		t.Fatalf("walkup: %v", err)
+	// Load records and resolver for filtering.
+	records := []*extract.Record{
+		{Path: "doc1.md", Frontmatter: map[string]any{"estado": "Pending", "tipo": "task"}},
+		{Path: "doc2.md", Frontmatter: map[string]any{"estado": "Pending", "tipo": "task"}},
+		{Path: "doc3.md", Frontmatter: map[string]any{"estado": "Pending", "tipo": "task"}},
 	}
-	stem := rules.MergeStemFiles(entries)
+	gapsResolver := infer.DefaultStemResolver()
 
 	// Collect all inferences from full report.
 	var allInferences []infer.Inference
@@ -41,7 +43,7 @@ func TestAnalyzeIncremental_FiltersCoveredInferences(t *testing.T) {
 		}
 	}
 
-	deltas := infer.FilterCoveredInferences(allInferences, stem)
+	deltas := infer.FilterCoveredInferences(allInferences, records, root, gapsResolver)
 
 	if len(deltas) >= fullTotal {
 		t.Errorf("incremental should have fewer inferences than full: deltas=%d, full=%d", len(deltas), fullTotal)
@@ -63,7 +65,12 @@ func TestAnalyzeIncremental_FullCoverage_ZeroDeltas(t *testing.T) {
 		},
 	}
 
-	deltas := infer.FilterCoveredInferences(inferences, stem)
+	singleScope := func(dir string) (*rules.StemFile, string) { return stem, "/.stem" }
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "Pending"}},
+	}
+
+	deltas := infer.FilterCoveredInferences(inferences, records, ".", singleScope)
 	if len(deltas) != 0 {
 		t.Errorf("expected 0 deltas with full coverage, got %d: %v", len(deltas), deltas)
 	}
@@ -75,8 +82,13 @@ func TestAnalyzeIncremental_NoStem_SameAsFull(t *testing.T) {
 		{Type: "field_type", Field: "estado", Value: "enum"},
 	}
 
-	// nil stem = no filtering.
-	deltas := infer.FilterCoveredInferences(inferences, nil)
+	// nil stem resolver = no filtering.
+	nilResolver := func(dir string) (*rules.StemFile, string) { return nil, "" }
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "draft"}},
+	}
+
+	deltas := infer.FilterCoveredInferences(inferences, records, ".", nilResolver)
 	if len(deltas) != len(inferences) {
 		t.Errorf("expected same count without stem: deltas=%d, full=%d", len(deltas), len(inferences))
 	}

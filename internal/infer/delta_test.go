@@ -1,10 +1,16 @@
 package infer
 
 import (
+	"path/filepath"
 	"testing"
 
+	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/rules"
 )
+
+func singleScope(stem *rules.StemFile) StemResolver {
+	return func(dir string) (*rules.StemFile, string) { return stem, "/.stem" }
+}
 
 func TestFilterCoveredInferences_RequiredCovered(t *testing.T) {
 	stem := &rules.StemFile{
@@ -13,11 +19,15 @@ func TestFilterCoveredInferences_RequiredCovered(t *testing.T) {
 		},
 	}
 
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "Pending"}},
+	}
+
 	inferences := []Inference{
 		{Type: "required_field", Field: "estado", Message: "estado is required"},
 	}
 
-	deltas := FilterCoveredInferences(inferences, stem)
+	deltas := FilterCoveredInferences(inferences, records, ".", singleScope(stem))
 	if len(deltas) != 0 {
 		t.Errorf("expected inference to be filtered (covered by stem), got %v", deltas)
 	}
@@ -30,11 +40,15 @@ func TestFilterCoveredInferences_RequiredNotCovered(t *testing.T) {
 		},
 	}
 
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "Pending"}},
+	}
+
 	inferences := []Inference{
 		{Type: "required_field", Field: "estado", Message: "estado is required"},
 	}
 
-	deltas := FilterCoveredInferences(inferences, stem)
+	deltas := FilterCoveredInferences(inferences, records, ".", singleScope(stem))
 	if len(deltas) != 1 {
 		t.Errorf("expected 1 uncovered inference, got %d", len(deltas))
 	}
@@ -47,11 +61,15 @@ func TestFilterCoveredInferences_FieldTypeCovered(t *testing.T) {
 		},
 	}
 
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "draft"}},
+	}
+
 	inferences := []Inference{
 		{Type: "field_type", Field: "estado", Value: "enum"},
 	}
 
-	deltas := FilterCoveredInferences(inferences, stem)
+	deltas := FilterCoveredInferences(inferences, records, ".", singleScope(stem))
 	if len(deltas) != 0 {
 		t.Errorf("expected field_type to be covered, got %v", deltas)
 	}
@@ -64,11 +82,15 @@ func TestFilterCoveredInferences_EnumCovered(t *testing.T) {
 		},
 	}
 
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"tipo": "task"}},
+	}
+
 	inferences := []Inference{
 		{Type: "enum_values", Field: "tipo", Value: "[task feature]"},
 	}
 
-	deltas := FilterCoveredInferences(inferences, stem)
+	deltas := FilterCoveredInferences(inferences, records, ".", singleScope(stem))
 	if len(deltas) != 0 {
 		t.Errorf("expected enum_values to be covered, got %v", deltas)
 	}
@@ -81,22 +103,32 @@ func TestFilterCoveredInferences_ConstantCovered(t *testing.T) {
 		},
 	}
 
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "Pending"}},
+	}
+
 	inferences := []Inference{
 		{Type: "constant_field", Field: "estado", Value: "Pending"},
 	}
 
-	deltas := FilterCoveredInferences(inferences, stem)
+	deltas := FilterCoveredInferences(inferences, records, ".", singleScope(stem))
 	if len(deltas) != 0 {
 		t.Errorf("expected constant_field to be covered, got %v", deltas)
 	}
 }
 
 func TestFilterCoveredInferences_NilStem(t *testing.T) {
+	nilResolver := func(dir string) (*rules.StemFile, string) { return nil, "" }
+
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"estado": "draft"}},
+	}
+
 	inferences := []Inference{
 		{Type: "required_field", Field: "estado"},
 	}
 
-	deltas := FilterCoveredInferences(inferences, nil)
+	deltas := FilterCoveredInferences(inferences, records, ".", nilResolver)
 	if len(deltas) != 1 {
 		t.Errorf("expected all inferences with nil stem, got %d", len(deltas))
 	}
@@ -109,13 +141,42 @@ func TestFilterCoveredInferences_UnknownTypePassesThrough(t *testing.T) {
 		},
 	}
 
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"Contexto": "body"}},
+	}
+
 	inferences := []Inference{
 		{Type: "section_patterns", Field: "Contexto", Value: "1.00"},
 	}
 
-	deltas := FilterCoveredInferences(inferences, stem)
+	deltas := FilterCoveredInferences(inferences, records, ".", singleScope(stem))
 	if len(deltas) != 1 {
 		t.Errorf("expected unknown type to pass through, got %d", len(deltas))
+	}
+}
+
+func TestFilterCoveredInferences_MultiScope(t *testing.T) {
+	conceptsStem := &rules.StemFile{Schema: map[string]rules.SchemaField{
+		"status": {Type: "enum", Values: []string{"a", "b"}},
+	}}
+	sourcesStem := &rules.StemFile{Schema: map[string]rules.SchemaField{}}
+	resolve := func(dir string) (*rules.StemFile, string) {
+		if filepath.Base(dir) == "sources" {
+			return sourcesStem, "sources/.stem"
+		}
+		return conceptsStem, "concepts/.stem"
+	}
+	records := []*extract.Record{
+		{Path: "concepts/a.md", Frontmatter: map[string]any{"status": "a"}},
+		{Path: "sources/p.md", Frontmatter: map[string]any{"ref": "x"}},
+	}
+	inferences := []Inference{
+		{Type: "enum_values", Field: "status"},              // covered in concepts scope
+		{Type: "field_type", Field: "ref", Value: "string"}, // not covered anywhere
+	}
+	got := FilterCoveredInferences(inferences, records, ".", resolve)
+	if len(got) != 1 || got[0].Field != "ref" {
+		t.Errorf("expected only 'ref' to survive, got %+v", got)
 	}
 }
 
