@@ -164,8 +164,14 @@ func runSchemaPropose(cmd *cobra.Command, args []string) error {
 		existingStem = rules.MergeStemFiles(entries)
 	}
 
+	// Create per-scope resolver for incremental filtering
+	var resolve infer.StemResolver
+	if schemaProposeIncremental {
+		resolve = infer.DefaultStemResolver()
+	}
+
 	// Generate schema proposals
-	proposals, err := generateSchemaProposals(ctx, root, records, existingStem, schemaProposeIncremental)
+	proposals, err := generateSchemaProposals(ctx, root, records, existingStem, schemaProposeIncremental, resolve)
 	if err != nil {
 		return fmt.Errorf("generating proposals: %w", err)
 	}
@@ -414,13 +420,17 @@ func runPostApplyValidation(ctx context.Context, root string) *ValidationSummary
 }
 
 // generateSchemaProposals analyzes records and generates schema proposals.
-func generateSchemaProposals(ctx context.Context, root string, records []*extract.Record, existingStem *rules.StemFile, incremental bool) ([]SchemaProposal, error) {
+// When incremental is true, uses per-scope stem resolution to filter proposals
+// that are already covered by existing scopes.
+func generateSchemaProposals(ctx context.Context, root string, records []*extract.Record, existingStem *rules.StemFile, incremental bool, resolve infer.StemResolver) ([]SchemaProposal, error) {
 	var proposals []SchemaProposal
 
 	// Try hierarchical detection first
 	hierarchy := infer.AnalyzeHierarchy(records, root)
 
 	stemPath := filepath.Join(root, ".stem")
+	var generatedStem *rules.StemFile
+
 	if hierarchy.Detected {
 		// Hierarchical case
 		opts := infer.DefaultInferOptions()
@@ -430,6 +440,7 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 		}
 
 		for _, rootStem := range stemMap {
+			generatedStem = rootStem
 			yaml := stemFileToYAML(rootStem, root)
 			proposal := SchemaProposal{
 				ID:            "bootstrap-hierarchical",
@@ -449,6 +460,7 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 			return nil, fmt.Errorf("generating flat schema: %w", err)
 		}
 
+		generatedStem = stemFile
 		yaml := stemFileToYAML(stemFile, root)
 		proposal := SchemaProposal{
 			ID:            "bootstrap-flat",
@@ -461,14 +473,49 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 		proposals = append(proposals, proposal)
 	}
 
-	// If incremental mode and stem exists, filter out covered proposals
-	if incremental && existingStem != nil {
-		// In incremental mode, if a .stem already exists, we don't propose
-		// a bootstrap operation (it's already covered)
-		proposals = nil
+	// If incremental mode, filter proposals using per-scope stems
+	if incremental && resolve != nil && generatedStem != nil {
+		// Convert schema fields to inferences for filtering
+		inferences := schemaToInferences(generatedStem)
+		if len(inferences) > 0 {
+			// Filter inferences using per-scope resolver
+			filtered := infer.FilterCoveredInferences(inferences, records, root, resolve)
+			// If all inferences are covered, don't propose
+			if len(filtered) == 0 {
+				proposals = nil
+			}
+		}
 	}
 
 	return proposals, nil
+}
+
+// schemaToInferences converts schema fields to inference objects for filtering.
+func schemaToInferences(stem *rules.StemFile) []infer.Inference {
+	var inferences []infer.Inference
+	for fieldName, sf := range stem.Schema {
+		// Create inferences based on field properties
+		if sf.Required {
+			inferences = append(inferences, infer.Inference{
+				Type:  "required_field",
+				Field: fieldName,
+			})
+		}
+		if sf.Type != "" {
+			inferences = append(inferences, infer.Inference{
+				Type:  "field_type",
+				Field: fieldName,
+				Value: sf.Type,
+			})
+		}
+		if sf.Type == "enum" && len(sf.Values) > 0 {
+			inferences = append(inferences, infer.Inference{
+				Type:  "enum_values",
+				Field: fieldName,
+			})
+		}
+	}
+	return inferences
 }
 
 // truncatePreview limits preview length for JSON output.

@@ -76,11 +76,14 @@ func TestSchemaProposeNoStem(t *testing.T) {
 }
 
 // TestSchemaProposeIncremental tests that with --incremental, existing .stem
-// results in fewer proposals.
+// results in fewer proposals. When all inferences are covered by existing stems,
+// no proposals are generated.
 func TestSchemaProposeIncremental(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
-		"test.md": "---\ntitulo: Test Document\ntipo: task\n---\n# Test Document\n\nContent here.\n",
-		".stem":   "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  titulo:\n    type: string\n  tipo:\n    type: enum\n    values: [task, epic]\n",
+		"a.md":  "---\ntitulo: Recipe A\ntipo: task\n---\n# Doc\n",
+		"b.md":  "---\ntitulo: Recipe B\ntipo: epic\n---\n# Doc\n",
+		"c.md":  "---\ntitulo: Recipe C\ntipo: task\n---\n# Doc\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  titulo:\n    type: enum\n    required: true\n    values: [Recipe A, Recipe B, Recipe C]\n  tipo:\n    type: enum\n    required: true\n    values: [task, epic]\n  doc:\n    type: string\n    required: true\n",
 	})
 
 	// Get initial stem content and mtime
@@ -218,6 +221,46 @@ func TestSchemaProposeEmptyDir(t *testing.T) {
 	// Empty directory should have no proposals
 	if len(report.Proposals) != 0 {
 		t.Errorf("expected 0 proposals for empty dir, got %d", len(report.Proposals))
+	}
+}
+
+// TestSchemaProposeIncrementalPerScope tests that with --incremental, proposals
+// for inferences covered by per-scope .stem files are filtered out.
+// Uses enum-like data (few repeated values) so GenerateFlatSchema infers enums.
+func TestSchemaProposeIncrementalPerScope(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		// concepts scope with .stem defining status as required enum
+		"concepts/.stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  status:\n    type: enum\n    required: true\n    values: [done, pending]\n",
+		"concepts/a.md":  "---\nstatus: done\n---\n# A\n",
+		"concepts/b.md":  "---\nstatus: pending\n---\n# B\n",
+
+		// sources scope with same .stem
+		"sources/.stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  status:\n    type: enum\n    required: true\n    values: [done, pending]\n",
+		"sources/a.md":  "---\nstatus: pending\n---\n# A\n",
+		"sources/b.md":  "---\nstatus: done\n---\n# B\n",
+	})
+
+	// Run schema propose --incremental at root
+	// Both scopes have identical .stem files with enum status covering [done, pending].
+	// GenerateFlatSchema will infer status as enum with the same values.
+	// The enum_values inference should be covered by both scopes' .stem files.
+	// With per-scope filtering, all inferences should be covered, so no proposal.
+	stdout, err := executeSchemaPropose(t, "--incremental", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report SchemaProposalsReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	// Per-scope filtering: all inferences should be covered
+	if len(report.Proposals) > 0 {
+		t.Errorf("expected 0 proposals (all inferences covered by per-scope .stems), got %d", len(report.Proposals))
+		for _, p := range report.Proposals {
+			t.Logf("  proposal: %s at %s", p.ID, p.Target)
+		}
 	}
 }
 
