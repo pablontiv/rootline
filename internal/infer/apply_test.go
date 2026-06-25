@@ -387,17 +387,29 @@ func TestApplySchemaInferences_RequiredFieldNotInSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Field not in schema → cannot find node → no change.
+	// required_field for a field not in schema → field is CREATED with required: true.
 	inferences := []ReportInference{
-		{Type: "required_field", Field: "nonexistent"},
+		{Type: "required_field", Field: "owner"},
 	}
 
 	result, err := ApplySchemaInferences(stemPath, inferences, false)
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
-	if len(result.Applied) != 0 {
-		t.Errorf("expected 0 applied for missing field, got %d", len(result.Applied))
+	if len(result.Applied) != 1 {
+		t.Fatalf("expected 1 applied (field created), got %d: %v", len(result.Applied), result.Applied)
+	}
+	if !strings.Contains(result.Applied[0], "add_field: owner") {
+		t.Errorf("expected add_field message, got %q", result.Applied[0])
+	}
+
+	data, _ := os.ReadFile(stemPath)
+	stem, err := rules.ParseStem(stemPath, data)
+	if err != nil {
+		t.Fatalf("re-parse after grow: %v", err)
+	}
+	if !stem.Schema["owner"].Required {
+		t.Errorf("expected created field to be required, got %+v", stem.Schema["owner"])
 	}
 }
 

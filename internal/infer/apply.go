@@ -60,8 +60,12 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 			}
 
 		case "required_field":
-			if applyRequiredFieldNode(&doc, stem, inf) {
-				result.Applied = append(result.Applied, fmt.Sprintf("add_required: %s", inf.Field))
+			if applied, created := applyRequiredFieldNode(&doc, stem, inf); applied {
+				if created {
+					result.Applied = append(result.Applied, fmt.Sprintf("add_field: %s (required)", inf.Field))
+				} else {
+					result.Applied = append(result.Applied, fmt.Sprintf("add_required: %s", inf.Field))
+				}
 				modified = true
 			}
 
@@ -267,19 +271,19 @@ func applyEnumExtensionNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInfe
 	return false, false
 }
 
-func applyRequiredFieldNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) bool {
+func applyRequiredFieldNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) (bool, bool) {
 	sf, ok := stem.Schema[inf.Field]
 	if ok && sf.Required {
-		return false
+		return false, false
 	}
 
-	fieldNode := findSchemaFieldNode(doc, inf.Field)
+	fieldNode, created := ensureSchemaFieldNode(doc, inf.Field)
 	if fieldNode == nil {
-		return false
+		return false, false
 	}
 
 	setFieldProperty(fieldNode, "required", "true")
-	return true
+	return true, created
 }
 
 func applyDefaultValueNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) bool {
