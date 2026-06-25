@@ -184,10 +184,20 @@ func TestApplySchemaInferences_EnumNoValuesKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply error: %v", err)
 	}
-	// The YAML node has "tipo" with "type: enum" but no "values" key,
-	// so applyEnumExtensionNode can't find the sequence to extend.
-	if len(result.Applied) != 0 {
-		t.Errorf("expected 0 applied (no values key in YAML), got %d", len(result.Applied))
+	// The YAML node has "tipo" with "type: enum" but no "values" key.
+	// The fix now correctly creates the values sequence when missing.
+	if len(result.Applied) != 1 {
+		t.Errorf("expected 1 applied (values sequence created), got %d", len(result.Applied))
+	}
+
+	data, _ := os.ReadFile(stemPath)
+	stem, err := rules.ParseStem(stemPath, data)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	sf := stem.Schema["tipo"]
+	if len(sf.Values) != 2 {
+		t.Errorf("expected 2 enum values, got %v", sf.Values)
 	}
 }
 
@@ -787,5 +797,61 @@ func TestApplySchemaInferences_GrowDryRunDoesNotWrite(t *testing.T) {
 	data, _ := os.ReadFile(stemPath)
 	if string(data) != original {
 		t.Errorf("dry-run must not modify the file, got:\n%s", data)
+	}
+}
+
+func TestApplySchemaInferences_EnumThenFieldTypeSameNewField(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	if err := os.WriteFile(stemPath, []byte("version: 2\nschema:\n  estado:\n    type: string\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// enum_values BEFORE field_type for the same new field.
+	inferences := []ReportInference{
+		{Type: "enum_values", Field: "prioridad", Value: "[alta media baja]"},
+		{Type: "field_type", Field: "prioridad", Value: "enum"},
+	}
+	if _, err := ApplySchemaInferences(stemPath, inferences, false); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+	data, _ := os.ReadFile(stemPath)
+	stem, err := rules.ParseStem(stemPath, data)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	sf := stem.Schema["prioridad"]
+	if sf.Type != "enum" {
+		t.Errorf("expected type enum, got %q", sf.Type)
+	}
+	if len(sf.Values) != 3 {
+		t.Errorf("expected 3 enum values, got %v", sf.Values)
+	}
+}
+
+func TestApplySchemaInferences_FieldTypeThenEnumSameNewField(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	if err := os.WriteFile(stemPath, []byte("version: 2\nschema:\n  estado:\n    type: string\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// field_type BEFORE enum_values for the same new field — the dropped-values bug.
+	inferences := []ReportInference{
+		{Type: "field_type", Field: "prioridad", Value: "enum"},
+		{Type: "enum_values", Field: "prioridad", Value: "[alta media baja]"},
+	}
+	if _, err := ApplySchemaInferences(stemPath, inferences, false); err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+	data, _ := os.ReadFile(stemPath)
+	stem, err := rules.ParseStem(stemPath, data)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	sf := stem.Schema["prioridad"]
+	if sf.Type != "enum" {
+		t.Errorf("expected type enum, got %q", sf.Type)
+	}
+	if len(sf.Values) != 3 {
+		t.Errorf("expected 3 enum values, got %v", sf.Values)
 	}
 }

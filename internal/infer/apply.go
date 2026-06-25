@@ -214,6 +214,21 @@ func setFieldProperty(node *yaml.Node, key, value string) {
 	)
 }
 
+// nodeProperty returns the scalar value of a property key on a mapping node.
+// The yaml.Node is the source of truth during a run; the parsed stem.Schema
+// struct is stale for fields created earlier in the same loop.
+func nodeProperty(node *yaml.Node, key string) (string, bool) {
+	if node.Kind != yaml.MappingNode {
+		return "", false
+	}
+	for i := 0; i < len(node.Content)-1; i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1].Value, true
+		}
+	}
+	return "", false
+}
+
 func applyEnumExtensionNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) (bool, bool) {
 	inferredValues := parseValueList(inf.Value)
 	if len(inferredValues) == 0 {
@@ -258,7 +273,13 @@ func applyEnumExtensionNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInfe
 		return true, true
 	}
 
-	// Existing field: append to its values sequence.
+	// Existing field (possibly created earlier this run by field_type).
+	// Refuse to attach enum values to a field already typed as non-enum.
+	if t, has := nodeProperty(fieldNode, "type"); has && t != "enum" {
+		return false, false
+	}
+
+	// Append to an existing values sequence if present.
 	for i := 0; i < len(fieldNode.Content)-1; i += 2 {
 		if fieldNode.Content[i].Value == "values" {
 			valuesNode := fieldNode.Content[i+1]
@@ -272,7 +293,21 @@ func applyEnumExtensionNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInfe
 			}
 		}
 	}
-	return false, false
+
+	// No values sequence yet (e.g. field_type created {type: enum} first):
+	// ensure type:enum and create the values sequence.
+	setFieldProperty(fieldNode, "type", "enum")
+	valuesNode := &yaml.Node{Kind: yaml.SequenceNode}
+	for _, v := range newValues {
+		valuesNode.Content = append(valuesNode.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: v},
+		)
+	}
+	fieldNode.Content = append(fieldNode.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Value: "values"},
+		valuesNode,
+	)
+	return true, false
 }
 
 func applyRequiredFieldNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) (bool, bool) {
@@ -306,13 +341,15 @@ func applyDefaultValueNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInfer
 }
 
 func applyFieldTypeNode(doc *yaml.Node, stem *rules.StemFile, inf ReportInference) (bool, bool) {
-	sf, ok := stem.Schema[inf.Field]
-	if ok && sf.Type != "" {
+	fieldNode, created := ensureSchemaFieldNode(doc, inf.Field)
+	if fieldNode == nil {
 		return false, false
 	}
 
-	fieldNode, created := ensureSchemaFieldNode(doc, inf.Field)
-	if fieldNode == nil {
+	// Source of truth is the live node, not the stale stem.Schema struct:
+	// never overwrite a type already set (e.g. type:enum from enum_values
+	// for this same field earlier in the run).
+	if _, has := nodeProperty(fieldNode, "type"); has {
 		return false, false
 	}
 
