@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pablontiv/rootline/internal/extract"
+	"gopkg.in/yaml.v3"
 )
 
 func TestParseStem_AllSections(t *testing.T) {
@@ -634,5 +637,44 @@ schema:
 	estado := stem.Schema["estado"]
 	if estado.Extract != "" {
 		t.Errorf("estado.Extract = %q, want empty", estado.Extract)
+	}
+}
+
+func TestLinkSchema_UnmarshalStylesAndChecks(t *testing.T) {
+	src := `
+links:
+  styles: [markdown]
+  checks:
+    resolve: true
+    anchors: true
+    encoding: true
+  reference:
+    target: '.*\.md$'
+`
+	var stem StemFile
+	if err := yaml.Unmarshal([]byte(src), &stem); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	ls := stem.Links
+	if len(ls.Styles) != 1 || ls.Styles[0] != "markdown" {
+		t.Errorf("Styles = %v, want [markdown]", ls.Styles)
+	}
+	if ls.Checks == nil || !ls.Checks.Resolve || !ls.Checks.Anchors || !ls.Checks.Encoding {
+		t.Errorf("Checks = %+v, want all true", ls.Checks)
+	}
+	if ls.IsEmpty() {
+		t.Error("IsEmpty() = true with styles+checks set")
+	}
+}
+
+func TestLinkSchema_EffectiveStylesDefault(t *testing.T) {
+	var ls LinkSchema
+	got := ls.EffectiveStyles()
+	if len(got) != 1 || got[0] != extract.StyleWikilink {
+		t.Errorf("EffectiveStyles() = %v, want [wikilink]", got)
+	}
+	ls.Styles = []string{"markdown", "wikilink"}
+	if got := ls.EffectiveStyles(); len(got) != 2 {
+		t.Errorf("EffectiveStyles() = %v, want declared list", got)
 	}
 }

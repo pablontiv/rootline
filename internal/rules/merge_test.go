@@ -466,3 +466,20 @@ func TestMergeStemFiles_ChildValidateNilDoesNotReplaceParent(t *testing.T) {
 		t.Errorf("validate len = %d, want 1 (inherited from parent)", len(result.Validate))
 	}
 }
+
+func TestMergeLinkSchema_StylesAndChecksChildReplace(t *testing.T) {
+	parent := LinkSchema{Styles: []string{"wikilink"}, Checks: &LinkChecks{Resolve: true}}
+	child := LinkSchema{Styles: []string{"markdown"}}
+	got := mergeLinkSchema(parent, child)
+	if len(got.Styles) != 1 || got.Styles[0] != "markdown" {
+		t.Errorf("Styles = %v, want child's [markdown]", got.Styles)
+	}
+	if got.Checks == nil || !got.Checks.Resolve {
+		t.Errorf("Checks = %+v, want inherited from parent", got.Checks)
+	}
+	child2 := LinkSchema{Checks: &LinkChecks{Encoding: true}}
+	got2 := mergeLinkSchema(parent, child2)
+	if got2.Checks == nil || got2.Checks.Resolve || !got2.Checks.Encoding {
+		t.Errorf("Checks = %+v, want child replacement", got2.Checks)
+	}
+}

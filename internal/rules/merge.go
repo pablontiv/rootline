@@ -168,7 +168,7 @@ func toStringMap(v any) (map[string]any, bool) {
 }
 
 // mergeLinkSchema merges two LinkSchema values.
-// Allowed (array) → child replaces. Rules (map) → key-level merge.
+// Allowed, Styles, Checks (arrays/struct) → child replaces. Rules (map) → key-level merge.
 func mergeLinkSchema(parent, child LinkSchema) LinkSchema {
 	if child.IsEmpty() {
 		return parent
@@ -184,6 +184,20 @@ func mergeLinkSchema(parent, child LinkSchema) LinkSchema {
 		result.Allowed = child.Allowed
 	} else {
 		result.Allowed = parent.Allowed
+	}
+
+	// Styles: child replaces (array semantics).
+	if child.Styles != nil {
+		result.Styles = child.Styles
+	} else {
+		result.Styles = parent.Styles
+	}
+
+	// Checks: child replaces when declared (struct semantics).
+	if child.Checks != nil {
+		result.Checks = child.Checks
+	} else {
+		result.Checks = parent.Checks
 	}
 
 	// Rules: map merge at key level.

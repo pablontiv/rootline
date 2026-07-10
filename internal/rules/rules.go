@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/pablontiv/rootline/internal/extract"
 	"gopkg.in/yaml.v3"
 )
 
@@ -52,7 +53,25 @@ func (sr StructuralRules) IsEmpty() bool {
 //	    field: blocked_by
 type LinkSchema struct {
 	Allowed []string            `json:"allowed,omitempty"`
+	Styles  []string            `json:"styles,omitempty"`
+	Checks  *LinkChecks         `json:"checks,omitempty"`
 	Rules   map[string]LinkRule `json:"rules,omitempty"`
+}
+
+// LinkChecks enables filesystem-backed link checks (ADO code-wiki conventions).
+type LinkChecks struct {
+	Resolve  bool `yaml:"resolve" json:"resolve,omitempty"`
+	Anchors  bool `yaml:"anchors" json:"anchors,omitempty"`
+	Encoding bool `yaml:"encoding" json:"encoding,omitempty"`
+}
+
+// EffectiveStyles returns the link styles governed by this schema.
+// An empty declaration defaults to wikilink-only for backward compatibility.
+func (ls LinkSchema) EffectiveStyles() []string {
+	if len(ls.Styles) > 0 {
+		return ls.Styles
+	}
+	return []string{extract.StyleWikilink}
 }
 
 // LinkRule defines a constraint for a specific link type.
@@ -82,6 +101,24 @@ func (ls *LinkSchema) UnmarshalYAML(value *yaml.Node) error {
 			continue
 		}
 
+		if key == "styles" {
+			var styles []string
+			if err := val.Decode(&styles); err != nil {
+				return fmt.Errorf("links.styles: %w", err)
+			}
+			ls.Styles = styles
+			continue
+		}
+
+		if key == "checks" {
+			var checks LinkChecks
+			if err := val.Decode(&checks); err != nil {
+				return fmt.Errorf("links.checks: %w", err)
+			}
+			ls.Checks = &checks
+			continue
+		}
+
 		var rule LinkRule
 		if err := val.Decode(&rule); err != nil {
 			return fmt.Errorf("links.%s: %w", key, err)
@@ -97,7 +134,7 @@ func (ls *LinkSchema) UnmarshalYAML(value *yaml.Node) error {
 
 // IsEmpty reports whether the LinkSchema has no constraints.
 func (ls LinkSchema) IsEmpty() bool {
-	return len(ls.Allowed) == 0 && len(ls.Rules) == 0
+	return len(ls.Allowed) == 0 && len(ls.Rules) == 0 && len(ls.Styles) == 0 && ls.Checks == nil
 }
 
 // Scope defines which files a .stem applies to.
