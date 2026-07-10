@@ -73,6 +73,8 @@ func runGraph(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
 
+	rules.FilterLinksByStyles(records, absRoot)
+
 	derive.EnrichBuiltinsSimple(ctx, records, absRoot)
 
 	// Apply --where filter.
