@@ -52,6 +52,8 @@ Batch:
 
 Each issue includes `rule`, `field`, `message`, `source`, `severity`, and optional `suggestion`.
 
+Link-check rules (emitted when the effective `.stem` sets `links.checks`): `link_resolve` (target missing, case-sensitive; carries fuzzy `suggestion`), `link_anchor` (`#anchor` matches no heading slug in the target), `link_encoding` (raw space in target; use `%20`). These are not auto-fixable by `fix` — repair the link or the target file manually.
+
 ### Reporting Format
 
 Use this exact shape in responses:

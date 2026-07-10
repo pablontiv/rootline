@@ -2,7 +2,7 @@
 
 ## graph
 
-Use `graph` for repository-level wiki-link topology, cycle checks, and broken-link checks.
+Use `graph` for repository-level link topology, cycle checks, and broken-link checks. Edges come from `[[wiki-links]]` and, when the effective `.stem` declares `links.styles: [markdown]`, from markdown links `[text](target)`; without that declaration only wikilinks appear (backcompat default).
 
 ### Usage
 

@@ -1,7 +1,7 @@
 ---
 name: rootline
 description: Use when working with Markdown records governed by .stem schemas or when the user asks to validate, fix, query, inspect, scaffold, mutate, analyze, apply, or graph Rootline data, even if they do not name Rootline. Do not use for roadmap decomposition or Go debugging.
-updated: 2026-05-21
+updated: 2026-07-10
 ---
 
 # Rootline CLI Operations
@@ -45,7 +45,7 @@ Local coverage check: `just coverage-check` (requires `.coverage-floors.toml`).
 | Show hierarchy | `tree` | `rootline tree <dir> --where "isIndex == false" -o table` |
 | Count records | `stats` | `rootline stats <dir> --where "tipo == 'task'" -o json` |
 | Explain field origins | `explain` | `rootline explain file.md -o json` |
-| Graph wiki-links | `graph` | JSON: `rootline graph <dir> -o json`; Mermaid: `rootline graph <dir> -o table --format mermaid` |
+| Graph links (wiki + markdown) | `graph` | JSON: `rootline graph <dir> -o json`; Mermaid: `rootline graph <dir> -o table --format mermaid` |
 | Infer schema | `init` | `rootline init <dir> --dry-run` then `rootline init <dir>` |
 | Analyze patterns | `analyze` | `rootline analyze <dir> -o json` |
 | Apply schema proposals | `schema apply` | `rootline schema apply --report proposals.json --dry-run` then apply without `--dry-run` |
@@ -75,6 +75,22 @@ rootline fix <file.md>
 rootline validate <file.md> -o json
 git diff -- <file.md>
 ```
+
+### Validate Markdown Links (multi-style, v1.12.2+)
+
+Link extraction always parses both `[[wiki-links]]` and markdown links `[text](target)`; each link carries `style` (`wikilink`/`markdown`) and `anchor`. The `.stem` governs which styles participate in validation and graph:
+
+```yaml
+version: 2
+links:
+  styles: [markdown]   # governed styles; default [wikilink] (backcompat)
+  checks:
+    resolve: true      # target exists (case-sensitive; dir targets need README.md)
+    anchors: true      # #anchor matches a heading slug in the target
+    encoding: true     # no raw spaces in targets (use %20)
+```
+
+Check failures surface in `validate` as rules `link_resolve` (with fuzzy suggestion), `link_anchor`, `link_encoding`. Absolute targets (`/...`), external schemes, images, and pure fragments are not checked. Use for repos with relative markdown links (e.g. Azure DevOps code wikis).
 
 ### Inspect Required Fields
 
