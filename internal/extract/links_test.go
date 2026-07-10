@@ -246,3 +246,102 @@ func TestParseLinks_SourceIsBody(t *testing.T) {
 		t.Errorf("expected Source='body', got %q", links[0].Source)
 	}
 }
+
+func TestParseLinks_MarkdownRelative(t *testing.T) {
+	links := ParseLinks("Ver [la guia](../guides/setup.md) para mas.")
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d: %+v", len(links), links)
+	}
+	l := links[0]
+	if l.Style != StyleMarkdown {
+		t.Errorf("Style = %q, want %q", l.Style, StyleMarkdown)
+	}
+	if l.Target != "../guides/setup.md" {
+		t.Errorf("Target = %q, want %q", l.Target, "../guides/setup.md")
+	}
+	if l.Type != "reference" {
+		t.Errorf("Type = %q, want %q", l.Type, "reference")
+	}
+	if l.Line != 1 {
+		t.Errorf("Line = %d, want 1", l.Line)
+	}
+	if l.Source != "body" {
+		t.Errorf("Source = %q, want %q", l.Source, "body")
+	}
+}
+
+func TestParseLinks_MarkdownAnchorSplit(t *testing.T) {
+	links := ParseLinks("[zonas](../project-master.md#6-zonas-inciertas-black-boxes)")
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if links[0].Target != "../project-master.md" {
+		t.Errorf("Target = %q, want path without fragment", links[0].Target)
+	}
+	if links[0].Anchor != "6-zonas-inciertas-black-boxes" {
+		t.Errorf("Anchor = %q", links[0].Anchor)
+	}
+}
+
+func TestParseLinks_MarkdownSkipsNonPathTargets(t *testing.T) {
+	body := "![img](diagram.png) [ext](https://example.com) [mail](mailto:a@b.c) [frag](#local) [dir](./)"
+	links := ParseLinks(body)
+	// Only [dir](./) survives: images, external schemes, and pure anchors are skipped.
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d: %+v", len(links), links)
+	}
+	if links[0].Target != "./" {
+		t.Errorf("Target = %q, want %q", links[0].Target, "./")
+	}
+}
+
+func TestParseLinks_MarkdownTitleAndAngleBrackets(t *testing.T) {
+	links := ParseLinks(`[a](foo.md "Some Title") [b](<bar.md>)`)
+	if len(links) != 2 {
+		t.Fatalf("expected 2 links, got %d: %+v", len(links), links)
+	}
+	if links[0].Target != "foo.md" {
+		t.Errorf("Target = %q, want %q", links[0].Target, "foo.md")
+	}
+	if links[1].Target != "bar.md" {
+		t.Errorf("Target = %q, want %q", links[1].Target, "bar.md")
+	}
+}
+
+func TestParseLinks_MarkdownRawSpacePreserved(t *testing.T) {
+	// A raw space with no quoted title is NOT a title separator — the target
+	// must survive intact so the encoding check can flag it later.
+	links := ParseLinks("[bad](my file.md)")
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d: %+v", len(links), links)
+	}
+	if links[0].Target != "my file.md" {
+		t.Errorf("Target = %q, want %q", links[0].Target, "my file.md")
+	}
+}
+
+func TestParseLinks_MarkdownInsideCodeIgnored(t *testing.T) {
+	body := "```\n[x](a.md)\n```\ny `[y](b.md)` z"
+	if links := ParseLinks(body); len(links) != 0 {
+		t.Fatalf("expected 0 links, got %d: %+v", len(links), links)
+	}
+}
+
+func TestParseLinks_WikilinkStyleTagged(t *testing.T) {
+	links := ParseLinks("[[T001-foo]] and [[blocks:T002-bar]]")
+	if len(links) != 2 {
+		t.Fatalf("expected 2 links, got %d", len(links))
+	}
+	for _, l := range links {
+		if l.Style != StyleWikilink {
+			t.Errorf("Style = %q, want %q", l.Style, StyleWikilink)
+		}
+	}
+}
+
+func TestParseFrontmatterLinks_StyleTagged(t *testing.T) {
+	links := ParseFrontmatterLinks(map[string]any{"dep": "[[T001-foo]]"})
+	if len(links) != 1 || links[0].Style != StyleWikilink {
+		t.Fatalf("expected 1 wikilink-style link, got %+v", links)
+	}
+}

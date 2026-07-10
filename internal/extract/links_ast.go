@@ -37,7 +37,7 @@ func walkBlocks(n ast.Node, source []byte, links *[]Link) {
 	}
 }
 
-// extractLinksFromLines extracts wiki-links from a block node's raw source lines,
+// extractLinksFromLines extracts wiki-links and markdown links from a block node's raw source lines,
 // skipping inline code spans.
 func extractLinksFromLines(block ast.Node, source []byte, links *[]Link) {
 	lines := block.Lines()
@@ -51,7 +51,7 @@ func extractLinksFromLines(block ast.Node, source []byte, links *[]Link) {
 
 		for _, match := range wikilinkRe.FindAllStringSubmatch(cleaned, -1) {
 			inner := match[1]
-			link := Link{Line: lineNum}
+			link := Link{Line: lineNum, Style: StyleWikilink}
 			if idx := strings.Index(inner, ":"); idx > 0 {
 				link.Type = inner[:idx]
 				link.Target = inner[idx+1:]
@@ -59,6 +59,19 @@ func extractLinksFromLines(block ast.Node, source []byte, links *[]Link) {
 				link.Type = "reference"
 				link.Target = inner
 			}
+			*links = append(*links, link)
+		}
+
+		for _, match := range markdownLinkRe.FindAllStringSubmatch(cleaned, -1) {
+			if match[1] == "!" {
+				continue // image
+			}
+			link, ok := parseMarkdownDestination(match[2])
+			if !ok {
+				continue
+			}
+			link.Line = lineNum
+			link.Source = "body"
 			*links = append(*links, link)
 		}
 	}

@@ -5,18 +5,65 @@ import (
 	"strings"
 )
 
-// Link represents a wiki-link extracted from document text.
+// Link represents a link extracted from document text.
 type Link struct {
 	Target string `json:"target"`
 	Type   string `json:"type"`
 	Line   int    `json:"line"`
 	Source string `json:"source,omitempty"` // "body" or "frontmatter:<fieldname>"
+	Style  string `json:"style,omitempty"`  // StyleWikilink or StyleMarkdown
+	Anchor string `json:"anchor,omitempty"` // fragment part of markdown targets, without '#'
 }
+
+// Link styles produced by extraction.
+const (
+	StyleWikilink = "wikilink"
+	StyleMarkdown = "markdown"
+)
 
 var wikilinkRe = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
 
-// ParseLinks extracts wiki-links from body text.
-// Supported formats: [[target]] (type "reference") and [[type:target]] (typed).
+// markdownLinkRe captures an optional image marker and the destination of
+// inline markdown links. Wikilinks don't match: their brackets are doubled
+// and have no (...) destination.
+var markdownLinkRe = regexp.MustCompile(`(!?)\[[^\]]*\]\(([^)]+)\)`)
+
+// parseMarkdownDestination converts an inline-link destination into a Link.
+// Returns false for destinations that aren't local paths: external schemes,
+// mailto, and pure fragments. Quoted titles (`foo.md "Title"`) and angle
+// brackets (`<foo.md>`) are stripped; a raw space with no quoted title after
+// it is kept so the encoding check can flag it.
+func parseMarkdownDestination(dest string) (Link, bool) {
+	dest = strings.TrimSpace(dest)
+	if i := strings.IndexAny(dest, " \t"); i >= 0 {
+		rest := strings.TrimSpace(dest[i+1:])
+		if strings.HasPrefix(rest, `"`) || strings.HasPrefix(rest, "'") || strings.HasPrefix(rest, "(") {
+			dest = dest[:i]
+		}
+	}
+	dest = strings.TrimPrefix(dest, "<")
+	dest = strings.TrimSuffix(dest, ">")
+	if dest == "" || strings.HasPrefix(dest, "#") {
+		return Link{}, false
+	}
+	if strings.Contains(dest, "://") || strings.HasPrefix(dest, "mailto:") {
+		return Link{}, false
+	}
+	link := Link{Type: "reference", Style: StyleMarkdown, Target: dest}
+	target, anchor, found := strings.Cut(dest, "#")
+	if found {
+		if target == "" {
+			return Link{}, false
+		}
+		link.Target = target
+		link.Anchor = anchor
+	}
+	return link, true
+}
+
+// ParseLinks extracts wiki-links and markdown links from body text.
+// Wiki-links: [[target]] (type "reference") and [[type:target]] (typed).
+// Markdown links: [text](target) with optional fragment (#anchor).
 // Links inside fenced code blocks or inline code are ignored.
 func ParseLinks(body string) []Link {
 	lines := strings.Split(body, "\n")
@@ -41,7 +88,7 @@ func ParseLinks(body string) []Link {
 
 		for _, match := range wikilinkRe.FindAllStringSubmatch(cleaned, -1) {
 			inner := match[1]
-			link := Link{Line: lineNum, Source: "body"}
+			link := Link{Line: lineNum, Source: "body", Style: StyleWikilink}
 			if idx := strings.Index(inner, ":"); idx > 0 {
 				link.Type = inner[:idx]
 				link.Target = inner[idx+1:]
@@ -49,6 +96,19 @@ func ParseLinks(body string) []Link {
 				link.Type = "reference"
 				link.Target = inner
 			}
+			links = append(links, link)
+		}
+
+		for _, match := range markdownLinkRe.FindAllStringSubmatch(cleaned, -1) {
+			if match[1] == "!" {
+				continue // image
+			}
+			link, ok := parseMarkdownDestination(match[2])
+			if !ok {
+				continue
+			}
+			link.Line = lineNum
+			link.Source = "body"
 			links = append(links, link)
 		}
 	}
@@ -93,7 +153,7 @@ func parseWikilinksFromString(s string) []Link {
 	var links []Link
 	for _, match := range wikilinkRe.FindAllStringSubmatch(s, -1) {
 		inner := match[1]
-		link := Link{Line: 0}
+		link := Link{Line: 0, Style: StyleWikilink}
 		if idx := strings.Index(inner, ":"); idx > 0 {
 			link.Type = inner[:idx]
 			link.Target = inner[idx+1:]

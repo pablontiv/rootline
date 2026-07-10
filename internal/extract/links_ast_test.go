@@ -4,12 +4,18 @@ import (
 	"testing"
 
 	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/ast"
+	gmtext "github.com/yuin/goldmark/text"
 )
+
+func parseTestAST(t *testing.T, source []byte) ast.Node {
+	t.Helper()
+	return goldmark.DefaultParser().Parse(gmtext.NewReader(source))
+}
 
 func parseAST(body string) []Link {
 	source := []byte(body)
-	reader := text.NewReader(source)
+	reader := gmtext.NewReader(source)
 	parser := goldmark.DefaultParser()
 	node := parser.Parse(reader)
 	return ParseLinksAST(node, source)
@@ -70,5 +76,18 @@ func TestParseLinksAST_FencedCodeBlockExclusion(t *testing.T) {
 	}
 	if links[1].Target != "link2" {
 		t.Errorf("link 1: expected target 'link2', got %q", links[1].Target)
+	}
+}
+
+func TestParseLinksAST_MarkdownLink(t *testing.T) {
+	source := []byte("Ver [la guia](../guides/setup.md#intro).")
+	node := parseTestAST(t, source) // use the existing AST-construction helper in this file
+	links := ParseLinksAST(node, source)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d: %+v", len(links), links)
+	}
+	l := links[0]
+	if l.Style != StyleMarkdown || l.Target != "../guides/setup.md" || l.Anchor != "intro" {
+		t.Errorf("got %+v", l)
 	}
 }
