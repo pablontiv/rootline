@@ -345,3 +345,16 @@ func TestParseFrontmatterLinks_StyleTagged(t *testing.T) {
 		t.Fatalf("expected 1 wikilink-style link, got %+v", links)
 	}
 }
+
+func TestParseLinks_MarkdownParenInTarget(t *testing.T) {
+	links := ParseLinks("[doc](section(1).md) and [v2](docs/spec(v2).md#intro)")
+	if len(links) != 2 {
+		t.Fatalf("expected 2 links, got %d: %+v", len(links), links)
+	}
+	if links[0].Target != "section(1).md" {
+		t.Errorf("Target = %q, want %q", links[0].Target, "section(1).md")
+	}
+	if links[1].Target != "docs/spec(v2).md" || links[1].Anchor != "intro" {
+		t.Errorf("got %+v", links[1])
+	}
+}

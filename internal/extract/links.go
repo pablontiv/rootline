@@ -25,8 +25,9 @@ var wikilinkRe = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
 
 // markdownLinkRe captures an optional image marker and the destination of
 // inline markdown links. Wikilinks don't match: their brackets are doubled
-// and have no (...) destination.
-var markdownLinkRe = regexp.MustCompile(`(!?)\[[^\]]*\]\(([^)]+)\)`)
+// and have no (...) destination. The destination group allows one level of
+// nested parentheses to handle targets like foo(1).md.
+var markdownLinkRe = regexp.MustCompile(`(!?)\[[^\]]*\]\(([^()]*(?:\([^()]*\)[^()]*)*)\)`)
 
 // parseMarkdownDestination converts an inline-link destination into a Link.
 // Returns false for destinations that aren't local paths: external schemes,

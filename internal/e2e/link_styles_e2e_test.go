@@ -69,6 +69,9 @@ func TestE2E_LinkStyles_WikilinkRepoUnaffected(t *testing.T) {
 	if len(edges) != 1 || edges[0].Type != "reference" {
 		t.Fatalf("edges = %+v, want single wikilink edge to b", edges)
 	}
+	if edges[0].Target != "b.md" {
+		t.Errorf("edge target = %q, want b.md", edges[0].Target)
+	}
 	if edges[0].Target == "c.md" {
 		t.Error("markdown link leaked into wikilink-only graph")
 	}

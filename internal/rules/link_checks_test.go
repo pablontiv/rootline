@@ -161,3 +161,24 @@ func TestCheckLinks_AnchorNilCacheStillWorks(t *testing.T) {
 		t.Fatalf("nil cache should parse on the fly: %+v", errs)
 	}
 }
+
+func TestCheckLinks_AnchorCacheReuse(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "target.md"), "## Section1\n\n## Section2\n")
+	writeFile(t, filepath.Join(dir, "src.md"), "body")
+	schema := mdChecksSchema(LinkChecks{Resolve: true, Anchors: true})
+	cache := NewHeadingCache()
+	src := filepath.Join(dir, "src.md")
+
+	links := []extract.Link{
+		{Target: "target.md", Anchor: "section1", Type: "reference", Style: extract.StyleMarkdown, Line: 1},
+		{Target: "target.md", Anchor: "section2", Type: "reference", Style: extract.StyleMarkdown, Line: 2},
+	}
+
+	if errs := CheckLinks(links, schema, src, cache); len(errs) != 0 {
+		t.Fatalf("both anchors should pass; got %+v", errs)
+	}
+	if len(cache.slugs) != 1 {
+		t.Errorf("cache.slugs = %d entries, want 1 (shared target)", len(cache.slugs))
+	}
+}
