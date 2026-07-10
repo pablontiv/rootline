@@ -349,8 +349,16 @@ func validateLinks(links []extract.Link, schema LinkSchema, source string) []Val
 		return nil
 	}
 
+	styles := make(map[string]bool)
+	for _, s := range schema.EffectiveStyles() {
+		styles[s] = true
+	}
+
 	var errs []ValidationError
 	for _, link := range links {
+		if !styles[linkStyle(link)] {
+			continue
+		}
 		// Check allowed types.
 		if len(schema.Allowed) > 0 && !stringSliceContains(schema.Allowed, link.Type) {
 			errs = append(errs, ValidationError{
@@ -395,6 +403,14 @@ func stringSliceContains(slice []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// linkStyle returns the link's style, defaulting legacy style-less links to wikilink.
+func linkStyle(l extract.Link) string {
+	if l.Style == "" {
+		return extract.StyleWikilink
+	}
+	return l.Style
 }
 
 // IsIndexFile reports whether a record path is a directory index file.

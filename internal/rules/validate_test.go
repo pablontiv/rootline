@@ -1083,3 +1083,35 @@ func valueSchema(ptrSchema map[string]*SchemaField) map[string]SchemaField {
 	}
 	return schema
 }
+
+func TestValidateLinks_MarkdownIgnoredByDefault(t *testing.T) {
+	schema := LinkSchema{Allowed: []string{"blocks"}}
+	links := []extract.Link{{Target: "../foo.md", Type: "reference", Style: extract.StyleMarkdown}}
+	if errs := validateLinks(links, schema, "test.stem"); len(errs) != 0 {
+		t.Fatalf("markdown link validated under default styles: %+v", errs)
+	}
+}
+
+func TestValidateLinks_MarkdownValidatedWhenDeclared(t *testing.T) {
+	schema := LinkSchema{
+		Styles: []string{extract.StyleMarkdown},
+		Rules:  map[string]LinkRule{"reference": {Target: `.*\.md$`}},
+	}
+	bad := []extract.Link{{Target: "../foo.txt", Type: "reference", Style: extract.StyleMarkdown}}
+	if errs := validateLinks(bad, schema, "test.stem"); len(errs) != 1 {
+		t.Fatalf("expected 1 link_target error, got %+v", errs)
+	}
+	// And wikilinks are now excluded (styles replaced the default).
+	wiki := []extract.Link{{Target: "nope", Type: "reference", Style: extract.StyleWikilink}}
+	if errs := validateLinks(wiki, schema, "test.stem"); len(errs) != 0 {
+		t.Fatalf("wikilink validated despite styles=[markdown]: %+v", errs)
+	}
+}
+
+func TestValidateLinks_EmptyStyleDefaultsToWikilink(t *testing.T) {
+	schema := LinkSchema{Allowed: []string{"blocks"}}
+	links := []extract.Link{{Target: "x", Type: "reference"}} // no Style set (legacy shape)
+	if errs := validateLinks(links, schema, "test.stem"); len(errs) != 1 {
+		t.Fatalf("legacy style-less wikilink not validated: %+v", errs)
+	}
+}
