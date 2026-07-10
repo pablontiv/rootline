@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/pablontiv/picokit/fuzzy"
 	"github.com/pablontiv/rootline/internal/extract"
@@ -84,9 +85,75 @@ func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath string, c
 	return errs
 }
 
-// checkAnchor is implemented with the anchors check (see link_checks anchors task).
-func checkAnchor(_ extract.Link, _ string, _ *HeadingCache) []ValidationError {
-	return nil
+// checkAnchor verifies the link's anchor matches a heading slug in the
+// resolved target file.
+func checkAnchor(link extract.Link, resolvedPath string, cache *HeadingCache) []ValidationError {
+	if cache == nil {
+		cache = NewHeadingCache()
+	}
+	slugs, err := cache.headingSlugs(resolvedPath)
+	if err != nil {
+		return nil // unreadable/non-markdown target: resolve check already covers existence
+	}
+	want, err := url.PathUnescape(link.Anchor)
+	if err != nil {
+		want = link.Anchor
+	}
+	want = strings.ToLower(want)
+	for _, s := range slugs {
+		if s == want {
+			return nil
+		}
+	}
+	return []ValidationError{{
+		Rule:     "link_anchor",
+		Field:    "links",
+		Message:  fmt.Sprintf("anchor %q not found in %q", link.Anchor, filepath.Base(resolvedPath)),
+		Source:   "links.checks",
+		Severity: "error",
+	}}
+}
+
+// headingSlugs returns the slugified headings of a markdown file, cached.
+func (c *HeadingCache) headingSlugs(absPath string) ([]string, error) {
+	if slugs, ok := c.slugs[absPath]; ok {
+		return slugs, nil
+	}
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, err
+	}
+	parseAST := true
+	ext := &extract.MarkdownExtractor{ParseAST: &parseAST}
+	rec, err := ext.Extract(absPath, content)
+	if err != nil {
+		return nil, err
+	}
+	var slugs []string
+	if rec.AST != nil {
+		for _, sec := range extract.ExtractSections(rec.AST, []byte(rec.Body)) {
+			slugs = append(slugs, slugifyHeading(sec.Heading))
+		}
+	}
+	c.slugs[absPath] = slugs
+	return slugs, nil
+}
+
+// slugifyHeading converts a heading to its anchor slug: lowercase, spaces and
+// hyphens become hyphens (not collapsed), punctuation is dropped, letters,
+// digits and underscores are kept (GitHub/ADO code-wiki convention).
+func slugifyHeading(h string) string {
+	h = strings.ToLower(strings.TrimSpace(h))
+	var b strings.Builder
+	for _, r := range h {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_':
+			b.WriteRune(r)
+		case r == ' ' || r == '-':
+			b.WriteByte('-')
+		}
+	}
+	return b.String()
 }
 
 // resolveCaseSensitive resolves a relative link target against baseDir,

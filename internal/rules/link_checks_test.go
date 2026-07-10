@@ -115,3 +115,49 @@ func TestCheckLinks_SkipsAbsoluteAndFilteredStyles(t *testing.T) {
 		t.Fatalf("expected no errors, got %+v", errs)
 	}
 }
+
+func TestSlugifyHeading(t *testing.T) {
+	cases := map[string]string{
+		"6. Zonas inciertas (black boxes)": "6-zonas-inciertas-black-boxes",
+		"Glosario de siglas":               "glosario-de-siglas",
+		"  Setup & Config  ":               "setup--config",
+		"Ya_valido":                        "ya_valido",
+	}
+	for in, want := range cases {
+		if got := slugifyHeading(in); got != want {
+			t.Errorf("slugifyHeading(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestCheckLinks_AnchorValidAndInvalid(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "master.md"), "# Title\n\n## 6. Zonas inciertas (black boxes)\n\ntext\n")
+	writeFile(t, filepath.Join(dir, "src.md"), "body")
+	schema := mdChecksSchema(LinkChecks{Resolve: true, Anchors: true})
+	src := filepath.Join(dir, "src.md")
+	cache := NewHeadingCache()
+
+	good := extract.Link{Target: "master.md", Anchor: "6-zonas-inciertas-black-boxes", Type: "reference", Style: extract.StyleMarkdown, Line: 1}
+	if errs := CheckLinks([]extract.Link{good}, schema, src, cache); len(errs) != 0 {
+		t.Fatalf("valid anchor rejected: %+v", errs)
+	}
+
+	bad := good
+	bad.Anchor = "7-no-existe"
+	errs := CheckLinks([]extract.Link{bad}, schema, src, cache)
+	if len(errs) != 1 || errs[0].Rule != "link_anchor" {
+		t.Fatalf("expected 1 link_anchor error, got %+v", errs)
+	}
+}
+
+func TestCheckLinks_AnchorNilCacheStillWorks(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "master.md"), "## Intro\n")
+	writeFile(t, filepath.Join(dir, "src.md"), "body")
+	schema := mdChecksSchema(LinkChecks{Resolve: true, Anchors: true})
+	link := extract.Link{Target: "master.md", Anchor: "intro", Type: "reference", Style: extract.StyleMarkdown, Line: 1}
+	if errs := CheckLinks([]extract.Link{link}, schema, filepath.Join(dir, "src.md"), nil); len(errs) != 0 {
+		t.Fatalf("nil cache should parse on the fly: %+v", errs)
+	}
+}
