@@ -418,8 +418,8 @@ func TestGraphCheck_MarkdownStylesClean(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nlinks:\n  styles: [markdown]\n"), 0644)
-	mustWriteFile(t, filepath.Join(dir, "README.md"), []byte("---\n---\n# Root\n[overview](docs/overview.md)\n"), 0644)
-	mustWriteFile(t, filepath.Join(dir, "docs", "overview.md"), []byte("---\n---\n# Overview\nNo backlinks\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "README.md"), []byte("---\n---\n# Root\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "docs", "overview.md"), []byte("---\n---\n# Overview\n[back](../README.md)\n"), 0644)
 
 	out, err := runCmd(t, "graph", "--check", dir)
 	if err != nil {
@@ -432,15 +432,16 @@ func TestGraphCheck_MarkdownStylesClean(t *testing.T) {
 
 func TestGraphJSON_MarkdownStylesProducesEdges(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "docs", "sub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nlinks:\n  styles: [markdown]\n"), 0644)
-	mustWriteFile(t, filepath.Join(dir, "README.md"), []byte("---\n---\n# Root\n[overview](docs/overview.md)\n"), 0644)
-	mustWriteFile(t, filepath.Join(dir, "docs", "overview.md"), []byte("---\n---\n# Overview\n[back](../README.md)\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "README.md"), []byte("---\n---\n# Root\n[a](docs/a.md)\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "docs", "a.md"), []byte("---\n---\n# A\n[b](sub/b.md)\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "docs", "sub", "b.md"), []byte("---\n---\n# B\n"), 0644)
 
 	out, err := runCmd(t, "graph", dir)
 	if err != nil {
@@ -453,6 +454,15 @@ func TestGraphJSON_MarkdownStylesProducesEdges(t *testing.T) {
 	edges := result["edges"].([]any)
 	if len(edges) != 2 {
 		t.Errorf("edges = %d, want 2", len(edges))
+	}
+	targets := make([]string, 0, len(edges))
+	for _, e := range edges {
+		targets = append(targets, e.(map[string]any)["target"].(string))
+	}
+	sort.Strings(targets)
+	want := []string{filepath.Join("docs", "a.md"), filepath.Join("docs", "sub", "b.md")}
+	if len(targets) != 2 || targets[0] != want[0] || targets[1] != want[1] {
+		t.Errorf("edge targets = %v, want %v", targets, want)
 	}
 }
 
