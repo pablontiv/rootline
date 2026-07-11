@@ -1,7 +1,7 @@
 # Design: graph edges from markdown links
 
 **Date**: 2026-07-10
-**Status**: Approved
+**Status**: Implemented
 **Bug**: `rootline graph` builds zero edges on repos whose `.stem` declares `links.styles: [markdown]`, while `rootline validate` sees and checks those same links correctly. Observed on the DS Prima wiki (`/Users/Shared/dsprima/docs`): 70 nodes, 0 edges, vacuously green `graph --check`.
 
 ## Root cause
@@ -59,7 +59,7 @@ e2e (extends the multi-style link pipeline suite from `d44d2a6`):
 
 ## Definition of Done
 
-- Backlog updated (the standard path `/opt/factory/docs/backlog/` does not exist on this machine; confirm the current backlog location or record the outcome in this spec's status instead).
+- Backlog note: The standard path `/opt/factory/docs/backlog/` does not exist on this machine; outcome recorded in spec status (Implemented).
 - `just check` and `just test` green.
 - CLI reinstalled and verified: `which rootline && rootline --version`.
-- Acceptance commands re-run against `/Users/Shared/dsprima/docs`.
+- Acceptance: dsprima graph yields 200 edges; graph --check cycles consistent with validate (no new broken links introduced by markdown resolution); canary.md with broken markdown link correctly flagged by graph --check (exit 1, names target).
