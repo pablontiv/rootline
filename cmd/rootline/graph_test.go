@@ -408,3 +408,67 @@ func TestGraphJSON_Unchanged(t *testing.T) {
 		t.Errorf("kind = %v, want rootline/graph", result["kind"])
 	}
 }
+
+func TestGraphCheck_MarkdownStylesClean(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nlinks:\n  styles: [markdown]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "README.md"), []byte("---\n---\n# Root\n[overview](docs/overview.md)\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "docs", "overview.md"), []byte("---\n---\n# Overview\nNo backlinks\n"), 0644)
+
+	out, err := runCmd(t, "graph", "--check", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "No cycles or broken links") {
+		t.Errorf("expected clean check, got: %s", out)
+	}
+}
+
+func TestGraphJSON_MarkdownStylesProducesEdges(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nlinks:\n  styles: [markdown]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "README.md"), []byte("---\n---\n# Root\n[overview](docs/overview.md)\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "docs", "overview.md"), []byte("---\n---\n# Overview\n[back](../README.md)\n"), 0644)
+
+	out, err := runCmd(t, "graph", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", err, out)
+	}
+	edges := result["edges"].([]any)
+	if len(edges) != 2 {
+		t.Errorf("edges = %d, want 2", len(edges))
+	}
+}
+
+func TestGraphCheck_MarkdownBrokenLinkCanary(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nlinks:\n  styles: [markdown]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[x](no-existe.md)\n"), 0644)
+
+	out, err := runCmd(t, "graph", "--check", dir)
+	if err != ErrValidationFailed {
+		t.Fatalf("expected ErrValidationFailed, got: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "no-existe.md") {
+		t.Errorf("expected broken link named in output, got: %s", out)
+	}
+}

@@ -74,6 +74,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	}
 
 	rules.FilterLinksByStyles(records, absRoot)
+	rules.ResolveMarkdownTargets(records, absRoot)
 
 	derive.EnrichBuiltinsSimple(ctx, records, absRoot)
 
