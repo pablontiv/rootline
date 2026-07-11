@@ -198,9 +198,11 @@ func renderDOT(cmd *cobra.Command, g *graph.Graph) {
 }
 
 // filterLinksBySchema removes links from records whose type has no rule in the schema.
-// If the schema is empty, no filtering is performed (backward compatible).
+// Typed-rule filtering applies only when typed rules are declared; a schema
+// carrying only styles/checks/allowed must not suppress links (the graph
+// showed zero edges on styles-only repos otherwise).
 func filterLinksBySchema(records []*extract.Record, schema rules.LinkSchema) {
-	if schema.IsEmpty() {
+	if len(schema.Rules) == 0 {
 		return
 	}
 	for _, rec := range records {

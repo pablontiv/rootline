@@ -216,6 +216,42 @@ func TestFilterLinksBySchema_EmptySchema(t *testing.T) {
 	}
 }
 
+func TestFilterLinksBySchema_StylesOnlySchema(t *testing.T) {
+	rec := &extract.Record{
+		Path:  "a.md",
+		Links: []extract.Link{{Target: "b.md", Type: "reference", Style: extract.StyleMarkdown}},
+	}
+	schema := rules.LinkSchema{Styles: []string{"markdown"}}
+	filterLinksBySchema([]*extract.Record{rec}, schema)
+	if len(rec.Links) != 1 {
+		t.Fatalf("links = %d, want 1 (styles-only schema must not drop links)", len(rec.Links))
+	}
+}
+
+func TestFilterLinksBySchema_ChecksOnlySchema(t *testing.T) {
+	rec := &extract.Record{
+		Path:  "a.md",
+		Links: []extract.Link{{Target: "b.md", Style: extract.StyleWikilink}},
+	}
+	schema := rules.LinkSchema{Checks: &rules.LinkChecks{Resolve: true}}
+	filterLinksBySchema([]*extract.Record{rec}, schema)
+	if len(rec.Links) != 1 {
+		t.Fatalf("links = %d, want 1 (checks-only schema must not drop links)", len(rec.Links))
+	}
+}
+
+func TestFilterLinksBySchema_AllowedOnlySchema(t *testing.T) {
+	rec := &extract.Record{
+		Path:  "a.md",
+		Links: []extract.Link{{Target: "b.md", Type: "reference", Style: extract.StyleWikilink}},
+	}
+	schema := rules.LinkSchema{Allowed: []string{"reference"}}
+	filterLinksBySchema([]*extract.Record{rec}, schema)
+	if len(rec.Links) != 1 {
+		t.Fatalf("links = %d, want 1 (typed filtering applies only when rules are declared)", len(rec.Links))
+	}
+}
+
 func TestGraphWhere_Filters(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: string\n"), 0644)
