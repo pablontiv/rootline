@@ -2,7 +2,7 @@
 
 ## graph
 
-Use `graph` for repository-level link topology, cycle checks, and broken-link checks. Edges come from `[[wiki-links]]` and, when the effective `.stem` declares `links.styles: [markdown]`, from markdown links `[text](target)`; without that declaration only wikilinks appear (backcompat default).
+Use `graph` for repository-level link topology, cycle checks, and broken-link checks. Edges come from `[[wiki-links]]` and, when the effective `.stem` declares `links.styles: [markdown]`, from markdown links `[text](target)`; without that declaration only wikilinks appear (backcompat default). Markdown targets resolve with the same semantics as `validate`'s link checks (v1.13.0+): `%20` decoding, case-sensitive path walk, directory targets → their `README.md`, root-anchored `/x.md` against the scan root; unresolvable targets surface as broken links in `--check` (no basename fallback for markdown, unlike wikilinks).
 
 ### Usage
 
