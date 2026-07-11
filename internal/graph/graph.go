@@ -25,6 +25,11 @@ type Edge struct {
 	Target string `json:"target"`
 	Type   string `json:"type"`
 	Line   int    `json:"line"`
+
+	// noFallback excludes the edge from basename fallback resolution.
+	// Markdown targets are path-resolved upstream; an unresolved one must
+	// stay verbatim so BrokenLinks reports it, matching validate.
+	noFallback bool
 }
 
 // BrokenLink represents a link whose target doesn't match any record.
@@ -51,12 +56,17 @@ func Build(_ context.Context, records []*extract.Record) *Graph {
 
 	for _, rec := range records {
 		for _, link := range rec.Links {
-			target := resolveTarget(rec.Path, link.Target)
+			target := link.Target
+			markdown := link.Style == extract.StyleMarkdown
+			if !markdown {
+				target = resolveTarget(rec.Path, link.Target)
+			}
 			g.Edges[rec.Path] = append(g.Edges[rec.Path], Edge{
-				Source: rec.Path,
-				Target: target,
-				Type:   link.Type,
-				Line:   link.Line,
+				Source:     rec.Path,
+				Target:     target,
+				Type:       link.Type,
+				Line:       link.Line,
+				noFallback: markdown,
 			})
 		}
 	}
@@ -84,6 +94,9 @@ func (g *Graph) resolveByBasename() {
 
 	for src, edges := range g.Edges {
 		for i, edge := range edges {
+			if edge.noFallback {
+				continue
+			}
 			if _, exists := g.Nodes[edge.Target]; exists {
 				continue // already resolved
 			}

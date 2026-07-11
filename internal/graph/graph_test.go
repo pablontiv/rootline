@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -331,5 +332,49 @@ func TestBuild_NoLinks(t *testing.T) {
 	cycles := g.DetectCycles()
 	if len(cycles) != 0 {
 		t.Errorf("cycles = %d, want 0", len(cycles))
+	}
+}
+
+func TestBuild_MarkdownTargetsUsedAsIs(t *testing.T) {
+	records := []*extract.Record{
+		{Path: filepath.Join("docs", "a.md"), Links: []extract.Link{
+			{Target: filepath.Join("docs", "b.md"), Style: extract.StyleMarkdown, Line: 3},
+		}},
+		{Path: filepath.Join("docs", "b.md")},
+	}
+	g := Build(context.Background(), records)
+	edges := g.Edges[filepath.Join("docs", "a.md")]
+	if len(edges) != 1 || edges[0].Target != filepath.Join("docs", "b.md") {
+		t.Fatalf("edges = %+v, want one edge to docs/b.md", edges)
+	}
+	if broken := g.BrokenLinks(); len(broken) != 0 {
+		t.Errorf("broken = %+v, want none", broken)
+	}
+}
+
+func TestBuild_MarkdownSkipsBasenameFallback(t *testing.T) {
+	records := []*extract.Record{
+		{Path: "a.md", Links: []extract.Link{
+			{Target: "missing.md", Style: extract.StyleMarkdown, Line: 1},
+		}},
+		{Path: filepath.Join("other", "missing.md")},
+	}
+	g := Build(context.Background(), records)
+	broken := g.BrokenLinks()
+	if len(broken) != 1 || broken[0].Target != "missing.md" {
+		t.Fatalf("broken = %+v, want unresolved markdown target reported verbatim", broken)
+	}
+}
+
+func TestBuild_WikilinkBasenameFallbackUnchanged(t *testing.T) {
+	records := []*extract.Record{
+		{Path: "a.md", Links: []extract.Link{
+			{Target: "missing.md", Style: extract.StyleWikilink, Line: 1},
+		}},
+		{Path: filepath.Join("other", "missing.md")},
+	}
+	g := Build(context.Background(), records)
+	if broken := g.BrokenLinks(); len(broken) != 0 {
+		t.Fatalf("broken = %+v, want basename fallback to resolve wikilink", broken)
 	}
 }
