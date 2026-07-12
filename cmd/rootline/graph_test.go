@@ -73,18 +73,87 @@ func TestGraphCheck_Clean(t *testing.T) {
 	}
 }
 
-func TestGraphCheck_WithCycle(t *testing.T) {
+func TestGraphCheck_WithCycle_InformationalByDefault(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
 
 	out, err := runCmd(t, "graph", "--check", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "Cycles found (informational): 1") {
+		t.Errorf("expected informational cycle report, got: %s", out)
+	}
+	if strings.Contains(out, "No cycles or broken links") {
+		t.Errorf("clean message printed despite cycles present: %s", out)
+	}
+}
+
+func TestGraphCheck_CyclesOptInFails(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nlinks:\n  checks:\n    cycles: true\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
+
+	out, err := runCmd(t, "graph", "--check", dir)
 	if err != ErrValidationFailed {
-		t.Fatalf("expected ErrValidationFailed, got: %v", err)
+		t.Fatalf("expected ErrValidationFailed, got: %v\noutput: %s", err, out)
 	}
 	if !strings.Contains(out, "Cycles found: 1") {
-		t.Errorf("expected cycle report, got: %s", out)
+		t.Errorf("expected failing cycle report, got: %s", out)
+	}
+}
+
+func TestGraphCheck_InformationalCyclesDontMaskBrokenLinks(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n[[missing.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
+
+	out, err := runCmd(t, "graph", "--check", dir)
+	if err != ErrValidationFailed {
+		t.Fatalf("expected ErrValidationFailed for broken link, got: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "Broken links: 1") {
+		t.Errorf("expected broken link report, got: %s", out)
+	}
+	if !strings.Contains(out, "Cycles found (informational): 1") {
+		t.Errorf("expected informational cycles alongside broken links, got: %s", out)
+	}
+}
+
+func TestGraphCheck_FailCyclesFlagForcesFailure(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
+
+	out, err := runCmd(t, "graph", "--check", "--fail-cycles=true", dir)
+	if err != ErrValidationFailed {
+		t.Fatalf("expected ErrValidationFailed with --fail-cycles=true, got: %v\noutput: %s", err, out)
+	}
+}
+
+func TestGraphCheck_FailCyclesFlagForcesInformational(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nlinks:\n  checks:\n    cycles: true\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
+
+	out, err := runCmd(t, "graph", "--check", "--fail-cycles=false", dir)
+	if err != nil {
+		t.Fatalf("expected success with --fail-cycles=false, got: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "Cycles found (informational): 1") {
+		t.Errorf("expected informational cycle report, got: %s", out)
 	}
 }
 

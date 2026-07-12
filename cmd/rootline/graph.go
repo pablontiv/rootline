@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	graphFormat string
-	graphCheck  bool
-	graphWhere  []string
-	graphOpen   bool
+	graphFormat     string
+	graphCheck      bool
+	graphWhere      []string
+	graphOpen       bool
+	graphFailCycles bool
 )
 
 var graphCmd = &cobra.Command{
@@ -33,6 +34,7 @@ func init() {
 	graphCmd.Flags().BoolVar(&graphCheck, "check", false, "validate only (cycles + broken links), no diagram")
 	graphCmd.Flags().StringArrayVar(&graphWhere, "where", nil, "filter expression (e.g. \"tipo != 'feature'\")")
 	graphCmd.Flags().BoolVar(&graphOpen, "open", false, "render diagram in browser")
+	graphCmd.Flags().BoolVar(&graphFailCycles, "fail-cycles", false, "treat cycles as check failures (overrides .stem links.checks.cycles)")
 	rootCmd.AddCommand(graphCmd)
 }
 
@@ -84,13 +86,18 @@ func runGraph(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("filtering records: %w", err)
 	}
 
-	// Load .stem schema and filter links to only include structurally relevant ones.
+	// Load .stem schema: filter links and read the cycle-failure opt-in.
+	failCycles := false
 	entries, err := rules.WalkUp(absRoot)
 	if err == nil {
 		stem := rules.MergeStemFiles(entries)
 		if stem != nil {
 			filterLinksBySchema(records, stem.Links)
+			failCycles = stem.Links.Checks != nil && stem.Links.Checks.Cycles
 		}
+	}
+	if cmd.Flags().Changed("fail-cycles") {
+		failCycles = graphFailCycles
 	}
 
 	g := graph.Build(ctx, records)
@@ -99,9 +106,13 @@ func runGraph(cmd *cobra.Command, args []string) error {
 
 	// --check mode: report issues and exit.
 	if graphCheck {
-		hasProblems := len(cycles) > 0 || len(broken) > 0
+		hasProblems := (failCycles && len(cycles) > 0) || len(broken) > 0
 		if len(cycles) > 0 {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Cycles found: %d\n", len(cycles))
+			header := "Cycles found"
+			if !failCycles {
+				header = "Cycles found (informational)"
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %d\n", header, len(cycles))
 			for i, c := range cycles {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %d: %s\n", i+1, strings.Join(c, " → "))
 			}
@@ -116,7 +127,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), msg)
 			}
 		}
-		if !hasProblems {
+		if len(cycles) == 0 && len(broken) == 0 {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No cycles or broken links found.")
 		}
 		if hasProblems {

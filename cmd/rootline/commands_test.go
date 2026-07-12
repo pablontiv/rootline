@@ -71,6 +71,10 @@ func resetFlags() {
 	graphCheck = false
 	graphWhere = nil
 	graphOpen = false
+	graphFailCycles = false
+	if f := graphCmd.Flags().Lookup("fail-cycles"); f != nil {
+		f.Changed = false
+	}
 	migrateDryRun = false
 	migrateFrom = ""
 	migrateRename = ""
