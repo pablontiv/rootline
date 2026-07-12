@@ -59,10 +59,12 @@ type LinkSchema struct {
 }
 
 // LinkChecks enables filesystem-backed link checks (ADO code-wiki conventions).
+// Cycles opts graph --check into treating link cycles as failures.
 type LinkChecks struct {
 	Resolve  bool `yaml:"resolve" json:"resolve,omitempty"`
 	Anchors  bool `yaml:"anchors" json:"anchors,omitempty"`
 	Encoding bool `yaml:"encoding" json:"encoding,omitempty"`
+	Cycles   bool `yaml:"cycles" json:"cycles,omitempty"`
 }
 
 // EffectiveStyles returns the link styles governed by this schema.

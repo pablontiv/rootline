@@ -667,6 +667,29 @@ links:
 	}
 }
 
+func TestLinkChecks_CyclesDecode(t *testing.T) {
+	src := `
+links:
+  checks:
+    cycles: true
+`
+	var stem StemFile
+	if err := yaml.Unmarshal([]byte(src), &stem); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if stem.Links.Checks == nil || !stem.Links.Checks.Cycles {
+		t.Errorf("Checks = %+v, want Cycles true", stem.Links.Checks)
+	}
+
+	var absent StemFile
+	if err := yaml.Unmarshal([]byte("links:\n  checks:\n    resolve: true\n"), &absent); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if absent.Links.Checks == nil || absent.Links.Checks.Cycles {
+		t.Errorf("Checks = %+v, want Cycles false when key absent", absent.Links.Checks)
+	}
+}
+
 func TestLinkSchema_EffectiveStylesDefault(t *testing.T) {
 	var ls LinkSchema
 	got := ls.EffectiveStyles()
