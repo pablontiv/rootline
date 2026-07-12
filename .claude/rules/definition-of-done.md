@@ -2,7 +2,6 @@
 
 > Una tarea NO está terminada hasta que cumple TODOS estos criterios.
 
-- [ ] Backlog actualizado en `/opt/factory/docs/backlog/`
 - [ ] `just check` pasa (vet + lint)
 - [ ] `just test` pasa (0 failures)
 - [ ] Commit convencional + push
