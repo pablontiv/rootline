@@ -551,3 +551,89 @@ func TestGraphCheck_MarkdownBrokenLinkCanary(t *testing.T) {
 		t.Errorf("expected broken link named in output, got: %s", out)
 	}
 }
+
+func TestGraphCheck_QuietCycles_InformationalOnly(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
+
+	out, err := runCmd(t, "graph", "--check", "--quiet-cycles", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+	// Should have exactly one summary line and no per-cycle enumeration.
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected exactly 1 output line with --quiet-cycles, got %d: %v", len(lines), lines)
+	}
+	if !strings.Contains(out, "Cycles found (informational):") {
+		t.Errorf("expected 'Cycles found (informational):' summary, got: %s", out)
+	}
+	// Verify no per-cycle lines (would look like "  1: a.md → b.md")
+	if strings.Contains(out, "→") {
+		t.Errorf("unexpected per-cycle enumeration with --quiet-cycles: %s", out)
+	}
+}
+
+func TestGraphCheck_QuietCycles_IgnoredWhenFailing(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
+
+	out, err := runCmd(t, "graph", "--check", "--fail-cycles", "--quiet-cycles", dir)
+	if err != ErrValidationFailed {
+		t.Fatalf("expected ErrValidationFailed, got: %v\noutput: %s", err, out)
+	}
+	// --quiet-cycles should be ignored when failing; full details should be shown.
+	if !strings.Contains(out, "→") {
+		t.Errorf("expected per-cycle details with --fail-cycles (--quiet-cycles ignored), got: %s", out)
+	}
+	if !strings.Contains(out, "Cycles found: 1") {
+		t.Errorf("expected 'Cycles found: 1' (failing), got: %s", out)
+	}
+}
+
+func TestGraphCheck_QuietCycles_WithBrokenLink(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n[[missing.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
+
+	out, err := runCmd(t, "graph", "--check", "--quiet-cycles", dir)
+	if err != ErrValidationFailed {
+		t.Fatalf("expected ErrValidationFailed for broken link, got: %v\noutput: %s", err, out)
+	}
+	// Broken links should still be printed in full.
+	if !strings.Contains(out, "Broken links:") {
+		t.Errorf("expected broken link report, got: %s", out)
+	}
+	// Cycles should be quiet (summary only).
+	if !strings.Contains(out, "Cycles found (informational):") {
+		t.Errorf("expected quiet cycle summary, got: %s", out)
+	}
+	if strings.Count(out, "\n") < 2 {
+		t.Errorf("expected at least cycle summary + broken link line, got: %s", out)
+	}
+}
+
+func TestGraphJSON_QuietCycles_CyclesPopulated(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
+
+	out, err := runCmd(t, "graph", "--quiet-cycles", dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", err, out)
+	}
+	cycles := result["cycles"].([]any)
+	if len(cycles) != 1 {
+		t.Errorf("cycles = %d, want 1 (JSON unaffected by --quiet-cycles)", len(cycles))
+	}
+}

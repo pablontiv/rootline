@@ -14,11 +14,12 @@ import (
 )
 
 var (
-	graphFormat     string
-	graphCheck      bool
-	graphWhere      []string
-	graphOpen       bool
-	graphFailCycles bool
+	graphFormat      string
+	graphCheck       bool
+	graphWhere       []string
+	graphOpen        bool
+	graphFailCycles  bool
+	graphQuietCycles bool
 )
 
 var graphCmd = &cobra.Command{
@@ -35,6 +36,7 @@ func init() {
 	graphCmd.Flags().StringArrayVar(&graphWhere, "where", nil, "filter expression (e.g. \"tipo != 'feature'\")")
 	graphCmd.Flags().BoolVar(&graphOpen, "open", false, "render diagram in browser")
 	graphCmd.Flags().BoolVar(&graphFailCycles, "fail-cycles", false, "treat cycles as check failures (overrides .stem links.checks.cycles)")
+	graphCmd.Flags().BoolVar(&graphQuietCycles, "quiet-cycles", false, "suppress per-cycle enumeration when informational (has no effect when --fail-cycles or .stem opt-in hardening)")
 	rootCmd.AddCommand(graphCmd)
 }
 
@@ -112,9 +114,15 @@ func runGraph(cmd *cobra.Command, args []string) error {
 			if !failCycles {
 				header = "Cycles found (informational)"
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %d\n", header, len(cycles))
-			for i, c := range cycles {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %d: %s\n", i+1, strings.Join(c, " → "))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: %d", header, len(cycles))
+			// When informational and --quiet-cycles set: suppress per-cycle enumeration, single line only.
+			if !failCycles && graphQuietCycles {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), " (use --fail-cycles or omit --quiet-cycles for details)\n")
+			} else {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout())
+				for i, c := range cycles {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %d: %s\n", i+1, strings.Join(c, " → "))
+				}
 			}
 		}
 		if len(broken) > 0 {
