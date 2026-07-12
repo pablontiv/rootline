@@ -88,6 +88,7 @@ links:
     resolve: true      # target exists (case-sensitive; dir targets need README.md)
     anchors: true      # #anchor matches a heading slug in the target
     encoding: true     # no raw spaces in targets (use %20)
+    cycles: true       # graph --check fails on link cycles (default: informational)
 ```
 
 Check failures surface in `validate` as rules `link_resolve` (with fuzzy suggestion), `link_anchor`, `link_encoding`. Absolute targets (`/...`), external schemes, images, and pure fragments are not checked. Use for repos with relative markdown links (e.g. Azure DevOps code wikis).
