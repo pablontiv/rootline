@@ -93,6 +93,8 @@ links:
 
 Check failures surface in `validate` as rules `link_resolve` (with fuzzy suggestion), `link_anchor`, `link_encoding`. Absolute targets (`/...`), external schemes, images, and pure fragments are not checked. Use for repos with relative markdown links (e.g. Azure DevOps code wikis).
 
+For `graph --check`: `--fail-cycles` overrides the `.stem` cycle opt-in per run (both directions), and `--quiet-cycles` collapses informational cycles to a single summary line (ignored when cycles are failing; JSON output unaffected).
+
 ### Inspect Required Fields
 
 ```bash
