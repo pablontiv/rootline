@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/expr-lang/expr v1.17.8
-	github.com/pablontiv/picokit v0.4.0
+	github.com/pablontiv/picokit v0.4.1
 	github.com/spf13/cobra v1.10.2
 	github.com/yuin/goldmark v1.8.2
 	golang.org/x/text v0.40.0
