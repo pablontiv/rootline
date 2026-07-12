@@ -7,6 +7,7 @@ package rules
 import (
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"gopkg.in/yaml.v3"
@@ -56,6 +57,10 @@ type LinkSchema struct {
 	Styles  []string            `json:"styles,omitempty"`
 	Checks  *LinkChecks         `json:"checks,omitempty"`
 	Rules   map[string]LinkRule `json:"rules,omitempty"`
+
+	// UnknownCheckKeys lists keys found under links.checks that no check
+	// consumes. Diagnostic only — surfaced by stem health, never serialized.
+	UnknownCheckKeys []string `json:"-"`
 }
 
 // LinkChecks enables filesystem-backed link checks (ADO code-wiki conventions).
@@ -66,6 +71,10 @@ type LinkChecks struct {
 	Encoding bool `yaml:"encoding" json:"encoding,omitempty"`
 	Cycles   bool `yaml:"cycles" json:"cycles,omitempty"`
 }
+
+// knownCheckKeys lists the keys LinkChecks consumes; keep in sync with its
+// struct fields.
+var knownCheckKeys = []string{"resolve", "anchors", "encoding", "cycles"}
 
 // EffectiveStyles returns the link styles governed by this schema.
 // An empty declaration defaults to wikilink-only for backward compatibility.
@@ -118,6 +127,12 @@ func (ls *LinkSchema) UnmarshalYAML(value *yaml.Node) error {
 				return fmt.Errorf("links.checks: %w", err)
 			}
 			ls.Checks = &checks
+			for j := 0; j+1 < len(val.Content); j += 2 {
+				k := val.Content[j].Value
+				if !slices.Contains(knownCheckKeys, k) {
+					ls.UnknownCheckKeys = append(ls.UnknownCheckKeys, k)
+				}
+			}
 			continue
 		}
 

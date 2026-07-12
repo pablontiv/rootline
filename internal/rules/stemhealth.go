@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/pablontiv/picokit/fuzzy"
 )
 
 // StemHealthCheck represents a single stem-health diagnostic result.
@@ -361,6 +363,24 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
+	}
+
+	// Check 11: unknown keys under links.checks (silently inert otherwise)
+	for sf, stem := range parsedStems {
+		relPath, _ := filepath.Rel(absRoot, sf)
+		for _, key := range stem.Links.UnknownCheckKeys {
+			msg := fmt.Sprintf("unknown key %q in links.checks", key)
+			if match := fuzzy.Match(key, knownCheckKeys); match != "" {
+				msg += fmt.Sprintf(" (did you mean %q?)", match)
+			}
+			checks = append(checks, StemHealthCheck{
+				Name:    "unknown-check-keys",
+				Status:  "warn",
+				Message: msg,
+				Path:    relPath,
+				Field:   key,
+			})
+		}
 	}
 
 	return &StemHealthResult{Checks: checks}, nil

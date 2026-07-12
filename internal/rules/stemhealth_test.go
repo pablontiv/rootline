@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -668,5 +669,56 @@ schema:
 	}
 	if !found {
 		t.Error("expected monotonic-violations error in batch output for required loosening")
+	}
+}
+
+func TestValidateStemHealth_UnknownCheckKeys(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+links:
+  checks:
+    cicles: true
+`))
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var found *StemHealthCheck
+	for i, c := range result.Checks {
+		if c.Name == "unknown-check-keys" {
+			found = &result.Checks[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("expected unknown-check-keys check")
+	}
+	if found.Status != "warn" {
+		t.Errorf("status = %q, want warn", found.Status)
+	}
+	if found.Field != "cicles" {
+		t.Errorf("field = %q, want cicles", found.Field)
+	}
+	if !strings.Contains(found.Message, `did you mean "cycles"?`) {
+		t.Errorf("message = %q, want cycles suggestion", found.Message)
+	}
+}
+
+func TestValidateStemHealth_KnownCheckKeysNoWarn(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+links:
+  checks:
+    resolve: true
+    cycles: true
+`))
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, c := range result.Checks {
+		if c.Name == "unknown-check-keys" {
+			t.Errorf("unexpected unknown-check-keys check: %+v", c)
+		}
 	}
 }

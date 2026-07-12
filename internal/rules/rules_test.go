@@ -701,3 +701,39 @@ func TestLinkSchema_EffectiveStylesDefault(t *testing.T) {
 		t.Errorf("EffectiveStyles() = %v, want declared list", got)
 	}
 }
+
+func TestLinkSchema_UnknownCheckKeysCaptured(t *testing.T) {
+	src := `
+links:
+  checks:
+    resolve: true
+    cicles: true
+    ancors: false
+`
+	var stem StemFile
+	if err := yaml.Unmarshal([]byte(src), &stem); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	got := stem.Links.UnknownCheckKeys
+	if len(got) != 2 || got[0] != "cicles" || got[1] != "ancors" {
+		t.Errorf("UnknownCheckKeys = %v, want [cicles ancors]", got)
+	}
+}
+
+func TestLinkSchema_KnownCheckKeysNotCaptured(t *testing.T) {
+	src := `
+links:
+  checks:
+    resolve: true
+    anchors: true
+    encoding: true
+    cycles: true
+`
+	var stem StemFile
+	if err := yaml.Unmarshal([]byte(src), &stem); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(stem.Links.UnknownCheckKeys) != 0 {
+		t.Errorf("UnknownCheckKeys = %v, want empty", stem.Links.UnknownCheckKeys)
+	}
+}
