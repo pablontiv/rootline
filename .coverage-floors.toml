@@ -1,17 +1,3 @@
 default = 85
 
-packages = [
-  "cmd/rootline",
-  "internal/derive",
-  "internal/e2e",
-  "internal/extract",
-  "internal/fix",
-  "internal/graph",
-  "internal/index",
-  "internal/infer",
-  "internal/migrate",
-  "internal/proposal",
-  "internal/query",
-  "internal/rules",
-  "internal/templates",
-]
+packages = ["cmd/rootline", "internal/derive", "internal/e2e", "internal/extract", "internal/fix", "internal/graph", "internal/index", "internal/infer", "internal/migrate", "internal/proposal", "internal/query", "internal/rules", "internal/templates"]
