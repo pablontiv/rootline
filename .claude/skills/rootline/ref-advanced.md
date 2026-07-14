@@ -11,11 +11,10 @@ rootline graph <dir> -o json
 rootline graph <dir> --check
 rootline graph <dir> -o table --format dot
 rootline graph <dir> -o table --format mermaid
-rootline graph <dir> --open --format mermaid
 rootline graph <dir> --where "tipo == 'feature'" -o json
 ```
 
-Default global output is JSON, so `--format dot|mermaid` only produces diagram text when paired with `-o table`. `--open` requires `--format mermaid` and cannot be used with `--check`.
+Default global output is JSON, so `--format dot|mermaid` only produces diagram text when paired with `-o table`. Mermaid output renders natively on GitHub and in most editors.
 
 ### Flags
 
@@ -23,7 +22,6 @@ Default global output is JSON, so `--format dot|mermaid` only produces diagram t
 |---|---|
 | `--format dot|mermaid` | diagram syntax when output is table |
 | `--check` | report cycles and broken links, exit non-zero on problems |
-| `--open` | render Mermaid HTML and open browser |
 | `--where "expr"` | filter records before graph construction |
 
 ### JSON Shape

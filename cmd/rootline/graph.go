@@ -17,7 +17,6 @@ var (
 	graphFormat      string
 	graphCheck       bool
 	graphWhere       []string
-	graphOpen        bool
 	graphFailCycles  bool
 	graphQuietCycles bool
 )
@@ -34,7 +33,6 @@ func init() {
 	graphCmd.Flags().StringVar(&graphFormat, "format", "dot", "output format: dot or mermaid")
 	graphCmd.Flags().BoolVar(&graphCheck, "check", false, "validate only (cycles + broken links), no diagram")
 	graphCmd.Flags().StringArrayVar(&graphWhere, "where", nil, "filter expression (e.g. \"tipo != 'feature'\")")
-	graphCmd.Flags().BoolVar(&graphOpen, "open", false, "render diagram in browser")
 	graphCmd.Flags().BoolVar(&graphFailCycles, "fail-cycles", false, "treat cycles as check failures (overrides .stem links.checks.cycles)")
 	graphCmd.Flags().BoolVar(&graphQuietCycles, "quiet-cycles", false, "suppress per-cycle enumeration when informational (has no effect when --fail-cycles or .stem opt-in hardening)")
 	rootCmd.AddCommand(graphCmd)
@@ -52,14 +50,6 @@ type GraphResult struct {
 
 func runGraph(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
-
-	// Validate --open flag combinations up front.
-	if graphOpen && graphCheck {
-		return fmt.Errorf("cannot use --open with --check")
-	}
-	if graphOpen && graphFormat == "dot" {
-		return fmt.Errorf("cannot use --open with --format dot")
-	}
 
 	scanRoot := "."
 	if len(args) > 0 {
@@ -143,18 +133,6 @@ func runGraph(cmd *cobra.Command, args []string) error {
 			cmd.SilenceErrors = true
 			return ErrValidationFailed
 		}
-		return nil
-	}
-
-	// --open mode: render mermaid into temp HTML and open in browser.
-	if graphOpen {
-		mermaidText := mermaidGraphText(g)
-		htmlPath, err := graph.RenderHTML(mermaidText)
-		if err != nil {
-			return fmt.Errorf("rendering HTML: %w", err)
-		}
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Opened: %s\n", htmlPath)
-		_ = graph.OpenBrowser(htmlPath)
 		return nil
 	}
 

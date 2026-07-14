@@ -213,34 +213,6 @@ func TestGraphFormat_Invalid(t *testing.T) {
 	}
 }
 
-func TestGraph_OpenWithCheck_ReturnsError(t *testing.T) {
-	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
-	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n"), 0644)
-
-	_, err := runCmd(t, "graph", "--open", "--check", dir)
-	if err == nil {
-		t.Fatal("expected error for --open with --check")
-	}
-	if !strings.Contains(err.Error(), "--open") || !strings.Contains(err.Error(), "--check") {
-		t.Errorf("expected error mentioning --open and --check, got: %v", err)
-	}
-}
-
-func TestGraph_OpenWithDot_ReturnsError(t *testing.T) {
-	dir := t.TempDir()
-	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
-	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n"), 0644)
-
-	_, err := runCmd(t, "graph", "--open", "--format", "dot", dir)
-	if err == nil {
-		t.Fatal("expected error for --open with --format dot")
-	}
-	if !strings.Contains(err.Error(), "--open") || !strings.Contains(err.Error(), "--format dot") {
-		t.Errorf("expected error mentioning --open and --format dot, got: %v", err)
-	}
-}
-
 func TestFilterLinksBySchema_WithRules(t *testing.T) {
 	records := []*extract.Record{
 		{
