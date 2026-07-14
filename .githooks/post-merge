@@ -11,8 +11,10 @@ rm -rf "${SKILLS_DEST:?}/$skill"
 cp -r "$REPO_ROOT/.claude/skills/$skill" "$SKILLS_DEST/$skill"
 echo "rootline: installed $skill skill → $SKILLS_DEST/$skill"
 
-# Rebuild rootline binary so the installed version matches the pulled code
-ROOTLINE_BIN="${ROOTLINE_BIN:-/usr/local/bin/rootline}"
+# Rebuild rootline binary so the installed version matches the pulled code.
+# Resolve the actual installed binary (install.sh may pick $HOME/.local/bin when
+# /usr/local/bin is not writable); fall back to /usr/local/bin only if not on PATH.
+ROOTLINE_BIN="${ROOTLINE_BIN:-$(command -v rootline || echo /usr/local/bin/rootline)}"
 
 install_rootline_binary() {
   local version tmp
