@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/graph"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/query"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -25,12 +27,17 @@ const whereExamples = `Examples:
   rootline query --where 'tags != nil'`
 
 var (
-	queryWhere  []string
-	queryCount  bool
-	queryLimit  int
-	queryFrom   string
-	querySort   string
-	querySelect string
+	queryWhere        []string
+	queryCount        bool
+	queryLimit        int
+	queryFrom         string
+	querySort         string
+	querySelect       string
+	queryHasInbound   string
+	queryHasOutbound  string
+	queryInboundType  string
+	queryOutboundType string
+	queryGraphRoot    string
 )
 
 var queryCmd = &cobra.Command{
@@ -48,6 +55,11 @@ func init() {
 	queryCmd.Flags().StringVar(&queryFrom, "from", ".", "root path to scan")
 	queryCmd.Flags().StringVar(&querySort, "sort", "", `sort by fields (e.g. "prioridad:asc,impact_score:desc")`)
 	queryCmd.Flags().StringVar(&querySelect, "select", "", "comma-separated field names to include in each row (e.g. path,estado,title,links)")
+	queryCmd.Flags().StringVar(&queryHasInbound, "has-inbound", "", "keep records with an inbound link from a record matching this expression (empty = any)")
+	queryCmd.Flags().StringVar(&queryHasOutbound, "has-outbound", "", "keep records with an outbound link to a record matching this expression (empty = any)")
+	queryCmd.Flags().StringVar(&queryInboundType, "inbound-type", "", "restrict --has-inbound to this link type")
+	queryCmd.Flags().StringVar(&queryOutboundType, "outbound-type", "", "restrict --has-outbound to this link type")
+	queryCmd.Flags().StringVar(&queryGraphRoot, "graph-root", "", "root for the link-graph scan (default: the query path)")
 	rootCmd.AddCommand(queryCmd)
 }
 
@@ -71,16 +83,39 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parsing --sort: %w", err)
 	}
 
-	// Scan records
-	reg := extract.NewRegistry()
-	records, err := index.Scan(ctx, absRoot, reg)
-	if err != nil {
-		return fmt.Errorf("scanning %s: %w", scanRoot, err)
+	// Traversal predicates: validate flag combinations before scanning.
+	hasInbound := cmd.Flags().Changed("has-inbound")
+	hasOutbound := cmd.Flags().Changed("has-outbound")
+	traversalActive := hasInbound || hasOutbound
+	if queryInboundType != "" && !hasInbound {
+		return fmt.Errorf("--inbound-type requires --has-inbound")
+	}
+	if queryOutboundType != "" && !hasOutbound {
+		return fmt.Errorf("--outbound-type requires --has-outbound")
+	}
+	if cmd.Flags().Changed("graph-root") && !traversalActive {
+		return fmt.Errorf("--graph-root requires --has-inbound or --has-outbound")
 	}
 
-	derive.DeriveAllSimple(ctx, records, absRoot)
-	derive.EnrichBuiltinsSimple(ctx, records, absRoot)
-	derive.AggregateAllSimple(ctx, records, absRoot)
+	// Scan records. With traversal predicates the scan runs from the graph
+	// root (a superset of the query path) so inbound edges are visible.
+	var records []*extract.Record
+	var linkGraph *graph.Graph
+	if traversalActive {
+		records, linkGraph, err = scanForTraversal(ctx, absRoot)
+		if err != nil {
+			return err
+		}
+	} else {
+		reg := extract.NewRegistry()
+		records, err = index.Scan(ctx, absRoot, reg)
+		if err != nil {
+			return fmt.Errorf("scanning %s: %w", scanRoot, err)
+		}
+		derive.DeriveAllSimple(ctx, records, absRoot)
+		derive.EnrichBuiltinsSimple(ctx, records, absRoot)
+		derive.AggregateAllSimple(ctx, records, absRoot)
+	}
 
 	q := &query.Query{
 		Count: queryCount,
@@ -91,6 +126,23 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	filtered, err := filterRecords(ctx, records, queryWhere, nil)
 	if err != nil {
 		return fmt.Errorf("filtering records: %w", err)
+	}
+
+	if traversalActive {
+		opts := query.TraversalOptions{
+			InboundType:  queryInboundType,
+			OutboundType: queryOutboundType,
+		}
+		if hasInbound {
+			opts.HasInbound = &queryHasInbound
+		}
+		if hasOutbound {
+			opts.HasOutbound = &queryHasOutbound
+		}
+		filtered, err = query.FilterByTraversal(ctx, filtered, linkGraph, opts)
+		if err != nil {
+			return fmt.Errorf("applying traversal predicates: %w", err)
+		}
 	}
 
 	// Sort AFTER filtering, BEFORE limit/output.
@@ -137,6 +189,54 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return outputQueryCSV(cmd, result, fields)
 	}
 	return outputJSON(cmd, result, false)
+}
+
+// scanForTraversal scans from the graph root (--graph-root, default: the
+// query path), prepares links the same way `rootline graph` does, builds the
+// link graph over the full universe, and returns the records under the query
+// path as candidates. Record paths are relative to the graph root.
+func scanForTraversal(ctx context.Context, absQueryRoot string) ([]*extract.Record, *graph.Graph, error) {
+	graphRoot := queryGraphRoot
+	if graphRoot == "" {
+		graphRoot = absQueryRoot
+	}
+	absGraphRoot, err := filepath.Abs(graphRoot)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolving --graph-root: %w", err)
+	}
+	rel, err := filepath.Rel(absGraphRoot, absQueryRoot)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, nil, fmt.Errorf("query path %s is outside --graph-root %s", absQueryRoot, absGraphRoot)
+	}
+
+	reg := extract.NewRegistry()
+	all, err := index.Scan(ctx, absGraphRoot, reg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("scanning graph root %s: %w", absGraphRoot, err)
+	}
+
+	// Mirror the `graph` command's link preparation so both commands see
+	// the same edge universe for the same root.
+	rules.FilterLinksByStyles(all, absGraphRoot)
+	rules.ResolveMarkdownTargets(all, absGraphRoot)
+
+	derive.DeriveAllSimple(ctx, all, absGraphRoot)
+	derive.EnrichBuiltinsSimple(ctx, all, absGraphRoot)
+	derive.AggregateAllSimple(ctx, all, absGraphRoot)
+
+	g := graph.Build(ctx, all)
+
+	if rel == "." {
+		return all, g, nil
+	}
+	prefix := filepath.ToSlash(rel) + "/"
+	var candidates []*extract.Record
+	for _, r := range all {
+		if strings.HasPrefix(filepath.ToSlash(r.Path), prefix) {
+			candidates = append(candidates, r)
+		}
+	}
+	return candidates, g, nil
 }
 
 func renderQueryTable(cmd *cobra.Command, result any) error {

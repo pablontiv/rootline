@@ -45,3 +45,6 @@ cartyx-out/
 
 # Local runtime context
 context/
+
+# CodeGraph index
+.codegraph/

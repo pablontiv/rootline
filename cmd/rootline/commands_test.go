@@ -50,6 +50,16 @@ func resetFlags() {
 	queryWhere = nil
 	querySort = ""
 	querySelect = ""
+	queryHasInbound = ""
+	queryHasOutbound = ""
+	queryInboundType = ""
+	queryOutboundType = ""
+	queryGraphRoot = ""
+	for _, name := range []string{"has-inbound", "has-outbound", "inbound-type", "outbound-type", "graph-root"} {
+		if f := queryCmd.Flags().Lookup(name); f != nil {
+			f.Changed = false
+		}
+	}
 	validateAll = false
 	validateStrict = false
 	validateStaged = false
