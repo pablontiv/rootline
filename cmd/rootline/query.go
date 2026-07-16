@@ -101,8 +101,9 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	// root (a superset of the query path) so inbound edges are visible.
 	var records []*extract.Record
 	var linkGraph *graph.Graph
+	var graphPrefix string
 	if traversalActive {
-		records, linkGraph, err = scanForTraversal(ctx, absRoot)
+		records, linkGraph, graphPrefix, err = scanForTraversal(ctx, absRoot)
 		if err != nil {
 			return err
 		}
@@ -142,6 +143,15 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		filtered, err = query.FilterByTraversal(ctx, filtered, linkGraph, opts)
 		if err != nil {
 			return fmt.Errorf("applying traversal predicates: %w", err)
+		}
+		// Rebase paths from graph-root-relative to query-path-relative so
+		// rows keep the same path format as a non-traversal query. This must
+		// run after FilterByTraversal: the graph indexes nodes and edges by
+		// graph-root-relative paths.
+		if graphPrefix != "" {
+			for _, rec := range filtered {
+				rec.Path = filepath.FromSlash(strings.TrimPrefix(filepath.ToSlash(rec.Path), graphPrefix))
+			}
 		}
 	}
 
@@ -194,25 +204,27 @@ func runQuery(cmd *cobra.Command, args []string) error {
 // scanForTraversal scans from the graph root (--graph-root, default: the
 // query path), prepares links the same way `rootline graph` does, builds the
 // link graph over the full universe, and returns the records under the query
-// path as candidates. Record paths are relative to the graph root.
-func scanForTraversal(ctx context.Context, absQueryRoot string) ([]*extract.Record, *graph.Graph, error) {
+// path as candidates. Record paths are relative to the graph root; the
+// returned prefix ("" when both roots match) lets the caller rebase them to
+// query-path-relative after traversal filtering.
+func scanForTraversal(ctx context.Context, absQueryRoot string) ([]*extract.Record, *graph.Graph, string, error) {
 	graphRoot := queryGraphRoot
 	if graphRoot == "" {
 		graphRoot = absQueryRoot
 	}
 	absGraphRoot, err := filepath.Abs(graphRoot)
 	if err != nil {
-		return nil, nil, fmt.Errorf("resolving --graph-root: %w", err)
+		return nil, nil, "", fmt.Errorf("resolving --graph-root: %w", err)
 	}
 	rel, err := filepath.Rel(absGraphRoot, absQueryRoot)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return nil, nil, fmt.Errorf("query path %s is outside --graph-root %s", absQueryRoot, absGraphRoot)
+		return nil, nil, "", fmt.Errorf("query path %s is outside --graph-root %s", absQueryRoot, absGraphRoot)
 	}
 
 	reg := extract.NewRegistry()
 	all, err := index.Scan(ctx, absGraphRoot, reg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("scanning graph root %s: %w", absGraphRoot, err)
+		return nil, nil, "", fmt.Errorf("scanning graph root %s: %w", absGraphRoot, err)
 	}
 
 	// Mirror the `graph` command's link preparation so both commands see
@@ -227,7 +239,7 @@ func scanForTraversal(ctx context.Context, absQueryRoot string) ([]*extract.Reco
 	g := graph.Build(ctx, all)
 
 	if rel == "." {
-		return all, g, nil
+		return all, g, "", nil
 	}
 	prefix := filepath.ToSlash(rel) + "/"
 	var candidates []*extract.Record
@@ -236,7 +248,7 @@ func scanForTraversal(ctx context.Context, absQueryRoot string) ([]*extract.Reco
 			candidates = append(candidates, r)
 		}
 	}
-	return candidates, g, nil
+	return candidates, g, prefix, nil
 }
 
 func renderQueryTable(cmd *cobra.Command, result any) error {

@@ -165,6 +165,34 @@ func TestQueryGraphRootDefaultsToQueryPath(t *testing.T) {
 	}
 }
 
+func TestQueryTraversalPathMatchesPlainQueryFormat(t *testing.T) {
+	dir := setupTraversalDir(t)
+
+	plain, err := runCmd(t, "query", filepath.Join(dir, "wiki/entities"),
+		"--where", "kind == 'tool'")
+	if err != nil {
+		t.Fatalf("plain query: unexpected error: %v", err)
+	}
+	traversal, err := runCmd(t, "query", filepath.Join(dir, "wiki/entities"),
+		"--where", "kind == 'tool'",
+		"--has-inbound", "",
+		"--graph-root", filepath.Join(dir, "wiki"))
+	if err != nil {
+		t.Fatalf("traversal query: unexpected error: %v", err)
+	}
+
+	// Both modes must emit path in the same canonical format: relative to
+	// the query path, without the graph-root prefix.
+	for mode, out := range map[string]string{"plain": plain, "traversal": traversal} {
+		if !strings.Contains(out, `"path":"tool-a.md"`) {
+			t.Errorf("%s: expected query-path-relative path \"tool-a.md\", got: %s", mode, out)
+		}
+		if strings.Contains(out, `"path":"entities/`) {
+			t.Errorf("%s: expected no graph-root prefix on path, got: %s", mode, out)
+		}
+	}
+}
+
 func TestQueryTraversalFlagValidation(t *testing.T) {
 	dir := setupTraversalDir(t)
 	cases := []struct {

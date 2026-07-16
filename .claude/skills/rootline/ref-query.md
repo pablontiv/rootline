@@ -160,7 +160,7 @@ rootline query wiki/entities --has-inbound "" --graph-root wiki -o json
 Rules:
 
 - `--graph-root` sets the universe for the edge scan (inbound links usually live OUTSIDE the queried directory). It defaults to the query path — never the repo root — and the query path must lie inside it. Choose it to exclude archived or raw trees.
-- With traversal active, record paths in output are relative to `--graph-root`, and links are prepared exactly like `graph` (styles filtering + markdown target resolution). Broken links never satisfy a predicate.
+- With traversal active, record paths in output stay relative to the query path (same format as a non-traversal query), and links are prepared exactly like `graph` (styles filtering + markdown target resolution). Broken links never satisfy a predicate.
 - `--inbound-type`/`--outbound-type` require their `--has-*` flag; `--graph-root` requires at least one predicate.
 - Output keeps the standard `rootline/query` version 1 envelope and composes with `--select`, `--output`, `--sort`, `--limit`, `--count`.
 
