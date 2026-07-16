@@ -40,6 +40,10 @@ rootline query <dir> --sort "prioridad:asc,impact_score:desc" -o json
 | `--sort "field:asc,other:desc"` | deterministic multi-key sort |
 | `--from <path>` | scan root when no positional path is used |
 | `--select "path,estado,titulo"` | compact projection; include only named fields |
+| `--has-inbound "expr"` | keep records with an inbound link from a record matching expr (`""` = any) |
+| `--has-outbound "expr"` | keep records with an outbound link to a record matching expr (`""` = any) |
+| `--inbound-type <t>` / `--outbound-type <t>` | restrict traversal edges to one link type |
+| `--graph-root <path>` | edge-scan universe for traversal (default: the query path) |
 
 ### Output Formats
 
@@ -133,6 +137,32 @@ Fields available in projection:
 - Missing fields are omitted from the projected row
 
 Derived fields are populated via `.stem` `source:` rules. For example, `titulo: {source: body.h1}` extracts the first Markdown heading. If a source cannot be extracted, the field is omitted from the row.
+
+### Link-traversal predicates
+
+Use `--has-inbound` / `--has-outbound` to filter records by their RELATIONS: a record is kept when at least one linked record matches the sub-expression (same syntax as `--where`, evaluated against the linked record — the source for inbound, the target for outbound). An empty expression (`""`) means "any linked record" (existence check). Predicates AND-compose with `--where` and apply before `--sort`/`--limit`/`--count`.
+
+```bash
+# entities of kind tool with a corroborated witness linking to them via a `supports` edge
+rootline query wiki/entities \
+  --where "kind == 'tool'" \
+  --has-inbound "verification == 'corroborated'" \
+  --inbound-type supports \
+  --graph-root wiki -o json
+
+# sources that link to at least one tool
+rootline query wiki/sources --has-outbound "kind == 'tool'" --graph-root wiki -o json
+
+# records with any inbound link at all
+rootline query wiki/entities --has-inbound "" --graph-root wiki -o json
+```
+
+Rules:
+
+- `--graph-root` sets the universe for the edge scan (inbound links usually live OUTSIDE the queried directory). It defaults to the query path — never the repo root — and the query path must lie inside it. Choose it to exclude archived or raw trees.
+- With traversal active, record paths in output are relative to `--graph-root`, and links are prepared exactly like `graph` (styles filtering + markdown target resolution). Broken links never satisfy a predicate.
+- `--inbound-type`/`--outbound-type` require their `--has-*` flag; `--graph-root` requires at least one predicate.
+- Output keeps the standard `rootline/query` version 1 envelope and composes with `--select`, `--output`, `--sort`, `--limit`, `--count`.
 
 ## tree
 
