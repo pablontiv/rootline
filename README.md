@@ -1,30 +1,26 @@
 # Rootline
 
 [![CI](https://github.com/pablontiv/rootline/actions/workflows/ci.yml/badge.svg)](https://github.com/pablontiv/rootline/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue)](LICENSE)
 
-A **file-based database and constraint engine** for structured documentation. `.stem` files are the **DDL** — they define what valid documents look like, just as SQL defines what valid rows look like.
+## Rootline turns Markdown into a governed, queryable knowledge system.
 
-| Database concept | Rootline equivalent |
-|-----------------|---------------------|
-| Table | Directory |
-| Row / Record | Markdown file |
-| Columns | Frontmatter fields |
-| DDL Schema | `.stem` file |
-| Constraint | Validation rule (`required`, `enum`, `exists`) |
+Keep your Markdown consistent, connected, and queryable as it grows.
+
+Rootline treats your documentation as structured data. **`.stem` files define schemas** (what fields must exist, their types, allowed values). **Validation rules** enforce consistency. **Queries** retrieve relevant records without reading every file. **Field provenance** shows where every value came from and how it was computed. Humans, automation, and AI agents all consume the same governed outputs.
 
 ---
 
 ## Table of Contents
 
 - [Installation](#installation)
+- [Why It Matters](#why-it-matters)
 - [Quick Start](#quick-start)
-- [Core Idea](#core-idea)
-- [The `.stem` File](#the-stem-file)
-- [CLI](#cli)
-- [AI-Native](#ai-native)
-- [Documentation](#documentation)
+- [Core Concepts](#core-concepts)
+- [Command Capabilities](#command-capabilities)
+- [Optional Integrations](#optional-integrations)
+- [Documentation & References](#documentation--references)
 - [Development](#development)
 - [License](#license)
 
@@ -52,44 +48,95 @@ go install github.com/pablontiv/rootline/cmd/rootline@latest
 
 ---
 
-## Quick Start
+## Why It Matters
 
-```bash
-# 1. Initialize — infer .stem rules from existing documents
-rootline init docs/
+As Markdown documentation grows, two problems emerge: **structural drift** and **retrieval difficulty**. Rootline solves both.
 
-# 2. Validate — check all documents against their rules
-rootline validate --all
+- **Schema inheritance prevents drift**: Parent directories define rules that child documents inherit. Fields, types, and constraints flow top-down; mutations raise errors immediately.
+- **Validation rules catch inconsistencies early**: `required`, `enum`, and structural constraints enforce consistency without manual review.
+- **Queryable fields eliminate document reading**: Search by metadata (estado, tipo, tags) using declarative filters — no grep, no manual scanning.
+- **Link graphs show dependencies**: Discover which documents reference each other, block on external targets, or form cycles.
+- **Humans, agents, and automation consume the same governed outputs**: Stable JSON contracts mean your Markdown structure is machine-readable and auditable.
 
-# 3. Describe — see what a valid document looks like
-rootline describe docs/api/
-
-# 4. Query — find documents by metadata (expr-lang syntax)
-rootline query --where 'estado == "published"'
-
-# 5. Scaffold — create a new document from the schema
-rootline new docs/api/auth.md
-
-# 6. Explain — trace why a field has a given value
-rootline explain docs/api/auth.md
-
-# 7. Graph — visualize document dependencies
-rootline graph docs/ --check
-```
+Rootline does not render documentation. It **models** it — making your Markdown a queryable, governed knowledge system.
 
 ---
 
-## Core Idea
+## Quick Start
 
-Documentation already has structure. Rootline makes it **explicit**, **inherited**, and **queryable**.
+Initialize your documentation directory, validate its structure, and query its contents.
 
-- The directory tree defines hierarchy
-- Rules flow from parent to child via `.stem` files
-- Fields are derived via expressions; aggregates roll up from children to parents
-- Documents link to each other via `[[wiki-links]]`, forming a dependency graph
-- All output is stable JSON, suitable for CI, automation, and AI
+```bash
+# 1. Initialize — infer .stem schema from existing documents
+rootline init docs/
 
-Rootline does not render documentation. It **models** it.
+# 2. Query — find records by metadata
+rootline query docs/ --where 'estado == "published"'
+
+# 3. Validate — check documents against their schema rules (requires Git tree)
+# Note: Schema discovery walks up the directory tree until it finds .git
+git init docs/  # if not already a git repo
+rootline validate --all docs/
+
+# 4. Graph — visualize document dependencies
+rootline graph docs/
+
+# 5. New — scaffold a document from the effective schema
+rootline new docs/task-001.md
+
+# 6. Explain — trace where a field value came from
+rootline explain docs/task-001.md
+```
+
+All commands output JSON by default. Use `--output table` for human-readable tables.
+
+---
+
+## Core Concepts
+
+### What Rootline Models
+
+- **Directory hierarchy**: Directories are tables; files are records.
+- **Inherited rules**: `.stem` files define schemas; rules flow from parent to child via top-down merge.
+- **Derived fields**: Expressions compute fields (slugify, concatenate, filter); aggregates roll up from children to parents.
+- **Links**: Documents reference each other via `[[wiki-links]]` and `[markdown](links)`, forming a queryable dependency graph.
+- **Queryable outputs**: Every command returns stable JSON; records can be filtered, sorted, and projected.
+
+### How Schema Inheritance Works
+
+Rootline discovers schemas by **walking up** your directory tree:
+
+1. Start at the target path (file or directory)
+2. Collect `.stem` files at each level, moving up toward the filesystem root
+3. Stop at `.git` directory (repository boundary)
+4. Merge collected schemas from root to leaf (parent → child)
+
+Each level can add new fields, override parent definitions, or remove inherited rules (with `null`). Type-driven merge rules ensure predictable inheritance (maps merge key-level; arrays and scalars replace entirely).
+
+**Git is required for schema discovery** because the `.git` boundary marks repository scope. Outside a Git tree, schema resolution fails.
+
+### What Validation Means
+
+Validation enforces consistency using rules defined in `.stem`:
+
+- **required**: Field must be present and non-empty
+- **enum**: Field value must be one of allowed choices
+- **type**: Field must match declared type (string, number, section, array)
+- **exists**: Path (file or directory) must exist
+- **structural**: Directory naming, required children, index files
+
+Violations are reported as errors; the command exits with code 1. Use `--strict` to treat warnings as errors.
+
+### What Queryability Means
+
+Queries retrieve relevant records without scanning entire documents:
+
+- Declarative filtering: `--where 'estado == "published" && tipo == "epic"'`
+- Metadata projection: `--select path,estado,title` returns compact rows
+- Graph traversal: `--has-inbound` / `--has-outbound` with link predicates
+- Counted results: `--count` returns summary statistics
+
+All outputs are JSON, suitable for piping to automation and AI consumers.
 
 ---
 
