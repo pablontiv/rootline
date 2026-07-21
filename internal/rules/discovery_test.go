@@ -3,6 +3,7 @@ package rules
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -326,41 +327,310 @@ func TestParseStemFile_Success(t *testing.T) {
 }
 
 // Slice 2: Cross-repository warning test
-func TestWarnIfChainCrossesProjectBoundary_HomeDirectory(t *testing.T) {
-	// Mock a chain that includes a .stem from the home directory
-	homeDir := os.Getenv("HOME")
-	if homeDir == "" {
-		t.Skip("HOME environment variable not set")
-	}
-
-	// Create a temporary project directory
-	projDir := t.TempDir()
-
-	// Create entries: one from home dir, one from project
-	entries := []StemEntry{
-		{
-			Path: filepath.Join(homeDir, ".stem"),
-			Stem: &StemFile{Version: 2},
-		},
-		{
-			Path: filepath.Join(projDir, ".stem"),
-			Stem: &StemFile{Version: 2},
-		},
-	}
-
-	startPath := filepath.Join(projDir, "task.md")
-	warning := WarnIfChainCrossesProjectBoundary(entries, startPath)
-
-	// Should return a non-empty warning
-	if warning == "" {
-		t.Error("expected non-empty warning for chain crossing home boundary")
-	}
-
-	// Warning should mention the home directory stem
-	if !filepath.IsAbs(warning) { // Allow string or path reference
-		// Just check it mentions something about home or boundary
-		if warning == "" {
-			t.Error("warning should not be empty")
+// TestChainHasNoDeclaredBoundary verifies detection of chains that terminated
+// at the filesystem root without a root: true marker.
+func TestChainHasNoDeclaredBoundary(t *testing.T) {
+	t.Run("chain with marker has declared boundary", func(t *testing.T) {
+		root := t.TempDir()
+		stemPath := filepath.Join(root, ".stem")
+		if err := os.WriteFile(stemPath, []byte("version: 2\nroot: true\n"), 0o644); err != nil {
+			t.Fatal(err)
 		}
+
+		entries, err := WalkUp(root)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Should have one entry with root: true
+		if len(entries) != 1 {
+			t.Fatalf("got %d entries, want 1", len(entries))
+		}
+		if !entries[0].Stem.Root {
+			t.Error("expected Root to be true")
+		}
+
+		// Chain has declared boundary
+		if ChainHasNoDeclaredBoundary(entries) {
+			t.Error("chain with root: true should have declared boundary")
+		}
+	})
+
+	t.Run("chain without marker has no declared boundary", func(t *testing.T) {
+		tmpdir := t.TempDir()
+		// Create a .stem without root: true marker
+		stemPath := filepath.Join(tmpdir, ".stem")
+		if err := os.WriteFile(stemPath, []byte("version: 2\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		entries, err := WalkUp(tmpdir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Should have one entry without root: true (reached filesystem root)
+		if len(entries) != 1 {
+			t.Fatalf("got %d entries, want 1", len(entries))
+		}
+		if entries[0].Stem.Root {
+			t.Error("expected Root to be false")
+		}
+
+		// Chain does NOT have declared boundary
+		if !ChainHasNoDeclaredBoundary(entries) {
+			t.Error("chain without root: true should have no declared boundary")
+		}
+	})
+}
+
+// TestProposeRootDirectory verifies that ProposeRootDirectory returns the directory
+// that should be marked as root.
+func TestProposeRootDirectory(t *testing.T) {
+	t.Run("proposes the root of the chain", func(t *testing.T) {
+		tmpdir := t.TempDir()
+		// Create .stem in tmpdir
+		stemPath := filepath.Join(tmpdir, ".stem")
+		if err := os.WriteFile(stemPath, []byte("version: 2\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		entries, err := WalkUp(tmpdir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		proposed := ProposeRootDirectory(entries)
+		if proposed != tmpdir {
+			t.Errorf("expected %q, got %q", tmpdir, proposed)
+		}
+	})
+
+	t.Run("returns empty string for empty entries", func(t *testing.T) {
+		proposed := ProposeRootDirectory(nil)
+		if proposed != "" {
+			t.Errorf("expected empty string for nil entries, got %q", proposed)
+		}
+	})
+}
+
+// TestApplyRootMarker verifies that the root marker can be applied to a .stem file.
+func TestApplyRootMarker(t *testing.T) {
+	t.Run("adds root: true to .stem file", func(t *testing.T) {
+		tmpdir := t.TempDir()
+		stemPath := filepath.Join(tmpdir, ".stem")
+
+		// Create a .stem without root: true
+		content := []byte("version: 2\nscope:\n  match: \"*.md\"\n")
+		if err := os.WriteFile(stemPath, content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Apply root marker
+		err := ApplyRootMarker(stemPath)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Read back and verify
+		data, err := os.ReadFile(stemPath)
+		if err != nil {
+			t.Fatalf("failed to read file: %v", err)
+		}
+
+		if !strings.Contains(string(data), "root: true") {
+			t.Errorf("root: true not found in file content: %s", string(data))
+		}
+	})
+
+	t.Run("is idempotent", func(t *testing.T) {
+		tmpdir := t.TempDir()
+		stemPath := filepath.Join(tmpdir, ".stem")
+
+		// Create a .stem with root: true
+		content := []byte("version: 2\nroot: true\nscope:\n  match: \"*.md\"\n")
+		if err := os.WriteFile(stemPath, content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Apply root marker again
+		err := ApplyRootMarker(stemPath)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Read back and verify it's still valid
+		data, err := os.ReadFile(stemPath)
+		if err != nil {
+			t.Fatalf("failed to read file: %v", err)
+		}
+
+		// Should still contain root: true only once
+		count := strings.Count(string(data), "root: true")
+		if count != 1 {
+			t.Errorf("root: true appears %d times, expected 1", count)
+		}
+	})
+
+	t.Run("handles .stem with no version line", func(t *testing.T) {
+		tmpdir := t.TempDir()
+		stemPath := filepath.Join(tmpdir, ".stem")
+
+		// Create a minimal .stem without version
+		content := []byte("scope:\n  match: \"*.md\"\n")
+		if err := os.WriteFile(stemPath, content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Apply root marker
+		err := ApplyRootMarker(stemPath)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Read back and verify
+		data, err := os.ReadFile(stemPath)
+		if err != nil {
+			t.Fatalf("failed to read file: %v", err)
+		}
+
+		if !strings.Contains(string(data), "root: true") {
+			t.Errorf("root: true not found in file")
+		}
+	})
+
+	t.Run("preserves file content when adding root marker", func(t *testing.T) {
+		tmpdir := t.TempDir()
+		stemPath := filepath.Join(tmpdir, ".stem")
+
+		originalContent := []byte("version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: string\n")
+		if err := os.WriteFile(stemPath, originalContent, 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Apply root marker
+		err := ApplyRootMarker(stemPath)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Read back and verify all original content is still there
+		data, err := os.ReadFile(stemPath)
+		if err != nil {
+			t.Fatalf("failed to read file: %v", err)
+		}
+
+		content := string(data)
+		if !strings.Contains(content, "version: 2") {
+			t.Error("version line lost")
+		}
+		if !strings.Contains(content, "scope:") {
+			t.Error("scope section lost")
+		}
+		if !strings.Contains(content, "schema:") {
+			t.Error("schema section lost")
+		}
+		if !strings.Contains(content, "root: true") {
+			t.Error("root: true not added")
+		}
+	})
+}
+
+// TestComposeNoDeclaredBoundaryError verifies the error message for non-interactive mode.
+func TestComposeNoDeclaredBoundaryError(t *testing.T) {
+	tmpdir := t.TempDir()
+	stemPath := filepath.Join(tmpdir, ".stem")
+
+	// Create a .stem without root: true
+	if err := os.WriteFile(stemPath, []byte("version: 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	proposed := tmpdir
+
+	msg := ComposeNoDeclaredBoundaryError(stemPath, proposed)
+
+	// Error message must contain:
+	// 1. What happened (no boundary)
+	// 2. Which stray .stem was picked up
+	// 3. Which directory should own the marker
+	// 4. The exact line to add
+	if msg == "" {
+		t.Error("error message must not be empty")
+	}
+	if !strings.Contains(msg, stemPath) {
+		t.Errorf("error message must mention stray .stem: %s", msg)
+	}
+	if !strings.Contains(msg, "root: true") {
+		t.Errorf("error message must include the exact line to add: %s", msg)
+	}
+}
+
+// TestAttemptRootMarkerMigration_NoTTY verifies that migration fails with a clear
+// error when no TTY is available (non-interactive environment like CI).
+func TestAttemptRootMarkerMigration_NoTTY(t *testing.T) {
+	tmpdir := t.TempDir()
+	stemPath := filepath.Join(tmpdir, ".stem")
+
+	// Create a .stem without root: true
+	if err := os.WriteFile(stemPath, []byte("version: 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Build entries as if from WalkUp
+	entries, err := WalkUp(tmpdir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// No TTY: hasStdin = false
+	result := AttemptRootMarkerMigration(entries, false)
+
+	// Should not apply
+	if result.Applied {
+		t.Error("migration should not apply without TTY")
+	}
+
+	// Should have error message
+	if result.Error == "" {
+		t.Error("migration should return error message without TTY")
+	}
+
+	// Error should be actionable
+	if !strings.Contains(result.Error, "root: true") {
+		t.Errorf("error should include remediation: %s", result.Error)
+	}
+
+	// File should not be modified
+	data, _ := os.ReadFile(stemPath)
+	if strings.Contains(string(data), "root: true") {
+		t.Error("file should not have been modified")
+	}
+}
+
+// TestAttemptRootMarkerMigration_WithMarker verifies that migration skips
+// when a marker already exists.
+func TestAttemptRootMarkerMigration_WithMarker(t *testing.T) {
+	tmpdir := t.TempDir()
+	stemPath := filepath.Join(tmpdir, ".stem")
+
+	// Create a .stem WITH root: true
+	if err := os.WriteFile(stemPath, []byte("version: 2\nroot: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := WalkUp(tmpdir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should not attempt migration when marker exists
+	result := AttemptRootMarkerMigration(entries, true)
+
+	if result.Applied {
+		t.Error("migration should not apply when marker already exists")
+	}
+	if result.Error != "" {
+		t.Errorf("migration should not error when marker exists: %s", result.Error)
 	}
 }

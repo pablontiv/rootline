@@ -48,11 +48,6 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("resolving .stem for record: %w", err)
 		}
-
-		// Emit cross-repository boundary warning if applicable
-		if warning := rules.WarnIfChainCrossesProjectBoundary(entries, targetPath); warning != "" {
-			_, _ = fmt.Fprintln(os.Stderr, warning)
-		}
 	} else {
 		// Directory (or non-existent path): use existing merge without levels.
 		entries, err = rules.WalkUp(targetPath)
@@ -60,11 +55,6 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("discovering .stem files: %w", err)
 		}
 		effective = rules.MergeStemFiles(entries)
-
-		// Emit cross-repository boundary warning if applicable
-		if warning := rules.WarnIfChainCrossesProjectBoundary(entries, targetPath); warning != "" {
-			_, _ = fmt.Fprintln(os.Stderr, warning)
-		}
 	}
 
 	// Use relative path for display

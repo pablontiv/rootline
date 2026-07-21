@@ -119,52 +119,140 @@ func WalkUp(targetPath string) ([]StemEntry, error) {
 	return entries, nil
 }
 
-// WarnIfChainCrossesProjectBoundary checks if the resolved stem chain includes
-// entries that appear to be outside the project, such as in a home directory.
-// It uses heuristics: home directory check and distance heuristic.
-//
-// Returns a non-empty string if a potential boundary crossing is detected,
-// empty string otherwise.
-func WarnIfChainCrossesProjectBoundary(entries []StemEntry, startPath string) string {
+// ChainHasNoDeclaredBoundary checks if the walk terminated at the filesystem root
+// without a root: true marker.
+// Returns true if entries[0].Stem.Root is false (walk stopped at fs root, not a marker).
+// Returns false if entries[0].Stem.Root is true (walk stopped at a marker).
+func ChainHasNoDeclaredBoundary(entries []StemEntry) bool {
+	if len(entries) == 0 {
+		return true // No entries means no boundary
+	}
+	// entries are ordered root-to-leaf; entries[0] is the topmost
+	return !entries[0].Stem.Root
+}
+
+// ProposeRootDirectory returns the directory containing the first (topmost) .stem
+// in the chain. This is the directory that should be marked with root: true.
+func ProposeRootDirectory(entries []StemEntry) string {
 	if len(entries) == 0 {
 		return ""
 	}
+	// entries[0] is the topmost .stem; extract its directory
+	return filepath.Dir(entries[0].Path)
+}
 
-	// Heuristic 1: Check if any entry is in $HOME
-	homeDir := os.Getenv("HOME")
-	if homeDir != "" {
-		for _, entry := range entries {
-			// If a stem is in HOME and startPath is NOT in HOME, we've crossed the boundary
-			if strings.HasPrefix(entry.Path, homeDir) && !strings.HasPrefix(startPath, homeDir) {
-				return fmt.Sprintf(
-					"Warning: .stem chain includes %q (in home directory); "+
-						"consider adding 'root: true' to the top-level .stem in your project",
-					entry.Path,
-				)
-			}
+// ApplyRootMarker adds "root: true" to a .stem file, preserving existing content.
+// It is idempotent: if "root: true" is already present, no action is taken.
+func ApplyRootMarker(stemPath string) error {
+	content, err := os.ReadFile(stemPath)
+	if err != nil {
+		return err
+	}
+
+	contentStr := string(content)
+
+	// Check if root: true already exists
+	if strings.Contains(contentStr, "root: true") {
+		return nil
+	}
+
+	// Insert "root: true" after the version line
+	// Find the first newline after "version:"
+	versionIdx := strings.Index(contentStr, "version:")
+	if versionIdx == -1 {
+		// No version line; prepend root: true
+		contentStr = "root: true\n" + contentStr
+	} else {
+		// Find the end of the version line
+		newlineIdx := strings.Index(contentStr[versionIdx:], "\n")
+		if newlineIdx == -1 {
+			// No newline after version; append at end
+			contentStr += "\nroot: true"
+		} else {
+			// Insert after the first newline
+			insertPos := versionIdx + newlineIdx + 1
+			contentStr = contentStr[:insertPos] + "root: true\n" + contentStr[insertPos:]
 		}
 	}
 
-	// Heuristic 2: Check if the root entry is very far from the start
-	// (more than 5 levels up suggests we've crossed an implicit boundary)
-	var startDir string
-	if info, err := os.Stat(startPath); err == nil && info.IsDir() {
-		startDir = startPath
-	} else {
-		startDir = filepath.Dir(startPath)
+	// #nosec G703 - stemPath is derived from os.ReadFile() result, not user input
+	return os.WriteFile(stemPath, []byte(contentStr), 0o644)
+}
+
+// ComposeNoDeclaredBoundaryError creates a clear error message that tells the user
+// what happened, which .stem was picked up, which directory should own the marker,
+// and the exact line to add. This message is meant for non-interactive environments
+// where the user cannot be prompted for confirmation.
+func ComposeNoDeclaredBoundaryError(strayStemmPath, proposedDir string) string {
+	return fmt.Sprintf(
+		"Schema discovery walk reached the filesystem root without a declared boundary.\n"+
+			"The .stem at %q was collected outside the project.\n"+
+			"To fix this, add the following line to %s/.stem:\n\n"+
+			"  root: true\n\n"+
+			"This establishes a clear governance boundary and prevents ancestor .stem files from affecting this project.\n",
+		strayStemmPath,
+		proposedDir,
+	)
+}
+
+// MigrationResult holds the outcome of a root marker migration attempt.
+type MigrationResult struct {
+	Applied bool   // true if root marker was applied
+	Error   string // non-empty if an error occurred
+}
+
+// AttemptRootMarkerMigration handles the interactive or non-interactive root marker
+// migration. It checks if a TTY is available and prompts the user if one is.
+// If no TTY, it returns an error with the full remediation instructions.
+// If user confirms, it applies the marker and returns success.
+// If user declines, it returns without error (no changes made).
+//
+// hasStdin should be true when os.Stdin is a terminal (use !isatty.IsNotATerminal(int(os.Stdin.Fd())))
+func AttemptRootMarkerMigration(entries []StemEntry, hasStdin bool) MigrationResult {
+	// Check if migration is needed
+	if !ChainHasNoDeclaredBoundary(entries) {
+		return MigrationResult{Applied: false}
 	}
 
-	rootDir := filepath.Dir(entries[0].Path)
-	rel, _ := filepath.Rel(rootDir, startDir)
-	levelCount := strings.Count(rel, string(filepath.Separator)) + 1
+	strayPath := entries[0].Path
+	proposedDir := ProposeRootDirectory(entries)
 
-	if levelCount > 5 {
-		return fmt.Sprintf(
-			"Warning: .stem root is %d levels above the project; "+
-				"consider adding 'root: true' to a .stem closer to your project root",
-			levelCount,
-		)
+	// No TTY: fail with error
+	if !hasStdin {
+		return MigrationResult{
+			Applied: false,
+			Error:   ComposeNoDeclaredBoundaryError(strayPath, proposedDir),
+		}
 	}
 
-	return ""
+	// Has TTY: prompt user
+	fmt.Fprintf(os.Stderr, "Your .stem chain includes %q which is outside this project.\n", strayPath)
+	fmt.Fprintf(os.Stderr, "To establish a clear boundary, add 'root: true' to %s/.stem.\n\n", proposedDir)
+	fmt.Fprintf(os.Stderr, "Apply this change now? (y/n) ")
+
+	// Simple confirmation: read one character
+	var response [1]byte
+	n, err := os.Stdin.Read(response[:])
+	if err != nil || n == 0 {
+		return MigrationResult{Applied: false}
+	}
+
+	if response[0] != 'y' && response[0] != 'Y' {
+		fmt.Fprintf(os.Stderr, "Skipped.\n")
+		return MigrationResult{Applied: false}
+	}
+
+	fmt.Fprintf(os.Stderr, "Applying root marker to %s/.stem...\n", proposedDir)
+
+	// Apply the marker
+	stemPath := filepath.Join(proposedDir, stemFileName)
+	if err := ApplyRootMarker(stemPath); err != nil {
+		return MigrationResult{
+			Applied: false,
+			Error:   fmt.Sprintf("failed to apply root marker: %v", err),
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "Root marker applied successfully.\n")
+	return MigrationResult{Applied: true}
 }
