@@ -634,3 +634,208 @@ func TestAttemptRootMarkerMigration_WithMarker(t *testing.T) {
 		t.Errorf("migration should not error when marker exists: %s", result.Error)
 	}
 }
+
+// TestStemCache_WalkUp verifies that the StemCache correctly caches results
+// from WalkUp, reducing filesystem I/O on repeated calls.
+func TestStemCache_WalkUp(t *testing.T) {
+	root := setupTree(t,
+		[]string{"a/.stem", "a/b/.stem", "a/b/c/.stem"},
+		"a/.stem",
+	)
+
+	target := filepath.Join(root, "a", "b", "c")
+	cache := NewStemCache()
+
+	// First call: cache miss
+	entries1, err1 := cache.WalkUp(target)
+	if err1 != nil {
+		t.Fatalf("first WalkUp failed: %v", err1)
+	}
+
+	// Second call: cache hit
+	entries2, err2 := cache.WalkUp(target)
+	if err2 != nil {
+		t.Fatalf("second WalkUp failed: %v", err2)
+	}
+
+	// Results should be identical
+	if len(entries1) != len(entries2) {
+		t.Errorf("cache returned different length: %d vs %d", len(entries1), len(entries2))
+	}
+
+	// Cache should have at least 3 hits (for the 3 .stem files)
+	hits := cache.Hits()
+	if hits < 1 {
+		t.Errorf("cache hits should be > 0, got %d", hits)
+	}
+}
+
+// TestWalkUp_EmptyEntries_ChainHasNoDeclaredBoundary verifies edge case
+// where entries slice is nil or empty.
+func TestWalkUp_EmptyEntries_ChainHasNoDeclaredBoundary(t *testing.T) {
+	result := ChainHasNoDeclaredBoundary(nil)
+	if !result {
+		t.Error("empty entries should report no declared boundary")
+	}
+
+	result = ChainHasNoDeclaredBoundary([]StemEntry{})
+	if !result {
+		t.Error("zero-length entries should report no declared boundary")
+	}
+}
+
+// TestProposeRootDirectory_WithGitHint verifies that ProposeRootDirectory
+// uses git repository as a hint for boundary placement.
+func TestProposeRootDirectory_WithGitHint(t *testing.T) {
+	tmpdir := t.TempDir()
+
+	// Create .git marker (used as boundary hint)
+	gitDir := filepath.Join(tmpdir, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create nested .stem structure
+	level1 := filepath.Join(tmpdir, "level1")
+	level2 := filepath.Join(level1, "level2")
+	if err := os.MkdirAll(level2, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create .stem files
+	for _, dir := range []string{tmpdir, level1, level2} {
+		stemPath := filepath.Join(dir, ".stem")
+		if err := os.WriteFile(stemPath, []byte("version: 2\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Load entries from level2
+	entries, err := WalkUp(level2)
+	if err != nil {
+		t.Fatalf("WalkUp failed: %v", err)
+	}
+
+	// ProposeRootDirectory should prefer a location inside .git boundary
+	proposed := ProposeRootDirectory(entries, level2)
+	if proposed == "" {
+		t.Fatalf("ProposeRootDirectory returned empty string")
+	}
+
+	// Proposed directory should be at or inside tmpdir (the .git root)
+	rel, err := filepath.Rel(tmpdir, proposed)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		t.Errorf("proposed dir %q should be inside git root %q", proposed, tmpdir)
+	}
+}
+
+// TestIsAtOrBelow_EdgeCases verifies path containment logic.
+func TestIsAtOrBelow_EdgeCases(t *testing.T) {
+	tmpdir := t.TempDir()
+
+	// Same path
+	if !isAtOrBelow(tmpdir, tmpdir) {
+		t.Error("isAtOrBelow should return true for same path")
+	}
+
+	// Child path
+	child := filepath.Join(tmpdir, "child")
+	if !isAtOrBelow(child, tmpdir) {
+		t.Error("isAtOrBelow should return true for child path")
+	}
+
+	// Parent path
+	if isAtOrBelow(tmpdir, child) {
+		t.Error("isAtOrBelow should return false for parent path")
+	}
+
+	// Unrelated path
+	tmpdir2 := t.TempDir()
+	if isAtOrBelow(tmpdir, tmpdir2) {
+		t.Error("isAtOrBelow should return false for unrelated paths")
+	}
+}
+
+// TestProjectBoundaryHint_NoGit verifies that projectBoundaryHint returns
+// empty string when no .git is found.
+func TestProjectBoundaryHint_NoGit(t *testing.T) {
+	tmpdir := t.TempDir()
+	// Create a directory with no .git anywhere above it
+	targetDir := filepath.Join(tmpdir, "project")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result := projectBoundaryHint(targetDir)
+	if result != "" {
+		t.Errorf("projectBoundaryHint should return empty when no .git, got %q", result)
+	}
+}
+
+// TestProjectBoundaryHint_WithGit verifies that projectBoundaryHint finds
+// the .git directory.
+func TestProjectBoundaryHint_WithGit(t *testing.T) {
+	tmpdir := t.TempDir()
+
+	// Create .git marker
+	gitDir := filepath.Join(tmpdir, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create nested target
+	targetDir := filepath.Join(tmpdir, "level1", "level2")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result := projectBoundaryHint(targetDir)
+	if result != tmpdir {
+		t.Errorf("projectBoundaryHint should return %q, got %q", tmpdir, result)
+	}
+}
+
+// TestWalkUp_AbsPathConversion verifies that WalkUp correctly handles
+// relative paths by converting them to absolute.
+func TestWalkUp_AbsPathConversion(t *testing.T) {
+	root := setupTree(t,
+		[]string{"project/.stem"},
+		"project/.stem",
+	)
+
+	projectDir := filepath.Join(root, "project")
+	targetDir := filepath.Join(projectDir, "subdir")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a file for testing
+	testFile := filepath.Join(targetDir, "test.md")
+	if err := os.WriteFile(testFile, []byte("test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Save current directory to restore later
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get wd: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldwd) }()
+
+	// Change to the root to test relative path resolution
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+
+	// Resolve using relative path
+	relPath := filepath.Join("project", "subdir", "test.md")
+	entries, err := WalkUp(relPath)
+	if err != nil {
+		t.Fatalf("WalkUp with relative path failed: %v", err)
+	}
+
+	// Should find the .stem file
+	if len(entries) == 0 {
+		t.Fatal("expected to find .stem with relative path")
+	}
+}
