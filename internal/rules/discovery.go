@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 )
 
 const stemFileName = ".stem"
@@ -116,4 +117,54 @@ func WalkUp(targetPath string) ([]StemEntry, error) {
 	}
 
 	return entries, nil
+}
+
+// WarnIfChainCrossesProjectBoundary checks if the resolved stem chain includes
+// entries that appear to be outside the project, such as in a home directory.
+// It uses heuristics: home directory check and distance heuristic.
+//
+// Returns a non-empty string if a potential boundary crossing is detected,
+// empty string otherwise.
+func WarnIfChainCrossesProjectBoundary(entries []StemEntry, startPath string) string {
+	if len(entries) == 0 {
+		return ""
+	}
+
+	// Heuristic 1: Check if any entry is in $HOME
+	homeDir := os.Getenv("HOME")
+	if homeDir != "" {
+		for _, entry := range entries {
+			// If a stem is in HOME and startPath is NOT in HOME, we've crossed the boundary
+			if strings.HasPrefix(entry.Path, homeDir) && !strings.HasPrefix(startPath, homeDir) {
+				return fmt.Sprintf(
+					"Warning: .stem chain includes %q (in home directory); "+
+						"consider adding 'root: true' to the top-level .stem in your project",
+					entry.Path,
+				)
+			}
+		}
+	}
+
+	// Heuristic 2: Check if the root entry is very far from the start
+	// (more than 5 levels up suggests we've crossed an implicit boundary)
+	var startDir string
+	if info, err := os.Stat(startPath); err == nil && info.IsDir() {
+		startDir = startPath
+	} else {
+		startDir = filepath.Dir(startPath)
+	}
+
+	rootDir := filepath.Dir(entries[0].Path)
+	rel, _ := filepath.Rel(rootDir, startDir)
+	levelCount := strings.Count(rel, string(filepath.Separator)) + 1
+
+	if levelCount > 5 {
+		return fmt.Sprintf(
+			"Warning: .stem root is %d levels above the project; "+
+				"consider adding 'root: true' to a .stem closer to your project root",
+			levelCount,
+		)
+	}
+
+	return ""
 }

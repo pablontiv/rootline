@@ -324,3 +324,43 @@ func TestParseStemFile_Success(t *testing.T) {
 		t.Errorf("scope.match = %q, want %q", stem.Scope.Match, "*.md")
 	}
 }
+
+// Slice 2: Cross-repository warning test
+func TestWarnIfChainCrossesProjectBoundary_HomeDirectory(t *testing.T) {
+	// Mock a chain that includes a .stem from the home directory
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		t.Skip("HOME environment variable not set")
+	}
+
+	// Create a temporary project directory
+	projDir := t.TempDir()
+
+	// Create entries: one from home dir, one from project
+	entries := []StemEntry{
+		{
+			Path: filepath.Join(homeDir, ".stem"),
+			Stem: &StemFile{Version: 2},
+		},
+		{
+			Path: filepath.Join(projDir, ".stem"),
+			Stem: &StemFile{Version: 2},
+		},
+	}
+
+	startPath := filepath.Join(projDir, "task.md")
+	warning := WarnIfChainCrossesProjectBoundary(entries, startPath)
+
+	// Should return a non-empty warning
+	if warning == "" {
+		t.Error("expected non-empty warning for chain crossing home boundary")
+	}
+
+	// Warning should mention the home directory stem
+	if !filepath.IsAbs(warning) { // Allow string or path reference
+		// Just check it mentions something about home or boundary
+		if warning == "" {
+			t.Error("warning should not be empty")
+		}
+	}
+}

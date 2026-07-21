@@ -383,5 +383,50 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		}
 	}
 
+	// Check 12: nested-root-marker (INFO level)
+	// Detect when a directory declares root: true and has an ancestor also with root: true
+	for sf, stem := range parsedStems {
+		if !stem.Root {
+			continue // Only check stems with root: true
+		}
+
+		relPath, _ := filepath.Rel(absRoot, sf)
+		dir := filepath.Dir(sf)
+
+		// Manually walk up the directory tree (without stopping at markers) to find
+		// ancestor directories that contain .stem files with root: true
+		current := dir
+		foundAncestorRoot := false
+		var ancestorRootPath string
+
+		for {
+			parent := filepath.Dir(current)
+			if parent == current {
+				// Reached filesystem root
+				break
+			}
+
+			// Check if parent contains a .stem with root: true
+			parentStemPath := filepath.Join(parent, stemFileName)
+			if parentStem, exists := parsedStems[parentStemPath]; exists && parentStem.Root {
+				foundAncestorRoot = true
+				ancestorRootPath = parentStemPath
+				break
+			}
+
+			current = parent
+		}
+
+		if foundAncestorRoot {
+			ancestorRelPath, _ := filepath.Rel(absRoot, ancestorRootPath)
+			checks = append(checks, StemHealthCheck{
+				Name:    "nested-root-marker",
+				Status:  "info",
+				Message: fmt.Sprintf("%s declares root: true, so records below it do not inherit %s", relPath, ancestorRelPath),
+				Path:    relPath,
+			})
+		}
+	}
+
 	return &StemHealthResult{Checks: checks}, nil
 }

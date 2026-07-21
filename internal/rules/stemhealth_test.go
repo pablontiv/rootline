@@ -722,3 +722,55 @@ links:
 		}
 	}
 }
+
+// Slice 2: Nested-root-marker health check
+func TestValidateStemHealth_NestedRootMarker(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create /repo/.stem with root: true
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+root: true
+scope:
+  match: "*.md"
+`))
+
+	// Create /repo/docs/.stem also with root: true
+	docsDir := filepath.Join(dir, "docs")
+	mustWriteStemTestFile(t, filepath.Join(docsDir, ".stem"), []byte(`version: 2
+root: true
+scope:
+  match: "*.md"
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Find the nested-root-marker check
+	var found *StemHealthCheck
+	for i, c := range result.Checks {
+		if c.Name == "nested-root-marker" {
+			found = &result.Checks[i]
+			break
+		}
+	}
+
+	if found == nil {
+		t.Fatal("expected nested-root-marker check")
+	}
+
+	if found.Status != "info" {
+		t.Errorf("status = %q, want info", found.Status)
+	}
+
+	// Should report the nested marker directory
+	if !strings.Contains(found.Path, "docs") {
+		t.Errorf("path = %q, expected to contain 'docs'", found.Path)
+	}
+
+	// Message should mention root marker and inheritance narrowing
+	if !strings.Contains(found.Message, "root: true") || !strings.Contains(found.Message, "do not inherit") {
+		t.Errorf("message = %q, want to contain 'root: true' and 'do not inherit'", found.Message)
+	}
+}
