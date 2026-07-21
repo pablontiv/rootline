@@ -617,3 +617,27 @@ func TestTreeCmd_WhereMultiple(t *testing.T) {
 		t.Errorf("total = %d, want 1 (Pending + test)", result.Root.Total)
 	}
 }
+
+// TEST-FIRST: Tree command should fail (non-zero exit) when schema resolution fails
+// This test will FAIL under current behavior if tree's resolver doesn't properly
+// propagate WalkUp errors to index.Scan
+func TestTreeErrorPropagation_NoSchema(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a markdown file WITHOUT a .stem anywhere in the tree
+	// This will cause WalkUp to return ErrNoSchemaFound
+	if err := os.WriteFile(filepath.Join(dir, "doc1.md"), []byte("---\nstatus: Pending\n---\n# Doc1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "doc2.md"), []byte("---\nstatus: Completed\n---\n# Doc2\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run tree on a directory with no schema
+	_, err := runCmd(t, "tree", dir)
+
+	// EXPECTATION: tree should fail when no schema is found, not silently build a tree
+	if err == nil {
+		t.Fatalf("tree should fail when no schema is found, but got nil error (silent degradation)")
+	}
+}

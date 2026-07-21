@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/rules"
@@ -72,5 +74,26 @@ func TestSortedMapKeys(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TEST-FIRST: Explain command should fail (non-zero exit) when schema resolution fails
+// This test will check if explain propagates WalkUp errors properly
+func TestExplainErrorPropagation_NoSchema(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a markdown file WITHOUT a .stem anywhere in the tree
+	// This will cause WalkUp to return ErrNoSchemaFound
+	filePath := filepath.Join(dir, "doc.md")
+	if err := os.WriteFile(filePath, []byte("---\nfoo: bar\n---\n# Doc\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run explain on a file with no schema in the tree
+	_, err := runCmd(t, "explain", filePath)
+
+	// EXPECTATION: explain should fail when no schema is found
+	if err == nil {
+		t.Fatalf("explain should fail when no schema is found, but got nil error (silent degradation)")
 	}
 }

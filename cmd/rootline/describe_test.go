@@ -291,3 +291,19 @@ func TestDescribeCmd_WithStemNoHints(t *testing.T) {
 		}
 	}
 }
+
+// TEST-FIRST: Describe command should fail (non-zero exit) when schema resolution fails
+// This test will FAIL under current behavior if describe doesn't propagate
+// WalkUp errors properly
+func TestDescribeErrorPropagation_NoSchema(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a directory WITHOUT a .stem anywhere in the tree
+	// This will cause WalkUp to return ErrNoSchemaFound
+	_, err := executeDescribe(t, dir)
+
+	// EXPECTATION: describe should fail when no schema is found, not silently succeed
+	if err == nil {
+		t.Fatalf("describe should fail when no schema is found, but got nil error (silent degradation)")
+	}
+}

@@ -661,3 +661,27 @@ func TestGraphJSON_QuietCycles_CyclesPopulated(t *testing.T) {
 		t.Errorf("cycles = %d, want 1 (JSON unaffected by --quiet-cycles)", len(cycles))
 	}
 }
+
+// TEST-FIRST: Graph command should fail (non-zero exit) when schema resolution fails
+// This test will FAIL under current behavior because graph silently degrades
+// when WalkUp returns an error (line 83-89 in graph.go checks err == nil).
+func TestGraphErrorPropagation_NoSchema(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a markdown file with links WITHOUT a .stem anywhere in the tree
+	// This will cause WalkUp to return ErrNoSchemaFound
+	if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run graph on a directory with no schema
+	_, err := runCmd(t, "graph", dir)
+
+	// EXPECTATION: graph should exit with an error, not silently produce a graph without link schema
+	if err == nil {
+		t.Fatalf("graph should fail when no schema is found, but got nil error (silent degradation)")
+	}
+}

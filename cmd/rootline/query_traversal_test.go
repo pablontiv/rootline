@@ -38,6 +38,53 @@ func setupTraversalDir(t *testing.T) string {
 	return dir
 }
 
+// TEST-FIRST: Query command with --sort should fail when schema resolution fails
+// This test verifies that query doesn't silently degrade when WalkUp returns an error
+// (line 161-163 in query.go checks err == nil).
+func TestQueryErrorPropagation_NoSchema(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create markdown files WITHOUT a .stem anywhere in the tree
+	// This will cause WalkUp to return ErrNoSchemaFound
+	if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte("---\nstatus: Pending\n---\n# A\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.md"), []byte("---\nstatus: Done\n---\n# B\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run query with --sort on a directory with no schema
+	// The sort operation needs the schema, so it should fail
+	_, err := runCmd(t, "query", dir, "--sort", "status:asc")
+
+	// EXPECTATION: query should exit with an error, not silently succeed
+	if err == nil {
+		t.Fatalf("query with --sort should fail when no schema is found, but got nil error (silent degradation)")
+	}
+}
+
+// TEST-FIRST: Query with --sort should fail when schema resolution fails
+// The sort operation needs the schema to determine sort order
+func TestQueryErrorPropagation_NoSchemaWithSort(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a markdown file without a .stem
+	if err := os.WriteFile(filepath.Join(dir, "doc1.md"), []byte("---\nstatus: A\n---\n# Doc1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "doc2.md"), []byte("---\nstatus: B\n---\n# Doc2\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run query with --sort on a directory with no schema
+	_, err := runCmd(t, "query", dir, "--sort", "status:asc")
+
+	// EXPECTATION: query should fail when trying to sort without a schema
+	if err == nil {
+		t.Fatalf("query with --sort should fail when no schema is found, but got nil error")
+	}
+}
+
 func TestQueryHasInbound(t *testing.T) {
 	dir := setupTraversalDir(t)
 	out, err := runCmd(t, "query", filepath.Join(dir, "wiki/entities"),

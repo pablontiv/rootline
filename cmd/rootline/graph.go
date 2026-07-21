@@ -81,12 +81,13 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	// Load .stem schema: filter links and read the cycle-failure opt-in.
 	failCycles := false
 	entries, err := rules.WalkUp(absRoot)
-	if err == nil {
-		stem := rules.MergeStemFiles(entries)
-		if stem != nil {
-			filterLinksBySchema(records, stem.Links)
-			failCycles = stem.Links.Checks != nil && stem.Links.Checks.Cycles
-		}
+	if err != nil {
+		return fmt.Errorf("discovering schema for link filtering: %w", err)
+	}
+	stem := rules.MergeStemFiles(entries)
+	if stem != nil {
+		filterLinksBySchema(records, stem.Links)
+		failCycles = stem.Links.Checks != nil && stem.Links.Checks.Cycles
 	}
 	if cmd.Flags().Changed("fail-cycles") {
 		failCycles = graphFailCycles

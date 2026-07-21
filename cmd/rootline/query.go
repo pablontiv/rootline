@@ -159,7 +159,10 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	if len(sortKeys) > 0 {
 		var schema map[string]rules.SchemaField
 		entries, walkErr := rules.WalkUp(absRoot)
-		if walkErr == nil && len(entries) > 0 {
+		if walkErr != nil {
+			return fmt.Errorf("discovering schema for sort: %w", walkErr)
+		}
+		if len(entries) > 0 {
 			merged := rules.MergeStemFiles(entries)
 			schema = merged.Schema
 		}
