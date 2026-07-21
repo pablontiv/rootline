@@ -28,6 +28,8 @@ func TestValidate_MalformedYAML_SingleFile(t *testing.T) {
 	writeYAMLFixture(t, dir, ".stem", "version: 2\nschema:\n  title:\n    type: string\n    required: true\n")
 	f := writeYAMLFixture(t, dir, "broken.md", malformedDoc)
 
+	declareTestBoundary(t, dir)
+
 	out, err := runCmd(t, "validate", f)
 	if err == nil {
 		t.Fatalf("expected validate to fail (exit error) on malformed YAML, got nil; out=%s", out)
@@ -44,6 +46,8 @@ func TestValidate_MalformedYAML_All(t *testing.T) {
 	}
 	writeYAMLFixture(t, dir, ".stem", "version: 2\nschema:\n  title:\n    type: string\n    required: true\n")
 	writeYAMLFixture(t, dir, "broken.md", malformedDoc)
+
+	declareTestBoundary(t, dir)
 
 	out, err := runCmd(t, "validate", "--all", dir)
 	if err == nil {
@@ -62,6 +66,8 @@ func TestValidate_MalformedYAML_ReportsEverything(t *testing.T) {
 	// estado is required; the malformed doc omits it entirely.
 	writeYAMLFixture(t, dir, ".stem", "version: 2\nschema:\n  title:\n    type: string\n    required: true\n  estado:\n    type: string\n    required: true\n")
 	f := writeYAMLFixture(t, dir, "broken.md", malformedDoc)
+
+	declareTestBoundary(t, dir)
 
 	out, err := runCmd(t, "validate", f)
 	if err == nil {
@@ -83,6 +89,8 @@ func TestValidate_ValidYAML_NoMalformedError(t *testing.T) {
 	}
 	writeYAMLFixture(t, dir, ".stem", "version: 2\nschema:\n  title:\n    type: string\n    required: true\n")
 	f := writeYAMLFixture(t, dir, "ok.md", "---\ntitle: \"Foo: Bar\"\n---\n# Body\n")
+
+	declareTestBoundary(t, dir)
 
 	out, err := runCmd(t, "validate", f)
 	if err != nil {

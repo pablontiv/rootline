@@ -24,6 +24,7 @@ schema:
     values: [Pending, Blocked, Completed]
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	// File with a parenthesized value that triggers migrate_value.
 	mustWriteFile(t, filepath.Join(dir, "task.md"), []byte("---\nestado: \"Pending (blocked by T001)\"\n---\n# Task\n\n## Context\n\nSome text\n"), 0644)
@@ -82,6 +83,7 @@ schema:
     values: [Pending, Completed]
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	// Value with mixed targets and notes.
 	mustWriteFile(t, filepath.Join(dir, "blocked.md"), []byte("---\nestado: \"Pending (blocked by E04 + human)\"\n---\n# Blocked\n\n## Details\n\nText here\n"), 0644)

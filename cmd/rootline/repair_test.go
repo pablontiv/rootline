@@ -33,6 +33,7 @@ schema:
     required: false
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	// Setup document with missing titulo
 	mustWriteFile(t, filepath.Join(dir, "task.md"),
@@ -92,6 +93,7 @@ schema:
     values: [Pending, Completed]
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "task.md"),
 		[]byte("---\nestado: InvalidValue\n---\n# Task\n"), 0644)
 
@@ -178,6 +180,7 @@ schema:
     values: [Pending, Completed]
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "task.md"),
 		[]byte("---\nestado: Pending\n---\n# Task\n"), 0644)
 
@@ -242,6 +245,7 @@ schema:
     values: [Pending, Completed]
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "task.md"),
 		[]byte("---\nestado: Pending\n---\n# Task\n"), 0644)
 

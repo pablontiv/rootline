@@ -400,14 +400,14 @@ func TestProposeRootDirectory(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		proposed := ProposeRootDirectory(entries)
+		proposed := ProposeRootDirectory(entries, tmpdir)
 		if proposed != tmpdir {
 			t.Errorf("expected %q, got %q", tmpdir, proposed)
 		}
 	})
 
 	t.Run("returns empty string for empty entries", func(t *testing.T) {
-		proposed := ProposeRootDirectory(nil)
+		proposed := ProposeRootDirectory(nil, "")
 		if proposed != "" {
 			t.Errorf("expected empty string for nil entries, got %q", proposed)
 		}
@@ -584,7 +584,7 @@ func TestAttemptRootMarkerMigration_NoTTY(t *testing.T) {
 	}
 
 	// No TTY: hasStdin = false
-	result := AttemptRootMarkerMigration(entries, false)
+	result := AttemptRootMarkerMigration(entries, tmpdir, false)
 
 	// Should not apply
 	if result.Applied {
@@ -625,7 +625,7 @@ func TestAttemptRootMarkerMigration_WithMarker(t *testing.T) {
 	}
 
 	// Should not attempt migration when marker exists
-	result := AttemptRootMarkerMigration(entries, true)
+	result := AttemptRootMarkerMigration(entries, tmpdir, true)
 
 	if result.Applied {
 		t.Error("migration should not apply when marker already exists")

@@ -33,6 +33,7 @@ schema:
     severity: error
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 	return dir
 }
 

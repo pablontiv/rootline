@@ -31,6 +31,7 @@ schema:
     values: [Pending, Completed]
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	// Run new command to generate markdown with a specific file path
 	newFile := filepath.Join(dir, "document.md")
@@ -278,6 +279,7 @@ aggregate:
     expression: "len(rows)"
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	// Create index file
 	mustWriteFile(t, filepath.Join(dir, "README.md"),

@@ -86,11 +86,13 @@ schema:
     required: true
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	// File missing the required "Notes" section
 	mustWriteFile(t, filepath.Join(dir, "task.md"),
 		[]byte("---\nestado: Pending\n---\n# Task\n\nSome content.\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	return dir
 }
 
@@ -165,6 +167,7 @@ schema:
     required: true
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	// Document with required fields present
 	docContent := `---
@@ -176,6 +179,8 @@ tipo: test
 `
 	target := filepath.Join(dir, "doc.md")
 	mustWriteFile(t, target, []byte(docContent), 0644)
+
+	declareTestBoundary(t, dir)
 
 	// Try to set tipo to "" (empty string) - this might fail post-validation if required
 	// Since tipo is required, setting to empty might fail validation
@@ -404,6 +409,7 @@ schema:
     values: [Pending, Completed]
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(parentStem), 0644)
+	declareTestBoundary(t, dir)
 
 	// Create child dir with its own .stem that duplicates estado
 	childDir := filepath.Join(dir, "sub")

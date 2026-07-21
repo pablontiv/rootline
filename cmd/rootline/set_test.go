@@ -35,6 +35,7 @@ schema:
     required: false
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	// Document with frontmatter and a section
 	docContent := `---
@@ -49,6 +50,7 @@ Initial findings here.
 `
 	mustWriteFile(t, filepath.Join(dir, "doc.md"), []byte(docContent), 0644)
 
+	declareTestBoundary(t, dir)
 	return dir
 }
 

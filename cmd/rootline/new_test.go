@@ -134,8 +134,11 @@ schema:
     values: [Pending, Completed]
     default: Pending
 `), 0644)
+	declareTestBoundary(t, dir)
 
 	target := filepath.Join(dir, "doc.md")
+	declareTestBoundary(t, dir)
+
 	out, err := runCmd(t, "new", target, "--dry-run")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -159,8 +162,11 @@ schema:
     required: true
     values: [outcome, task]
 `), 0644)
+	declareTestBoundary(t, dir)
 
 	target := filepath.Join(dir, "T001-my-task.md")
+	declareTestBoundary(t, dir)
+
 	out, err := runCmd(t, "new", target, "--dry-run")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

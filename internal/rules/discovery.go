@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 const stemFileName = ".stem"
@@ -131,14 +133,76 @@ func ChainHasNoDeclaredBoundary(entries []StemEntry) bool {
 	return !entries[0].Stem.Root
 }
 
-// ProposeRootDirectory returns the directory containing the first (topmost) .stem
-// in the chain. This is the directory that should be marked with root: true.
-func ProposeRootDirectory(entries []StemEntry) string {
+// ProposeRootDirectory returns the directory whose .stem should carry the
+// root: true marker for the given target.
+//
+// The topmost entry in the chain is NOT automatically the answer. When the walk
+// collected a .stem from an ancestor outside the project, proposing that
+// directory would declare the stray file as the governance root and lock it in
+// permanently — the opposite of what the migration is for.
+//
+// The project boundary is inferred from a .git directory at or above the
+// target. Git is consulted as a HINT ONLY: its absence must never break the
+// proposal, and it never bounds discovery itself. With a hint, the proposal is
+// the outermost .stem at or below that boundary. Without one, there is no
+// evidence that any ancestor belongs to the project, so the proposal stays
+// conservative and does not reach above the target's own nearest .stem.
+//
+// Returns "" when the chain is empty.
+func ProposeRootDirectory(entries []StemEntry, targetPath string) string {
 	if len(entries) == 0 {
 		return ""
 	}
-	// entries[0] is the topmost .stem; extract its directory
-	return filepath.Dir(entries[0].Path)
+
+	boundary := projectBoundaryHint(targetPath)
+
+	// With a hint, take the outermost .stem that lies at or below it.
+	if boundary != "" {
+		for _, entry := range entries {
+			if dir := filepath.Dir(entry.Path); isAtOrBelow(dir, boundary) {
+				return dir
+			}
+		}
+	}
+
+	// No hint, or nothing in the chain sits inside it: fall back to the entry
+	// closest to the target. Proposing too narrow a root is recoverable;
+	// proposing a directory outside the project is not.
+	return filepath.Dir(entries[len(entries)-1].Path)
+}
+
+// projectBoundaryHint returns the nearest directory at or above targetPath that
+// contains a .git entry, or "" when there is none. This is advisory only — it
+// suggests where a project starts, and never bounds schema discovery.
+func projectBoundaryHint(targetPath string) string {
+	dir, err := filepath.Abs(targetPath)
+	if err != nil {
+		return ""
+	}
+	if info, statErr := os.Stat(dir); statErr == nil && !info.IsDir() {
+		dir = filepath.Dir(dir)
+	}
+
+	for {
+		if _, statErr := os.Stat(filepath.Join(dir, ".git")); statErr == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+// isAtOrBelow reports whether dir is root itself or nested inside it. It
+// compares path components, so /home/user2 is not treated as inside /home/user.
+func isAtOrBelow(dir, root string) bool {
+	rel, err := filepath.Rel(root, dir)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 // ApplyRootMarker adds "root: true" to a .stem file, preserving existing content.
@@ -183,16 +247,25 @@ func ApplyRootMarker(stemPath string) error {
 // what happened, which .stem was picked up, which directory should own the marker,
 // and the exact line to add. This message is meant for non-interactive environments
 // where the user cannot be prompted for confirmation.
-func ComposeNoDeclaredBoundaryError(strayStemmPath, proposedDir string) string {
-	return fmt.Sprintf(
-		"Schema discovery walk reached the filesystem root without a declared boundary.\n"+
-			"The .stem at %q was collected outside the project.\n"+
-			"To fix this, add the following line to %s/.stem:\n\n"+
-			"  root: true\n\n"+
-			"This establishes a clear governance boundary and prevents ancestor .stem files from affecting this project.\n",
-		strayStemmPath,
-		proposedDir,
-	)
+// A stray path may be empty, meaning the walk found no .stem outside the
+// project — the boundary is simply undeclared.
+func ComposeNoDeclaredBoundaryError(strayStemPath, proposedDir string) string {
+	var b strings.Builder
+
+	b.WriteString("Schema discovery reached the filesystem root without finding a declared boundary.\n\n")
+	if strayStemPath != "" {
+		fmt.Fprintf(&b, "It collected %s, which is outside this project.\n", strayStemPath)
+		b.WriteString("That file is now governing records it has nothing to do with.\n\n")
+	} else {
+		b.WriteString("No .stem in this project declares where the project starts.\n\n")
+	}
+
+	fmt.Fprintf(&b, "Fix: add this line to %s\n\n", filepath.Join(proposedDir, stemFileName))
+	b.WriteString("  root: true\n\n")
+	b.WriteString("Discovery then stops there and never reads .stem files above it.\n")
+	b.WriteString("Run rootline in a terminal to be prompted and have this applied for you.\n")
+
+	return b.String()
 }
 
 // MigrationResult holds the outcome of a root marker migration attempt.
@@ -207,15 +280,34 @@ type MigrationResult struct {
 // If user confirms, it applies the marker and returns success.
 // If user declines, it returns without error (no changes made).
 //
-// hasStdin should be true when os.Stdin is a terminal (use !isatty.IsNotATerminal(int(os.Stdin.Fd())))
-func AttemptRootMarkerMigration(entries []StemEntry, hasStdin bool) MigrationResult {
+// IsTerminal reports whether stdin is attached to a terminal. Callers must pass
+// its result rather than prompting unconditionally: a prompt in CI, a git hook,
+// or an agent hangs the pipeline until timeout, which is worse than failing.
+//
+// This performs a real terminal check (an ioctl) rather than inspecting the
+// file mode. Testing os.ModeCharDevice is wrong: /dev/null is itself a
+// character device, so `rootline ... < /dev/null` would be misread as
+// interactive, prompt into a pipeline, read EOF, and exit successfully —
+// silently skipping the failure that non-interactive callers must get.
+func IsTerminal() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+// hasStdin must be true only when os.Stdin is a terminal; use isTerminal().
+func AttemptRootMarkerMigration(entries []StemEntry, targetPath string, hasStdin bool) MigrationResult {
 	// Check if migration is needed
 	if !ChainHasNoDeclaredBoundary(entries) {
 		return MigrationResult{Applied: false}
 	}
 
+	proposedDir := ProposeRootDirectory(entries, targetPath)
 	strayPath := entries[0].Path
-	proposedDir := ProposeRootDirectory(entries)
+
+	// When the chain is entirely inside the proposed root there is no stray
+	// ancestor — the project simply has not declared its boundary yet.
+	if filepath.Dir(strayPath) == proposedDir {
+		strayPath = ""
+	}
 
 	// No TTY: fail with error
 	if !hasStdin {
@@ -226,8 +318,12 @@ func AttemptRootMarkerMigration(entries []StemEntry, hasStdin bool) MigrationRes
 	}
 
 	// Has TTY: prompt user
-	fmt.Fprintf(os.Stderr, "Your .stem chain includes %q which is outside this project.\n", strayPath)
-	fmt.Fprintf(os.Stderr, "To establish a clear boundary, add 'root: true' to %s/.stem.\n\n", proposedDir)
+	if strayPath != "" {
+		fmt.Fprintf(os.Stderr, "Your .stem chain includes %q, which is outside this project.\n", strayPath)
+	} else {
+		fmt.Fprintf(os.Stderr, "No .stem in this project declares a governance boundary.\n")
+	}
+	fmt.Fprintf(os.Stderr, "To establish one, add 'root: true' to %s/.stem.\n\n", proposedDir)
 	fmt.Fprintf(os.Stderr, "Apply this change now? (y/n) ")
 
 	// Simple confirmation: read one character

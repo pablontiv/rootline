@@ -20,6 +20,7 @@ func setupMigrateDir(t *testing.T, stemContent string, files map[string]string) 
 
 	if stemContent != "" {
 		mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+		declareTestBoundary(t, dir)
 	}
 
 	for name, content := range files {
@@ -30,6 +31,7 @@ func setupMigrateDir(t *testing.T, stemContent string, files map[string]string) 
 		mustWriteFile(t, path, []byte(content), 0644)
 	}
 
+	declareTestBoundary(t, dir)
 	return dir
 }
 

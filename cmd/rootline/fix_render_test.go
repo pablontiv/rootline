@@ -128,6 +128,7 @@ schema:
     required: false
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 	taskFile := filepath.Join(dir, "task.md")
 	mustWriteFile(t, taskFile, []byte("---\nestado: Pending\n---\n# Task\n"), 0644)
 
@@ -164,6 +165,7 @@ schema:
     type: string
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 	taskFile := filepath.Join(dir, "task.md")
 	mustWriteFile(t, taskFile, []byte("---\nestado: InvalidValue\ntitulo: Task\n---\n# Task\n"), 0644)
 
@@ -193,6 +195,7 @@ schema:
     type: string
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	// Run fix to test RemoveStemField scenarios
 	resetFlags()
@@ -218,6 +221,7 @@ schema:
     type: string
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 	taskFile := filepath.Join(dir, "task.md")
 	mustWriteFile(t, taskFile, []byte("---\nestado: Pending\n---\n# Task\n"), 0644)
 

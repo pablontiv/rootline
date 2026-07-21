@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -25,7 +26,73 @@ func setupValidateProject(t *testing.T, files map[string]string) string {
 			t.Fatal(err)
 		}
 	}
+	declareTestBoundary(t, root)
 	return root
+}
+
+// declareTestBoundary marks the fixture root as a governance boundary.
+//
+// Every fixture models a real project, and real projects declare where they
+// start. Without the marker the walk climbs past the temp directory toward the
+// filesystem root, and the boundary preflight fails the command before it runs.
+// It appends to an existing root .stem rather than creating one, so the chain
+// keeps exactly the layers the test intends. If no .stem exists, it creates one.
+func declareTestBoundary(t *testing.T, root string) {
+	t.Helper()
+
+	// Mark the outermost .stem the fixture actually created — usually the one
+	// at the root, but some fixtures put their only .stem in a subdirectory,
+	// and that subtree is then what declares itself.
+	stemPath := shallowestStem(root)
+	if stemPath == "" {
+		// Never manufacture a .stem. Several tests deliberately build a tree
+		// with none in order to assert ErrNoSchemaFound, and creating one here
+		// would silently convert them into a different scenario.
+		return
+	}
+
+	content, err := os.ReadFile(stemPath)
+	if err != nil {
+		return
+	}
+	if strings.Contains(string(content), "root:") {
+		return
+	}
+	// #nosec G703 -- stemPath is built from the test's own t.TempDir() tree.
+	if err := os.WriteFile(stemPath, append([]byte("root: true\n"), content...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// shallowestStem returns the path of the .stem closest to root, or "" when the
+// tree has none. Marking a deeper one would truncate the chain and silently
+// change what the test is exercising.
+func shallowestStem(root string) string {
+	if _, err := os.Stat(filepath.Join(root, ".stem")); err == nil {
+		return filepath.Join(root, ".stem")
+	}
+
+	queue := []string{root}
+	for len(queue) > 0 {
+		dir := queue[0]
+		queue = queue[1:]
+
+		items, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		var subdirs []string
+		for _, item := range items {
+			if item.Name() == ".stem" {
+				return filepath.Join(dir, ".stem")
+			}
+			if item.IsDir() && item.Name() != ".git" {
+				subdirs = append(subdirs, filepath.Join(dir, item.Name()))
+			}
+		}
+		queue = append(queue, subdirs...)
+	}
+	return ""
 }
 
 // executeValidate runs the validate command with args and returns

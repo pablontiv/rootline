@@ -15,8 +15,10 @@ import (
 func TestGraphJSON_Empty(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# No links\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -41,9 +43,11 @@ func TestGraphJSON_Empty(t *testing.T) {
 func TestGraphJSON_WithLinks(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "doc1.md"), []byte("---\n---\n# Doc1\n[[doc2.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "doc2.md"), []byte("---\n---\n# Doc2\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -61,9 +65,11 @@ func TestGraphJSON_WithLinks(t *testing.T) {
 func TestGraphCheck_Clean(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "doc1.md"), []byte("---\n---\n# Doc1\n[[doc2.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "doc2.md"), []byte("---\n---\n# Doc2\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -76,9 +82,11 @@ func TestGraphCheck_Clean(t *testing.T) {
 func TestGraphCheck_WithCycle_InformationalByDefault(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -97,9 +105,11 @@ func TestGraphCheck_CyclesOptInFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nlinks:\n  checks:\n    cycles: true\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", dir)
 	if err != ErrValidationFailed {
 		t.Fatalf("expected ErrValidationFailed, got: %v\noutput: %s", err, out)
@@ -112,9 +122,11 @@ func TestGraphCheck_CyclesOptInFails(t *testing.T) {
 func TestGraphCheck_InformationalCyclesDontMaskBrokenLinks(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n[[missing.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", dir)
 	if err != ErrValidationFailed {
 		t.Fatalf("expected ErrValidationFailed for broken link, got: %v\noutput: %s", err, out)
@@ -130,9 +142,11 @@ func TestGraphCheck_InformationalCyclesDontMaskBrokenLinks(t *testing.T) {
 func TestGraphCheck_FailCyclesFlagForcesFailure(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", "--fail-cycles=true", dir)
 	if err != ErrValidationFailed {
 		t.Fatalf("expected ErrValidationFailed with --fail-cycles=true, got: %v\noutput: %s", err, out)
@@ -145,9 +159,11 @@ func TestGraphCheck_FailCyclesFlagForcesInformational(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nlinks:\n  checks:\n    cycles: true\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", "--fail-cycles=false", dir)
 	if err != nil {
 		t.Fatalf("expected success with --fail-cycles=false, got: %v\noutput: %s", err, out)
@@ -160,8 +176,10 @@ func TestGraphCheck_FailCyclesFlagForcesInformational(t *testing.T) {
 func TestGraphCheck_WithBrokenLink(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[nonexistent.md]]\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", dir)
 	if err != ErrValidationFailed {
 		t.Fatalf("expected ErrValidationFailed, got: %v", err)
@@ -174,8 +192,10 @@ func TestGraphCheck_WithBrokenLink(t *testing.T) {
 func TestGraphFormat_DOT(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "-o", "table", "--format", "dot", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -188,8 +208,10 @@ func TestGraphFormat_DOT(t *testing.T) {
 func TestGraphFormat_Mermaid(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "-o", "table", "--format", "mermaid", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -202,8 +224,10 @@ func TestGraphFormat_Mermaid(t *testing.T) {
 func TestGraphFormat_Invalid(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	_, err := runCmd(t, "graph", "-o", "table", "--format", "xyz", dir)
 	if err == nil {
 		t.Fatal("expected error for invalid format")
@@ -296,9 +320,11 @@ func TestFilterLinksBySchema_AllowedOnlySchema(t *testing.T) {
 func TestGraphWhere_Filters(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nscope:\n  match: \"*.md\"\nschema:\n  tipo:\n    type: string\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\ntipo: test\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\ntipo: prod\n---\n# B\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", dir, "--where", "tipo == 'test'")
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -316,8 +342,10 @@ func TestGraphWhere_Filters(t *testing.T) {
 func TestGraphWhere_InvalidExpr(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	_, err := runCmd(t, "graph", dir, "--where", "== bad")
 	if err == nil {
 		t.Fatal("expected error for invalid where expression")
@@ -332,9 +360,11 @@ func TestGraphCheck_SchemaFiltersReferenceLinks(t *testing.T) {
 	// .stem with links schema that only has rules for "blocks"
 	stem := "version: 2\nlinks:\n  allowed: [blocks, reference]\n  blocks:\n    target: \"*.md\"\n"
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stem), 0644)
+	declareTestBoundary(t, dir)
 	// doc with a [[reference]] link to nonexistent target — should be filtered out
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[nonexistent]]\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", dir)
 	if err != nil {
 		t.Fatalf("expected no error (reference links filtered), got: %v\noutput: %s", err, out)
@@ -347,10 +377,12 @@ func TestGraphCheck_SchemaFiltersReferenceLinks(t *testing.T) {
 func TestGraphJSON_FieldProjection_Edges(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[c.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "c.md"), []byte("---\n---\n# C\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", dir, "--field", "edges")
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -368,10 +400,12 @@ func TestGraphJSON_FieldProjection_Edges(t *testing.T) {
 func TestGraphJSON_FieldProjection_EdgeSources(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[c.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "c.md"), []byte("---\n---\n# C\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", dir, "--field", "edges[].source")
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -390,8 +424,10 @@ func TestGraphJSON_FieldProjection_EdgeSources(t *testing.T) {
 func TestGraphJSON_FieldProjection_BrokenLinks(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[nonexistent.md]]\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", dir, "--field", "broken_links")
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -409,9 +445,11 @@ func TestGraphJSON_FieldProjection_BrokenLinks(t *testing.T) {
 func TestGraphJSON_Unchanged(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -459,9 +497,11 @@ func TestGraphCheck_MarkdownStylesClean(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nlinks:\n  styles: [markdown]\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "README.md"), []byte("---\n---\n# Root\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "docs", "overview.md"), []byte("---\n---\n# Overview\n[back](../README.md)\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -480,10 +520,12 @@ func TestGraphJSON_MarkdownStylesProducesEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nlinks:\n  styles: [markdown]\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "README.md"), []byte("---\n---\n# Root\n[a](docs/a.md)\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "docs", "a.md"), []byte("---\n---\n# A\n[b](sub/b.md)\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "docs", "sub", "b.md"), []byte("---\n---\n# B\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -513,8 +555,10 @@ func TestGraphCheck_MarkdownBrokenLinkCanary(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nlinks:\n  styles: [markdown]\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[x](no-existe.md)\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", dir)
 	if err != ErrValidationFailed {
 		t.Fatalf("expected ErrValidationFailed, got: %v\noutput: %s", err, out)
@@ -527,9 +571,11 @@ func TestGraphCheck_MarkdownBrokenLinkCanary(t *testing.T) {
 func TestGraphCheck_QuietCycles_InformationalOnly(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", "--quiet-cycles", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -551,9 +597,11 @@ func TestGraphCheck_QuietCycles_InformationalOnly(t *testing.T) {
 func TestGraphCheck_QuietCycles_IgnoredWhenFailing(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", "--fail-cycles", "--quiet-cycles", dir)
 	if err != ErrValidationFailed {
 		t.Fatalf("expected ErrValidationFailed, got: %v\noutput: %s", err, out)
@@ -570,9 +618,11 @@ func TestGraphCheck_QuietCycles_IgnoredWhenFailing(t *testing.T) {
 func TestGraphCheck_QuietCycles_WithBrokenLink(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n[[missing.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--check", "--quiet-cycles", dir)
 	if err != ErrValidationFailed {
 		t.Fatalf("expected ErrValidationFailed for broken link, got: %v\noutput: %s", err, out)
@@ -593,9 +643,11 @@ func TestGraphCheck_QuietCycles_WithBrokenLink(t *testing.T) {
 func TestGraphJSON_QuietCycles_CyclesPopulated(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "graph", "--quiet-cycles", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)

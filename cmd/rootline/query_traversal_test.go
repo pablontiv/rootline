@@ -34,6 +34,7 @@ func setupTraversalDir(t *testing.T) string {
 			t.Fatalf("write %s: %v", rel, err)
 		}
 	}
+	declareTestBoundary(t, dir)
 	return dir
 }
 

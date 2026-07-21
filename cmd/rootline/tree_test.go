@@ -11,13 +11,15 @@ import (
 )
 
 // setupTreeProject creates a temp directory with .git marker, .stem, and
-// markdown files for tree command testing.
+// markdown files for tree command testing. It adds a boundary marker only
+// if the caller provides one explicitly in the files map.
 func setupTreeProject(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+
 	for relPath, content := range files {
 		absPath := filepath.Join(root, relPath)
 		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
@@ -27,6 +29,8 @@ func setupTreeProject(t *testing.T, files map[string]string) string {
 			t.Fatal(err)
 		}
 	}
+
+	declareTestBoundary(t, root)
 	return root
 }
 

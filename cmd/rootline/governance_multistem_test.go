@@ -395,6 +395,7 @@ schema:
 	if err := os.WriteFile(filepath.Join(root, ".stem"), []byte(rootStem), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	declareTestBoundary(t, root)
 
 	// Create markdown files WITHOUT tipo/category to avoid triggering data inferences that would suppress governance gaps
 	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("---\nstatus: a\n---\n# Doc A\n"), 0o644); err != nil {

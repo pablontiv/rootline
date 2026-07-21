@@ -566,8 +566,11 @@ func TestSchemaApply_AnalyzeReport_ExtendsEnum(t *testing.T) {
 
 	stem := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Done]\n"
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stem), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\nestado: Pending\n---\n# A\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\nestado: Blocked\n---\n# B\n"), 0644)
+
+	declareTestBoundary(t, dir)
 
 	out, err := runCmd(t, "analyze", dir)
 	if err != nil {
@@ -594,8 +597,11 @@ func TestSchemaApply_AnalyzeReport_DryRunNoWrite(t *testing.T) {
 
 	stem := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    values: [Pending, Done]\n"
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stem), 0644)
+	declareTestBoundary(t, dir)
 	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\nestado: Pending\n---\n# A\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\nestado: Blocked\n---\n# B\n"), 0644)
+
+	declareTestBoundary(t, dir)
 
 	// Record initial .stem content
 	initialStem := mustReadFile(t, filepath.Join(dir, ".stem"))

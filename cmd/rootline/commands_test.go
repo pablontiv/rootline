@@ -34,11 +34,13 @@ schema:
     required: false
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	// Two markdown files
 	mustWriteFile(t, filepath.Join(dir, "doc1.md"), []byte("---\nestado: Pending\ntipo: test\n---\n# Doc 1\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "doc2.md"), []byte("---\nestado: Completed\ntipo: prod\n---\n# Doc 2\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	return dir
 }
 
@@ -711,6 +713,7 @@ derive:
   slug: "slugify(estado)"
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 	out, err := runCmd(t, "explain", filepath.Join(dir, "doc1.md"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -771,6 +774,7 @@ schema:
     default: "unknown"
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 	// Create file without tipo (will use default).
 	mustWriteFile(t, filepath.Join(dir, "defaulttest.md"), []byte("---\nestado: Pending\n---\n# Test\n"), 0644)
 	out, err := runCmd(t, "explain", filepath.Join(dir, "defaulttest.md"))
@@ -914,11 +918,13 @@ schema:
     required: false
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	mustWriteFile(t, filepath.Join(dir, "item1.md"), []byte("---\nprioridad: media\nimpact_score: 5\n---\n# Item 1\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "item2.md"), []byte("---\nprioridad: alta\nimpact_score: 8\n---\n# Item 2\n"), 0644)
 	mustWriteFile(t, filepath.Join(dir, "item3.md"), []byte("---\nprioridad: alta\nimpact_score: 3\n---\n# Item 3\n"), 0644)
 
+	declareTestBoundary(t, dir)
 	return dir
 }
 

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -38,7 +39,33 @@ func setupProject(t *testing.T, files map[string]string) string {
 			t.Fatal(err)
 		}
 	}
+	declareTestBoundaryE2E(t, root)
 	return root
+}
+
+// declareTestBoundaryE2E marks the fixture root as a governance boundary.
+// For tests that provide a .stem, it adds the marker. For tests that don't
+// provide one (like TestPipeline_NoStemIsAnError), it doesn't create one.
+// This preserves tests that deliberately test the no-stem scenario.
+func declareTestBoundaryE2E(t *testing.T, root string) {
+	t.Helper()
+
+	stemPath := filepath.Join(root, ".stem")
+	content, err := os.ReadFile(stemPath)
+	if err != nil {
+		// No .stem file exists; don't create one for E2E tests.
+		// E2E tests may intentionally test the no-stem scenario.
+		return
+	}
+	if strings.Contains(string(content), "root:") {
+		// Already has root marker.
+		return
+	}
+	// Add root marker to existing .stem file.
+	// #nosec G703 -- stemPath is built from the test's own t.TempDir() tree.
+	if err := os.WriteFile(stemPath, append([]byte("root: true\n"), content...), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // buildScopeResolver returns a ScopeResolver that uses WalkUp + Merge

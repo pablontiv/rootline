@@ -31,6 +31,7 @@ schema:
     values: [Pending, Completed, In Progress]
 `
 	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(rootStem), 0644)
+	declareTestBoundary(t, root)
 
 	// Nested .stem in epics/: adds tipo field (merge from parent).
 	if err := os.MkdirAll(filepath.Join(root, "epics"), 0o755); err != nil {
@@ -69,6 +70,7 @@ schema:
 	mustWriteFile(t, filepath.Join(root, "epics", "E01", "T001.md"), []byte("---\nestado: Pending\ntipo: bug\npriority: high\n---\n# T001\n"), 0644)
 	mustWriteFile(t, filepath.Join(root, "epics", "E01", "T002.md"), []byte("---\nestado: Completed\ntipo: chore\npriority: low\n---\n# T002\n"), 0644)
 
+	declareTestBoundary(t, root)
 	return root
 }
 

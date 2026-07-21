@@ -188,6 +188,7 @@ schema:
     type: string
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	resetFlags()
 	out, err := runCmd(t, "migrate", dir, "--dry-run")
@@ -262,6 +263,7 @@ schema:
     values: [Pending, Completed]
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, dir)
 
 	newFile := filepath.Join(dir, "newdoc.md")
 

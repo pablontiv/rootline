@@ -636,6 +636,7 @@ schema:
     required: false
 `
 	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(richStem), 0644)
+	declareTestBoundary(t, root)
 
 	// Subdirectory with a poor stem (only id field, no enums).
 	subdir := filepath.Join(root, "sub")
@@ -701,6 +702,7 @@ schema:
     type: string
 `
 	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(stemContent), 0644)
+	declareTestBoundary(t, root)
 
 	subdir := filepath.Join(root, "docs")
 	if err := os.MkdirAll(subdir, 0755); err != nil {
@@ -825,6 +827,7 @@ schema:
     values: [Pending, In Progress, Blocked, Completed]
 `
 	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(stem), 0644)
+	declareTestBoundary(t, root)
 
 	// Hierarchical structure with overlapping enum values.
 	for _, epic := range []string{"E01-a", "E02-b"} {
@@ -890,6 +893,7 @@ schema:
     values: [Pending, In Progress, Blocked, Completed]
 `
 	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(stem), 0644)
+	declareTestBoundary(t, root)
 
 	// Hierarchical structure.
 	for _, epic := range []string{"E01-a", "E02-b"} {
@@ -1074,6 +1078,7 @@ schema:
 `
 	stemPath := filepath.Join(root, ".stem")
 	mustWriteFile(t, stemPath, []byte(stem), 0644)
+	declareTestBoundary(t, root)
 
 	// Create a document.
 	mustWriteFile(t, filepath.Join(root, "test.md"), []byte("---\nestado: Pending\n---\n# Test\n"), 0644)
@@ -1120,6 +1125,7 @@ schema:
     values: [Pending, Completed]
 `
 	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(stem), 0644)
+	declareTestBoundary(t, root)
 
 	// Create hierarchical structure to trigger add_aggregate.
 	epicDir := filepath.Join(root, "E01-test")
