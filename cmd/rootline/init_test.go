@@ -490,3 +490,69 @@ func TestInitAutoHierarchy_NoAggregateForNonEnum(t *testing.T) {
 		t.Errorf("expected no aggregate section for non-enum fields, got:\n%s", string(content))
 	}
 }
+
+func TestInitMarkerOutput(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\nestado: draft\n---\n# A\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\nestado: done\n---\n# B\n"), 0644)
+
+	out, err := runCmd(t, "init", dir, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	lines := strings.Split(out, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 lines, got: %s", out)
+	}
+
+	// Version should be on first line
+	if !strings.HasPrefix(lines[0], "version:") {
+		t.Errorf("expected version on line 1, got: %s", lines[0])
+	}
+
+	// Root should be on second line
+	if !strings.HasPrefix(lines[1], "root:") || !strings.Contains(lines[1], "true") {
+		t.Errorf("expected 'root: true' on line 2, got: %s", lines[1])
+	}
+
+	// Also verify it's in the output
+	if !strings.Contains(out, "root: true") {
+		t.Errorf("expected 'root: true' in output, got: %s", out)
+	}
+}
+
+func TestInitHierarchicalMarkerRootOnly(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a 2-level hierarchy
+	for _, epic := range []string{"E01-infra", "E02-platform"} {
+		epicDir := filepath.Join(dir, epic)
+		_ = os.MkdirAll(epicDir, 0755)
+		mustWriteFile(t, filepath.Join(epicDir, "README.md"),
+			[]byte("---\nestado: Pending\n---\n# "+epic+"\n"), 0644)
+
+		for _, feat := range []string{"F01-net", "F02-store"} {
+			featDir := filepath.Join(epicDir, feat)
+			_ = os.MkdirAll(featDir, 0755)
+			mustWriteFile(t, filepath.Join(featDir, "README.md"),
+				[]byte("---\nestado: Pending\ntipo: feature\n---\n# "+feat+"\n"), 0644)
+		}
+	}
+
+	out, err := runCmd(t, "init", dir, "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Find the first .stem in the output (the root-level one)
+	if !strings.Contains(out, "root: true") {
+		t.Errorf("expected 'root: true' in hierarchical init output, got: %s", out)
+	}
+
+	// Root marker should appear exactly once in the output
+	count := strings.Count(out, "root: true")
+	if count != 1 {
+		t.Errorf("expected 'root: true' to appear exactly once (only at root level), got %d times in: %s", count, out)
+	}
+}

@@ -105,6 +105,9 @@ func runInitFlat(cmd *cobra.Command, absTarget, target string, records []*extrac
 		return fmt.Errorf("generating flat schema: %w", err)
 	}
 
+	// Mark as root to establish schema boundary
+	stemFile.Root = true
+
 	// Analyze frontmatter for warning about mixed content
 	analyzed := infer.Analyze(records)
 	if analyzed.TotalFiles > 0 && analyzed.FilesWithout > 0 {
@@ -142,6 +145,11 @@ func runInitHierarchical(cmd *cobra.Command, absTarget, target string, hierarchy
 	stemMap, err := infer.GenerateHierarchicalSchema(cmd.Context(), absTarget, records, opts)
 	if err != nil {
 		return fmt.Errorf("generating hierarchical schema: %w", err)
+	}
+
+	// Mark only the root-level .stem as the boundary (children inherit through merge)
+	if rootStem := stemMap["."]; rootStem != nil {
+		rootStem.Root = true
 	}
 
 	// Convert StemFiles to file content for writing
@@ -208,7 +216,11 @@ type stemFile struct {
 // stemFileToYAML converts a StemFile to YAML string representation.
 func stemFileToYAML(stem *rules.StemFile, scanRoot string) string {
 	var b strings.Builder
-	b.WriteString("version: 2\nscope:\n  match: \"*.md\"\nschema:\n")
+	b.WriteString("version: 2\n")
+	if stem.Root {
+		b.WriteString("root: true\n")
+	}
+	b.WriteString("scope:\n  match: \"*.md\"\nschema:\n")
 
 	keys := make([]string, 0, len(stem.Schema))
 	for k := range stem.Schema {
