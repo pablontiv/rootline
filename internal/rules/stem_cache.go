@@ -28,8 +28,8 @@ func (c *StemCache) Hits() int {
 	return c.hits
 }
 
-// WalkUp walks from targetPath up to the repository root (.git boundary),
-// collecting and parsing .stem files along the way. Results are cached per
+// WalkUp walks from targetPath upward, collecting every .stem file it finds,
+// and terminates at a .stem that declares `root: true`. Results are cached per
 // directory so repeated calls for files in the same tree skip disk I/O.
 // Returns entries ordered root-to-leaf (ready for top-down merge).
 func (c *StemCache) WalkUp(targetPath string) ([]StemEntry, error) {
@@ -51,21 +51,28 @@ func (c *StemCache) WalkUp(targetPath string) ([]StemEntry, error) {
 		}
 		if entry != nil {
 			entries = append(entries, *entry)
-		}
 
-		gitPath := filepath.Join(dir, ".git")
-		if _, err := os.Stat(gitPath); err == nil {
-			break
+			// If this .stem has root: true, stop the walk.
+			if entry.Stem.Root {
+				break
+			}
 		}
 
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return nil, nil
+			// Reached filesystem root.
+			break
 		}
 		dir = parent
 	}
 
 	slices.Reverse(entries)
+
+	// If no .stem was found anywhere, return ErrNoSchemaFound.
+	if len(entries) == 0 {
+		return nil, ErrNoSchemaFound
+	}
+
 	return entries, nil
 }
 

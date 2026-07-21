@@ -17,6 +17,7 @@ import (
 type StemFile struct {
 	Path       string                 `yaml:"-"`
 	Version    int                    `yaml:"version"`
+	Root       bool                   `yaml:"root"`
 	Scope      Scope                  `yaml:"scope"`
 	Schema     map[string]SchemaField `yaml:"schema"`
 	Validate   []ValidationRule       `yaml:"validate"`

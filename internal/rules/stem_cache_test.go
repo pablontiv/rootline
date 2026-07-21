@@ -8,10 +8,7 @@ import (
 
 func TestStemCache_CachesRepeatedLookups(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, ".git"), []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	stemContent := []byte("version: 2\nschema:\n  estado:\n    type: enum\n    values: [pendiente, activo]\n    required: true\n")
+	stemContent := []byte("version: 2\nroot: true\nschema:\n  estado:\n    type: enum\n    values: [pendiente, activo]\n    required: true\n")
 	if err := os.WriteFile(filepath.Join(root, ".stem"), stemContent, 0o644); err != nil {
 		t.Fatal(err)
 	}
