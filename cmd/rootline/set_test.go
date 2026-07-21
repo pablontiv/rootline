@@ -223,3 +223,47 @@ func TestSetMultipleFields(t *testing.T) {
 		t.Errorf("expected 'tipo: production', got:\n%s", content)
 	}
 }
+
+// --- Slice 3d: Mutating Command Error Semantics ---
+
+// TestSetRefusesNoSchema verifies that set fails when no schema is present.
+// This is a slice 3d test: currently set might succeed silently on ungoverned trees.
+// After slice 3d, it should fail.
+func TestSetRefusesNoSchema(t *testing.T) {
+	// Create a tree with NO .stem file
+	dir := t.TempDir()
+
+	// Create a markdown file
+	target := filepath.Join(dir, "doc.md")
+	mustWriteFile(t, target, []byte("---\ntitle: Test\n---\n# Test\n"), 0644)
+
+	// Attempt set (should fail because no schema exists)
+	out, err := runCmd(t, "set", target, "field=value")
+
+	// After slice 3d: this should error
+	if err == nil {
+		t.Errorf("expected error when set has no schema, but succeeded with output: %s", out)
+	}
+}
+
+// TestSetRefusesBadSchema verifies that set fails when the schema is unparseable.
+func TestSetRefusesBadSchema(t *testing.T) {
+	// Create a tree with an unparseable .stem
+	dir := t.TempDir()
+
+	// Create unparseable .stem
+	badStem := "version: 2\nthis: [is not valid YAML"
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(badStem), 0644)
+
+	// Create a markdown file
+	target := filepath.Join(dir, "doc.md")
+	mustWriteFile(t, target, []byte("---\ntitle: Test\n---\n# Test\n"), 0644)
+
+	// Attempt set (should fail because schema parse error)
+	out, err := runCmd(t, "set", target, "field=value")
+
+	// After slice 3d: this should error
+	if err == nil {
+		t.Errorf("expected error when set has bad schema, but succeeded with output: %s", out)
+	}
+}

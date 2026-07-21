@@ -1149,3 +1149,49 @@ schema:
 	// Schema suggestions should be > 0 if add_aggregate was proposed.
 	// (add_aggregate was proposed but not applied.)
 }
+
+// --- Slice 3d: Mutating Command Error Semantics ---
+
+// TestFixAllRefusesNoSchema verifies that fix --all fails when no schema is present.
+// This is a bootstrap test: currently fix --all succeeds silently on ungoverned trees.
+// After slice 3d, it should fail.
+func TestFixAllRefusesNoSchema(t *testing.T) {
+	// Create a tree with NO .stem file
+	dir := t.TempDir()
+
+	// Create markdown file
+	target := filepath.Join(dir, "test.md")
+	mustWriteFile(t, target, []byte("---\ntitle: Test\n---\n# Test\n"), 0644)
+
+	// Attempt fix --all (should fail because no schema exists)
+	out, err := runCmd(t, "fix", "--all", dir)
+
+	// After slice 3d: this should error
+	// Currently the command succeeds (err == nil) but we want it to fail
+	if err == nil {
+		t.Fatalf("expected error when fix --all has no schema, but succeeded with output: %s", out)
+	}
+}
+
+// TestFixAllRefusesBadSchema verifies that fix --all fails when the schema is unparseable.
+// This is a hard error that should always propagate.
+func TestFixAllRefusesBadSchema(t *testing.T) {
+	// Create a tree with an unparseable .stem
+	dir := t.TempDir()
+
+	// Create unparseable .stem
+	badStem := "version: 2\nthis: [is not valid YAML"
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(badStem), 0644)
+
+	// Create markdown file
+	target := filepath.Join(dir, "test.md")
+	mustWriteFile(t, target, []byte("---\ntitle: Test\n---\n# Test\n"), 0644)
+
+	// Attempt fix --all (should fail because schema parse error)
+	out, err := runCmd(t, "fix", "--all", dir)
+
+	// After slice 3d: this should error
+	if err == nil {
+		t.Errorf("expected error when fix --all has bad schema, but succeeded with output: %s", out)
+	}
+}

@@ -647,3 +647,61 @@ func listFilesWithContent(t *testing.T, dir string) map[string]string {
 	}
 	return files
 }
+
+// --- Slice 3d: Mutating Command Error Semantics ---
+
+// TestSchemaProposeWorksWithoutSchema verifies that schema propose succeeds on a tree with no .stem.
+// This is a bootstrap test: schema propose must work on ungoverned trees to infer the schema.
+func TestSchemaProposeWorksWithoutSchema(t *testing.T) {
+	// Create a tree with NO .stem file
+	dir := t.TempDir()
+
+	// Create markdown files
+	mustWriteFile(t, filepath.Join(dir, "doc1.md"), []byte("---\ntitle: Doc1\nestado: Pending\n---\n# Doc 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "doc2.md"), []byte("---\ntitle: Doc2\nestado: Completed\n---\n# Doc 2\n"), 0644)
+
+	// Attempt schema propose (should succeed because it's a bootstrap command)
+	out, err := runCmd(t, "schema", "propose", dir)
+
+	// This should NOT error
+	if err != nil {
+		t.Errorf("expected schema propose to succeed on no-schema tree, but got error: %v\noutput: %s", err, out)
+	}
+
+	// Should output valid JSON report
+	var report map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Errorf("expected valid JSON report, got error: %v\noutput: %s", err, out)
+	}
+	if report["kind"] != "rootline/schema-proposals" {
+		t.Errorf("expected kind rootline/schema-proposals, got %v", report["kind"])
+	}
+}
+
+// TestAnalyzeWorksWithoutSchema verifies that analyze succeeds on a tree with no .stem.
+// This is a bootstrap test: analyze must work on ungoverned trees to infer the schema.
+func TestAnalyzeWorksWithoutSchema(t *testing.T) {
+	// Create a tree with NO .stem file
+	dir := t.TempDir()
+
+	// Create markdown files
+	mustWriteFile(t, filepath.Join(dir, "doc1.md"), []byte("---\ntitle: Doc1\nestado: Pending\n---\n# Doc 1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "doc2.md"), []byte("---\ntitle: Doc2\nestado: Completed\n---\n# Doc 2\n"), 0644)
+
+	// Attempt analyze (should succeed because it's a bootstrap command)
+	out, err := runCmd(t, "analyze", dir)
+
+	// This should NOT error
+	if err != nil {
+		t.Errorf("expected analyze to succeed on no-schema tree, but got error: %v\noutput: %s", err, out)
+	}
+
+	// Should output valid JSON report
+	var report map[string]interface{}
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Errorf("expected valid JSON report, got error: %v\noutput: %s", err, out)
+	}
+	if report["kind"] != "analyze" {
+		t.Errorf("expected kind analyze, got %v", report["kind"])
+	}
+}
