@@ -198,7 +198,7 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 	for dir := range visitedDirs {
 		entries, walkErr := rules.WalkUp(dir)
 		if walkErr != nil {
-			continue
+			return fmt.Errorf("resolving schema for structural validation in %s: %w", dir, walkErr)
 		}
 		effective := rules.MergeStemFiles(entries)
 		if effective.Structural.IsEmpty() {
@@ -223,7 +223,10 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 			continue
 		}
 		entries, walkErr := rules.WalkUp(dir)
-		if walkErr != nil || len(entries) == 0 {
+		if walkErr != nil {
+			return fmt.Errorf("resolving schema for drift detection in %s: %w", dir, walkErr)
+		}
+		if len(entries) == 0 {
 			continue
 		}
 		effective := rules.MergeStemFiles(entries)

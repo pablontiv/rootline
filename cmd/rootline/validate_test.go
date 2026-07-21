@@ -493,3 +493,139 @@ func TestValidateAll_StemHealthWarnings(t *testing.T) {
 		t.Errorf("expected enum-values warning in results, got: %s", stdout)
 	}
 }
+
+// TestValidateAll_NoSchemaAnywhere tests that validate --all exits non-zero
+// when no .stem files exist in the tree.
+func TestValidateAll_NoSchemaAnywhere(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Create a markdown file but NO .stem files anywhere
+	mdFile := filepath.Join(root, "doc.md")
+	if err := os.WriteFile(mdFile, []byte("---\ntitle: Test\n---\n# Test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Note: deliberately NOT calling declareTestBoundary so there is no .stem
+
+	mustChdir(t, root)
+
+	stdout, err := executeValidate(t, "--all")
+	// Should exit with error since no schema is found
+	if err == nil {
+		t.Fatalf("expected error when no .stem files exist, got success\noutput: %s", stdout)
+	}
+}
+
+// TestValidateAll_HardErrorStructuralValidation tests that validate --all
+// propagates hard errors from structural validation (line ~199 in validate.go).
+func TestValidateAll_HardErrorStructuralValidation(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a valid .stem at root with structural rules
+	if err := os.WriteFile(
+		filepath.Join(root, ".stem"),
+		[]byte("version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\nstructural:\n  require_index: true\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a subdirectory
+	subDir := filepath.Join(root, "sub")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a markdown file in subdirectory so it gets validated
+	// This will add sub to visitedDirs
+	if err := os.WriteFile(
+		filepath.Join(subDir, "doc.md"),
+		[]byte("---\ntitle: Test\n---\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an unparseable STEM file in subdirectory
+	// This will cause WalkUp to fail during structural validation phase
+	if err := os.WriteFile(
+		filepath.Join(subDir, ".stem"),
+		[]byte("version: 2\ninvalid: [unclosed\nschema:\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	mustChdir(t, root)
+
+	stdout, err := executeValidate(t, "--all")
+	// Should fail due to unparseable .stem during structural validation
+	if err == nil {
+		t.Fatalf("expected error when .stem is unparseable during structural validation, got success\noutput: %s", stdout)
+	}
+}
+
+// TestValidateAll_HardErrorDriftDetection tests that validate --all
+// propagates hard errors from drift detection (line ~225 in validate.go).
+func TestValidateAll_HardErrorDriftDetection(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a valid .stem at root
+	if err := os.WriteFile(
+		filepath.Join(root, ".stem"),
+		[]byte("version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a subdirectory with markdown files for drift detection
+	subDir := filepath.Join(root, "sub")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create an index file (README.md) - this triggers drift detection for this parent
+	if err := os.WriteFile(
+		filepath.Join(subDir, "README.md"),
+		[]byte("---\ntitle: Index\n---\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a child file - this makes parentChildren[subDir] non-empty
+	if err := os.WriteFile(
+		filepath.Join(subDir, "child.md"),
+		[]byte("---\ntitle: Child\n---\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create an unparseable .stem in the subdirectory
+	// This will cause WalkUp to fail during drift detection phase
+	if err := os.WriteFile(
+		filepath.Join(subDir, ".stem"),
+		[]byte("version: 2\ninvalid: [unclosed\nschema:\n"),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	mustChdir(t, root)
+
+	stdout, err := executeValidate(t, "--all")
+	// Should fail due to unparseable .stem encountered during drift detection
+	if err == nil {
+		t.Fatalf("expected error during drift detection when .stem is unparseable, got success\noutput: %s", stdout)
+	}
+}
