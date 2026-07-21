@@ -47,13 +47,20 @@ func boundaryPreflight(cmd *cobra.Command, args []string) error {
 
 	entries, err := rules.WalkUp(target)
 	if err != nil {
-		// A tree with no .stem at all is ErrNoSchemaFound, which each command
-		// reports in its own context. Anything else is a real IO or parse
-		// failure and likewise belongs to the command.
+		// A tree with no .stem at all is not a broken project. Governed
+		// commands reject it in their own context and bootstrap commands are
+		// allowed to work on one, so pass that case through.
 		if errors.Is(err, rules.ErrNoSchemaFound) {
 			return nil
 		}
-		return nil
+
+		// Anything else is a real IO or parse failure, and this is the only
+		// place that sees every governed command. `query` and `stats` never
+		// resolve a schema on their own — query does so only under --sort and
+		// neither passes a scope resolver — so without failing here a corrupt
+		// .stem is invisible to them: they return records from a tree whose
+		// governance is broken and report success.
+		return err
 	}
 
 	if !rules.ChainHasNoDeclaredBoundary(entries) {
