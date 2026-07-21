@@ -5,6 +5,7 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -247,25 +248,33 @@ func TestPipeline_StemMergeInheritance(t *testing.T) {
 	}
 }
 
-// TestPipeline_NoStemMatchesEverything tests that without any .stem
-// files, the scanner extracts all files with registered extractors.
-func TestPipeline_NoStemMatchesEverything(t *testing.T) {
+// TestPipeline_NoStemIsAnError tests that a tree with no .stem anywhere is a
+// hard error at the discovery layer.
+//
+// This replaces TestPipeline_NoStemMatchesEverything, which asserted the
+// opposite: that an ungoverned tree matched every file and scanned
+// successfully. That rule is what let `validate --all` exit 0 having governed
+// nothing.
+//
+// Scope note: the assertion is at the WalkUp layer, not the Scan layer.
+// index.ScopeResolver still returns only *rules.StemFile, so buildScopeResolver
+// below is forced to convert this error into a nil — reproducing the exact
+// swallow that causes the false green. Scan therefore still reports zero
+// records with a nil error here. Making that path fail is slice 3a, which
+// changes ScopeResolver to return (*rules.StemFile, error); the Scan-level
+// assertion belongs to that slice.
+func TestPipeline_NoStemIsAnError(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		"a.md": "---\ntitle: A\n---\n",
 		"b.md": "---\ntitle: B\n---\n",
 	})
 
-	reg := extract.NewRegistry()
-	resolver := buildScopeResolver()
-
-	records, err := index.Scan(context.Background(), root, reg, index.WithScopeResolver(resolver))
-	if err != nil {
-		t.Fatalf("Scan error: %v", err)
+	_, err := rules.WalkUp(root)
+	if err == nil {
+		t.Fatal("expected an error for a tree with no .stem, got success")
 	}
-
-	// No .stem = no scope = match all. Both .md files should be extracted.
-	if len(records) != 2 {
-		t.Fatalf("got %d records, want 2", len(records))
+	if !errors.Is(err, rules.ErrNoSchemaFound) {
+		t.Fatalf("expected ErrNoSchemaFound, got: %v", err)
 	}
 }
 

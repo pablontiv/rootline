@@ -10,7 +10,12 @@ import (
 const stemFileName = ".stem"
 
 // ErrNoSchemaFound is returned when no .stem file is found in the directory chain.
-var ErrNoSchemaFound = fmt.Errorf("no .stem file found in the directory chain")
+//
+// The remediation hint is part of the message on purpose. Commands used to
+// answer this condition with a successful, empty result carrying a "run
+// rootline init" hint; now that it is a hard error, the guidance travels with
+// the error so the help is not lost.
+var ErrNoSchemaFound = fmt.Errorf("no .stem file found in the directory chain; run 'rootline init' to create one")
 
 // StemEntry pairs a .stem file path with its parsed content.
 type StemEntry struct {

@@ -2,10 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 // --- generateMarkdown tests (new.go) ---
@@ -160,12 +163,15 @@ func TestRunDescribe_TableOutput(t *testing.T) {
 	}
 }
 
-// TestRunDescribe_NoStem tests describe when no .stem file exists
+// TestRunDescribe_NoStem tests that describe fails explicitly when no .stem
+// exists anywhere in the chain.
+//
+// Before the marker-based discovery change, this returned a successful JSON
+// document carrying hints. That was one half of the false-green class of bugs:
+// a command reporting success while governing nothing. Zero .stem is now
+// always ErrNoSchemaFound.
 func TestRunDescribe_NoStem(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	emptyDir := filepath.Join(dir, "empty")
 	if err := os.Mkdir(emptyDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -173,21 +179,11 @@ func TestRunDescribe_NoStem(t *testing.T) {
 
 	resetFlags()
 	out, err := runCmd(t, "describe", emptyDir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	if err == nil {
+		t.Fatalf("expected an error when no .stem exists, got success\noutput: %s", out)
 	}
-
-	var result map[string]any
-	if err := json.Unmarshal([]byte(out), &result); err != nil {
-		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
-	}
-
-	// Should have hints
-	if hints, ok := result["hints"]; ok && hints != nil {
-		hintList := hints.([]any)
-		if len(hintList) == 0 {
-			t.Error("expected hints when no .stem found")
-		}
+	if !errors.Is(err, rules.ErrNoSchemaFound) {
+		t.Fatalf("expected ErrNoSchemaFound, got: %v", err)
 	}
 }
 

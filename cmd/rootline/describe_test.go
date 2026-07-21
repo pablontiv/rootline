@@ -3,10 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 func executeDescribe(t *testing.T, args ...string) (string, error) {
@@ -74,41 +77,27 @@ func TestDescribeCmd_FullContract(t *testing.T) {
 	}
 }
 
+// TestDescribeCmd_NoStemAncestors asserts that describing a path with no .stem
+// anywhere in its chain is an explicit failure.
+//
+// This previously returned an empty schema plus a hint, which meant a command
+// could report success while governing nothing. Zero .stem is now
+// ErrNoSchemaFound; the "run rootline init" guidance moved into the error
+// message so the help survives the stricter contract.
 func TestDescribeCmd_NoStemAncestors(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
 		"empty/placeholder.txt": "",
 	})
 
-	stdout, err := executeDescribe(t, filepath.Join(root, "empty"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := executeDescribe(t, filepath.Join(root, "empty"))
+	if err == nil {
+		t.Fatal("expected an error when no .stem exists in the chain, got success")
 	}
-
-	var result map[string]any
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
-		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	if !errors.Is(err, rules.ErrNoSchemaFound) {
+		t.Fatalf("expected ErrNoSchemaFound, got: %v", err)
 	}
-
-	// Should return empty schema, not an error
-	applies := result["applies"].([]any)
-	if len(applies) != 0 {
-		t.Errorf("applies = %v, want empty", applies)
-	}
-
-	schema := result["schema"].(map[string]any)
-	if len(schema) != 0 {
-		t.Errorf("schema = %v, want empty", schema)
-	}
-
-	// Should include hint to run init
-	hints, ok := result["hints"].([]any)
-	if !ok || len(hints) == 0 {
-		t.Error("expected hints when no .stem found")
-	} else {
-		hint := hints[0].(string)
-		if !strings.Contains(hint, "rootline init") {
-			t.Errorf("hint should mention 'rootline init', got: %s", hint)
-		}
+	if !strings.Contains(err.Error(), "rootline init") {
+		t.Errorf("error should guide the user to 'rootline init', got: %s", err)
 	}
 }
 
@@ -224,21 +213,22 @@ func TestDescribeCmd_RequiresArg(t *testing.T) {
 	}
 }
 
+// TestDescribeCmd_NoStemTableHint asserts the same failure in table mode, and
+// that the init guidance is preserved in the error regardless of output format.
 func TestDescribeCmd_NoStemTableHint(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
 		"empty/placeholder.txt": "",
 	})
 
-	stdout, err := executeDescribe(t, "--output", "table", filepath.Join(root, "empty"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := executeDescribe(t, "--output", "table", filepath.Join(root, "empty"))
+	if err == nil {
+		t.Fatal("expected an error when no .stem exists in the chain, got success")
 	}
-
-	if !strings.Contains(stdout, "Hint:") {
-		t.Errorf("expected Hint in table output, got: %s", stdout)
+	if !errors.Is(err, rules.ErrNoSchemaFound) {
+		t.Fatalf("expected ErrNoSchemaFound, got: %v", err)
 	}
-	if !strings.Contains(stdout, "rootline init") {
-		t.Errorf("expected 'rootline init' in hint, got: %s", stdout)
+	if !strings.Contains(err.Error(), "rootline init") {
+		t.Errorf("error should guide the user to 'rootline init', got: %s", err)
 	}
 }
 
