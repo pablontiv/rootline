@@ -24,6 +24,23 @@ var commandsExemptFromBoundaryPreflight = map[string]bool{
 	"migrate":    true,
 }
 
+// isExemptFromBoundaryPreflight reports whether cmd, or any command it hangs
+// under, is exempt.
+//
+// Cobra reports a subcommand's own name, so `schema propose` answers "propose"
+// and `hooks status` answers "status". Matching only the leaf name would
+// silently un-exempt every subcommand of an exempt parent — which broke exactly
+// the user the migration exists for: an existing project with a .stem but no
+// marker could not reach `schema propose`.
+func isExemptFromBoundaryPreflight(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if commandsExemptFromBoundaryPreflight[c.Name()] {
+			return true
+		}
+	}
+	return false
+}
+
 // boundaryPreflight runs once before any schema-governed command.
 //
 // It is wired at the root rather than at each of the sixteen WalkUp call sites:
@@ -36,7 +53,7 @@ var commandsExemptFromBoundaryPreflight = map[string]bool{
 // the command fails, because prompting into a pipeline that cannot answer hangs
 // it until timeout.
 func boundaryPreflight(cmd *cobra.Command, args []string) error {
-	if commandsExemptFromBoundaryPreflight[cmd.Name()] {
+	if isExemptFromBoundaryPreflight(cmd) {
 		return nil
 	}
 
