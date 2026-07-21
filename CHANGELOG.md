@@ -10,7 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 - `CHANGELOG.md` (this file) — ecosystem documentation baseline
 - GitHub Issues enabled on the repository
-- `docs/UPGRADE.md` — migration guide for root marker requirement (v0.11+)
+- `docs/UPGRADE.md` — migration guide for the root marker requirement
 - Root marker support: `.stem` files can now declare `root: true` to establish a schema discovery boundary
 - Stem-health check for nested root markers (`nested-root-marker` info-level diagnostic)
 - Interactive migration prompt: when running on a terminal, rootline prompts to add the root marker to existing projects
@@ -19,7 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 - **BREAKING**: Schema discovery no longer uses `.git` directory as a boundary. Projects must now declare a root marker by adding `root: true` to the project's top-level `.stem` file. Existing projects without a root marker will receive a clear error message with the fix.
 - **BREAKING**: Commands that govern a project (`validate`, `fix`, `query`, `tree`, `graph`, `describe`, `explain`, `set`, `stats`) now fail instead of silently succeeding when schema discovery cannot find a `.stem` boundary. This prevents false-green validation runs over zero records.
-- **BREAKING**: Projects with `.stem` files but no root marker must run `rootline init --force` or manually add `root: true` to their top-level `.stem` to use governed commands. See `docs/UPGRADE.md` for details.
+- **BREAKING**: Projects with `.stem` files but no root marker must add `root: true` to their top-level `.stem` — one line — to use governed commands. On a terminal, rootline offers to add it interactively. Do not use `rootline init --force` to migrate: it re-infers and overwrites an existing schema. See `docs/UPGRADE.md`.
 - Schema discovery is now stable: resolution depends only on the target path and filesystem `.stem` files, never on the process working directory.
 - `set` command no longer requires a `.git` directory to function.
 - `rootline init` now emits `root: true` in generated `.stem` files, marking new projects as their own boundaries.
