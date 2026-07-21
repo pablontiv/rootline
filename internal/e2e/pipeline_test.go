@@ -70,13 +70,14 @@ func declareTestBoundaryE2E(t *testing.T, root string) {
 
 // buildScopeResolver returns a ScopeResolver that uses WalkUp + Merge
 // to compute the effective stem for each directory.
+// It now returns the error from WalkUp instead of swallowing it.
 func buildScopeResolver() index.ScopeResolver {
-	return func(dir string) *rules.StemFile {
+	return func(dir string) (*rules.StemFile, error) {
 		entries, err := rules.WalkUp(dir)
 		if err != nil {
-			return nil
+			return nil, err
 		}
-		return rules.MergeStemFiles(entries)
+		return rules.MergeStemFiles(entries), nil
 	}
 }
 
@@ -276,32 +277,34 @@ func TestPipeline_StemMergeInheritance(t *testing.T) {
 }
 
 // TestPipeline_NoStemIsAnError tests that a tree with no .stem anywhere is a
-// hard error at the discovery layer.
+// hard error at the Scan layer.
 //
 // This replaces TestPipeline_NoStemMatchesEverything, which asserted the
 // opposite: that an ungoverned tree matched every file and scanned
 // successfully. That rule is what let `validate --all` exit 0 having governed
 // nothing.
 //
-// Scope note: the assertion is at the WalkUp layer, not the Scan layer.
-// index.ScopeResolver still returns only *rules.StemFile, so buildScopeResolver
-// below is forced to convert this error into a nil — reproducing the exact
-// swallow that causes the false green. Scan therefore still reports zero
-// records with a nil error here. Making that path fail is slice 3a, which
-// changes ScopeResolver to return (*rules.StemFile, error); the Scan-level
-// assertion belongs to that slice.
+// With Slice 3a, ScopeResolver now returns (*rules.StemFile, error), and buildScopeResolver
+// passes the error through instead of swallowing it. Scan therefore returns
+// ErrNoSchemaFound when no .stem is found anywhere in the tree.
 func TestPipeline_NoStemIsAnError(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		"a.md": "---\ntitle: A\n---\n",
 		"b.md": "---\ntitle: B\n---\n",
 	})
 
-	_, err := rules.WalkUp(root)
+	reg := extract.NewRegistry()
+	resolver := buildScopeResolver()
+
+	records, err := index.Scan(context.Background(), root, reg, index.WithScopeResolver(resolver))
 	if err == nil {
-		t.Fatal("expected an error for a tree with no .stem, got success")
+		t.Fatal("expected Scan to return an error for a tree with no .stem, got success")
 	}
 	if !errors.Is(err, rules.ErrNoSchemaFound) {
-		t.Fatalf("expected ErrNoSchemaFound, got: %v", err)
+		t.Fatalf("expected ErrNoSchemaFound from Scan, got: %v", err)
+	}
+	if records != nil {
+		t.Errorf("expected nil records, got %v", records)
 	}
 }
 

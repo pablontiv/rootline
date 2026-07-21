@@ -122,12 +122,12 @@ func runSchemaPropose(cmd *cobra.Command, args []string) error {
 
 	// Index and extract records.
 	reg := extract.NewASTRegistry()
-	resolver := func(dir string) *rules.StemFile {
+	resolver := func(dir string) (*rules.StemFile, error) {
 		entries, err := rules.WalkUp(dir)
 		if err != nil || len(entries) == 0 {
-			return nil
+			return nil, err
 		}
-		return rules.MergeStemFiles(entries)
+		return rules.MergeStemFiles(entries), nil
 	}
 
 	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver))
@@ -373,12 +373,12 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 // runPostApplyValidation runs validate --all on the root and returns a summary.
 func runPostApplyValidation(ctx context.Context, root string) *ValidationSummary {
 	reg := extract.NewRegistry()
-	resolver := func(dir string) *rules.StemFile {
+	resolver := func(dir string) (*rules.StemFile, error) {
 		entries, err := rules.WalkUp(dir)
 		if err != nil || len(entries) == 0 {
-			return nil
+			return nil, err
 		}
-		return rules.MergeStemFiles(entries)
+		return rules.MergeStemFiles(entries), nil
 	}
 
 	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver))

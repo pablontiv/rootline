@@ -2,12 +2,14 @@ package index
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 // helper to create a temp tree with files and optional .stemignore.
@@ -315,5 +317,97 @@ func TestParseStemignore_NotFound(t *testing.T) {
 	_, err := parseStemignore("/nonexistent/.stemignore")
 	if err == nil {
 		t.Error("expected error for nonexistent file")
+	}
+}
+
+// TestScan_ResolverHardErrorAbortsScan tests that a hard error from the
+// resolver (parse error, IO error) aborts the entire scan.
+func TestScan_ResolverHardErrorAbortsScan(t *testing.T) {
+	root := setupScanTree(t, map[string]string{
+		"doc.md": "---\ntitle: Doc\n---\n",
+	})
+
+	reg := extract.NewRegistry()
+
+	// Create a resolver that returns a hard error.
+	resolver := func(dir string) (*rules.StemFile, error) {
+		return nil, fmt.Errorf("simulated read error")
+	}
+
+	records, err := Scan(context.Background(), root, reg, WithScopeResolver(resolver))
+	if err == nil {
+		t.Fatal("expected an error from resolver hard failure, got success")
+	}
+	if records != nil {
+		t.Errorf("expected nil records on hard error, got %v", records)
+	}
+	if !errors.Is(err, fmt.Errorf("simulated read error")) && err.Error() != "simulated read error" {
+		t.Errorf("error should be the hard error, got: %v", err)
+	}
+}
+
+// TestScan_ResolverErrNoSchemaFoundContinuesScan tests that when a resolver
+// returns ErrNoSchemaFound for a directory, the scan skips that directory and
+// continues scanning other files.
+func TestScan_ResolverErrNoSchemaFoundContinuesScan(t *testing.T) {
+	root := setupScanTree(t, map[string]string{
+		"doc.md":      "---\ntitle: Doc\n---\n",
+		"sub/file.md": "---\ntitle: File\n---\n",
+	})
+
+	reg := extract.NewRegistry()
+
+	// Create a resolver that returns ErrNoSchemaFound for "sub" but success for root.
+	resolver := func(dir string) (*rules.StemFile, error) {
+		if filepath.Base(dir) == "sub" {
+			return nil, rules.ErrNoSchemaFound
+		}
+		// Return a minimal stem for root.
+		return &rules.StemFile{}, nil
+	}
+
+	records, err := Scan(context.Background(), root, reg, WithScopeResolver(resolver))
+	if err != nil {
+		t.Fatalf("expected scan to continue after ErrNoSchemaFound, got error: %v", err)
+	}
+
+	// Should have found only doc.md (at root where resolver succeeds).
+	// sub/file.md should have been skipped (resolver returned ErrNoSchemaFound for sub).
+	if len(records) != 1 {
+		paths := make([]string, len(records))
+		for i, r := range records {
+			paths[i] = r.Path
+		}
+		t.Errorf("expected 1 record (only root doc.md), got %d: %v", len(records), paths)
+	}
+	if records[0].Path != "doc.md" {
+		t.Errorf("expected record path doc.md, got %q", records[0].Path)
+	}
+}
+
+// TestScan_NoResolverResultReturnsErrNoSchemaFound tests that when a scan
+// finds no files that can be resolved (all directories have no schema),
+// the scan returns ErrNoSchemaFound instead of (nil, nil).
+func TestScan_NoResolverResultReturnsErrNoSchemaFound(t *testing.T) {
+	root := setupScanTree(t, map[string]string{
+		"doc.md": "---\ntitle: Doc\n---\n",
+	})
+
+	reg := extract.NewRegistry()
+
+	// Create a resolver that always returns ErrNoSchemaFound.
+	resolver := func(dir string) (*rules.StemFile, error) {
+		return nil, rules.ErrNoSchemaFound
+	}
+
+	records, err := Scan(context.Background(), root, reg, WithScopeResolver(resolver))
+	if err == nil {
+		t.Fatal("expected ErrNoSchemaFound when no files resolve, got success")
+	}
+	if !errors.Is(err, rules.ErrNoSchemaFound) {
+		t.Fatalf("expected ErrNoSchemaFound, got: %v", err)
+	}
+	if records != nil {
+		t.Errorf("expected nil records when returning ErrNoSchemaFound, got %v", records)
 	}
 }

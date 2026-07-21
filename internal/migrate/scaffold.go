@@ -56,12 +56,12 @@ func (op *ScaffoldOperation) Execute() (*ScaffoldResult, error) {
 	reg := extract.NewASTRegistry()
 
 	// Build a scope resolver so that index.Scan respects .stem scope rules.
-	resolver := func(dir string) *rules.StemFile {
+	resolver := func(dir string) (*rules.StemFile, error) {
 		entries, walkErr := rules.WalkUp(dir)
 		if walkErr != nil {
-			return nil
+			return nil, walkErr
 		}
-		return rules.MergeStemFiles(entries)
+		return rules.MergeStemFiles(entries), nil
 	}
 
 	records, err := index.Scan(context.Background(), absRoot, reg, index.WithScopeResolver(resolver))

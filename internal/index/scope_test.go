@@ -69,7 +69,7 @@ func TestScan_WithScopeResolver_FiltersFiles(t *testing.T) {
 	})
 
 	stem := &rules.StemFile{Scope: rules.Scope{Match: "doc.md"}}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir string) (*rules.StemFile, error) { return stem, nil }
 
 	reg := extract.NewRegistry()
 	records, err := Scan(context.Background(), root, reg, WithScopeResolver(resolver))
@@ -94,15 +94,15 @@ func TestScan_WithScopeResolver_PerDirectory(t *testing.T) {
 	})
 
 	// docs/ scope only matches api.md, src/ matches everything, root has no stem.
-	resolver := func(dir string) *rules.StemFile {
+	resolver := func(dir string) (*rules.StemFile, error) {
 		rel, _ := filepath.Rel(root, dir)
 		switch rel {
 		case "docs":
-			return &rules.StemFile{Scope: rules.Scope{Match: "api.md"}}
+			return &rules.StemFile{Scope: rules.Scope{Match: "api.md"}}, nil
 		case "src":
-			return &rules.StemFile{Scope: rules.Scope{Match: "*.md"}}
+			return &rules.StemFile{Scope: rules.Scope{Match: "*.md"}}, nil
 		default:
-			return nil // no stem = exclude
+			return nil, rules.ErrNoSchemaFound // no stem = exclude
 		}
 	}
 
@@ -112,7 +112,7 @@ func TestScan_WithScopeResolver_PerDirectory(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// root.md excluded (nil stem) + docs/api.md (matches) + src/main.md (matches) = 2
+	// root.md excluded (ErrNoSchemaFound) + docs/api.md (matches) + src/main.md (matches) = 2
 	if len(records) != 2 {
 		names := make([]string, len(records))
 		for i, r := range records {
@@ -147,9 +147,9 @@ func TestScan_ScopeResolverCachesPerDirectory(t *testing.T) {
 	})
 
 	calls := 0
-	resolver := func(dir string) *rules.StemFile {
+	resolver := func(dir string) (*rules.StemFile, error) {
 		calls++
-		return &rules.StemFile{} // empty stem = match all
+		return &rules.StemFile{}, nil // empty stem = match all
 	}
 
 	reg := extract.NewRegistry()
@@ -174,7 +174,7 @@ func TestScan_ScopeAndStemignoreCombined(t *testing.T) {
 
 	// Scope only allows *.md (all are .md), but .stemignore excludes draft.md
 	stem := &rules.StemFile{Scope: rules.Scope{Match: "*.md"}}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir string) (*rules.StemFile, error) { return stem, nil }
 
 	reg := extract.NewRegistry()
 	records, err := Scan(context.Background(), root, reg, WithScopeResolver(resolver))
@@ -202,7 +202,7 @@ func TestScan_ScopeExcludesBeforeExtraction(t *testing.T) {
 
 	// Scope excludes skip.md
 	stem := &rules.StemFile{Scope: rules.Scope{Match: "good.md"}}
-	resolver := func(dir string) *rules.StemFile { return stem }
+	resolver := func(dir string) (*rules.StemFile, error) { return stem, nil }
 
 	reg := extract.NewRegistry()
 	records, err := Scan(context.Background(), root, reg, WithScopeResolver(resolver))

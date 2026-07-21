@@ -22,12 +22,12 @@ func TestFixAllSiblingInference(t *testing.T) {
 
 	ctx := context.Background()
 	reg := extract.NewRegistry()
-	resolver := func(dir string) *rules.StemFile {
+	resolver := func(dir string) (*rules.StemFile, error) {
 		entries, err := rules.WalkUp(dir)
 		if err != nil {
-			return nil
+			return nil, err
 		}
-		return rules.MergeStemFiles(entries)
+		return rules.MergeStemFiles(entries), nil
 	}
 
 	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver))

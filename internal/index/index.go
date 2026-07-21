@@ -6,6 +6,7 @@ package index
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -31,9 +32,12 @@ type scanConfig struct {
 
 // WithScopeResolver adds scope filtering to Scan. The resolver is called
 // once per directory to obtain the effective StemFile. If the resolver
-// returns nil, no .stem governs the directory and all its files are
-// excluded. Files that don't match scope.match are also skipped.
-func WithScopeResolver(fn func(dir string) *rules.StemFile) ScanOption {
+// returns an error:
+// - a hard error aborts the scan
+// - ErrNoSchemaFound skips that directory and continues
+// If the resolver returns nil with no error, all files in that directory
+// are excluded. Files that don't match scope.match are also skipped.
+func WithScopeResolver(fn func(dir string) (*rules.StemFile, error)) ScanOption {
 	return func(c *scanConfig) { c.scopeResolver = fn }
 }
 
@@ -58,8 +62,11 @@ func Scan(ctx context.Context, rootPath string, registry *extract.Registry, opts
 	var ignoreStack []ignoreEntry
 
 	var scopeCache map[string]*rules.StemFile
+	var scopeErrors map[string]error
+	var hitErrNoSchemaFound bool
 	if cfg.scopeResolver != nil {
 		scopeCache = make(map[string]*rules.StemFile)
+		scopeErrors = make(map[string]error)
 	}
 
 	err = filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
@@ -101,10 +108,26 @@ func Scan(ctx context.Context, rootPath string, registry *extract.Registry, opts
 		if cfg.scopeResolver != nil {
 			dir := filepath.Dir(path)
 			stem, cached := scopeCache[dir]
+			var resolveErr error
 			if !cached {
-				stem = cfg.scopeResolver(dir)
+				stem, resolveErr = cfg.scopeResolver(dir)
 				scopeCache[dir] = stem
+				scopeErrors[dir] = resolveErr
+			} else {
+				resolveErr = scopeErrors[dir]
 			}
+
+			// Hard error from resolver aborts the scan.
+			if resolveErr != nil && !errors.Is(resolveErr, rules.ErrNoSchemaFound) {
+				return resolveErr
+			}
+
+			// ErrNoSchemaFound for this directory means skip it, and mark that we hit it.
+			if errors.Is(resolveErr, rules.ErrNoSchemaFound) {
+				hitErrNoSchemaFound = true
+				return nil
+			}
+
 			if stem == nil {
 				return nil
 			}
@@ -125,6 +148,12 @@ func Scan(ctx context.Context, rootPath string, registry *extract.Registry, opts
 	}
 
 	if len(files) == 0 {
+		// Only return ErrNoSchemaFound if we used a resolver and found at least one
+		// file that hit ErrNoSchemaFound. If there were simply no files to scan,
+		// return success (nil, nil).
+		if hitErrNoSchemaFound {
+			return nil, rules.ErrNoSchemaFound
+		}
 		return nil, nil
 	}
 

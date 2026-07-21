@@ -6,9 +6,11 @@ import (
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
-// ScopeResolver returns the effective StemFile for a given directory.
+// ScopeResolver returns the effective StemFile for a given directory, or an error.
+// A hard error (parse/IO failure) aborts the scan.
+// ErrNoSchemaFound indicates no schema applies to this directory and that directory should be skipped.
 // Used by the scanner to filter files by scope before extraction.
-type ScopeResolver func(dir string) *rules.StemFile
+type ScopeResolver func(dir string) (*rules.StemFile, error)
 
 // MatchesScope checks whether a file path matches the scope.match
 // pattern from an effective StemFile. If the stem is nil or has no

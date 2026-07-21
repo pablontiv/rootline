@@ -217,17 +217,9 @@ func TestFixAllNoStem(t *testing.T) {
 
 	mustChdir(t, dir)
 
-	out, err := runCmd(t, "fix", "--all", "--output", "json")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var batch BatchFixResult
-	if err := json.Unmarshal([]byte(out), &batch); err != nil {
-		t.Fatalf("invalid JSON output: %v", err)
-	}
-	if batch.Summary.Fixed != 0 {
-		t.Errorf("expected 0 fixes without .stem, got: %d", batch.Summary.Fixed)
+	_, err := runCmd(t, "fix", "--all", "--output", "json")
+	if err == nil {
+		t.Fatal("expected error when no .stem file, got success")
 	}
 }
 

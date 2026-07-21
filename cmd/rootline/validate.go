@@ -146,12 +146,12 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 
 	// Phase 2: Document validation.
 	reg := extract.NewASTRegistry()
-	resolver := func(dir string) *rules.StemFile {
+	resolver := func(dir string) (*rules.StemFile, error) {
 		entries, err := rules.WalkUp(dir)
 		if err != nil || len(entries) == 0 {
-			return nil
+			return nil, err
 		}
-		return rules.MergeStemFiles(entries)
+		return rules.MergeStemFiles(entries), nil
 	}
 
 	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver))
