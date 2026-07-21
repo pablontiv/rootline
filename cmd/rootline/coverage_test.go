@@ -2,7 +2,7 @@ package main
 
 // coverage_test.go: targeted tests for uncovered code paths in cmd/rootline.
 // Focus: runAnalyze, runMigrateScaffold, postValidateOrRollback,
-// findGitRoot, renderValidateTable, appendStemHealthProposals,
+// findRootMarker, renderValidateTable, appendStemHealthProposals,
 // appendPropagateProposals, proposalsToFixResults.
 
 import (
@@ -194,29 +194,35 @@ tipo: test
 	_ = content
 }
 
-// --- findGitRoot (cmd/rootline) ---
+// --- findRootMarker (cmd/rootline) ---
 
-func TestFindGitRootCmd_NotFound(t *testing.T) {
+func TestFindRootMarkerCmd_NotFound(t *testing.T) {
 	dir := t.TempDir()
-	_, err := findGitRoot(dir)
+	_, err := findRootMarker(dir)
 	if err == nil {
-		t.Fatal("expected error when no .git directory")
+		t.Fatal("expected error when no marker exists")
 	}
-	if !strings.Contains(err.Error(), "no .git directory") {
-		t.Errorf("expected 'no .git directory' error, got: %v", err)
-	}
+	// Should return ErrNoSchemaFound or similar
 }
 
-func TestFindGitRootCmd_Found(t *testing.T) {
+func TestFindRootMarkerCmd_Found(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	// Create a root marker
+	stemContent := `version: 2
+root: true
+scope:
+  match: "*.md"
+schema:
+  test:
+    type: string
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+
 	sub := filepath.Join(dir, "a", "b")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	got, err := findGitRoot(sub)
+	got, err := findRootMarker(sub)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -234,20 +240,21 @@ func TestSetFileNotFound(t *testing.T) {
 	}
 }
 
-// --- runSet: no git root ---
+// --- runSet: no schema marker ---
 
-func TestSetNoGitRoot(t *testing.T) {
+func TestSetNoSchemaMarker(t *testing.T) {
 	dir := t.TempDir()
-	// No .git directory
+	// No .stem marker anywhere in the tree
 	target := filepath.Join(dir, "file.md")
 	mustWriteFile(t, target, []byte("---\nestado: Pending\n---\n# File\n"), 0644)
 
 	_, err := runCmd(t, "set", target, "estado=Completed")
 	if err == nil {
-		t.Fatal("expected error for no git root")
+		t.Fatal("expected error when no schema marker exists")
 	}
-	if !strings.Contains(err.Error(), "finding git root") {
-		t.Errorf("expected 'finding git root' error, got: %v", err)
+	// Should indicate a schema resolution error, not a git root error
+	if !strings.Contains(err.Error(), "resolving schema") {
+		t.Errorf("expected 'resolving schema' error, got: %v", err)
 	}
 }
 

@@ -96,19 +96,21 @@ func resolveValue(raw string) (string, error) {
 	return raw, nil
 }
 
-// findGitRoot walks up from dir looking for a .git directory.
-func findGitRoot(dir string) (string, error) {
-	current := dir
-	for {
-		if _, err := os.Stat(filepath.Join(current, ".git")); err == nil {
-			return current, nil
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			return "", fmt.Errorf("no .git directory found above %s", dir)
-		}
-		current = parent
+// findRootMarker walks up from startPath using WalkUp to find the schema boundary.
+// Returns the directory containing the root marker (or the filesystem root if no marker).
+// Uses marker-based discovery instead of Git.
+func findRootMarker(startPath string) (string, error) {
+	entries, err := rules.WalkUp(startPath)
+	if err != nil {
+		return "", err
 	}
+	if len(entries) == 0 {
+		return "", rules.ErrNoSchemaFound
+	}
+
+	// The root-most entry (first in the chain) is the boundary marker's directory
+	rootEntry := entries[0]
+	return filepath.Dir(rootEntry.Path), nil
 }
 
 func runSet(cmd *cobra.Command, args []string) error {
@@ -135,15 +137,23 @@ func runSet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("reading %s: %w", filePath, err)
 	}
 
-	// Step 3: Find git root for schema resolution.
-	dir := filepath.Dir(absPath)
-	gitRoot, err := findGitRoot(dir)
+	// Step 3: Get the invocation root (current working directory) for path computation.
+	// This is the namespace that scanning already uses for Record.Path.
+	invocationRoot, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("finding git root: %w", err)
+		return fmt.Errorf("getting working directory: %w", err)
 	}
 
-	// Compute relative path early: record.Path and proposal.Paths must match.
-	relPath, err := filepath.Rel(gitRoot, absPath)
+	// Step 3b: Resolve schema via marker-based discovery (for schema only, not paths).
+	dir := filepath.Dir(absPath)
+	_, err = findRootMarker(dir)
+	if err != nil {
+		return fmt.Errorf("resolving schema boundary: %w", err)
+	}
+
+	// Compute relative path from the invocation root (not the marker root).
+	// record.Path and proposal.Paths must use the same namespace.
+	relPath, err := filepath.Rel(invocationRoot, absPath)
 	if err != nil {
 		relPath = absPath
 	}
@@ -229,7 +239,7 @@ func runSet(cmd *cobra.Command, args []string) error {
 	}
 
 	recordMap := []*extract.Record{record}
-	if err := fix.ApplyProposals(ctx, report, gitRoot, recordMap); err != nil {
+	if err := fix.ApplyProposals(ctx, report, invocationRoot, recordMap); err != nil {
 		return fmt.Errorf("applying changes: %w", err)
 	}
 

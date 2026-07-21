@@ -267,3 +267,113 @@ func TestSetRefusesBadSchema(t *testing.T) {
 		t.Errorf("expected error when set has bad schema, but succeeded with output: %s", out)
 	}
 }
+
+// --- Slice 4: Set.go Root Computation ---
+
+// TestSetProposalPaths_MatchRecordPaths verifies that proposal paths and record paths
+// use the same namespace (invocation root), not the marker root. This is a critical
+// requirement for fix.go to find and apply proposals.
+func TestSetProposalPaths_MatchRecordPaths(t *testing.T) {
+	dir := setupSetTestDir(t)
+
+	// Run set from the directory root, targeting a file in docs/
+	target := filepath.Join(dir, "doc.md")
+	out, err := runCmd(t, "set", target, "estado=Completed")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	// Verify the file was actually modified (proposal was applied)
+	content := string(mustReadFile(t, target))
+	if !strings.Contains(content, "estado: Completed") {
+		t.Errorf("expected 'estado: Completed' in file after set, got:\n%s", content)
+	}
+
+	// The test passes if set succeeded and modified the file, which means
+	// the proposal paths matched the record paths during fix.ApplyProposals.
+	// If paths diverged, the lookup in fix.go:29-31 would silently skip the record
+	// and the file would remain unchanged.
+}
+
+// TestSetWithMarkerBoundary verifies that set respects the marker-based schema
+// boundary, not a Git boundary. This test creates a marker at a specific location
+// and verifies set works correctly with it.
+func TestSetWithMarkerBoundary(t *testing.T) {
+	// Create a simple project with a marker at the root
+	dir := t.TempDir()
+
+	// Create the root marker with `root: true`
+	stemContent := `version: 2
+root: true
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completed]
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+
+	// Create a document
+	docContent := `---
+estado: Pending
+---
+# Test Doc
+`
+	mustWriteFile(t, filepath.Join(dir, "doc.md"), []byte(docContent), 0644)
+
+	// Run set
+	target := filepath.Join(dir, "doc.md")
+	out, err := runCmd(t, "set", target, "estado=Completed")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	// Verify the change was applied
+	content := string(mustReadFile(t, target))
+	if !strings.Contains(content, "estado: Completed") {
+		t.Errorf("expected 'estado: Completed' after set, got:\n%s", content)
+	}
+}
+
+// TestSetOutsideGit verifies that set works on a file in a project with no .git directory.
+// This is a critical requirement: set must not depend on .git to compute paths.
+func TestSetOutsideGit(t *testing.T) {
+	// Create a project with NO .git directory at all
+	dir := t.TempDir()
+
+	// Create a marker (required by new implementation)
+	stemContent := `version: 2
+root: true
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completed]
+`
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+
+	// Create a markdown file
+	docContent := `---
+estado: Pending
+---
+# Test Doc
+`
+	target := filepath.Join(dir, "doc.md")
+	mustWriteFile(t, target, []byte(docContent), 0644)
+
+	// Attempt set (should work even without .git)
+	out, err := runCmd(t, "set", target, "estado=Completed")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	// Verify the change was applied
+	content := string(mustReadFile(t, target))
+	if !strings.Contains(content, "estado: Completed") {
+		t.Errorf("expected 'estado: Completed' after set, got:\n%s", content)
+	}
+}
