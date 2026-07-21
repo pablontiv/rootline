@@ -27,7 +27,22 @@ type fileEntry struct {
 type ScanOption func(*scanConfig)
 
 type scanConfig struct {
-	scopeResolver ScopeResolver
+	scopeResolver   ScopeResolver
+	allowUngoverned bool
+}
+
+// AllowUngoverned lets a scan read documents in a tree where no .stem resolves.
+//
+// It exists for the bootstrap commands only. `schema propose` and `analyze`
+// derive a schema FROM documents that do not have one yet, so demanding a
+// resolved schema before reading them would make them useless for their only
+// purpose — you cannot require a schema as the precondition for creating one.
+//
+// It tolerates a MISSING schema, never a broken one: hard read and parse errors
+// still abort the scan. Governed commands must not use it, because succeeding
+// over zero governed records is exactly the false green this change removes.
+func AllowUngoverned() ScanOption {
+	return func(c *scanConfig) { c.allowUngoverned = true }
 }
 
 // WithScopeResolver adds scope filtering to Scan. The resolver is called
@@ -123,16 +138,25 @@ func Scan(ctx context.Context, rootPath string, registry *extract.Registry, opts
 			}
 
 			// ErrNoSchemaFound for this directory means skip it, and mark that we hit it.
-			if errors.Is(resolveErr, rules.ErrNoSchemaFound) {
+			// Bootstrap scans instead read the file with no schema applied, since
+			// deriving a schema requires reading documents that lack one.
+			ungoverned := errors.Is(resolveErr, rules.ErrNoSchemaFound)
+			if ungoverned {
 				hitErrNoSchemaFound = true
-				return nil
+				if !cfg.allowUngoverned {
+					return nil
+				}
 			}
 
-			if stem == nil {
-				return nil
-			}
-			if !MatchesScope(path, stem) {
-				return nil
+			// An ungoverned bootstrap scan has no scope to filter by, so every
+			// readable file is in scope.
+			if !ungoverned {
+				if stem == nil {
+					return nil
+				}
+				if !MatchesScope(path, stem) {
+					return nil
+				}
 			}
 		}
 
@@ -148,10 +172,11 @@ func Scan(ctx context.Context, rootPath string, registry *extract.Registry, opts
 	}
 
 	if len(files) == 0 {
-		// Only return ErrNoSchemaFound if we used a resolver and found at least one
-		// file that hit ErrNoSchemaFound. If there were simply no files to scan,
-		// return success (nil, nil).
-		if hitErrNoSchemaFound {
+		// Report ErrNoSchemaFound only when a directory actually failed to
+		// resolve. An empty result because there was simply nothing to scan is
+		// a legitimate success. Bootstrap scans never report it: reading
+		// schemaless documents is their purpose.
+		if hitErrNoSchemaFound && !cfg.allowUngoverned {
 			return nil, rules.ErrNoSchemaFound
 		}
 		return nil, nil

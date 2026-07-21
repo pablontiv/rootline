@@ -69,7 +69,9 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		return rules.MergeStemFiles(entries), nil
 	}
 
-	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver))
+	// Bootstrap scan: this command derives a schema from documents that may
+	// not have one yet, so a missing schema must not stop it.
+	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver), index.AllowUngoverned())
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
 	}

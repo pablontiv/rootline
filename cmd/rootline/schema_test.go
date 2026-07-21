@@ -32,14 +32,46 @@ func TestSchemaProposeNoStem(t *testing.T) {
 		t.Fatal("expected no .stem file to exist initially")
 	}
 
-	_, err := executeSchemaPropose(t, root)
-	if err == nil {
-		t.Fatal("expected error when no .stem file found")
+	stdout, err := executeSchemaPropose(t, root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 
 	// Verify that no .stem file was created
 	if _, err := os.Stat(stemPath); err == nil {
-		t.Fatal("schema propose created a .stem file when it should have errored")
+		t.Fatal("schema propose created a .stem file, but should be read-only")
+	}
+
+	var report SchemaProposalsReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	// Verify report structure
+	if report.Version != 1 {
+		t.Errorf("expected version 1, got %d", report.Version)
+	}
+	if report.Kind != "rootline/schema-proposals" {
+		t.Errorf("expected kind 'rootline/schema-proposals', got %s", report.Kind)
+	}
+
+	// Verify summary  consistency
+	if report.Summary.Total != len(report.Proposals) {
+		t.Errorf("summary total mismatch: %d != %d", report.Summary.Total, len(report.Proposals))
+	}
+
+	// Verify engine_resolved count
+	agentRequired := 0
+	for _, p := range report.Proposals {
+		if p.RequiresAgent {
+			agentRequired++
+		}
+	}
+	if agentRequired != report.Summary.RequiresAgent {
+		t.Errorf("requires_agent mismatch: %d != %d", agentRequired, report.Summary.RequiresAgent)
+	}
+	if report.Summary.EngineResolved != (report.Summary.Total - report.Summary.RequiresAgent) {
+		t.Errorf("engine_resolved mismatch: %d != %d", report.Summary.EngineResolved, report.Summary.Total-report.Summary.RequiresAgent)
 	}
 }
 
@@ -118,8 +150,8 @@ func TestSchemaProposeReadOnly(t *testing.T) {
 	initialFiles := listFilesWithContent(t, root)
 
 	_, err := executeSchemaPropose(t, root)
-	if err == nil {
-		t.Fatal("expected error when no .stem file found")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 
 	// Verify no new files were created
@@ -147,9 +179,28 @@ func TestSchemaProposeJSONOutput(t *testing.T) {
 		"test.md": "---\ntitulo: Test\ntipo: task\n---\n# Test\n\nContent.\n",
 	})
 
-	_, err := executeSchemaPropose(t, root)
-	if err == nil {
-		t.Fatal("expected error when no .stem file found")
+	stdout, err := executeSchemaPropose(t, root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report SchemaProposalsReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+
+	// Verify required fields
+	if report.Version == 0 {
+		t.Error("version is 0")
+	}
+	if report.Kind == "" {
+		t.Error("kind is empty")
+	}
+	if report.Path == "" {
+		t.Error("path is empty")
+	}
+	if report.Proposals == nil {
+		t.Error("proposals is nil")
 	}
 }
 
