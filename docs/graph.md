@@ -45,7 +45,28 @@ rootline graph docs/epics/ --check            # Validate only: cycles + broken l
 |------|-------------|
 | `--format dot\|mermaid` | Output format (default: `dot`) |
 | `--check` | Validate only — reports cycles and broken links, no diagram |
+| `--fail-cycles` | Treat cycles as check failures; exit with code 1 if any found (default: cycles are informational) |
+| `--quiet-cycles` | Suppress per-cycle enumeration when informational (only affects output when cycles are detected and not failing) |
 | `--where "expr"` | Filter records before building graph (expr-lang syntax, repeatable) |
+
+### Link Styles
+
+Rootline extracts both `[[wiki-links]]` and `[markdown](links)` reference styles. The links recognized in graph building are configured in `.stem` via the `links.styles` field (default: `[wikilink]`).
+
+To control which link styles are processed in the graph:
+
+```yaml
+# .stem file
+links:
+  styles: [wikilink, markdown]  # Recognize both wiki-links and markdown links
+  checks:
+    resolve: true              # Check that targets resolve (case-sensitive)
+    anchors: true              # Validate heading anchors
+    encoding: true             # Check for `%20` encoding in URLs
+    cycles: true               # Fail graph --check if cycles found (optional)
+```
+
+With `links.styles`, only listed styles are extracted and validated. The graph command respects this setting.
 
 ### With --where
 

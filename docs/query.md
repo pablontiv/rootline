@@ -32,6 +32,36 @@ Sort type detection per field:
 
 Missing/nil values always sort last, regardless of direction. Sort applies after filtering and before limit.
 
+### Link Traversal Predicates
+
+Query documents based on their link relationships using `--has-inbound` and `--has-outbound`:
+
+```bash
+# Find records with inbound links from documents matching a filter
+rootline query --has-inbound 'tipo == "epic"'
+
+# Find records with outbound links matching a filter (empty = any)
+rootline query --has-outbound ''
+
+# Restrict to specific link types
+rootline query --has-inbound 'tipo == "epic"' --inbound-type 'depends'
+rootline query --has-outbound 'estado == "published"' --outbound-type 'blocks'
+
+# Combine with other filters
+rootline query --where 'estado == "Pending"' --has-inbound 'true'
+```
+
+Link-traversal predicates apply `--where` filters to linked records and keep records with at least one matching link. When combined with `--where`, both filters AND together. Predicates support both `[[wiki-links]]` and `[markdown](links)` reference styles.
+
+Flags:
+- `--has-inbound "<expr>"` — Keep records with inbound links from records matching expr (empty = any record)
+- `--has-outbound "<expr>"` — Keep records with outbound links to records matching expr (empty = any record)
+- `--inbound-type <type>` — Restrict `--has-inbound` to links of this type (e.g., `depends`, `blocks`)
+- `--outbound-type <type>` — Restrict `--has-outbound` to links of this type
+- `--graph-root <path>` — Set the root for edge scanning (default: the query path). The query path must lie inside the graph root.
+
+**Link styles**: By default, link traversal searches both wiki-link (`[[target]]`) and markdown-link (`[text](target)`) styles. Styles can be configured in `.stem` via `links.styles` to restrict which types are recognized.
+
 ### Compact Projections with `--select`
 
 The `--select` flag produces compact output containing only specified fields:
@@ -55,16 +85,16 @@ rootline query --where 'estado == "Pending"' --select path,title --output csv
 
 ### Output Formats
 
-The `--output` flag supports multiple formats for projected query results:
+The `--output` flag supports multiple formats:
 
-| Format | Encoding | Use case |
-|--------|----------|----------|
-| `json` (default) | Full JSON objects in a `rows` array | AI agents, typed languages, complete data |
-| `table` | Human-readable columnar format | Terminal inspection, reports |
-| `jsonl` | One JSON object per line | Streaming processors, log ingestion |
-| `csv` | RFC 4180 CSV with headers | Spreadsheets, SQL import, `awk`/`cut` pipelines |
+| Format | Encoding | Requires `--select` | Use case |
+|--------|----------|---|----------|
+| `json` (default) | Full JSON objects in a `rows` array | No | AI agents, typed languages, complete data |
+| `table` | Human-readable columnar format | No | Terminal inspection, reports |
+| `jsonl` | One JSON object per line | **Yes** | Streaming processors, log ingestion |
+| `csv` | RFC 4180 CSV with headers | **Yes** | Spreadsheets, SQL import, `awk`/`cut` pipelines |
 
-> **Note**: `jsonl` and `csv` formats require `--select` to specify which columns to output.
+> **Constraint**: `jsonl` and `csv` formats **require** `--select` to specify which columns to output. Without `--select`, they produce an error.
 
 Examples:
 

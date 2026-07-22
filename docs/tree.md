@@ -43,26 +43,25 @@ Records without `estado` show `[—]`. Directories show `[completed/total]`.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "kind": "rootline/tree",
   "root": {
     "name": "docs",
     "path": "docs",
-    "completed": 10,
     "total": 21,
     "children": [
       {
         "name": "query.md",
         "path": "query.md",
-        "completed": 1,
         "total": 1,
         "is_leaf": true,
-        "estado": "Completed"
+        "frontmatter": {
+          "estado": "Completed"
+        }
       },
       {
         "name": "research",
         "path": "research",
-        "completed": 0,
         "total": 10,
         "children": [ ... ]
       }
@@ -70,3 +69,5 @@ Records without `estado` show `[—]`. Directories show `[completed/total]`.
   }
 }
 ```
+
+The `total` count includes all children recursively; leaf nodes have `total: 1`. Field values appear in the `frontmatter` object.

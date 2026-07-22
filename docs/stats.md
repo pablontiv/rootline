@@ -24,6 +24,8 @@ rootline stats -o json                            # JSON output
 
 ## Table Output
 
+When documents define `estado` and `tipo` fields in `.stem`, the table shows aggregates by those fields:
+
 ```
 Total: 21 records
 
@@ -45,13 +47,13 @@ By Tipo:
 {
   "version": 1,
   "kind": "rootline/stats",
-  "by_estado": {
+  "by_lifecycle_state": {
     "Completed": 10,
     "In Progress": 1,
     "Pending": 1,
     "Pre-research": 4
   },
-  "by_tipo": {
+  "by_record_type": {
     "software": 12,
     "infra": 5,
     "docs": 4
@@ -59,3 +61,5 @@ By Tipo:
   "total": 21
 }
 ```
+
+When no consistent `estado` or `tipo` fields are found across documents, the maps are empty.

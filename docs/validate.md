@@ -9,12 +9,15 @@ estado: Completed
 
 ```bash
 rootline validate docs/api/overview.md           # Single file
-rootline validate --all                           # All files in scope
 rootline validate --all docs/epics/               # All files under path
 rootline validate --staged                        # Git staged files only
 rootline validate --all --strict                  # Warnings as errors
 rootline validate --all --where 'estado != "Completed"'  # Filtered
 ```
+
+**Schema Discovery**: `validate` discovers schemas by walking up the directory tree until it finds a `.stem` file or a directory marked with `root: true`. The walk continues to the filesystem root if no marker is found. A `.stem` file must exist in the target path or a parent directory; if none exists, `validate` exits with error code 1.
+
+**Prerequisite**: Before running `validate`, initialize the directory with `rootline init` to create a `.stem` schema file.
 
 ### Flags
 
