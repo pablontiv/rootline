@@ -46,7 +46,7 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 | Intent | Command | Canonical form |
 |---|---|---|
 | Validate files | `validate` | file: `rootline validate file.md -o json`; dir/all: `rootline validate --all <dir> -o json` |
-| Repair validation issues | `fix` | dir/all: `rootline fix --all <dir> --dry-run -o json`; file: `rootline fix file.md --dry-run` |
+| Repair validation issues | `fix` | dir/all: `rootline fix --all <dir> --dry-run -o json > <dir>/repairs.json` (save inside `<dir>`: `repair apply` resolves record paths relative to the report's directory); file: `rootline fix file.md --dry-run` |
 | Inspect schema | `describe` | `rootline describe <path> -o json` |
 | Create document | `new` | `rootline new <file.md> --dry-run` then `rootline new <file.md>` |
 | Set fields | `set` | `rootline set --dry-run file.md field=value` then apply without `--dry-run` |
@@ -54,7 +54,7 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 | Show hierarchy | `tree` | `rootline tree <dir> --where "isIndex == false" -o table` |
 | Count records | `stats` | `rootline stats <dir> --where "tipo == 'task'" -o json` |
 | Explain field origins | `explain` | `rootline explain file.md -o json` |
-| Graph links (wiki + markdown) | `graph` | DOT: `rootline graph <dir> -o json`; Mermaid: `rootline graph <dir> --format mermaid -o table` |
+| Graph links (wiki + markdown) | `graph` | JSON: `rootline graph <dir> -o json`; DOT: `rootline graph <dir> --format dot`; Mermaid: `rootline graph <dir> --format mermaid -o table` |
 | Infer schema | `init` | `rootline init <dir> --dry-run` then `rootline init <dir>` |
 | Analyze patterns | `analyze` | `rootline analyze <dir> -o json` |
 | Apply schema proposals | `schema apply` | `rootline schema apply --report proposals.json --dry-run` then apply without `--dry-run` |

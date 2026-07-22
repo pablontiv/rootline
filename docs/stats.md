@@ -24,21 +24,17 @@ rootline stats -o json                            # JSON output
 
 ## Table Output
 
-When documents define `estado` and `tipo` fields in `.stem`, the table shows aggregates by those fields:
+`stats` is field-agnostic: it reports the total record count and makes no assumptions about which frontmatter fields exist:
 
 ```
 Total: 21 records
+```
 
-By Estado:
-  Completed            10
-  In Progress          1
-  Pending              1
-  Pre-research         4
+For field-specific counts, filter with `--where` and compare totals:
 
-By Tipo:
-  software             12
-  infra                5
-  docs                 4
+```bash
+rootline stats docs/roadmap/ --where "estado == 'Completed'"
+rootline stats docs/roadmap/ --where "tipo == 'software'"
 ```
 
 ## JSON Result
@@ -47,19 +43,10 @@ By Tipo:
 {
   "version": 1,
   "kind": "rootline/stats",
-  "by_lifecycle_state": {
-    "Completed": 10,
-    "In Progress": 1,
-    "Pending": 1,
-    "Pre-research": 4
-  },
-  "by_record_type": {
-    "software": 12,
-    "infra": 5,
-    "docs": 4
-  },
+  "by_lifecycle_state": {},
+  "by_record_type": {},
   "total": 21
 }
 ```
 
-When no consistent `estado` or `tipo` fields are found across documents, the maps are empty.
+The `by_lifecycle_state` and `by_record_type` maps are reserved in the output contract but are currently always empty; use `--where` for field-specific slices.
