@@ -107,13 +107,36 @@ All commands output JSON by default. Use `--output table` for human-readable tab
 Rootline discovers schemas by **walking up** your directory tree:
 
 1. Start at the target path (file or directory)
-2. Collect `.stem` files at each level, moving up toward the filesystem root
-3. Stop at `.git` directory (repository boundary)
-4. Merge collected schemas from root to leaf (parent → child)
+2. Collect `.stem` files at each level, moving up toward the filesystem root or a `root: true` marker
+3. Merge collected schemas from root to leaf (parent → child)
 
 Each level can add new fields, override parent definitions, or remove inherited rules (with `null`). Type-driven merge rules ensure predictable inheritance (maps merge key-level; arrays and scalars replace entirely).
 
-**Git is required for schema discovery** because the `.git` boundary marks repository scope. Outside a Git tree, schema resolution fails.
+A `.stem` file with `root: true` marks the governance boundary; walk-up discovery stops there. Without an explicit marker, discovery continues to the filesystem root. **Git is optional** — Rootline works in any directory, with or without Git.
+
+### The `.stem` File
+
+A `.stem` file is the DDL schema for a directory. It defines what fields exist, what types they have, which are required, and how values are validated.
+
+```yaml
+version: 2
+
+schema:
+  title: { type: string, required: true }
+  status:
+    type: enum
+    values: [draft, review, published]
+    default: draft
+    required: true
+
+aggregate:
+  completed: 'len(filter(descendants, .status == "published"))'
+
+links:
+  allowed: [blocks, depends]
+```
+
+> Sections (`type: section`) are first-class schema fields — validated, defaulted, and queryable alongside frontmatter.
 
 ### What Validation Means
 
@@ -140,80 +163,103 @@ All outputs are JSON, suitable for piping to automation and AI consumers.
 
 ---
 
-## The `.stem` File — Your DDL
+## Command Capabilities
 
-A `.stem` file is the DDL schema for a directory. It defines what fields exist, what types they have, which are required, and how values are validated. Rootline resolves schemas using **walk-up discovery + top-down merge**:
+Rootline ships as a **single static Go binary** with no dependencies. Commands are grouped by use case. Most commands support `--where 'expr'` (expr-lang syntax) to filter records before processing.
 
-1. From the target path, walk **up** collecting `.stem` files until `.git` root
-2. Merge them **top-down** (parent → child)
+### Validate & Govern
 
-### Merge Rules
+Check documents against inherited schemas and trace field origins.
 
-| YAML type | Behavior | Example |
-|-----------|----------|---------|
-| **map** | Key-level merge | Child adds or overrides keys |
-| **array** | Replace | Child redefines entirely |
-| **scalar** | Replace | Child overrides value |
-| **null** | Remove | Child removes inherited key |
+- **`validate`** — Check documents against `.stem` rules
+  - `rootline validate [file...]` — Single file
+  - `rootline validate --all [--where 'expr'] [--strict]` — All files in scope
+  - `rootline validate --staged` — Git staging area only
 
-### Example
+- **`describe`** — Show effective schema for a directory
+  - `rootline describe <path>` — Merged schema with all inherited rules
+  - `rootline describe <path> --by-domain <name>` — Filter output by domain
 
-```yaml
-version: 2
+- **`explain`** — Trace field origins, derivations, and errors
+  - `rootline explain <file>` — See where every value came from
 
-schema:
-  title: { type: string, required: true }
-  status:
-    type: enum
-    values: [draft, review, published]
-    default: draft
-    required: true
-  ejecutable_en: { type: string, required: true, match: "T*" }
-  "## Summary": { type: section, required: true }
-  "## Changelog": { type: section, default: "<!-- TODO -->" }
+### Query & Traverse
 
-aggregate:
-  completed: 'len(filter(descendants, .status == "published"))'
+Find records and visualize dependencies.
 
-links:
-  allowed: [blocks, depends]
-```
+- **`query`** — Search by metadata using declarative filters
+  - `rootline query [path] --where 'expr'` — Filter records
+  - `rootline query --where 'expr' --count` — Summary count
+  - `rootline query --where 'expr' --select path,estado,title` — Compact row output
+  - `rootline query --where 'expr' --has-inbound '<sub-expr>'` — Records with inbound links
+  - `rootline query --where 'expr' --has-outbound '<sub-expr>'` — Records with outbound links
 
-> Sections (`type: section`) are first-class schema fields — validated, defaulted, and queryable alongside frontmatter.
+- **`tree`** — Hierarchical view with completion counts
+  - `rootline tree [path] [--where 'expr']` — Directory structure with metadata
 
----
+- **`graph`** — Dependency graph from wiki-links and markdown links
+  - `rootline graph [path] [--format dot|mermaid]` — Build diagram
+  - `rootline graph [path] --check` — Validate (detect cycles, broken links)
+  - `rootline graph [path] --fail-cycles` — Treat cycles as errors
 
-## CLI
+### Build & Maintain
 
-Rootline ships as a **single static Go binary** with no dependencies.
+Create and update documents.
 
-> **Universal Filtering**: Most commands support `--where 'expr'` (expr-lang syntax) to filter records before processing.
+- **`init`** — Generate `.stem` schema from existing documents
+  - `rootline init [path]` — Infer schema from frontmatter patterns
+  - `rootline init [path] --template owner/repo[@tag]` — Fetch `.stem` from remote
+  - `rootline init [path] --force` — Overwrite existing `.stem`
+  - `rootline init [path] --dry-run` — Preview without writing
 
-```bash
-# Core
-rootline validate [file|--all|--staged] [--where 'expr'] [--strict]  # Check documents against .stem rules
-rootline query [path] --where 'expr' [--count] [--limit N]  # Search by metadata (expr-lang syntax)
-rootline describe <path>                  # Show effective schema for a directory
-rootline tree [path] [--where 'expr']     # Hierarchical view with completion counts
-rootline stats [path] [--where 'expr']    # Summary counts by estado and tipo
-rootline graph [path] [--where 'expr']    # Dependency graph (DOT, Mermaid, --check, --open)
-rootline explain <file>                   # Trace field origins, derivations, and errors
+- **`new`** — Scaffold a document from effective schema
+  - `rootline new <filepath>` — Create with frontmatter pre-populated
+  - `rootline new <filepath> --dry-run` — Preview generated content
 
-# Document lifecycle
-rootline init [path] [--force] [--template owner/repo]  # Infer .stem or fetch from remote
-rootline new <file> [--force] [--dry-run] # Scaffold document from effective schema
-rootline set <file> field=value [...]     # Mutate frontmatter and sections with validation
-rootline fix [file|--all]                 # Auto-repair: add fields, fix enums, propose changes
-rootline validate --all --where 'expr'   # Validate only records matching filter
-rootline migrate [path]                   # Detect schema changes, rename, split, --to-v2, --from-levels
-rootline analyze [path] [--incremental]   # Run 14 detectors (12 data + 2 governance), produce report
-rootline schema apply --report <file>     # Apply schema proposals to .stem (accepts analyze reports for schema changes)
-rootline repair apply --report <file>     # Apply data-only repairs to document frontmatter
+- **`set`** — Mutate frontmatter and sections with validation
+  - `rootline set <file> field=value [field2=value2 ...]` — Set fields
+  - `rootline set <file> field=@file` — Load content from file
+  - `rootline set <file> field+=@file` — Append to section
+  - `rootline set <file> ... --create` — Create new sections
+  - `rootline set <file> ... --dry-run` — Preview changes
 
-# Tooling
-rootline hooks install|uninstall|status   # Git pre-commit hook management
-rootline completion bash|zsh|fish         # Shell completion scripts
-```
+- **`fix`** — Auto-repair validation errors
+  - `rootline fix [file...]` — Fix single file
+  - `rootline fix --all` — Fix all files in scope
+  - `rootline fix --dry-run` — Preview proposed changes
+
+### Analyze & Evolve
+
+Analyze patterns and manage schema evolution.
+
+- **`analyze`** — Run 14 inference detectors (12 data + 2 governance)
+  - `rootline analyze [directory]` — Produce structured report
+  - `rootline analyze [directory] --incremental` — Only inferences not covered by existing `.stem`
+
+- **`schema`** — Schema operations
+  - `rootline schema propose [directory]` — Generate schema proposals
+  - `rootline schema apply --report <file>` — Apply schema proposals to `.stem` files
+
+- **`repair`** — Apply data-only repairs from analyze report
+  - `rootline repair apply --report <file>` — Fix frontmatter only (not `.stem`)
+  - `rootline repair apply --report <file> --dry-run` — Preview repairs
+
+- **`migrate`** — Detect and apply schema changes
+  - `rootline migrate [path]` — Compare current `.stem` against git HEAD
+  - `rootline migrate [path] --rename old_field=new_field` — Bulk field rename
+  - `rootline migrate [path] --split` — Convert flat `.stem` to hierarchical per-level files
+  - `rootline migrate [path] --scaffold` — Create missing required sections
+  - `rootline migrate [path] --dry-run` — Preview without modifying
+
+### Infrastructure
+
+- **`completion`** — Generate shell completion scripts
+  - `rootline completion bash|zsh|fish` — Load in your shell
+
+- **`hooks`** — Git pre-commit hook management
+  - `rootline hooks install` — Enable pre-commit validation
+  - `rootline hooks status` — Check installation status
+  - `rootline hooks uninstall` — Remove hook
 
 All commands support `--output json|table` and `--field` for dot-path extraction, including array projection:
 
@@ -290,7 +336,6 @@ Documents reference each other via `[[wiki-links]]` in their body. Rootline extr
 rootline graph docs/ --format mermaid   # Mermaid diagram
 rootline graph docs/ --format dot       # Graphviz DOT
 rootline graph docs/ --check            # Validate: detect cycles and broken links
-rootline graph docs/ --open             # Open interactive diagram in browser
 ```
 
 Link schemas in `.stem` files control which link types are allowed and validate targets against regex patterns.
@@ -324,7 +369,7 @@ Rootline is designed as a **structured knowledge source for AI assistants**. All
 
 ### CLI-first automation
 
-AI assistants and automation should call the Rootline CLI directly and consume stable JSON output from commands such as `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`, `trace`, and `new`.
+AI assistants and automation should call the Rootline CLI directly and consume stable JSON output from commands such as `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`, and `new`.
 
 ### Engine vs. agent: division of labor
 
