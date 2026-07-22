@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Obsolete
 tipo: outcome
 ---
 # O05: Add Rootline-aware runtime context

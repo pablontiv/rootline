@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Obsolete
 tipo: outcome
 ---
 # O02: Design Pi extension architecture

@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Obsolete
 tipo: outcome
 ---
 # O07: Expose complex operations with guardrails

@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Obsolete
 tipo: outcome
 ---
 # O06: Add safe mutation tools

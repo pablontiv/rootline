@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Obsolete
 tipo: outcome
 ---
 # O08: Productionize testing, release, and adoption
