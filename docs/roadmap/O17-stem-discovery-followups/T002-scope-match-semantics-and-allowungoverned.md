@@ -19,9 +19,14 @@ La exploración completa está en el cambio SDD `decouple-inference-scan` (persi
 
 `index.AllowUngoverned()` es un parche provisional que hoy mantiene vivos a `schema propose` y `analyze` sobre árboles sin esquema. Dos escenarios del spec de `stem-native-discovery` fueron marcados SUPERSEDED por él. Su destino se decide aquí: si los comandos de inferencia sueltan el resolver y se apoyan en `.stemignore`, `AllowUngoverned` se puede borrar.
 
+## Nota: caso `query`/`stats` sin esquema
+
+Durante la verificación de `stem-native-discovery` apareció que `query` y `stats` salen 0 sobre un árbol sin `.stem`, mientras `validate`/`tree` fallan. NO es un bug de aquel cambio: `query` no valida nada, y sus predicados de traversal (`--has-inbound`/`--has-outbound`) y `--where` operan sobre frontmatter y wiki-links sin esquema, por diseño, incluso en Markdown no gobernado. Un `.stem` corrupto sí falla `query` (el preflight propaga errores duros); sólo el `.stem` ausente pasa. El escenario "Query exits non-zero on resolution error" del spec de `stem-native-discovery` quedó marcado PARTIALLY SUPERSEDED apuntando aquí. La decisión de si `query`/`stats` son "gobernados" es parte de esta tarea.
+
 ## Criterios de aceptación
 
 - Una decisión escrita de qué significa `scope.match`: "archivos que son registros" (filtro de descubrimiento) vs "registros que se validan" (filtro de gobierno), y qué conjunto de comandos lo aplica.
+- Resuelto explícitamente si `query`/`stats` deben fallar sobre un árbol sin esquema, y en consecuencia restaurar o eliminar el escenario del spec marcado PARTIALLY SUPERSEDED.
 - Todos los comandos consistentes con esa decisión; `query`/`stats` dejan de discrepar con `validate`/`tree`.
 - Decisión explícita sobre `AllowUngoverned`: eliminarlo o formalizarlo, y actualizar o restaurar los dos escenarios del spec marcados SUPERSEDED en consecuencia.
 - Si `query`/`stats` empiezan a honrar `scope`, documentar el cambio de comportamiento (breaking pre-1.0).
