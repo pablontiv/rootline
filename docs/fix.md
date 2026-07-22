@@ -41,78 +41,100 @@ Each proposal in the output has the following fields:
 
 `heading` and `mode` are only populated on `set_field` and `set_section` proposals. `set_field` reuses the existing `applySetField` pipeline from `rootline set`.
 
-## CLI Usage
+## Three Repair Paths
 
-### Dry Run (Recommended)
+Rootline provides **three separate commands** for different repair scenarios. Choose the right one for your workflow:
 
-Always preview changes before applying them.
+### 1. `rootline fix` — Built-in Repair (Legacy)
 
-```bash
-rootline fix --all --dry-run
-rootline fix --all --no-propagate   # Skip aggregate propagation proposals
-```
-
-The output groups proposals by type, showing affected files and rationale:
-
-```json
-{
-  "version": 1,
-  "kind": "rootline/proposals",
-  "proposals": [
-    {
-      "type": "extract_body",
-      "field": "fecha",
-      "description": "extract \"2026-02-25\" from body to frontmatter",
-      "paths": ["research/kedral/README.md"]
-    },
-    {
-      "type": "add_field",
-      "field": "estado",
-      "description": "required field \"estado\" is missing",
-      "paths": ["research/kedral/design.md", "research/kedral/roadmap.md"]
-    }
-  ],
-  "schema_suggestions": [
-    {
-      "type": "extend_enum",
-      "field": "estado",
-      "description": "2 records use \"Archivado\"; propose adding to enum",
-      "paths": [".stem"]
-    }
-  ],
-  "summary": {
-    "total": 3,
-    "extend_enum": 1,
-    "migrate_value": 0,
-    "correct_value": 0,
-    "extract_body": 1,
-    "infer_from_children": 0,
-    "add_field": 2,
-    "infer_from_siblings": 0,
-    "correct_outlier": 0,
-    "correct_link": 0,
-    "add_aggregate": 0,
-    "remove_stem_field": 0,
-    "propagate_aggregate": 0
-  }
-}
-```
-
-### Applying Fixes
+**Deprecated.** Use `rootline repair apply` instead (see below).
 
 ```bash
-rootline fix --all
+rootline fix --all --dry-run   # Preview proposals (data-only)
+rootline fix --all             # Apply data-only repairs
 ```
 
-`fix --all` applies **data-only repairs** (correct_value, add_field, migrate_value, extract_body, etc.) to document frontmatter. It does NOT apply schema-surface proposals (extend_enum, add_aggregate, remove_stem_field) — these appear as suggestions in the `schema_suggestions` array.
+`fix` combines proposal generation and application in one step. It applies only **data-only repairs** to frontmatter and skips schema-surface proposals, which appear in the `schema_suggestions` field of the output.
 
-Schema proposals require careful review and are meant to be applied separately:
+### 2. `rootline repair apply` — Data-Only Bulk Repair (Current)
+
+Use this for fixing frontmatter data issues found by `rootline validate` or `rootline analyze`.
+
+**Workflow:**
 
 ```bash
-# To apply schema changes, manually edit .stem files or use:
-rootline describe --by-domain  # Review current schema
-# Then manually update .stem based on schema_suggestions
+# 1. Generate analyze report
+rootline analyze docs/ > analyze.json
+
+# 2. Review proposals in analyze.json (schema_suggestions are separated)
+# 3. Apply repair proposals (frontmatter only, never .stem)
+rootline repair apply --report analyze.json --dry-run
+rootline repair apply --report analyze.json
+
+# Or use fix output directly:
+rootline fix --all --dry-run > fix-proposals.json
+rootline repair apply --report fix-proposals.json
 ```
+
+`repair apply` accepts a report from `rootline fix` or `rootline analyze` and applies only repair-surface proposals to document frontmatter:
+- correct_value
+- add_field
+- migrate_value
+- extract_body
+- infer_from_siblings
+- correct_outlier
+- infer_from_children
+- propagate_aggregate
+- set_field
+- set_section
+
+Schema proposals (extend_enum, add_aggregate, remove_stem_field) are **silently rejected** — use `rootline schema apply` instead.
+
+Flags:
+- `--dry-run` — Preview changes without modifying files
+- `--report <file>` — Path to proposals JSON file (required)
+
+### 3. `rootline schema apply` — Schema Mutation
+
+Use this for applying schema changes (extending enums, creating `.stem` fields, updating `.stem` files).
+
+**Workflow:**
+
+```bash
+# 1. Generate schema proposals from analyze report
+rootline analyze docs/ --incremental > analyze.json
+
+# 2. Review schema_suggestions in analyze.json
+# 3. Apply schema proposals to .stem files
+rootline schema apply --report analyze.json --dry-run
+rootline schema apply --report analyze.json
+
+# Or generate proposals without analysis:
+rootline schema propose docs/ > proposals.json
+rootline schema apply --report proposals.json --dry-run
+rootline schema apply --report proposals.json
+```
+
+`schema apply` accepts a report from `rootline analyze` or `rootline schema propose` and applies only schema-surface proposals to `.stem` files:
+- create_stem
+- update_stem
+- extend_enum
+
+Data-only repairs (correct_value, add_field, etc.) are **ignored** — use `rootline repair apply` instead.
+
+Flags:
+- `--dry-run` — Preview changes without modifying files
+- `--report <file>` — Path to proposals JSON file (required)
+
+## When to Use Each
+
+| Scenario | Command | Example |
+|----------|---------|---------|
+| Add missing required fields to documents | `repair apply` | Missing `estado` field in all tasks |
+| Correct misspelled enum values | `repair apply` | `"Complted"` → `"Completed"` |
+| Extend `.stem` enum to accept new valid values | `schema apply` | Adding `"Archived"` to allowed statuses |
+| Create `.stem` for a new directory | `schema apply` | Initialize schema after inferring patterns |
+| Update `.stem` after schema changes | `schema apply` | Add new field definitions after inference |
 
 ## YAML AST Preservation
 
