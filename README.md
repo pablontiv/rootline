@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/pablontiv/rootline/actions/workflows/ci.yml/badge.svg)](https://github.com/pablontiv/rootline/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 
 ## Rootline turns Markdown into a governed, queryable knowledge system.
 
@@ -455,4 +455,4 @@ Pre-commit hooks run `golangci-lint` and `gofmt` automatically. Commits follow [
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) — free for non-commercial use.
+[Apache License 2.0](LICENSE) — free for commercial and non-commercial use.
