@@ -1,5 +1,16 @@
 # Contributing to Rootline
 
+## Requirements
+
+### Product Requirement
+- **Go 1.26+** — Required to build and run Rootline
+
+### Contributor Workflow
+- **Git** — For pre-commit hooks, tests, and CI integration
+- **[just](https://github.com/casey/just)** — Task runner for development recipes
+
+**Note**: Rootline itself does not require Git to operate. Git is only needed for the contributor development workflow, not for end users.
+
 ## Development Setup
 
 ```bash
@@ -13,8 +24,6 @@ git config core.hooksPath .githooks
 just check
 just test
 ```
-
-Requires Go 1.24+ and [just](https://github.com/casey/just).
 
 ## Just Recipes
 
