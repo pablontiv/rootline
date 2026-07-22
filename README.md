@@ -363,6 +363,23 @@ Shows each field's origin (frontmatter, schema default, derived, or aggregated) 
 
 ---
 
+## Optional Integrations
+
+Git is optional. Rootline works in any directory, with or without version control.
+
+### Git-based Workflows
+
+Rootline integrates with Git for continuous validation and collaborative workflows:
+
+- **Staged validation** — The `.githooks/pre-commit` hook runs `validate --staged` automatically, catching schema violations before commit
+- **CI validation** — GitHub Actions workflows in `.github/workflows/` run full validation and lint on every push
+- **Merge conflict detection** — Rootline's graph analyzer can detect when `.stem` file changes conflict with document mutations
+- **Diff-aware reviews** — Queries and validation support `--where` filters, making it easy to review only changed documents
+
+These workflows are optional enhancements, not product requirements. You can use Rootline without Git by running commands manually.
+
+---
+
 ## AI-Native
 
 Rootline is designed as a **structured knowledge source for AI assistants**. All commands output stable JSON with `"version": 1` contracts, making them suitable for tool use and automation.
@@ -383,7 +400,9 @@ same as that one? — are not guessed: `analyze` marks those proposals
 
 ---
 
-## Documentation
+## Documentation & References
+
+### User Documentation
 
 | Topic | Description |
 |-------|-------------|
@@ -414,6 +433,13 @@ Release builds auto-update in the background using a staged async pattern — th
 
 ## Development
 
+### Requirements
+
+- **Product requirement**: Go 1.26+
+- **Contributor workflow**: Git (for pre-commit hooks, tests, CI)
+
+### Contributor Setup
+
 ```bash
 go build ./cmd/rootline/          # Build
 go test ./... -race               # Tests with race detector
@@ -422,6 +448,8 @@ golangci-lint run ./...           # Full lint
 ```
 
 Pre-commit hooks run `golangci-lint` and `gofmt` automatically. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): description`), enforced by a commit-msg hook. To manually sync skills and rebuild after pulling: `bash .githooks/pre-push`.
+
+**Note**: Git workflow is contributor-only; Rootline itself does not require Git.
 
 ---
 
