@@ -133,7 +133,7 @@ Fields available in projection:
 - `path` — document path relative to scan root
 - `estado`, `tipo`, etc. — any frontmatter field
 - `titulo` — derived field from `.stem` source extraction (e.g., `source: body.h1`)
-- `links` — array of wiki-link references
+- `links` — array of links extracted from document body: both `[[wiki-links]]` and `[markdown](links)` references (which styles are active depends on `.stem links.styles`)
 - Missing fields are omitted from the projected row
 
 Derived fields are populated via `.stem` `source:` rules. For example, `titulo: {source: body.h1}` extracts the first Markdown heading. If a source cannot be extracted, the field is omitted from the row.

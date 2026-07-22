@@ -54,7 +54,7 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 | Show hierarchy | `tree` | `rootline tree <dir> --where "isIndex == false" -o table` |
 | Count records | `stats` | `rootline stats <dir> --where "tipo == 'task'" -o json` |
 | Explain field origins | `explain` | `rootline explain file.md -o json` |
-| Graph links (wiki + markdown) | `graph` | JSON: `rootline graph <dir> -o json`; Mermaid: `rootline graph <dir> -o table --format mermaid` |
+| Graph links (wiki + markdown) | `graph` | DOT: `rootline graph <dir> -o json`; Mermaid: `rootline graph <dir> --format mermaid -o table` |
 | Infer schema | `init` | `rootline init <dir> --dry-run` then `rootline init <dir>` |
 | Analyze patterns | `analyze` | `rootline analyze <dir> -o json` |
 | Apply schema proposals | `schema apply` | `rootline schema apply --report proposals.json --dry-run` then apply without `--dry-run` |
@@ -65,12 +65,15 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 
 ## Required Workflows
 
-### Validate and Repair
+### Validate and Repair (Data-Only Fixes)
+
+**Use `repair apply` for data-only fixes; use `schema apply` for schema mutations.**
 
 ```bash
 rootline validate --all <dir> -o json
 rootline fix --all <dir> --dry-run -o json
-rootline fix --all <dir>
+rootline repair apply --report <proposals.json> --dry-run -o json
+rootline repair apply --report <proposals.json>
 rootline validate --all <dir> -o json
 git diff -- <dir>
 ```
@@ -85,24 +88,35 @@ rootline validate <file.md> -o json
 git diff -- <file.md>
 ```
 
-### Validate Markdown Links (multi-style, v1.12.2+)
+For schema mutations (extending enums, creating `.stem` fields):
 
-Link extraction always parses both `[[wiki-links]]` and markdown links `[text](target)`; each link carries `style` (`wikilink`/`markdown`) and `anchor`. The `.stem` governs which styles participate in validation and graph:
+```bash
+rootline analyze <dir> -o json  # or rootline schema propose <dir> -o json
+rootline schema apply --report <proposals.json> --dry-run -o json
+rootline schema apply --report <proposals.json>
+rootline validate --all <dir> -o json
+```
+
+### Validate and Query Markdown Links (multi-style)
+
+Link extraction always parses both `[[wiki-links]]` and markdown links `[text](target)`. Each link carries `style` (`wikilink`/`markdown`) and optional `anchor`. The `.stem` governs which link styles participate in validation, graph, and query link-traversal operations:
 
 ```yaml
 version: 2
 links:
-  styles: [markdown]   # governed styles; default [wikilink] (backcompat)
+  styles: [wikilink, markdown]  # governed styles; default [wikilink]
   checks:
-    resolve: true      # target exists (case-sensitive; dir targets need README.md)
-    anchors: true      # #anchor matches a heading slug in the target
-    encoding: true     # no raw spaces in targets (use %20)
-    cycles: true       # graph --check fails on link cycles (default: informational)
+    resolve: true               # target exists (case-sensitive; dir targets need README.md)
+    anchors: true               # #anchor matches a heading slug in the target
+    encoding: true              # no raw spaces in targets (use %20)
+    cycles: true                # graph --check fails on link cycles (default: informational)
 ```
 
-Check failures surface in `validate` as rules `link_resolve` (with fuzzy suggestion), `link_anchor`, `link_encoding`. Absolute targets (`/...`), external schemes, images, and pure fragments are not checked. Use for repos with relative markdown links (e.g. Azure DevOps code wikis).
+**Validation**: Check failures surface in `validate` as rules `link_resolve` (with fuzzy suggestion), `link_anchor`, `link_encoding`. Absolute targets (`/...`), external schemes, images, and pure fragments are not checked.
 
-For `graph --check`: `--fail-cycles` overrides the `.stem` cycle opt-in per run (both directions), and `--quiet-cycles` collapses informational cycles to a single summary line (ignored when cycles are failing; JSON output unaffected).
+**Query link traversal**: `--has-inbound` and `--has-outbound` predicates search both wiki-link and markdown-link styles (governed by `.stem links.styles`). Combine with `--inbound-type` / `--outbound-type` to restrict to one link type.
+
+**Graph**: `graph` respects the governed link styles from `.stem`. For `graph --check`: `--fail-cycles` overrides the `.stem` cycle opt-in per run (both directions), and `--quiet-cycles` collapses informational cycles to a single summary line (ignored when cycles are failing; JSON output unaffected).
 
 ### Inspect Required Fields
 
