@@ -14,8 +14,8 @@ Rootline is a **file-based database and constraint engine** for structured docum
 just check              # gofmt check + golangci-lint + go build
 just test               # go test ./... -race  (no coverage measurement — fast cycle)
 just fmt                # gofmt -l -w
-just validate           # rootline validate --all docs/epics/
-just fix-docs           # rootline fix --all docs/epics/
+just validate           # rootline validate --all docs/roadmap/
+just fix-docs           # rootline fix --all docs/roadmap/
 just coverage           # go test ./... -coverprofile; print per-package table + total
 just coverage-check     # like coverage, but exits 1 if any package < 85% (per .coverage-floors.toml)
 ```
@@ -69,7 +69,7 @@ Derivation evaluates per-record expressions from `.stem` `derive:` fields. Aggre
 ## Project Documentation
 
 - `docs/research/` — Pre-research for deferred features (plugin architecture)
-- `docs/epics/` — Roadmap for features. Completed: derivation engine (E04/F04), dependency graph (E04/F05), fix proposals (E04/F10), schema migration (E07/F01), v1 stem removal (E12), inference detectors (E13/F02). Pending: aggregate consistency engine (E14), repo best practices (E05).
+- `docs/roadmap/` — Feature roadmap as Rootline-governed records (`O##` objectives with `T###` tasks, `.stem`-validated). Query it with the CLI (`rootline query docs/roadmap/ --where "estado == 'Pending'"`) instead of reading files manually.
 - Documentation is written in a mix of Spanish and English (field names like `estado`, `tipo`, `ejecutable_en` are in Spanish)
 
 ## Rootline as Primary Interface
@@ -102,17 +102,15 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/). The
 
 Format: `type(scope): description` — scope is optional. Add `!` before `:` for breaking changes.
 
-### Pre-1.0 Version Strategy
+### Version Strategy
 
-While in v0.x, semver bumps follow pre-1.0 convention:
+Standard semver, derived automatically from conventional commits by the release workflow:
 
-| Commit type | Bump | Example |
-|---|---|---|
-| `fix`, `perf` | patch | v0.9.0 → v0.9.1 |
-| `feat` | patch | v0.9.0 → v0.9.1 |
-| `feat!`, `fix!` (breaking) | minor | v0.9.0 → v0.10.0 |
-
-After v1.0: `feat` bumps minor, breaking bumps major (standard semver).
+| Commit type | Bump |
+|---|---|
+| `fix`, `perf` | patch |
+| `feat` | minor |
+| `feat!`, `fix!` (breaking `!`) | major |
 
 ## Release Flow
 
@@ -133,9 +131,9 @@ CI/CD uses shared reusable workflows from `pablontiv/crossbeam@v1`:
 - `codeql.yml` — CodeQL security scanning (Go)
 - `scorecard.yml` — OpenSSF Scorecard, inlined locally rather than via crossbeam because the v1 reusable caps workflow permissions at `read-all`, conflicting with the `security-events: write` the job needs. The Scorecard action additionally rejects publish when `security-events: write` is set at the workflow level — write permissions must live only at the job level (top-level stays `contents: read`). Actions are pinned by SHA (Scorecard best practice); if a pin becomes unresolvable, re-pin via `gh api repos/<owner>/<repo>/git/refs/tags/<version> --jq .object.sha`. Runs nightly; also dispatchable via `gh workflow run "OpenSSF Scorecard"`.
 
-`docs-validate` is repo-specific (runs `rootline validate --all docs/epics/`) and stays inline in `ci.yml`.
+`docs-validate` is repo-specific (runs `rootline validate --all docs/roadmap/`) and stays inline in `ci.yml`.
 
-**Coverage gates**: The 85% threshold in CI (`coverage-threshold: 85` in crossbeam) is mirrored locally via `.coverage-floors.toml` (`default = 85`, uniform across all packages). Since picokit v0.5, `pkcov` parses a minimal TOML subset: string arrays in `.coverage-floors.toml` (`packages`, `exclude`) must be single-line. The local gate runs via `pkcov` from `github.com/pablontiv/picokit` (see [`picokit/docs/coverage-spec.md`](https://github.com/pablontiv/picokit/blob/main/docs/coverage-spec.md)); rootline cumple coverage-spec v1.0. The pre-push hook (`.githooks/pre-push`) runs `just coverage-check` automatically whenever any `.go` file is included in the push — this blocks the push before CI even runs. Do **not** bypass with `git push --no-verify` except in documented emergencies with an explanation in the commit message.
+**Coverage gates**: The 85% threshold in CI (`coverage-threshold: 85` in crossbeam) is mirrored locally via `.coverage-floors.toml` (`default = 85`, uniform across all packages). `pkcov` parses a minimal TOML subset: string arrays in `.coverage-floors.toml` (`packages`, `exclude`) must be single-line. The local gate runs via `pkcov` from `github.com/pablontiv/picokit` (see [`picokit/docs/coverage-spec.md`](https://github.com/pablontiv/picokit/blob/main/docs/coverage-spec.md)); rootline complies with picokit's coverage spec. The pre-push hook (`.githooks/pre-push`) runs `just coverage-check` automatically whenever any `.go` file is included in the push — this blocks the push before CI even runs. Do **not** bypass with `git push --no-verify` except in documented emergencies with an explanation in the commit message.
 
 ## Module Path
 

@@ -201,12 +201,9 @@ Surface() ProposalSurface  // returns one of:
 
 Use `proposal.Surface()` to gate schema vs. repair apply paths.
 
-## Legacy Apply Deprecation
+## Legacy Apply Removal
 
-`rootline apply` is **deprecated**. On every invocation it prints to stderr:
-> Warning: 'rootline apply' is deprecated. Use 'rootline schema apply' for schema changes or 'rootline repair apply' for data repairs.
-
-The command remains functional for backward compatibility. `analyze` help text now references the replacement workflows. Replace scripts/agents using `apply` with:
+`rootline apply` no longer exists — invoking it fails with `unknown command "apply"`. Replace scripts/agents that used `apply` with:
 - `rootline schema apply --report <proposals.json>` — schema changes (`.stem` files)
 - `rootline repair apply --report <analyze-report.json>` — data corrections (frontmatter)
 

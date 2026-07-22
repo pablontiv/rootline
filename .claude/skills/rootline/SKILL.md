@@ -37,7 +37,7 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 3. **Validation exit code**: `validate` returns non-zero when errors exist. If JSON was requested, parse stdout and continue the workflow.
 4. **Mutations**: run the command-specific preview first. Apply changes only when the user explicitly requested a write (`arregla`, `aplica`, `cambia`, `set`, `crea`, `corrige`, `fix`, `apply`) or approves the preview.
 5. **Verify writes**: after any mutation, run the smallest matching `rootline validate` command and show `git diff -- <target>` when files changed.
-6. **Schema vs. data mutations are now separate**: Use `schema apply --report <file>` for schema proposals and `repair apply --report <file>` for data-only repairs. The legacy `apply` command is deprecated in favor of these specialized commands. Always inspect proposals before applying.
+6. **Schema vs. data mutations are separate**: Use `schema apply --report <file>` for schema proposals and `repair apply --report <file>` for data-only repairs. There is no generic `apply` command. Always inspect proposals before applying.
 7. **Expressions**: `--where` uses expr syntax: `==`, `!=`, `in`, `contains`, `&&`, `||`, booleans, and `field != nil` for existence.
 8. **Field extraction**: `--field a.b.c` extracts one JSON dot path. Do not rely on multiple `--field` values.
 
@@ -59,7 +59,6 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 | Analyze patterns | `analyze` | `rootline analyze <dir> -o json` |
 | Apply schema proposals | `schema apply` | `rootline schema apply --report proposals.json --dry-run` then apply without `--dry-run` |
 | Apply data repairs | `repair apply` | `rootline repair apply --report repairs.json --dry-run` then apply without `--dry-run` |
-| Apply analysis (legacy) | `apply` | deprecated; use `schema apply` or `repair apply` instead |
 | Schema operations | `migrate` | diff: `rootline migrate <path> -o json`; writes require `--rename`, `--split`, or `--scaffold` |
 | Git hook management | `hooks` | `rootline hooks status|install|uninstall` |
 

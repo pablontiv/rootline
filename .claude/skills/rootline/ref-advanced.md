@@ -116,9 +116,9 @@ Flags:
 
 Use `--field summary` only after confirming the analyze JSON contains that path.
 
-## apply (Deprecated)
+## apply (Removed)
 
-The legacy `apply` command is deprecated. Use specialized commands instead:
+The legacy `apply` command was removed — it fails with `unknown command "apply"`. Use the specialized commands instead:
 
 **For schema proposals** (add fields to `.stem`, extend enums, etc.):
 ```bash
