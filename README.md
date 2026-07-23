@@ -413,6 +413,7 @@ same as that one? — are not guessed: `analyze` marks those proposals
 | [New](docs/new.md) | Document scaffolding from effective schema |
 | [Set](docs/set.md) | Mutate frontmatter and sections with schema validation |
 | [Fix & Proposals](docs/fix.md) | Auto-repair, enum correction, field inference |
+| [Analyze](docs/analyze.md) | Infer schemas and patterns from documents |
 | [Explain](docs/explain.md) | Field origin tracing, derivation chain, error diagnosis |
 | [Tree](docs/tree.md) | Hierarchical view with completion counts |
 | [Stats](docs/stats.md) | Summary counts by type and state |
