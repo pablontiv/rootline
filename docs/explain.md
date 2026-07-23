@@ -72,4 +72,4 @@ For documents with derived and aggregated fields, each field shows its expressio
 }
 ```
 
-The `stem_chain` shows the walk-up discovery order from target to `.git` root. The `origin` field is one of: `frontmatter`, `schema` (default value), `derived`, or `aggregate`.
+The `stem_chain` shows the walk-up discovery order from the target up to the `root: true` marker (or the filesystem root). The `origin` field is one of: `frontmatter`, `schema` (default value), `derived`, or `aggregate`.

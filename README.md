@@ -67,15 +67,16 @@ Rootline does not render documentation. It **models** it — making your Markdow
 Initialize your documentation directory, validate its structure, and query its contents.
 
 ```bash
-# 1. Initialize — infer .stem schema from existing documents
+# 1. Initialize — infer a .stem schema from existing documents
+# (writes a root: true marker so schema discovery knows where to stop)
 rootline init docs/
 
 # 2. Query — find records by metadata
 rootline query docs/ --where 'estado == "published"'
 
-# 3. Validate — check documents against their schema rules (requires Git tree)
-# Note: Schema discovery walks up the directory tree until it finds .git
-git init docs/  # if not already a git repo
+# 3. Validate — check documents against their schema rules
+# Schema discovery walks up the tree until it hits a root: true .stem
+# (or the filesystem root). No Git required.
 rootline validate --all docs/
 
 # 4. Graph — visualize document dependencies
