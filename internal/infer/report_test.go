@@ -37,8 +37,8 @@ func TestAnalyzeReport_Roundtrip(t *testing.T) {
 	if decoded.Version != 1 {
 		t.Errorf("expected version 1, got %d", decoded.Version)
 	}
-	if decoded.Kind != "analyze" {
-		t.Errorf("expected kind 'analyze', got %s", decoded.Kind)
+	if decoded.Kind != "rootline/analyze" {
+		t.Errorf("expected kind 'rootline/analyze', got %s", decoded.Kind)
 	}
 	if decoded.Path != "/some/path" {
 		t.Errorf("expected path '/some/path', got %s", decoded.Path)

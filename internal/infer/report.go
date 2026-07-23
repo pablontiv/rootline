@@ -40,11 +40,11 @@ type ReportSummary struct {
 	EngineResolved  int `json:"engine_resolved"`
 }
 
-// NewAnalyzeReport creates a report with version 1 and kind "analyze".
+// NewAnalyzeReport creates a report with version 1 and kind "rootline/analyze".
 func NewAnalyzeReport(path string) *AnalyzeReport {
 	return &AnalyzeReport{
 		Version: 1,
-		Kind:    "analyze",
+		Kind:    "rootline/analyze",
 		Path:    path,
 	}
 }

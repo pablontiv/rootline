@@ -112,8 +112,8 @@ func TestAnalyze_JSONReport(t *testing.T) {
 	if decoded.Version != 1 {
 		t.Errorf("expected version 1, got %d", decoded.Version)
 	}
-	if decoded.Kind != "analyze" {
-		t.Errorf("expected kind 'analyze', got %s", decoded.Kind)
+	if decoded.Kind != "rootline/analyze" {
+		t.Errorf("expected kind 'rootline/analyze', got %s", decoded.Kind)
 	}
 }
 
@@ -158,5 +158,12 @@ func TestAnalyze_ConstantField(t *testing.T) {
 	}
 	if !foundConstant {
 		t.Error("expected constant_field inference for 'estado'")
+	}
+}
+
+func TestAnalyzeReportKindIsNamespaced(t *testing.T) {
+	r := infer.NewAnalyzeReport("some/path")
+	if r.Kind != "rootline/analyze" {
+		t.Errorf("expected kind %q, got %q", "rootline/analyze", r.Kind)
 	}
 }

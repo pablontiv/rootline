@@ -91,8 +91,8 @@ schema:
 	if report["version"].(float64) != 1 {
 		t.Errorf("expected version 1, got %v", report["version"])
 	}
-	if report["kind"] != "analyze" {
-		t.Errorf("expected kind analyze, got %s", report["kind"])
+	if report["kind"] != "rootline/analyze" {
+		t.Errorf("expected kind rootline/analyze, got %s", report["kind"])
 	}
 
 	// Verify that enum_without_values is detected for tipo in sources/
@@ -426,8 +426,8 @@ schema:
 	if report["version"].(float64) != 1 {
 		t.Errorf("expected version 1, got %v", report["version"])
 	}
-	if report["kind"] != "analyze" {
-		t.Errorf("expected kind analyze, got %s", report["kind"])
+	if report["kind"] != "rootline/analyze" {
+		t.Errorf("expected kind rootline/analyze, got %s", report["kind"])
 	}
 
 	// Verify categories are present

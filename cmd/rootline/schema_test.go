@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pablontiv/rootline/internal/infer"
 )
 
 func executeSchemaPropose(t *testing.T, args ...string) (string, error) {
@@ -306,6 +308,31 @@ func TestSchemaApplyInvalidKind(t *testing.T) {
 	_, err := executeSchemaApply(t, "--report", reportFile)
 	if err == nil {
 		t.Error("expected error for wrong report kind, got nil")
+	}
+}
+
+// TestSchemaApplyAcceptsBothAnalyzeKinds verifies schema apply dispatches an
+// analyze report whether it carries the legacy "analyze" kind or the
+// namespaced "rootline/analyze" kind (backward-compatible reads).
+func TestSchemaApplyAcceptsBothAnalyzeKinds(t *testing.T) {
+	for _, kind := range []string{"analyze", "rootline/analyze"} {
+		t.Run(kind, func(t *testing.T) {
+			root := t.TempDir()
+			// Create a minimal .stem file so schema apply can resolve stems
+			stemContent := "version: 2\nschema:\n  estado:\n    type: string\n"
+			if err := os.WriteFile(filepath.Join(root, ".stem"), []byte(stemContent), 0o644); err != nil {
+				t.Fatalf("writing .stem: %v", err)
+			}
+			report := infer.AnalyzeReport{Version: 1, Kind: kind, Path: root}
+			data, _ := json.Marshal(report)
+			reportFile := filepath.Join(root, "report.json")
+			if err := os.WriteFile(reportFile, data, 0o644); err != nil {
+				t.Fatalf("writing report: %v", err)
+			}
+			if _, err := executeSchemaApply(t, "--report", reportFile); err != nil {
+				t.Errorf("expected kind %q to be accepted, got error: %v", kind, err)
+			}
+		})
 	}
 }
 
@@ -701,7 +728,7 @@ func TestAnalyzeWorksWithoutSchema(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &report); err != nil {
 		t.Errorf("expected valid JSON report, got error: %v\noutput: %s", err, out)
 	}
-	if report["kind"] != "analyze" {
-		t.Errorf("expected kind analyze, got %v", report["kind"])
+	if report["kind"] != "rootline/analyze" {
+		t.Errorf("expected kind rootline/analyze, got %v", report["kind"])
 	}
 }

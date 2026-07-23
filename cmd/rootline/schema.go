@@ -220,7 +220,7 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		Kind string `json:"kind"`
 	}
 	_ = json.Unmarshal(data, &probe)
-	if probe.Kind == "analyze" {
+	if probe.Kind == "analyze" || probe.Kind == "rootline/analyze" {
 		return runSchemaApplyFromAnalyze(cmd, data)
 	}
 
@@ -303,8 +303,8 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	if report.Version != 1 {
 		return fmt.Errorf("unsupported report version: %d (expected 1)", report.Version)
 	}
-	if report.Kind != "analyze" {
-		return fmt.Errorf("wrong report kind: %s (expected analyze)", report.Kind)
+	if report.Kind != "analyze" && report.Kind != "rootline/analyze" {
+		return fmt.Errorf("wrong report kind: %s (expected analyze or rootline/analyze)", report.Kind)
 	}
 
 	// Resolve root path from report path.
