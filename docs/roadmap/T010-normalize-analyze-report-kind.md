@@ -1,5 +1,5 @@
 ---
-estado: Pending
+estado: Completed
 tipo: task
 ---
 # T010: Normalize the analyze report `kind` to the `rootline/<name>` convention
