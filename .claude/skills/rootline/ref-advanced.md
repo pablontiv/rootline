@@ -114,6 +114,8 @@ Flags:
 | `--incremental` | include only inferences not covered by the target `.stem` |
 | `--threshold <0..1>` | section pattern detection threshold |
 
+Emits JSON: version 1, kind `"rootline/analyze"`, with `categories[]` (each `id`, `name`, `inference_count`, `inferences[]`) and a `summary` (`total_inferences`, `agent_required`, `engine_resolved`). Feeds `schema apply` and `repair apply`. Full reference: `docs/analyze.md`.
+
 Use `--field summary` only after confirming the analyze JSON contains that path.
 
 ## apply (Removed)
