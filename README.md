@@ -382,7 +382,7 @@ These workflows are optional enhancements, not product requirements. You can use
 
 ## AI-Native
 
-Rootline is designed as a **structured knowledge source for AI assistants**. All commands output stable JSON with `"version": 1` contracts, making them suitable for tool use and automation.
+Rootline is designed as a **structured knowledge source for AI assistants**. All commands output stable, versioned JSON contracts (each payload carries its own `version` field), making them suitable for tool use and automation.
 
 ### CLI-first automation
 

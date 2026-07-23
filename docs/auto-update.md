@@ -25,7 +25,7 @@ The user-visible effect is that the version shown by `rootline --version` change
 
 ```
 ~/.cache/rootline/staged/
-  v1.2.0/
+  vX.Y.Z/
     rootline          # Linux / macOS
     rootline.exe      # Windows
 ```
