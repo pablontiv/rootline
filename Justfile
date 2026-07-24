@@ -27,15 +27,15 @@ coverage:
 coverage-check: coverage
     go run github.com/pablontiv/picokit/cmd/pkcov check
 
-# Build and install a local development binary to ~/bin
+# Build and install a local development binary to ~/.local/bin
 #
-# Not the only install path in the repo yet: install.sh (the public installer)
-# targets ~/.local/bin when it is on PATH, and the post-merge / pre-push hooks
-# rebuild over whatever `command -v rootline` resolves to. See docs/roadmap/T011.
+# The single canonical install destination. install.sh (the public installer)
+# defaults here too, and the post-merge / pre-push hooks delegate to this
+# recipe, so all three agree on one location and one version scheme.
 install: && doctor-install
     #!/usr/bin/env bash
     set -euo pipefail
-    dest="$HOME/bin"
+    dest="$HOME/.local/bin"
     mkdir -p "$dest"
     git fetch --tags --quiet origin 2>/dev/null || true
     # Version as <highest known tag>+local.<sha>, NOT `git describe`.
@@ -62,29 +62,31 @@ install: && doctor-install
     go build -ldflags "-X main.version=${version}" -o "$dest/rootline" ./cmd/rootline
     echo "installed $dest/rootline ($version)"
 
-# Fail if PATH resolves rootline to anything but a single ~/bin binary
+# Fail if PATH resolves rootline to anything but a single ~/.local/bin binary
 doctor-install:
     #!/usr/bin/env bash
     set -euo pipefail
+    dest="$HOME/.local/bin/rootline"
     # which -a, never which: a bare which returns only the first PATH hit, so a
     # stale binary shadowed in another directory passes the check unseen.
     found="$(which -a rootline 2>/dev/null || true)"
     count="$(printf '%s' "$found" | grep -c . || true)"
     if [ "$count" -gt 1 ]; then
-        echo "ERROR: $count rootline binaries in PATH — only ~/bin/rootline is supported:"
+        echo "ERROR: $count rootline binaries in PATH — only $dest is supported:"
         printf '%s\n' "$found" | while read -r bin; do
             [ -n "$bin" ] || continue
             printf '  %-40s %s\n' "$bin" "$("$bin" --version 2>/dev/null || echo '<unreadable>')"
         done
-        echo "Remove every copy except $HOME/bin/rootline, then re-run."
+        echo "Remove every copy except $dest, then re-run."
         exit 1
     fi
     if [ "$count" -eq 0 ]; then
         echo "ERROR: rootline is not in PATH — run: just install"
         exit 1
     fi
-    if [ "$found" != "$HOME/bin/rootline" ]; then
-        echo "ERROR: rootline resolves to $found, expected $HOME/bin/rootline"
+    if [ "$found" != "$dest" ]; then
+        echo "ERROR: rootline resolves to $found, expected $dest"
+        echo "A copy in an earlier PATH entry is shadowing it — remove it."
         exit 1
     fi
     case "$("$found" --version)" in

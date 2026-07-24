@@ -33,16 +33,17 @@ detect_arch() {
 }
 
 resolve_install_dir() {
-    if [ -n "$INSTALL_DIR" ]; then
-        return
+    # ~/.local/bin is the canonical destination: per-user, no sudo, and the same
+    # place `just install` and the git hooks use, so a machine never ends up with
+    # two rootline binaries in different directories. verify_installation warns
+    # if it is not yet on PATH. Override with ROOTLINE_INSTALL_DIR.
+    if [ -z "$INSTALL_DIR" ]; then
+        INSTALL_DIR="$HOME/.local/bin"
     fi
 
-    if echo "$PATH" | tr ':' '\n' | grep -qx "$HOME/.local/bin"; then
-        INSTALL_DIR="$HOME/.local/bin"
-    elif [ -w "/usr/local/bin" ]; then
-        INSTALL_DIR="/usr/local/bin"
-    else
-        INSTALL_DIR="/usr/local/bin"
+    # A root-owned override (e.g. /usr/local/bin) needs sudo; the default under
+    # $HOME never does.
+    if [ ! -w "$INSTALL_DIR" ] && [ ! -w "$(dirname "$INSTALL_DIR")" ]; then
         NEED_SUDO=1
     fi
 }

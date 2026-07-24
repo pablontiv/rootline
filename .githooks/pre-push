@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate docs/epics/ before pushing if any doc files changed in the push range.
+# Validate docs/roadmap/ before pushing if any doc files changed in the push range.
 # Mirrors the docs-validate CI job to catch errors locally.
 
 remote="$1"
@@ -24,7 +24,7 @@ while read local_ref local_sha remote_ref remote_sha; do
       echo "Or:  rootline fix --all docs/roadmap/"
       exit 1
     fi
-    echo "docs/epics/ validation passed"
+    echo "docs/roadmap/ validation passed"
   fi
 
   # Check if CLI code changed but docs or skills weren't updated
@@ -74,37 +74,13 @@ rm -rf "${SKILLS_DEST:?}/$skill"
 cp -r "$REPO_ROOT/.claude/skills/$skill" "$SKILLS_DEST/$skill"
 echo "rootline: installed $skill skill → $SKILLS_DEST/$skill"
 
-# Rebuild rootline binary so the installed version matches the pushed code.
-# Resolve the actual installed binary (install.sh may pick $HOME/.local/bin when
-# /usr/local/bin is not writable); fall back to /usr/local/bin only if not on PATH.
-ROOTLINE_BIN="${ROOTLINE_BIN:-$(command -v rootline || echo /usr/local/bin/rootline)}"
-
-install_rootline_binary() {
-  local version tmp
-  version="$(git describe --tags 2>/dev/null || echo dev)"
-  tmp="$(mktemp)"
-
-  if ! go build -ldflags "-X main.version=$version" -o "$tmp" ./cmd/rootline/ 2>&1; then
-    rm -f "$tmp"
-    return 1
-  fi
-
-  if [ -w "$ROOTLINE_BIN" ] || { [ ! -e "$ROOTLINE_BIN" ] && [ -w "$(dirname "$ROOTLINE_BIN")" ]; }; then
-    install -m 0755 "$tmp" "$ROOTLINE_BIN"
-  elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    sudo install -m 0755 "$tmp" "$ROOTLINE_BIN"
-  else
-    echo "Warning: $ROOTLINE_BIN is not writable and passwordless sudo is unavailable"
-    rm -f "$tmp"
-    return 1
-  fi
-
-  rm -f "$tmp"
-}
-
+# Rebuild the rootline binary so the installed version matches the pushed code.
+# Delegate to `just install` — the single source of truth for install destination
+# (~/.local/bin) and version scheme (<tag>+local.<sha>). Non-fatal: a failed
+# rebuild must never block the push.
 echo "Rebuilding rootline binary..."
-if install_rootline_binary; then
-  echo "rootline rebuilt: $("$ROOTLINE_BIN" --version)"
+if command -v just >/dev/null 2>&1; then
+  ( cd "$REPO_ROOT" && just install ) || echo "Warning: just install failed (push continues)"
 else
-  echo "Warning: rootline rebuild failed (push continues)"
+  echo "Warning: just not found; skipping rootline reinstall"
 fi

@@ -1,5 +1,5 @@
 ---
-estado: In Progress
+estado: Completed
 tipo: task
 ---
 # T011: Establish a single supported install path with a duplicate-binary guard
@@ -22,27 +22,27 @@ Two further defects surfaced while fixing this:
 1. `docs/auto-update.md` documented the staging directory as `~/.cache/rootline/staged/`. The real base is Go's `os.UserCacheDir()`, which is `~/Library/Caches` on macOS. Following the troubleshooting steps led to a non-existent path and the conclusion that auto-update was broken.
 2. The same doc claimed staging directories are cleaned up when the binary is applied. Applying moves the binary out but leaves the empty version directory behind; they accumulate one per release.
 
-## Three competing install mechanisms
+## Three install mechanisms, now reconciled
 
-Discovered while merging: `just install` is not yet the only path. The repository already installs the binary in two other ways, and they disagree on both destination and version.
+`just install` was not initially the only install path. The repository installed the binary in two other ways that disagreed on both destination and version, so a single `rootline` on `PATH` was a matter of convention, not construction:
 
-| Mechanism | Destination | Version |
-|-----------|-------------|---------|
-| `install.sh` (public `curl \| sh` installer) | `~/.local/bin` when it is on `PATH`, else `/usr/local/bin` | downloaded release |
-| `.githooks/post-merge`, `.githooks/pre-push` | whatever `command -v rootline` resolves to | `git describe --tags` |
-| `just install` | `~/bin` | `<highest tag>+local.<sha>` |
+| Mechanism | Was | Now |
+|-----------|-----|-----|
+| `install.sh` (public `curl \| sh` installer) | `~/.local/bin` only when on `PATH`, else `/usr/local/bin` | `~/.local/bin` unconditionally (override: `ROOTLINE_INSTALL_DIR`) |
+| `.githooks/post-merge`, `.githooks/pre-push` | own `install_rootline_binary` over `command -v rootline`, versioned with `git describe` | delegate to `just install` |
+| `just install` | `~/bin`, `<highest tag>+local.<sha>` | `~/.local/bin`, `<highest tag>+local.<sha>` |
 
-`install.sh:40-41` is what produced the orphan: it prefers `$HOME/.local/bin` whenever that directory is on `PATH`. The hooks then follow `PATH`, so which binary they overwrite depends on directory order.
+`install.sh:40-41` was what produced the orphan: it preferred `$HOME/.local/bin` only when that directory was on `PATH`, and the hooks then followed `PATH`, so which binary they overwrote depended on directory order. All three now converge on `~/.local/bin` with the `<highest tag>+local.<sha>` scheme, and the two duplicated copies of `install_rootline_binary` are gone.
 
-Two further defects in `.githooks/post-merge`: it runs `rootline fix --all "$REPO_ROOT/docs/epics/"`, a directory that does not exist (the roadmap lives at `docs/roadmap/`), silenced by `2>/dev/null || true`; and it versions rebuilds with `git describe`, which falls below the current release whenever tags are stale.
+`.githooks/post-merge` also ran `rootline fix --all "$REPO_ROOT/docs/epics/"`, a directory that does not exist (the roadmap lives at `docs/roadmap/`), silenced by `2>/dev/null || true`; `.githooks/pre-push` printed `docs/epics/ validation passed` while actually validating `docs/roadmap/`. Both `docs/epics/` references are corrected.
 
 ## Acceptance criteria
 
-- `just install` targets `~/bin` and builds with the same ldflags as goreleaser so an installed binary never reports `dev`. **Done.**
+- `just install` targets `~/.local/bin` and builds with the same ldflags as goreleaser so an installed binary never reports `dev`. **Done.**
 - `just install` versions the build as `<highest known tag>+local.<sha>`. Auto-update compares only `major.minor.patch` (`parseSemver` truncates at the first `-` or `+`; `isNewer` uses a strict `>`). A synced `git describe` ties safely, but it drops below the release whenever tags are stale or `HEAD` predates the newest tag, and the binary is then replaced on the next run. Taking the highest tag is deterministic regardless of where `HEAD` sits. **Done.**
-- **Open:** reconcile `install.sh`, the two git hooks, and `just install` onto one destination and one version scheme, so a single `rootline` can exist on `PATH` by construction rather than by convention.
-- **Open:** fix or remove the dead `docs/epics/` call in `.githooks/post-merge`.
-- `just doctor-install` uses `which -a` and fails when `PATH` resolves to more than one `rootline`, when it resolves outside `~/bin`, or when the binary reports `dev`. It prints every path with its version.
+- `install.sh` and both git hooks converge on `~/.local/bin`; the hooks delegate to `just install` instead of carrying their own build-and-install logic. **Done.**
+- The dead `docs/epics/` references in `.githooks/post-merge` and `.githooks/pre-push` are corrected to `docs/roadmap/`. **Done.**
+- `just doctor-install` uses `which -a` and fails when `PATH` resolves to more than one `rootline`, when it resolves outside `~/.local/bin`, or when the binary reports `dev`. It prints every path with its version. **Done.**
 - Both copies of the Definition of Done (repo and user-global) call `just doctor-install` instead of `which rootline`.
 - `docs/auto-update.md` states the staging base per OS, describes the empty-directory accumulation accurately, and documents the version-comparison semantics.
 
