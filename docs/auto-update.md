@@ -23,14 +23,39 @@ The user-visible effect is that the version shown by `rootline --version` change
 
 ## Staging Directory
 
+The base is Go's `os.UserCacheDir()`, so the path is OS-dependent:
+
+| OS | Staging base |
+|----|--------------|
+| macOS | `~/Library/Caches/rootline/staged/` |
+| Linux | `~/.cache/rootline/staged/` |
+| Windows | `%LocalAppData%\rootline\staged\` |
+
 ```
-~/.cache/rootline/staged/
+<staging base>/
   vX.Y.Z/
     rootline          # Linux / macOS
     rootline.exe      # Windows
 ```
 
-The directory is created by the downloader. Each staged release occupies its own version subdirectory. Staging directories are cleaned up automatically when the binary is applied.
+The directory is created by the downloader. Each staged release occupies its own version subdirectory.
+
+Applying an update renames the staged binary over the running one, so the binary leaves the staging directory — but the now-empty version directory is **not** removed. They accumulate one empty directory per release. Harmless (zero bytes), and safe to delete at any time.
+
+## Version Comparison
+
+Only `major.minor.patch` participates. `parseSemver` truncates the version at the first `-` or `+`, and `isNewer` then compares with a strict `>`. Pre-release and build metadata are invisible to the comparison:
+
+| Installed | Released | Replaced? | Why |
+|-----------|----------|-----------|-----|
+| `v4.0.8` | `v4.0.9` | yes | `4.0.9 > 4.0.8` |
+| `v4.0.8-3-gabc123` | `v4.0.9` | yes | truncates to `4.0.8` |
+| `v4.0.9+local.abc123` | `v4.0.9` | no | tie, and the test is `>` not `>=` |
+| `v4.0.9+local.abc123` | `v4.1.0` | yes | `4.1.0 > 4.0.9` |
+
+This is why `just install` versions a local build as `<highest known tag>+local.<sha>` rather than using `git describe`. From a fully synced checkout describe yields the release version and ties safely — but it drops *below* the release whenever tags are stale or `HEAD` predates the newest tag. The release then outranks it and the freshly installed binary is replaced on the very next run. Taking the highest known tag is deterministic regardless of where `HEAD` sits.
+
+Clearing the staging directory does **not** prevent that: every invocation re-stages in a background goroutine, so the next one applies it.
 
 ## When Auto-update Does NOT Run
 
@@ -60,14 +85,16 @@ All auto-update errors are suppressed — the current command is never interrupt
 
 **The binary is not updating:**
 
-1. Verify the installed binary is a release build: `rootline --version` should show a semver tag, not `dev`.
-2. Check staging directory: `ls ~/.cache/rootline/staged/` — if empty after running, connectivity or permissions may be blocking.
-3. Verify network access to `api.github.com` and `github.com`.
+1. Verify the installed binary is a release build: `rootline --version` should show a semver tag, not `dev`. A `dev` binary was built without ldflags — reinstall with `just install`.
+2. Check that PATH resolves to a single binary: `just doctor-install`. A stale copy shadowing the real one in another directory is the most common cause of "the version never changes".
+3. Check the staging directory for your OS (see the table above) — if it stays empty after a run, connectivity or permissions may be blocking.
+4. Verify the installed binary sits in a directory you own. Applying an update to a root-owned path such as `/usr/local/bin` fails silently and leaves the old version in place.
+5. Verify network access to `api.github.com` and `github.com`.
 
 **Force an update now:**
 
 ```bash
-rm -rf ~/.cache/rootline/staged/
+rm -rf ~/Library/Caches/rootline/staged/   # macOS — see the table above for other OSes
 rootline --version   # run N: downloads release in background
 rootline --version   # run N+1: applies and re-execs with new version
 ```
