@@ -133,6 +133,8 @@ CI/CD uses shared reusable workflows from `pablontiv/crossbeam@v1`:
 
 `docs-validate` is repo-specific (runs `rootline validate --all docs/roadmap/`) and stays inline in `ci.yml`.
 
+`installer-smoke` is a post-release job (`needs: [release]`, push only) that runs the public install scripts on native runners — `install.sh` on `ubuntu-latest`/`macos-latest`, `install.ps1` on `windows-latest` — against the freshly published release, asserting `rootline --version`. It exists because the binary-only release smoke never exercised the install path, so a GNU-only `sha256sum --check` in `install.sh` shipped broken on macOS. Native runners (not Docker/qemu) are what make the macOS BSD `sha256sum` and real-Windows `$env:TEMP` paths testable. Inline for now; migrating it to a reusable crossbeam workflow is tracked in `docs/roadmap/T012`.
+
 **Coverage gates**: The 85% threshold in CI (`coverage-threshold: 85` in crossbeam) is mirrored locally via `.coverage-floors.toml` (`default = 85`, uniform across all packages). `pkcov` parses a minimal TOML subset: string arrays in `.coverage-floors.toml` (`packages`, `exclude`) must be single-line. The local gate runs via `pkcov` from `github.com/pablontiv/picokit` (see [`picokit/docs/coverage-spec.md`](https://github.com/pablontiv/picokit/blob/main/docs/coverage-spec.md)); rootline complies with picokit's coverage spec. The pre-push hook (`.githooks/pre-push`) runs `just coverage-check` automatically whenever any `.go` file is included in the push — this blocks the push before CI even runs. Do **not** bypass with `git push --no-verify` except in documented emergencies with an explanation in the commit message.
 
 ## Module Path

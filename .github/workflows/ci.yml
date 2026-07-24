@@ -41,3 +41,52 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+
+  # Post-release installer smoke test: prove the just-published release actually
+  # installs and runs through the public install scripts on every supported OS.
+  # Native runners (no Docker/qemu) exercise the real platform tooling — e.g.
+  # macOS's BSD sha256sum, whose lack of `--check` once silently broke
+  # install.sh on every Mac, and real Windows, where install.ps1's $env:TEMP /
+  # $env:LOCALAPPDATA assumptions hold. Also catches release-asset defects the
+  # binary --version smoke misses: missing checksums.txt, wrong archive naming,
+  # bad permissions.
+  #
+  # POSSIBLE MIGRATION: install-script smoke testing is generic and could move
+  # to a reusable crossbeam workflow (pablontiv/crossbeam), mirroring go-ci /
+  # go-release, so every Go CLI repo reuses it. Kept inline for now — like
+  # docs-validate — while it proves its value. Tracked in docs/roadmap/T012.
+  installer-smoke:
+    needs: [release]
+    if: github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: install.sh smoke (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -eu
+          # Retry: the scripts hit the GitHub API and release CDN, which flake.
+          for attempt in 1 2 3; do
+            if sh install.sh; then break; fi
+            echo "install.sh attempt ${attempt} failed; retrying in 5s..."
+            sleep 5
+          done
+          # install.sh installs to ~/.local/bin (the canonical destination),
+          # which is not necessarily on the runner PATH — invoke by full path.
+          "${HOME}/.local/bin/rootline" --version
+      - name: install.ps1 smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 3; $i++) {
+            try { & ./install.ps1; break }
+            catch { Write-Host "install.ps1 attempt $i failed: $_"; Start-Sleep 5 }
+          }
+          # install.ps1 installs to %LOCALAPPDATA%\rootline\bin and only updates
+          # the persistent User PATH, not this job's PATH — invoke by full path.
+          & (Join-Path $env:LOCALAPPDATA "rootline\bin\rootline.exe") --version
