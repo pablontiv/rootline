@@ -46,6 +46,12 @@ Two further defects surfaced while fixing this:
 - Both copies of the Definition of Done (repo and user-global) call `just doctor-install` instead of `which rootline`.
 - `docs/auto-update.md` states the staging base per OS, describes the empty-directory accumulation accurately, and documents the version-comparison semantics.
 
+## Checksum verification portability
+
+End-to-end validation of `install.sh` on macOS surfaced a pre-existing bug (introduced in `dfeee57`, unrelated to the path reconciliation): checksum verification used `sha256sum --check --status`, GNU coreutils syntax that the BSD/macOS `sha256sum` rejects. The public installer therefore aborted on every macOS run with `Checksum verification failed`, before installing anything. Linux with GNU coreutils was unaffected.
+
+Fixed by computing the digest and comparing hex strings instead of relying on the `--check` flag — the same approach `install.ps1` already uses via `Get-FileHash`. A `sha256_hex` helper prefers `shasum -a 256` (present on macOS and most Linux) and falls back to `sha256sum` (GNU / busybox). Verified end-to-end on macOS, plus a negative test confirming a corrupted checksum is rejected.
+
 ## Notes
 
 Clearing the staging directory before installing was evaluated and rejected: every `rootline` invocation re-stages in a background goroutine, so the next invocation applies the release anyway. The version-matching approach is what actually holds.

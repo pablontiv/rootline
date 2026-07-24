@@ -74,8 +74,17 @@ download_and_install() {
     if ! fetch "$CHECKSUM_URL" > "$TMPDIR/checksums.txt" 2>/dev/null; then
         abort "Could not fetch checksums.txt from ${CHECKSUM_URL}"
     fi
-    if ! grep -F "$ARCHIVE" "$TMPDIR/checksums.txt" | sha256sum --check --status; then
-        abort "Checksum verification failed for ${ARCHIVE}"
+    # Compute-and-compare rather than `sha256sum --check`: the --check/-c flags
+    # differ across GNU coreutils and the BSD/macOS sha256sum, so relying on them
+    # breaks the installer on macOS. Extracting the expected hash and comparing
+    # hex strings is portable and mirrors install.ps1's Get-FileHash approach.
+    EXPECTED="$(grep -F "$ARCHIVE" "$TMPDIR/checksums.txt" | awk '{print $1}')"
+    if [ -z "$EXPECTED" ]; then
+        abort "No checksum listed for ${ARCHIVE} in checksums.txt"
+    fi
+    ACTUAL="$(sha256_hex "$TMPDIR/$ARCHIVE")"
+    if [ "$ACTUAL" != "$EXPECTED" ]; then
+        abort "Checksum mismatch for ${ARCHIVE}: expected ${EXPECTED}, got ${ACTUAL}"
     fi
     log "Checksum verified."
 
@@ -115,6 +124,19 @@ fetch() {
         wget -qO- "$1"
     else
         abort "curl or wget is required"
+    fi
+}
+
+# Print the lowercase hex SHA-256 of a file. Prefers shasum (present on macOS
+# and most Linux via Perl); falls back to sha256sum (GNU coreutils / busybox).
+# Both print "<hex>  <file>", so the first field is the digest.
+sha256_hex() {
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | awk '{print $1}'
+    elif command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        abort "shasum or sha256sum is required to verify the download"
     fi
 }
 
