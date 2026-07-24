@@ -54,7 +54,7 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 | Show hierarchy | `tree` | `rootline tree <dir> --where "isIndex == false" -o table` |
 | Count records | `stats` | `rootline stats <dir> --where "tipo == 'task'" -o json` |
 | Explain field origins | `explain` | `rootline explain file.md -o json` |
-| Graph links (wiki + markdown) | `graph` | JSON: `rootline graph <dir> -o json`; DOT: `rootline graph <dir> --format dot`; Mermaid: `rootline graph <dir> --format mermaid -o table` |
+| Graph links (wiki + markdown) | `graph` | JSON: `rootline graph <dir> -o json` (default); DOT: `rootline graph <dir> --format dot -o table`; Mermaid: `rootline graph <dir> --format mermaid -o table` |
 | Infer schema | `init` | `rootline init <dir> --dry-run` then `rootline init <dir>` |
 | Analyze patterns | `analyze` | `rootline analyze <dir> -o json` |
 | Apply schema proposals | `schema apply` | `rootline schema apply --report proposals.json --dry-run` then apply without `--dry-run` |

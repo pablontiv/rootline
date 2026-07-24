@@ -4,8 +4,6 @@
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 
-## Rootline turns Markdown into a governed, queryable knowledge system.
-
 Keep your Markdown consistent, connected, and queryable as it grows.
 
 Rootline treats your documentation as structured data. **`.stem` files define schemas** (what fields must exist, their types, allowed values). **Validation rules** enforce consistency. **Queries** retrieve relevant records without reading every file. **Field provenance** shows where every value came from and how it was computed. Humans, automation, and AI agents all consume the same governed outputs.
@@ -79,8 +77,8 @@ rootline query docs/ --where 'estado == "published"'
 # (or the filesystem root). No Git required.
 rootline validate --all docs/
 
-# 4. Graph — visualize document dependencies
-rootline graph docs/
+# 4. Graph — render the dependency diagram (Mermaid)
+rootline graph docs/ --format mermaid -o table
 
 # 5. New — scaffold a document from the effective schema
 rootline new docs/task-001.md
@@ -89,7 +87,7 @@ rootline new docs/task-001.md
 rootline explain docs/task-001.md
 ```
 
-All commands output JSON by default. Use `--output table` for human-readable tables.
+Most commands output JSON by default. Use `--output table` for human-readable tables. (`graph --check` reports cycles and broken links as text plus an exit code.)
 
 ---
 
@@ -160,7 +158,7 @@ Queries retrieve relevant records without scanning entire documents:
 - Graph traversal: `--has-inbound` / `--has-outbound` with link predicates
 - Counted results: `--count` returns summary statistics
 
-All outputs are JSON, suitable for piping to automation and AI consumers.
+These outputs are JSON, suitable for piping to automation and AI consumers.
 
 ---
 
@@ -199,8 +197,9 @@ Find records and visualize dependencies.
   - `rootline tree [path] [--where 'expr']` — Directory structure with metadata
 
 - **`graph`** — Dependency graph from wiki-links and markdown links
-  - `rootline graph [path] [--format dot|mermaid]` — Build diagram
-  - `rootline graph [path] --check` — Validate (detect cycles, broken links)
+  - `rootline graph [path]` — Dependency graph as JSON (default)
+  - `rootline graph [path] --format dot|mermaid -o table` — Render a diagram
+  - `rootline graph [path] --check` — Validate cycles and broken links (text report + exit code)
   - `rootline graph [path] --fail-cycles` — Treat cycles as errors
 
 ### Build & Maintain
@@ -215,6 +214,7 @@ Create and update documents.
 
 - **`new`** — Scaffold a document from effective schema
   - `rootline new <filepath>` — Create with frontmatter pre-populated
+  - `rootline new <filepath> --force` — Overwrite an existing file
   - `rootline new <filepath> --dry-run` — Preview generated content
 
 - **`set`** — Mutate frontmatter and sections with validation
@@ -334,9 +334,10 @@ Derived and aggregated fields appear alongside frontmatter in query results, sta
 Documents reference each other via `[[wiki-links]]` in their body. Rootline extracts these links and builds a directed graph:
 
 ```bash
-rootline graph docs/ --format mermaid   # Mermaid diagram
-rootline graph docs/ --format dot       # Graphviz DOT
-rootline graph docs/ --check            # Validate: detect cycles and broken links
+rootline graph docs/                            # Dependency graph as JSON (default)
+rootline graph docs/ --format mermaid -o table  # Mermaid diagram
+rootline graph docs/ --format dot -o table      # Graphviz DOT
+rootline graph docs/ --check                    # Validate: cycles + broken links (text + exit code)
 ```
 
 Link schemas in `.stem` files control which link types are allowed and validate targets against regex patterns.
@@ -383,7 +384,7 @@ These workflows are optional enhancements, not product requirements. You can use
 
 ## AI-Native
 
-Rootline is designed as a **structured knowledge source for AI assistants**. All commands output stable, versioned JSON contracts (each payload carries its own `version` field), making them suitable for tool use and automation.
+Rootline is designed as a **structured knowledge source for AI assistants**. Data commands output stable, versioned JSON contracts (each payload carries its own `version` field), making them suitable for tool use and automation.
 
 ### CLI-first automation
 

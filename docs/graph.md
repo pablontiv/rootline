@@ -34,16 +34,17 @@ Without a link schema, all link types are allowed by default.
 ## CLI Usage
 
 ```bash
-rootline graph docs/epics/                    # DOT output (default)
-rootline graph docs/epics/ --format mermaid   # Mermaid output
-rootline graph docs/epics/ --check            # Validate only: cycles + broken links
+rootline graph docs/epics/                             # Dependency graph as JSON (default)
+rootline graph docs/epics/ --format mermaid -o table   # Mermaid diagram
+rootline graph docs/epics/ --format dot -o table       # Graphviz DOT diagram
+rootline graph docs/epics/ --check                     # Validate only: cycles + broken links (text + exit code)
 ```
 
 ### Flags
 
 | Flag | Description |
 |------|-------------|
-| `--format dot\|mermaid` | Output format (default: `dot`) |
+| `--format dot\|mermaid` | Diagram format when `-o` is not `json` (default: `dot`) |
 | `--check` | Validate only — reports cycles and broken links, no diagram |
 | `--fail-cycles` | Treat cycles as check failures; exit with code 1 if any found (default: cycles are informational) |
 | `--quiet-cycles` | Suppress per-cycle enumeration when informational (only affects output when cycles are detected and not failing) |
@@ -79,18 +80,14 @@ rootline graph docs/epics/ --where 'estado == "Specified"' --check  # Check only
 
 ### With --check
 
-Returns exit code 1 if cycles or broken links are found:
+Prints a text report and exits 1 when a blocking problem is found (broken links always block; cycles block only with `--fail-cycles` or `links.checks.cycles: true`, otherwise they are informational):
 
-```json
-{
-  "version": 1,
-  "kind": "rootline/graph-check",
-  "cycles": [["T001", "T003", "T001"]],
-  "broken_links": [
-    {"source": "T002-task.md", "target": "T999-nonexistent", "type": "blocks", "line": 7, "suggestions": ["T001-setup-database.md", "T005-deploy.md"]}
-  ]
-}
+```text
+Broken links: 1
+  T002-task.md:7 → T999-nonexistent (blocks) — did you mean: T005-deploy.md?
 ```
+
+When nothing is wrong it prints `No cycles or broken links found.` and exits 0. `--check` is a text-plus-exit-code validator; it does not emit JSON — use the default JSON mode below to extract link data.
 
 ### With --field (Field Projection)
 
@@ -107,12 +104,12 @@ rootline graph docs/ --field 'edges[].target'
 # Extract both source and target as objects
 rootline graph docs/ --field 'edges[]'
 
-# Check for broken links and extract details
-rootline graph docs/ --check --field 'broken_links'
+# Extract broken-link details (default JSON mode — not --check)
+rootline graph docs/ --field 'broken_links'
 # [{"source": "T002-task.md", "target": "T999-nonexistent", "type": "blocks", ...}]
 
 # Extract simple broken link targets
-rootline graph docs/ --check --field 'broken_links[].target'
+rootline graph docs/ --field 'broken_links[].target'
 # ["T999-nonexistent"]
 ```
 

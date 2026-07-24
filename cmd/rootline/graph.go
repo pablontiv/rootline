@@ -24,13 +24,13 @@ var (
 var graphCmd = &cobra.Command{
 	Use:   "graph [path]",
 	Short: "Build and visualize the document dependency graph",
-	Long:  "Scan documents, build a directed graph from wiki-links, and output in DOT or Mermaid format.\nUse --check to validate for cycles and broken links without generating a diagram.",
+	Long:  "Scan documents and build a directed graph from wiki-links.\nOutput is JSON by default; pass -o table with --format dot|mermaid to render a diagram.\nUse --check to validate for cycles and broken links (text report + exit code).",
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  runGraph,
 }
 
 func init() {
-	graphCmd.Flags().StringVar(&graphFormat, "format", "dot", "output format: dot or mermaid")
+	graphCmd.Flags().StringVar(&graphFormat, "format", "dot", "diagram format when -o is not json: dot or mermaid")
 	graphCmd.Flags().BoolVar(&graphCheck, "check", false, "validate only (cycles + broken links), no diagram")
 	graphCmd.Flags().StringArrayVar(&graphWhere, "where", nil, "filter expression (e.g. \"tipo != 'feature'\")")
 	graphCmd.Flags().BoolVar(&graphFailCycles, "fail-cycles", false, "treat cycles as check failures (overrides .stem links.checks.cycles)")
