@@ -167,9 +167,9 @@ Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new comman
 
 ## Repair Apply Command
 
-`rootline repair apply --report <analyze-report.json> [--dry-run]` applies data-only repairs:
+`rootline repair apply --report <repairs.json> [--dry-run]` applies data-only repairs (from `rootline fix --all <dir> --dry-run -o json`):
 - Accepts repair-surface proposals (correct_value, add_field, migrate_value, etc.)
-- Silently rejects schema proposals (extend_enum, add_aggregate, remove_stem_field, etc.)
+- Rejects schema proposals (extend_enum, add_aggregate, remove_stem_field, etc.); appear in output under Rejected
 - Never creates, deletes, or modifies `.stem` files
 - Supports `--dry-run` for preview without writes
 - Emits JSON: version 1, kind "rootline/repair", with Changed/Skipped/Rejected/Errors
@@ -205,7 +205,7 @@ Use `proposal.Surface()` to gate schema vs. repair apply paths.
 
 `rootline apply` no longer exists — invoking it fails with `unknown command "apply"`. Replace scripts/agents that used `apply` with:
 - `rootline schema apply --report <proposals.json>` — schema changes (`.stem` files)
-- `rootline repair apply --report <analyze-report.json>` — data corrections (frontmatter)
+- `rootline repair apply --report <repairs.json>` — data corrections (frontmatter)
 
 ## Field Extraction — Array Projection
 

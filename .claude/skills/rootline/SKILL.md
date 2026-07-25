@@ -70,9 +70,9 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 
 ```bash
 rootline validate --all <dir> -o json
-rootline fix --all <dir> --dry-run -o json
-rootline repair apply --report <proposals.json> --dry-run -o json
-rootline repair apply --report <proposals.json>
+rootline fix --all <dir> --dry-run -o json > <dir>/repairs.json
+rootline repair apply --report <dir>/repairs.json --dry-run -o json
+rootline repair apply --report <dir>/repairs.json
 rootline validate --all <dir> -o json
 git diff -- <dir>
 ```

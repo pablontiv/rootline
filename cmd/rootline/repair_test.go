@@ -42,7 +42,7 @@ schema:
 	// Create a minimal repair report with add_field proposal
 	report := proposal.Report{
 		Version: 1,
-		Kind:    "rootline/analyze",
+		Kind:    "rootline/proposals",
 		Proposals: []proposal.Proposal{
 			{
 				Type:        proposal.AddField,
@@ -100,7 +100,7 @@ schema:
 	// Create a report with correct_value proposal
 	report := proposal.Report{
 		Version: 1,
-		Kind:    "rootline/analyze",
+		Kind:    "rootline/proposals",
 		Proposals: []proposal.Proposal{
 			{
 				Type:        proposal.CorrectValue,
@@ -187,7 +187,7 @@ schema:
 	// Create a report with extend_enum proposal (schema surface, should be rejected)
 	report := proposal.Report{
 		Version: 1,
-		Kind:    "rootline/analyze",
+		Kind:    "rootline/proposals",
 		Proposals: []proposal.Proposal{
 			{
 				Type:        proposal.ExtendEnum,
@@ -251,7 +251,7 @@ schema:
 
 	report := proposal.Report{
 		Version: 1,
-		Kind:    "rootline/analyze",
+		Kind:    "rootline/proposals",
 		Proposals: []proposal.Proposal{
 			{
 				Type:        proposal.CorrectValue,
@@ -288,5 +288,184 @@ func TestRunRepairApply_NoReportFlag(t *testing.T) {
 	_, err := runCmd(t, "repair", "apply")
 	if err == nil {
 		t.Fatal("expected error when --report flag is missing")
+	}
+}
+
+func TestRunRepairApply_EnvelopeGuard(t *testing.T) {
+	// Common setup: directory with .stem and one document
+	baseSetup := func() (dir string, reportDir string) {
+		dir = t.TempDir()
+		if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		// Setup .stem
+		stemContent := `version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completed]
+  titulo:
+    type: string
+    required: false
+`
+		mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
+		declareTestBoundary(t, dir)
+
+		// Setup document with validation error (missing titulo; required=false so title is actually present)
+		mustWriteFile(t, filepath.Join(dir, "task.md"),
+			[]byte("---\nestado: Pending\n---\n# Task\n"), 0644)
+
+		return dir, dir
+	}
+
+	cases := []struct {
+		name                string
+		version             int
+		kind                string
+		proposalsPresent    bool
+		expectError         bool
+		errorContains       string
+		expectDiskUnchanged bool
+		expectDiskChanged   bool
+	}{
+		{
+			name:                "UnsupportedVersion_0",
+			version:             0,
+			kind:                "rootline/proposals",
+			proposalsPresent:    true,
+			expectError:         true,
+			errorContains:       "unsupported report version: 0",
+			expectDiskUnchanged: true,
+		},
+		{
+			name:                "UnsupportedVersion_99",
+			version:             99,
+			kind:                "rootline/proposals",
+			proposalsPresent:    true,
+			expectError:         true,
+			errorContains:       "unsupported report version: 99",
+			expectDiskUnchanged: true,
+		},
+		{
+			name:                "WrongKind_Analyze",
+			version:             1,
+			kind:                "rootline/analyze",
+			proposalsPresent:    true,
+			expectError:         true,
+			errorContains:       "wrong report kind",
+			expectDiskUnchanged: true,
+		},
+		{
+			name:                "WrongKind_SchemaProposals",
+			version:             1,
+			kind:                "rootline/schema-proposals",
+			proposalsPresent:    true,
+			expectError:         true,
+			errorContains:       "wrong report kind",
+			expectDiskUnchanged: true,
+		},
+		{
+			name:                "WrongKind_Empty",
+			version:             1,
+			kind:                "",
+			proposalsPresent:    true,
+			expectError:         true,
+			errorContains:       "wrong report kind",
+			expectDiskUnchanged: true,
+		},
+		{
+			name:                "FalsePositive_WrongKindValidProposals",
+			version:             1,
+			kind:                "rootline/analyze",
+			proposalsPresent:    true,
+			expectError:         true,
+			errorContains:       "wrong report kind",
+			expectDiskUnchanged: true, // FALSE-POSITIVE REGRESSION: assert both error AND disk unchanged
+		},
+		{
+			name:              "ValidReport",
+			version:           1,
+			kind:              "rootline/proposals",
+			proposalsPresent:  true,
+			expectError:       false,
+			expectDiskChanged: true,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			dir, reportDir := baseSetup()
+
+			// Build report with proposals if requested
+			report := proposal.Report{
+				Version: tt.version,
+				Kind:    tt.kind,
+			}
+			if tt.proposalsPresent {
+				// Use relative paths from report directory
+				taskPath := "task.md"
+				if reportDir != dir {
+					taskPath = filepath.Join(dir, "task.md")
+				}
+				report.Proposals = []proposal.Proposal{
+					{
+						Type:        proposal.AddField,
+						Field:       "titulo",
+						Value:       "New Title",
+						Paths:       []string{taskPath},
+						Description: "add titulo field",
+					},
+				}
+			}
+
+			reportData, err := json.Marshal(report)
+			if err != nil {
+				t.Fatalf("marshal report: %v", err)
+			}
+
+			reportFile := filepath.Join(reportDir, "report.json")
+			mustWriteFile(t, reportFile, reportData, 0644)
+
+			// Save original file content for false-positive check
+			taskFile := filepath.Join(dir, "task.md")
+			originalContent := mustReadFile(t, taskFile)
+
+			// Run repair apply
+			resetFlags()
+			out, err := runCmd(t, "repair", "apply", "--report", reportFile)
+
+			if tt.expectError {
+				if err == nil {
+					t.Fatalf("expected error, got nil; output: %s", out)
+				}
+				if !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("error %q does not contain %q", err.Error(), tt.errorContains)
+				}
+
+				// FALSE-POSITIVE REGRESSION: verify disk unchanged
+				if tt.expectDiskUnchanged {
+					afterContent := mustReadFile(t, taskFile)
+					if !bytes.Equal(originalContent, afterContent) {
+						t.Fatal("false-positive regression: files were modified despite error")
+					}
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+				}
+
+				// Happy-path: verify record actually changed on disk
+				if tt.expectDiskChanged {
+					afterContent := mustReadFile(t, taskFile)
+					if bytes.Equal(originalContent, afterContent) {
+						t.Fatal("expected record to be modified on disk, but it was unchanged")
+					}
+				}
+			}
+		})
 	}
 }

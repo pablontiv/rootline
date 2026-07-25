@@ -99,6 +99,8 @@ func resetFlags() {
 	schemaProposeIncremental = false
 	schemaApplyReport = ""
 	schemaApplyDryRun = false
+	reportPath = ""
+	repairDryRun = false
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
 	if f := treeCmd.Flags().Lookup("where"); f != nil {

@@ -18,12 +18,12 @@ var (
 
 var repairCmd = &cobra.Command{
 	Use:   "repair apply --report <file> [--dry-run]",
-	Short: "Apply data-only repair fixes from an analyze report",
-	Long: `Apply repair proposals from an analyze report to document frontmatter.
+	Short: "Apply data-only repair fixes to document frontmatter",
+	Long: `Apply repair proposals from a fix report (produced by 'rootline fix --all <dir> --dry-run -o json') to document frontmatter.
 
 Only repair-surface proposals (correct_value, add_field, migrate_value, etc.)
-are applied. Schema proposals (extend_enum, add_aggregate, etc.) are silently
-rejected.
+are applied. Schema proposals (extend_enum, add_aggregate, etc.) are rejected
+and appear in the output under Rejected.
 
 Use --dry-run to preview changes without modifying files.`,
 	RunE: runRepairApply,
@@ -31,8 +31,8 @@ Use --dry-run to preview changes without modifying files.`,
 
 var repairApplyCmd = &cobra.Command{
 	Use:   "apply --report <file> [--dry-run]",
-	Short: "Apply repair proposals from an analyze report",
-	Long: `Apply repair proposals to document frontmatter.
+	Short: "Apply repair proposals to document frontmatter",
+	Long: `Apply repair proposals from a fix report (produced by 'rootline fix --all <dir> --dry-run -o json') to document frontmatter.
 
 Only repair-surface proposals are applied. Schema proposals are rejected.
 Use --dry-run to preview changes without modifying files.`,
@@ -41,7 +41,7 @@ Use --dry-run to preview changes without modifying files.`,
 }
 
 func init() {
-	repairApplyCmd.Flags().StringVar(&reportPath, "report", "", "path to analyze report JSON (required)")
+	repairApplyCmd.Flags().StringVar(&reportPath, "report", "", "path to fix report JSON (produced by 'rootline fix --all <dir> --dry-run -o json'; required)")
 	_ = repairApplyCmd.MarkFlagRequired("report")
 	repairApplyCmd.Flags().BoolVar(&repairDryRun, "dry-run", false, "preview changes without modifying files")
 
@@ -63,6 +63,14 @@ func runRepairApply(cmd *cobra.Command, _ []string) error {
 	var report proposal.Report
 	if err := json.Unmarshal(reportData, &report); err != nil {
 		return fmt.Errorf("parsing report: %w", err)
+	}
+
+	// Validate report version and kind.
+	if report.Version != 1 {
+		return fmt.Errorf("unsupported report version: %d (expected 1)", report.Version)
+	}
+	if report.Kind != "rootline/proposals" {
+		return fmt.Errorf("wrong report kind: %s (expected rootline/proposals)", report.Kind)
 	}
 
 	// Determine the root directory (directory containing the report).
