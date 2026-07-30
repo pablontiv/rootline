@@ -6,7 +6,7 @@ require (
 	github.com/expr-lang/expr v1.17.8
 	github.com/pablontiv/picokit v0.5.4
 	github.com/spf13/cobra v1.10.2
-	github.com/yuin/goldmark v1.8.4
+	github.com/yuin/goldmark v1.8.5
 	golang.org/x/term v0.45.0
 	golang.org/x/text v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
