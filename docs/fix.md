@@ -63,20 +63,34 @@ Use this for fixing frontmatter data issues found by `rootline validate` or `roo
 **Workflow:**
 
 ```bash
-# 1. Generate analyze report
-rootline analyze docs/ > analyze.json
+cd docs/
 
-# 2. Review proposals in analyze.json (schema_suggestions are separated)
+# 1. Generate a proposals report
+rootline fix --all . --dry-run -o json > fix-proposals.json
+
+# 2. Review the proposals (schema_suggestions are separated)
 # 3. Apply repair proposals (frontmatter only, never .stem)
-rootline repair apply --report analyze.json --dry-run
-rootline repair apply --report analyze.json
-
-# Or use fix output directly:
-rootline fix --all --dry-run > fix-proposals.json
+rootline repair apply --report fix-proposals.json --dry-run
 rootline repair apply --report fix-proposals.json
 ```
 
-`repair apply` accepts a report from `rootline fix` or `rootline analyze` and applies only repair-surface proposals to document frontmatter:
+Keep the report file in the directory you scanned. `repair apply` resolves the paths in the
+report against the **report file's own directory**, so a report written elsewhere (a `reports/`
+or CI artifacts directory) resolves to paths that do not exist and the run becomes a no-op.
+
+**Report envelope.** `repair apply` validates the report envelope before touching any file
+and rejects anything that is not `version: 1` and `kind: rootline/proposals`:
+
+```bash
+rootline repair apply --report analyze.json
+# Error: wrong report kind: rootline/analyze (expected rootline/proposals)
+```
+
+An `analyze` report is therefore not a valid input here — produce the report with
+`rootline fix --all <dir> --dry-run -o json`. For the schema-surface half of an analyze
+report, use `rootline schema apply`, which does accept `kind: rootline/analyze`.
+
+`repair apply` applies only repair-surface proposals to document frontmatter:
 - correct_value
 - add_field
 - migrate_value
