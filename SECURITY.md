@@ -2,9 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Rootline, please report it responsibly.
-
-**Do not open a public issue.** Instead, email the maintainer directly or use [GitHub's private vulnerability reporting](https://github.com/pablontiv/rootline/security/advisories/new).
+If you discover a security vulnerability in Rootline, open a public issue using the bug report template.
 
 Include:
 
