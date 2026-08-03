@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Added
 
+- Pull request template now has a dedicated **Related issue** section with a `Closes #<N>` field and a checklist item, so issue linkage stops depending on the author remembering the keyword
 - `CHANGELOG.md` (this file) — ecosystem documentation baseline
 - GitHub Issues enabled on the repository
 - `docs/UPGRADE.md` — migration guide for the root marker requirement
