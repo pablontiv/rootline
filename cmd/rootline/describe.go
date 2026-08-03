@@ -26,6 +26,31 @@ func init() {
 	rootCmd.AddCommand(describeCmd)
 }
 
+// noSchemaGovernsError restates ErrNoSchemaFound as the condition the user hit
+// rather than the step that was running, while staying the same error to code
+// that tests for it with errors.Is.
+type noSchemaGovernsError struct{ cause error }
+
+func (e *noSchemaGovernsError) Error() string {
+	return "no schema governs this path; run 'rootline init <path>' to create one"
+}
+
+func (e *noSchemaGovernsError) Unwrap() error { return e.cause }
+
+// describeSchemaError turns a discovery failure into the answer describe owes
+// the user.
+//
+// describe prints a resolved schema, so it must still fail when there is none —
+// but "discovering .stem files: ..." named the internal step instead of the
+// condition, which reads as a fault in rootline rather than an answer about the
+// tree. A real IO or parse failure is a different answer and keeps its cause.
+func describeSchemaError(err error) error {
+	if rules.IsRealSchemaError(err) {
+		return fmt.Errorf("resolving .stem: %w", err)
+	}
+	return &noSchemaGovernsError{cause: err}
+}
+
 func runDescribe(cmd *cobra.Command, args []string) error {
 	targetPath, err := filepath.Abs(args[0])
 	if err != nil {
@@ -42,7 +67,7 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 		dir := filepath.Dir(targetPath)
 		entries, err = rules.WalkUp(dir)
 		if err != nil {
-			return fmt.Errorf("discovering .stem files: %w", err)
+			return describeSchemaError(err)
 		}
 		effective, err = rules.ResolveForRecord(dir, args[0])
 		if err != nil {
@@ -52,7 +77,7 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 		// Directory (or non-existent path): use existing merge without levels.
 		entries, err = rules.WalkUp(targetPath)
 		if err != nil {
-			return fmt.Errorf("discovering .stem files: %w", err)
+			return describeSchemaError(err)
 		}
 		effective = rules.MergeStemFiles(entries)
 	}

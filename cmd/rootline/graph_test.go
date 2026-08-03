@@ -662,27 +662,41 @@ func TestGraphJSON_QuietCycles_CyclesPopulated(t *testing.T) {
 	}
 }
 
-// TEST-FIRST: Graph command should fail (non-zero exit) when schema resolution fails
-// This test will FAIL under current behavior because graph silently degrades
-// when WalkUp returns an error (line 83-89 in graph.go checks err == nil).
-func TestGraphErrorPropagation_NoSchema(t *testing.T) {
+// schemalessLinkTree builds a tree of linked documents with no .stem anywhere.
+func schemalessLinkTree(t *testing.T, target string) string {
+	t.Helper()
 	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[["+target+"]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n"), 0644)
+	return dir
+}
 
-	// Create a markdown file with links WITHOUT a .stem anywhere in the tree
-	// This will cause WalkUp to return ErrNoSchemaFound
-	if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644); err != nil {
-		t.Fatal(err)
+// TestGraph_SchemalessEmitsGraph replaces TestGraphErrorPropagation_NoSchema,
+// which asserted the opposite.
+//
+// A .stem governs which link styles graph reads and whether cycles fail a
+// check. Its absence removes those restrictions; it does not remove the links.
+// Refusing to draw the graph withheld the one view that helps someone decide
+// where the schema should go, so a tree with no .stem now yields the whole
+// extracted graph rather than a discovery error.
+func TestGraph_SchemalessEmitsGraph(t *testing.T) {
+	dir := schemalessLinkTree(t, "b.md")
+
+	out, err := runCmd(t, "graph", dir)
+	if err != nil {
+		t.Fatalf("graph must tolerate a tree with no .stem, got: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n"), 0644); err != nil {
-		t.Fatal(err)
+
+	var result map[string]any
+	if jsonErr := json.Unmarshal([]byte(out), &result); jsonErr != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", jsonErr, out)
 	}
-
-	// Run graph on a directory with no schema
-	_, err := runCmd(t, "graph", dir)
-
-	// EXPECTATION: graph should exit with an error, not silently produce a graph without link schema
-	if err == nil {
-		t.Fatalf("graph should fail when no schema is found, but got nil error (silent degradation)")
+	if result["kind"] != "rootline/graph" {
+		t.Errorf("kind = %v, want rootline/graph", result["kind"])
+	}
+	edges, _ := result["edges"].([]any)
+	if len(edges) != 1 {
+		t.Errorf("edges = %d, want 1 (the a.md -> b.md link is still there)", len(edges))
 	}
 }
 
@@ -846,4 +860,32 @@ func TestGraphEdgeOrder(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestGraph_CheckOnSchemalessReportsIntegrity keeps --check answering the
+// question it was asked. Link integrity does not depend on a schema, so on a
+// tree with no .stem the exit code must report broken links and nothing else.
+func TestGraph_CheckOnSchemalessReportsIntegrity(t *testing.T) {
+	t.Run("broken link fails the check", func(t *testing.T) {
+		dir := schemalessLinkTree(t, "no-such-file")
+
+		out, err := runCmd(t, "graph", dir, "--check")
+		if err == nil {
+			t.Fatalf("--check must fail on a broken link\noutput: %s", out)
+		}
+		if !strings.Contains(out, "Broken links: 1") {
+			t.Errorf("expected the broken-link report, got: %s", out)
+		}
+		if strings.Contains(err.Error(), "schema") {
+			t.Errorf("the failure must be about links, not schema discovery: %v", err)
+		}
+	})
+
+	t.Run("valid links pass the check", func(t *testing.T) {
+		dir := schemalessLinkTree(t, "b.md")
+
+		if _, err := runCmd(t, "graph", dir, "--check"); err != nil {
+			t.Fatalf("--check must pass when every link resolves, got: %v", err)
+		}
+	})
 }

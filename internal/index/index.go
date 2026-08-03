@@ -33,14 +33,19 @@ type scanConfig struct {
 
 // AllowUngoverned lets a scan read documents in a tree where no .stem resolves.
 //
-// It exists for the bootstrap commands only. `schema propose` and `analyze`
-// derive a schema FROM documents that do not have one yet, so demanding a
-// resolved schema before reading them would make them useless for their only
-// purpose — you cannot require a schema as the precondition for creating one.
+// Two kinds of command need it. The bootstrap commands — `schema propose` and
+// `analyze` — derive a schema FROM documents that do not have one yet, so
+// demanding a resolved schema before reading them would make them useless for
+// their only purpose: you cannot require a schema as the precondition for
+// creating one. `tree` needs it for a different reason — it reports the shape
+// of a directory rather than a verdict about it — but only once a governed scan
+// has already come back with nothing, so that a tree which does govern some of
+// its records keeps its scope filtering.
 //
 // It tolerates a MISSING schema, never a broken one: hard read and parse errors
-// still abort the scan. Governed commands must not use it, because succeeding
-// over zero governed records is exactly the false green this change removes.
+// still abort the scan. Commands that return a verdict must not use it, because
+// succeeding over zero governed records is exactly the false green this option
+// must never produce.
 func AllowUngoverned() ScanOption {
 	return func(c *scanConfig) { c.allowUngoverned = true }
 }

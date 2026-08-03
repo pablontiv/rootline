@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -119,6 +120,18 @@ func WalkUp(targetPath string) ([]StemEntry, error) {
 	}
 
 	return entries, nil
+}
+
+// IsRealSchemaError reports whether err is a genuine IO or parse failure rather
+// than the absence of a schema.
+//
+// WalkUp reports ErrNoSchemaFound and a real failure through the same channel,
+// but they are not the same answer: a tree with no .stem is ungoverned, while
+// one whose .stem cannot be read or parsed is broken. Commands that can still
+// do useful work without a schema use this to tell the two apart instead of
+// treating every non-nil error as fatal.
+func IsRealSchemaError(err error) bool {
+	return err != nil && !errors.Is(err, ErrNoSchemaFound)
 }
 
 // ChainHasNoDeclaredBoundary checks if the walk terminated at the filesystem root

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -102,6 +103,17 @@ func runTree(cmd *cobra.Command, args []string) error {
 		return rules.MergeStemFiles(entries), nil
 	}
 	records, err := index.Scan(ctx, absRoot, reg, index.WithScopeResolver(resolver))
+	if errors.Is(err, rules.ErrNoSchemaFound) {
+		// Nothing under absRoot resolved a schema. There is no scope to filter
+		// by and no governance to report, but the directory still has a shape,
+		// and tree describes structure rather than returning a verdict about
+		// it — so it renders what is there instead of refusing.
+		//
+		// This retry is deliberately narrower than passing AllowUngoverned
+		// outright: as soon as one record IS governed, the scan above keeps its
+		// scope filtering, and files outside every .stem's reach stay excluded.
+		records, err = index.Scan(ctx, absRoot, reg, index.WithScopeResolver(resolver), index.AllowUngoverned())
+	}
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
