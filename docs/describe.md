@@ -35,13 +35,6 @@ rootline describe docs/api/
       "source": "docs/api/.stem"
     }
   },
-  "levels": {
-    "task": {
-      "match": "T*",
-      "children": [],
-      "schema": { "tipo": { "type": "string" } }
-    }
-  },
   "validate": [
     {
       "rule": "requires",
@@ -59,10 +52,21 @@ rootline describe docs/api/
   "links": {
     "allowed": ["blocks", "depends"]
   },
-  "structural": {
-    "require_index": true,
-    "min_children": 1
+  "layers": ["docs/.stem", "docs/api/.stem"],
+  "provenance": {
+    "title": "docs/.stem",
+    "status": "docs/api/.stem"
   }
+}
+```
+
+These are every key `describe` can emit. `layers`, `provenance` and `hints` are
+omitted when empty, so a run on a governed directory looks exactly like the
+above; `hints` only appears when there is advice to give:
+
+```json
+{
+  "hints": ["No .stem schema found. Run 'rootline init <path>' to infer schema from existing files."]
 }
 ```
 
@@ -71,7 +75,8 @@ This makes the merge cascade transparent and debuggable.
 
 The `layers` array lists all `.stem` files in resolution order (root-to-leaf).
 The `provenance` map shows which `.stem` file defined each field, enabling
-field-level traceability of the schema inheritance chain.
+field-level traceability of the schema inheritance chain. Paths are printed
+absolute; they are shortened here for readability.
 
 ### Sections
 
@@ -82,7 +87,9 @@ field-level traceability of the schema inheritance chain.
 | `derive` | Per-record expressions evaluated via expr-lang (e.g., `slugify(title)`) |
 | `aggregate` | Bottom-up expressions for index files (e.g., `len(descendants)`) |
 | `links` | Wiki-link schema: allowed types and target validation patterns |
-| `structural` | Directory constraints: require_index, min/max_children |
+| `layers` | The `.stem` chain in resolution order, root-most first (omitted when empty) |
+| `provenance` | Field name → the `.stem` file that defined it (omitted when empty) |
+| `hints` | Actionable advice, e.g. run `rootline init` when no schema was found (omitted when empty) |
 
 ## Field Extraction
 

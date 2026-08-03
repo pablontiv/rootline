@@ -47,10 +47,21 @@ Diff mode compares `.stem` files and classifies each change:
 
 ## Result Shape
 
+`migrate` emits three `kind` values, one per mode:
+
+| `kind` | Produced by | Payload |
+|--------|-------------|---------|
+| `rootline/migrate-diff` | A single `.stem` comparison | `stem_path`, `changes`, `breaking_count`, `total_count` |
+| `rootline/migrate-batch` | Diffing a directory (every `.stem` under the path) | `results` (one `migrate-diff` each) plus a `summary` |
+| `rootline/migrate-rename` | `--rename old=new` | `old_field`, `new_field`, `files_updated`, `stems_updated`, `summary` |
+
+A single-stem diff carries `stem_path`, the absolute path of the `.stem` it describes:
+
 ```json
 {
   "version": 1,
-  "kind": "rootline/migrate",
+  "kind": "rootline/migrate-diff",
+  "stem_path": "/repo/docs/.stem",
   "changes": [
     {
       "kind": "field_removed",
@@ -66,6 +77,33 @@ Diff mode compares `.stem` files and classifies each change:
   "total_count": 1
 }
 ```
+
+Pointing `migrate` at a directory wraps those diffs in a batch envelope — this is
+the shape you get from `rootline migrate docs --dry-run -o json`:
+
+```json
+{
+  "version": 1,
+  "kind": "rootline/migrate-batch",
+  "results": [
+    {
+      "version": 1,
+      "kind": "rootline/migrate-diff",
+      "stem_path": "/repo/docs/.stem",
+      "changes": null,
+      "breaking_count": 0,
+      "total_count": 0
+    }
+  ],
+  "summary": {
+    "stems_checked": 1,
+    "total_changes": 0,
+    "breaking_count": 0
+  }
+}
+```
+
+`changes` is `null`, not `[]`, when a `.stem` has no changes to report.
 
 ## Rename Mode
 
@@ -180,8 +218,8 @@ These changes can still be legitimate during migrations (e.g., field deprecation
 
 Example workflow:
 ```bash
-# Detect breaking changes in .stem
-rootline migrate docs/roadmap/ --output json | jq '.changes[] | select(.breaking == true)'
+# Detect breaking changes in .stem (batch envelope: changes live under results[])
+rootline migrate docs/roadmap/ --output json | jq '.results[].changes[]? | select(.breaking == true)'
 
 # These breaking changes can be represented as schema_evolution proposals
 # and reviewed for explicit approval before application

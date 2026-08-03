@@ -3,7 +3,7 @@ estado: Completed
 ---
 # Statistics
 
-`rootline stats` shows aggregate counts by `estado` and `tipo` frontmatter fields.
+`rootline stats` reports aggregate record statistics for a directory tree. It is field-agnostic: it counts records and reserves `by_lifecycle_state` / `by_record_type` in the output contract, which are currently always empty. Use `--where` for field-specific slices.
 
 ## CLI Usage
 

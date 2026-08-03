@@ -15,7 +15,7 @@ rootline validate --all --strict                  # Warnings as errors
 rootline validate --all --where 'estado != "Completed"'  # Filtered
 ```
 
-**Schema Discovery**: `validate` discovers schemas by walking up the directory tree until it finds a `.stem` file or a directory marked with `root: true`. The walk continues to the filesystem root if no marker is found. A `.stem` file must exist in the target path or a parent directory; if none exists, `validate` exits with error code 1.
+**Schema Discovery**: `validate` discovers schemas by walking up the directory tree, collecting `.stem` files until one declares `root: true` — the governance boundary — or, if none does, until the filesystem root. Reaching the filesystem root without a marker is not a valid configuration: the boundary preflight requires one before any governed command runs, offering to add it on a terminal and failing with an error otherwise. A `.stem` file must exist in the target path or a parent directory; if none exists, `validate` exits with error code 1.
 
 **Prerequisite**: Before running `validate`, initialize the directory with `rootline init` to create a `.stem` schema file.
 
@@ -32,18 +32,19 @@ rootline validate --all --where 'estado != "Completed"'  # Filtered
 
 Batch validation runs four phases in order:
 
-1. **Stem Health** — 11 diagnostics on `.stem` files themselves:
+1. **Stem Health** — 12 diagnostics on `.stem` files themselves:
+   - `stem-files-exist` — the scanned tree contains at least one `.stem` file
    - `yaml-valid` — valid YAML syntax
    - `scope-match` — scope patterns match at least one file
    - `type-consistency` — field types are consistent across hierarchy
    - `enum-values` — enums have at least 2 values
    - `rule-field-exists` — validation rules reference defined fields
    - `field-override` — child field overrides warn about partial override
-   - `aggregated-required` — required fields have aggregate expressions
-   - `version-deprecated` — v0/v1 stems are rejected at parse
-   - `domain-type-compat` — domain type matches field type
-   - `domain-missing-attrs` — domain-required attributes are declared
+   - `aggregated-required` — warns when a field is both `required` and aggregated (`required` is auto-skipped on index files, so the combination rarely does what it looks like)
+   - `aggregate-formula-coverage` — an aggregate formula references every enum value of the field it aggregates
    - `monotonic-violations` — child constraints do not widen parent constraints (type, required, enum, severity, structural)
+   - `unknown-check-keys` — keys under `links.checks` are recognized (fuzzy "did you mean?" on typos)
+   - `nested-root-marker` — reports (info) a `.stem` that declares `root: true` below another one that already does, since records under it stop inheriting the ancestor
 
 2. **Document Validation** — Checks each record against its effective schema: required fields, enum values, non_empty, exists, requires rules.
 3. **Structural Validation** — Directory-level rules: `require_index` (must have README.md), `min_children`/`max_children` constraints.

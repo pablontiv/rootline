@@ -72,4 +72,4 @@ For documents with derived and aggregated fields, each field shows its expressio
 }
 ```
 
-The `stem_chain` shows the walk-up discovery order from the target up to the `root: true` marker (or the filesystem root). The `origin` field is one of: `frontmatter`, `schema` (default value), `derived`, or `aggregate`.
+The `stem_chain` shows the walk-up discovery order from the target up to the `root: true` marker. A chain that reaches the filesystem root without one has no declared boundary; the preflight stops governed commands there and asks for the marker. The `origin` field is one of: `frontmatter`, `schema` (default value), `derived`, or `aggregate`.
