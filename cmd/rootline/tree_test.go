@@ -619,27 +619,35 @@ func TestTreeCmd_WhereMultiple(t *testing.T) {
 	}
 }
 
-// TEST-FIRST: Tree command should fail (non-zero exit) when schema resolution fails
-// This test will FAIL under current behavior if tree's resolver doesn't properly
-// propagate WalkUp errors to index.Scan
-func TestTreeErrorPropagation_NoSchema(t *testing.T) {
+// TestTree_SchemalessToleratesMissing replaces TestTreeErrorPropagation_NoSchema,
+// which asserted the opposite.
+//
+// tree renders a directory hierarchy and whatever frontmatter it finds. A .stem
+// only tells it which field to show as a status, so its absence narrows the
+// output rather than invalidating it — the same tolerance `query` already has
+// on the same tree.
+func TestTree_SchemalessToleratesMissing(t *testing.T) {
 	dir := t.TempDir()
-
-	// Create a markdown file WITHOUT a .stem anywhere in the tree
-	// This will cause WalkUp to return ErrNoSchemaFound
-	if err := os.WriteFile(filepath.Join(dir, "doc1.md"), []byte("---\nstatus: Pending\n---\n# Doc1\n"), 0644); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "doc2.md"), []byte("---\nstatus: Completed\n---\n# Doc2\n"), 0644); err != nil {
-		t.Fatal(err)
+	mustWriteFile(t, filepath.Join(dir, "doc1.md"), []byte("---\nstatus: Pending\n---\n# Doc1\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "sub", "doc2.md"), []byte("---\nstatus: Completed\n---\n# Doc2\n"), 0644)
+
+	out, err := runCmd(t, "tree", dir)
+	if err != nil {
+		t.Fatalf("tree must tolerate a tree with no .stem, got: %v", err)
 	}
 
-	// Run tree on a directory with no schema
-	_, err := runCmd(t, "tree", dir)
-
-	// EXPECTATION: tree should fail when no schema is found, not silently build a tree
-	if err == nil {
-		t.Fatalf("tree should fail when no schema is found, but got nil error (silent degradation)")
+	var result TreeResult
+	if jsonErr := json.Unmarshal([]byte(out), &result); jsonErr != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", jsonErr, out)
+	}
+	if result.Root == nil {
+		t.Fatal("root node missing")
+	}
+	if result.Root.Total != 2 {
+		t.Errorf("total = %d, want 2 (both documents are still indexed)", result.Root.Total)
 	}
 }
 

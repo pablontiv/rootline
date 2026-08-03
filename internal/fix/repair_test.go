@@ -296,3 +296,41 @@ func contains(s, substr string) bool {
 	}
 	return false
 }
+
+// TestApplyRepair_DirectoryPathReported keeps the message about the path rather
+// than the syscall that tripped over it.
+//
+// A proposal path that names a directory reached os.ReadFile and came back as
+// "read docs: is a directory" — an internal failure rather than an answer about
+// the report. The repair surface takes document paths, and the flag that takes
+// a file is worth naming.
+func TestApplyRepair_DirectoryPathReported(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmpDir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	proposals := []proposal.Proposal{
+		{
+			Type:        proposal.CorrectValue,
+			Field:       "estado",
+			Description: "correct typo",
+			Paths:       []string{"docs"},
+			From:        "Inprogres",
+			To:          "In Progress",
+		},
+	}
+
+	result, err := ApplyRepair(proposals, false, tmpDir)
+	if err != nil {
+		t.Fatalf("ApplyRepair failed: %v", err)
+	}
+
+	want := "docs is a directory; use 'rootline repair apply --report <file>.json'"
+	if len(result.Errors) != 1 || result.Errors[0] != want {
+		t.Errorf("errors = %v, want [%q]", result.Errors, want)
+	}
+	if len(result.Changed) != 0 {
+		t.Errorf("changed = %v, want none", result.Changed)
+	}
+}

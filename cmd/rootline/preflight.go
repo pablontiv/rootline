@@ -10,11 +10,20 @@ import (
 )
 
 // commandsExemptFromBoundaryPreflight lists commands that must run even when no
-// governance boundary is declared.
+// governance boundary is declared. They fall into two categories.
 //
-// `init` and `schema` create the very .stem files the preflight asks for, so
-// gating them on a declared boundary would be circular. The rest do not resolve
-// schemas at all.
+// Schema-creating — `init` and `schema` write the very .stem files the preflight
+// asks for, so gating them on a declared boundary would be circular.
+//
+// Schema-independent — `completion`, `hooks`, `help` and `migrate` resolve no
+// schema at all, and neither does `analyze`: it infers a schema from the
+// documents themselves. Gating it would block the one command that can tell an
+// ungoverned tree what its schema should be, and it is the entry point of the
+// `analyze --incremental` -> `schema apply` loop whose other end is already
+// exempt. This is not a general "read-only is safe" rule: `query` and `stats`
+// stay governed, because they skip schema resolution voluntarily and would
+// otherwise report records governed by .stem files collected from outside an
+// undeclared project.
 var commandsExemptFromBoundaryPreflight = map[string]bool{
 	"init":       true,
 	"schema":     true,
@@ -22,6 +31,7 @@ var commandsExemptFromBoundaryPreflight = map[string]bool{
 	"hooks":      true,
 	"help":       true,
 	"migrate":    true,
+	"analyze":    true,
 }
 
 // isExemptFromBoundaryPreflight reports whether cmd, or any command it hangs
@@ -64,20 +74,31 @@ func boundaryPreflight(cmd *cobra.Command, args []string) error {
 
 	entries, err := rules.WalkUp(target)
 	if err != nil {
-		// A tree with no .stem at all is not a broken project. Governed
-		// commands reject it in their own context and bootstrap commands are
-		// allowed to work on one, so pass that case through.
-		if errors.Is(err, rules.ErrNoSchemaFound) {
-			return nil
+		if !errors.Is(err, rules.ErrNoSchemaFound) {
+			// A real IO or parse failure, and this is the only place that sees
+			// every governed command. `query` and `stats` never resolve a
+			// schema on their own — query does so only under --sort and neither
+			// passes a scope resolver — so without failing here a corrupt .stem
+			// is invisible to them: they return records from a tree whose
+			// governance is broken and report success.
+			return err
 		}
 
-		// Anything else is a real IO or parse failure, and this is the only
-		// place that sees every governed command. `query` and `stats` never
-		// resolve a schema on their own — query does so only under --sort and
-		// neither passes a scope resolver — so without failing here a corrupt
-		// .stem is invisible to them: they return records from a tree whose
-		// governance is broken and report success.
-		return err
+		// Nothing governs the target from above, but the walk only looked one
+		// way. The same tree used to pass from one directory and fail from
+		// another that happened to sit above the only .stem, so ask the
+		// question downward too — whether a project declares where it starts is
+		// a property of the tree, not of the directory that was named.
+		entries, err = rules.DownwardScan(target)
+		if err != nil {
+			return err
+		}
+		// No .stem anywhere below either: the tree is ungoverned, not
+		// misgoverned. Governed commands reject it in their own context and
+		// bootstrap commands are allowed to work on one, so pass it through.
+		if len(entries) == 0 {
+			return nil
+		}
 	}
 
 	if !rules.ChainHasNoDeclaredBoundary(entries) {

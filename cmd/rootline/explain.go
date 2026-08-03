@@ -34,8 +34,16 @@ func runExplain(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving path: %w", err)
 	}
 
-	if _, err := os.Stat(absPath); err != nil {
+	// A directory otherwise reaches the extractor registry as an unrecognised
+	// file type and comes back as "no extractor for <dir>". explain traces one
+	// document and has no --all to offer, so the message names the argument
+	// shape it does accept.
+	info, err := os.Stat(absPath)
+	if err != nil {
 		return fmt.Errorf("file not found: %s", file)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("%s is a directory; use 'rootline explain <file>'", file)
 	}
 
 	// Extract record.

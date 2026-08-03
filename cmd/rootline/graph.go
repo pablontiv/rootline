@@ -79,9 +79,14 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load .stem schema: filter links and read the cycle-failure opt-in.
+	//
+	// A missing .stem is not a missing graph. The schema only decides which
+	// link styles are governed and whether cycles fail a check, so without one
+	// the links stay unfiltered and cycles stay informational — the nil stem
+	// below already expresses exactly that.
 	failCycles := false
 	entries, err := rules.WalkUp(absRoot)
-	if err != nil {
+	if rules.IsRealSchemaError(err) {
 		return fmt.Errorf("discovering schema for link filtering: %w", err)
 	}
 	stem := rules.MergeStemFiles(entries)

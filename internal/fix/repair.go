@@ -54,6 +54,14 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*Repa
 
 	for path := range affectedPaths {
 		absPath := filepath.Join(root, path)
+		// A directory otherwise reaches os.ReadFile and comes back as
+		// "read docs: is a directory" — the syscall that tripped over the path
+		// rather than an answer about the report. Repair takes document paths.
+		if info, statErr := os.Stat(absPath); statErr == nil && info.IsDir() {
+			result.Errors = append(result.Errors,
+				fmt.Sprintf("%s is a directory; use 'rootline repair apply --report <file>.json'", path))
+			continue
+		}
 		content, err := os.ReadFile(absPath)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("read %s: %v", path, err))

@@ -307,3 +307,29 @@ func TestDescribeErrorPropagation_NoSchema(t *testing.T) {
 		t.Fatalf("describe should fail when no schema is found, but got nil error (silent degradation)")
 	}
 }
+
+// TestDescribe_SchemaMissingMessage keeps the failure but fixes what it says.
+//
+// describe prints a resolved schema, so it must still fail when there is none.
+// The old text ("discovering .stem files: ...") named the step that was running
+// rather than the condition the user hit, which reads as an internal fault
+// instead of an answer.
+func TestDescribe_SchemaMissingMessage(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, target := range []string{dir, filepath.Join(dir, "a.md")} {
+		_, err := executeDescribe(t, target)
+		if err == nil {
+			t.Fatalf("describe(%s) must fail without a schema", target)
+		}
+		if !strings.Contains(err.Error(), "no schema governs this path") {
+			t.Errorf("describe(%s): expected the schema-governance message, got: %v", target, err)
+		}
+		if strings.Contains(err.Error(), "discovering .stem files") {
+			t.Errorf("describe(%s): the internal discovery step leaked into the message: %v", target, err)
+		}
+	}
+}
