@@ -62,6 +62,27 @@ func parseMarkdownDestination(dest string) (Link, bool) {
 	return link, true
 }
 
+// parseWikilinkInner converts the text between [[ and ]] into a Link.
+// The optional "type:" prefix selects the link type; the optional "#anchor"
+// suffix is split off into Link.Anchor exactly as parseMarkdownDestination
+// does for markdown destinations, so anchor-aware checks fire on both styles.
+// Returns false for a pure fragment ([[#heading]]), which names no target.
+func parseWikilinkInner(inner string) (Link, bool) {
+	link := Link{Type: "reference", Target: inner, Style: StyleWikilink}
+	if idx := strings.Index(inner, ":"); idx > 0 {
+		link.Type = inner[:idx]
+		link.Target = inner[idx+1:]
+	}
+	if target, anchor, found := strings.Cut(link.Target, "#"); found {
+		if target == "" {
+			return Link{}, false
+		}
+		link.Target = target
+		link.Anchor = anchor
+	}
+	return link, true
+}
+
 // ParseLinks extracts wiki-links and markdown links from body text.
 // Wiki-links: [[target]] (type "reference") and [[type:target]] (typed).
 // Markdown links: [text](target) with optional fragment (#anchor).
@@ -88,15 +109,12 @@ func ParseLinks(body string) []Link {
 		cleaned := removeInlineCode(line)
 
 		for _, match := range wikilinkRe.FindAllStringSubmatch(cleaned, -1) {
-			inner := match[1]
-			link := Link{Line: lineNum, Source: "body", Style: StyleWikilink}
-			if idx := strings.Index(inner, ":"); idx > 0 {
-				link.Type = inner[:idx]
-				link.Target = inner[idx+1:]
-			} else {
-				link.Type = "reference"
-				link.Target = inner
+			link, ok := parseWikilinkInner(match[1])
+			if !ok {
+				continue
 			}
+			link.Line = lineNum
+			link.Source = "body"
 			links = append(links, link)
 		}
 
@@ -153,14 +171,9 @@ func ParseFrontmatterLinks(frontmatter map[string]any) []Link {
 func parseWikilinksFromString(s string) []Link {
 	var links []Link
 	for _, match := range wikilinkRe.FindAllStringSubmatch(s, -1) {
-		inner := match[1]
-		link := Link{Line: 0, Style: StyleWikilink}
-		if idx := strings.Index(inner, ":"); idx > 0 {
-			link.Type = inner[:idx]
-			link.Target = inner[idx+1:]
-		} else {
-			link.Type = "reference"
-			link.Target = inner
+		link, ok := parseWikilinkInner(match[1])
+		if !ok {
+			continue
 		}
 		links = append(links, link)
 	}

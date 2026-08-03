@@ -358,3 +358,57 @@ func TestParseLinks_MarkdownParenInTarget(t *testing.T) {
 		t.Errorf("got %+v", links[1])
 	}
 }
+
+func TestParseLinks_WikilinkAnchor(t *testing.T) {
+	cases := []struct {
+		name       string
+		body       string
+		wantTarget string
+		wantAnchor string
+		wantType   string
+	}{
+		{"bare anchor", "see [[b#heading-one]]", "b", "heading-one", "reference"},
+		{"path-qualified anchor", "see [[sub/file#section]]", "sub/file", "section", "reference"},
+		{"extension and anchor", "see [[b.md#intro]]", "b.md", "intro", "reference"},
+		{"typed link with anchor", "see [[blocks:T003#done]]", "T003", "done", "blocks"},
+		{"no anchor", "see [[file]]", "file", "", "reference"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			links := ParseLinks(tc.body)
+			if len(links) != 1 {
+				t.Fatalf("expected 1 link, got %d: %+v", len(links), links)
+			}
+			if links[0].Target != tc.wantTarget {
+				t.Errorf("Target = %q, want %q", links[0].Target, tc.wantTarget)
+			}
+			if links[0].Anchor != tc.wantAnchor {
+				t.Errorf("Anchor = %q, want %q", links[0].Anchor, tc.wantAnchor)
+			}
+			if links[0].Type != tc.wantType {
+				t.Errorf("Type = %q, want %q", links[0].Type, tc.wantType)
+			}
+			if strings.Contains(links[0].Target, "#") {
+				t.Errorf("Target %q still carries the anchor separator", links[0].Target)
+			}
+		})
+	}
+}
+
+// A wikilink that is nothing but an anchor has no target to resolve; it is a
+// same-document reference and must not become a link to the empty path.
+func TestParseLinks_WikilinkPureFragmentIsSkipped(t *testing.T) {
+	if links := ParseLinks("see [[#heading-one]]"); len(links) != 0 {
+		t.Errorf("expected pure-fragment wikilink to be skipped, got %+v", links)
+	}
+}
+
+func TestParseFrontmatterLinks_WikilinkAnchor(t *testing.T) {
+	links := ParseFrontmatterLinks(map[string]any{"ref": "[[b#heading-one]]"})
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	if links[0].Target != "b" || links[0].Anchor != "heading-one" {
+		t.Errorf("got Target=%q Anchor=%q, want b/heading-one", links[0].Target, links[0].Anchor)
+	}
+}
