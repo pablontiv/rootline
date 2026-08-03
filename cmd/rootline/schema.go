@@ -9,6 +9,7 @@ import (
 
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fix"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -55,6 +56,10 @@ type SchemaApplyResult struct {
 	DryRun            bool               `json:"dry_run,omitempty"`
 	Errors            []string           `json:"errors,omitempty"`
 	ValidationSummary *ValidationSummary `json:"validation_summary,omitempty"`
+
+	// ResolvedTargets is populated in dry-run only, where the caller cannot
+	// inspect the outcome on disk and needs to see where each .stem would land.
+	ResolvedTargets *fix.ResolvedTargetsBreakdown `json:"resolved_targets,omitempty"`
 }
 
 // ValidationSummary contains validation results after schema apply.
@@ -257,6 +262,11 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		scanRoot = absRoot
 	}
 
+	resolved := &fix.ResolvedTargetsBreakdown{
+		Accepted: map[string]string{},
+		Rejected: map[string]string{},
+	}
+
 	// Process each proposal.
 	for _, proposal := range report.Proposals {
 		// Skip proposals that require agent intervention.
@@ -267,13 +277,30 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 
 		// Process based on operation type.
 		if proposal.Operation == "create_stem" {
+			// `schema propose` emits absolute targets under the scan root, so the
+			// propose->apply contract depends on absolute paths staying valid —
+			// they are accepted, then confined.
+			target, err := fix.ContainPath(scanRoot, proposal.Target, fix.PolicyAcceptAbsolute)
+			if err != nil {
+				// A refused target is a validation failure, not a feature gap:
+				// schema apply has no rejected[], so it belongs in errors[].
+				result.Errors = append(result.Errors, err.Error())
+				resolved.Rejected[proposal.Target] = fix.ContainmentReason(err)
+				continue
+			}
+			resolved.Accepted[proposal.Target] = target
+
 			// Create a new .stem file at target.
-			if err := infer.ScaffoldSchema(filepath.Dir(proposal.Target), schemaApplyDryRun); err != nil {
+			if err := infer.ScaffoldSchema(filepath.Dir(target), schemaApplyDryRun); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("scaffold %s: %v", proposal.Target, err))
 			} else {
-				result.Applied = append(result.Applied, fmt.Sprintf("create_stem: %s", proposal.Target))
+				result.Applied = append(result.Applied, fmt.Sprintf("create_stem: %s", target))
 			}
 		}
+	}
+
+	if schemaApplyDryRun {
+		result.ResolvedTargets = resolved
 	}
 
 	// If not dry-run, run validation.
