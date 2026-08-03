@@ -74,20 +74,31 @@ func boundaryPreflight(cmd *cobra.Command, args []string) error {
 
 	entries, err := rules.WalkUp(target)
 	if err != nil {
-		// A tree with no .stem at all is not a broken project. Governed
-		// commands reject it in their own context and bootstrap commands are
-		// allowed to work on one, so pass that case through.
-		if errors.Is(err, rules.ErrNoSchemaFound) {
-			return nil
+		if !errors.Is(err, rules.ErrNoSchemaFound) {
+			// A real IO or parse failure, and this is the only place that sees
+			// every governed command. `query` and `stats` never resolve a
+			// schema on their own — query does so only under --sort and neither
+			// passes a scope resolver — so without failing here a corrupt .stem
+			// is invisible to them: they return records from a tree whose
+			// governance is broken and report success.
+			return err
 		}
 
-		// Anything else is a real IO or parse failure, and this is the only
-		// place that sees every governed command. `query` and `stats` never
-		// resolve a schema on their own — query does so only under --sort and
-		// neither passes a scope resolver — so without failing here a corrupt
-		// .stem is invisible to them: they return records from a tree whose
-		// governance is broken and report success.
-		return err
+		// Nothing governs the target from above, but the walk only looked one
+		// way. The same tree used to pass from one directory and fail from
+		// another that happened to sit above the only .stem, so ask the
+		// question downward too — whether a project declares where it starts is
+		// a property of the tree, not of the directory that was named.
+		entries, err = rules.DownwardScan(target)
+		if err != nil {
+			return err
+		}
+		// No .stem anywhere below either: the tree is ungoverned, not
+		// misgoverned. Governed commands reject it in their own context and
+		// bootstrap commands are allowed to work on one, so pass it through.
+		if len(entries) == 0 {
+			return nil
+		}
 	}
 
 	if !rules.ChainHasNoDeclaredBoundary(entries) {

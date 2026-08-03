@@ -3,6 +3,7 @@ package rules
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -120,6 +121,151 @@ func WalkUp(targetPath string) ([]StemEntry, error) {
 	}
 
 	return entries, nil
+}
+
+// DownwardScan collects every .stem at or below targetPath that has not
+// declared, and is not covered by, a governance boundary.
+//
+// WalkUp answers "what governs this path", which is enough to resolve a schema
+// but not to judge one: it looks only upward, so the same tree could pass from
+// one directory and fail from another that happened to sit above the only
+// .stem. Whether a project declares where it starts is a property of the tree,
+// so the question has to be asked downward too.
+//
+// A .stem carrying root: true has already answered it. Its subtree is governed
+// and is skipped whole — reporting the stems below a declared boundary as
+// undeclared would be the same mistake in the other direction.
+//
+// Return semantics mirror the tree, not the walk:
+//   - entries (non-empty): every ungoverned .stem, root-most first
+//   - nil, nil: nothing left undeclared, including the tree with no .stem at
+//     all, which is ungoverned rather than misgoverned
+//   - error: a .stem that cannot be read or parsed, reported where it is found
+//     instead of collected around
+//
+// The traversal shares index.Scan's universe — it honours .stemignore and never
+// enters .git — because a file the project has excluded governs nothing and
+// cannot be the reason a command is refused. filepath.WalkDir orders entries
+// lexically and stats with Lstat, so the result is deterministic and symlinks
+// are not followed out of the subtree.
+func DownwardScan(targetPath string) ([]StemEntry, error) {
+	absTarget, err := filepath.Abs(targetPath)
+	if err != nil {
+		return nil, err
+	}
+
+	scanRoot := absTarget
+	if info, statErr := os.Lstat(absTarget); statErr == nil && !info.IsDir() {
+		scanRoot = filepath.Dir(absTarget)
+	}
+
+	var entries []StemEntry
+	var ignores []stemIgnoreScope
+
+	walkErr := filepath.WalkDir(scanRoot, func(dir string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			// An unreadable directory is not a governance verdict. A target
+			// that does not exist belongs to the command that was given it.
+			if d != nil && d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil //nolint:nilerr // absence and unreadability are the caller's to report
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if d.Name() == ".git" && dir != scanRoot {
+			return fs.SkipDir
+		}
+
+		if patterns, loadErr := parseStemIgnore(filepath.Join(dir, ".stemignore")); loadErr == nil {
+			ignores = append(ignores, stemIgnoreScope{dir: dir, patterns: patterns})
+		}
+
+		stemPath := filepath.Join(dir, stemFileName)
+		info, statErr := os.Lstat(stemPath)
+		if statErr != nil || info.IsDir() {
+			return nil
+		}
+		if stemIsIgnored(stemPath, ignores) {
+			return nil
+		}
+
+		content, readErr := os.ReadFile(stemPath)
+		if readErr != nil {
+			return readErr
+		}
+		stem, parseErr := ParseStem(stemPath, content)
+		if parseErr != nil {
+			return parseErr
+		}
+
+		if stem.Root {
+			return fs.SkipDir
+		}
+		entries = append(entries, StemEntry{Path: stemPath, Stem: stem})
+		return nil
+	})
+	if walkErr != nil {
+		return nil, walkErr
+	}
+
+	return entries, nil
+}
+
+// stemIgnoreScope holds the patterns of one .stemignore and the directory they
+// apply to.
+type stemIgnoreScope struct {
+	dir      string
+	patterns []string
+}
+
+// parseStemIgnore reads a .stemignore, dropping blanks and comments. A missing
+// file is reported as an error so callers simply skip it.
+func parseStemIgnore(path string) ([]string, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var patterns []string
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		patterns = append(patterns, line)
+	}
+	return patterns, nil
+}
+
+// stemIsIgnored matches absPath against every .stemignore that covers it, by
+// base name and by path relative to the ignoring directory.
+//
+// This mirrors internal/index, which cannot be imported here: it already
+// depends on this package, and inverting that would make the schema domain
+// depend on the scanner that reads it.
+func stemIsIgnored(absPath string, scopes []stemIgnoreScope) bool {
+	name := filepath.Base(absPath)
+	for _, scope := range scopes {
+		// Compare with a separator so /sub never covers /sub-extra.
+		if absPath != scope.dir && !strings.HasPrefix(absPath, scope.dir+string(filepath.Separator)) {
+			continue
+		}
+		relFromIgnore, err := filepath.Rel(scope.dir, absPath)
+		if err != nil {
+			continue
+		}
+		for _, pattern := range scope.patterns {
+			if matched, _ := filepath.Match(pattern, name); matched {
+				return true
+			}
+			if matched, _ := filepath.Match(pattern, relFromIgnore); matched {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // IsRealSchemaError reports whether err is a genuine IO or parse failure rather

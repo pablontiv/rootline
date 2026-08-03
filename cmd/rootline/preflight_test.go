@@ -176,3 +176,112 @@ func TestPreflight_QueryStatsNotExempt(t *testing.T) {
 		})
 	}
 }
+
+// writeTree materialises a fixture from relative path -> content.
+func writeTree(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	for rel, content := range files {
+		abs := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+// TestPreflight_TreeScopedDownscan_FindsUnmarkedStem is the defect from #65.
+//
+// Whether a project declares where it starts is a property of the tree, but the
+// preflight only ever looked upward from the target, so the same tree answered
+// differently depending on which directory you named: `validate --all wiki`
+// walked up, found nothing, and passed, while `validate --all wiki/entities`
+// found the unmarked .stem and failed. Three commands, one tree, two verdicts.
+func TestPreflight_TreeScopedDownscan_FindsUnmarkedStem(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"wiki/.stem":          "version: 2\nscope:\n  match: \"*.md\"\n",
+		"wiki/entities/.stem": "version: 2\nscope:\n  match: \"*.md\"\n",
+		"wiki/entities/a.md":  "---\ntitulo: x\n---\n# x\n",
+	})
+
+	for _, target := range []string{root, filepath.Join(root, "wiki"), filepath.Join(root, "wiki", "entities")} {
+		out, err := runCmd(t, "validate", "--all", target)
+		if err == nil {
+			t.Fatalf("validate --all %s must report the undeclared boundary\noutput: %s", target, out)
+		}
+		if !strings.Contains(err.Error(), "declared boundary") {
+			t.Errorf("validate --all %s: expected the boundary error, got: %v", target, err)
+		}
+	}
+}
+
+// TestPreflight_TreeScopedDownscan_NoStemFound keeps the two conditions apart.
+// A tree with no .stem at all is ungoverned, not misgoverned: there is no
+// boundary to declare, so the preflight must pass it through and let the
+// command answer in its own terms.
+func TestPreflight_TreeScopedDownscan_NoStemFound(t *testing.T) {
+	root := writeTree(t, map[string]string{"a.md": "---\ntitulo: x\n---\n# x\n"})
+
+	_, err := runCmd(t, "validate", "--all", root)
+	if err == nil {
+		t.Fatal("validate --all must still fail on a tree it cannot validate")
+	}
+	if strings.Contains(err.Error(), "declared boundary") {
+		t.Errorf("an ungoverned tree must not be reported as an undeclared boundary: %v", err)
+	}
+}
+
+// TestPreflight_TreeScopedDownscan_RootMarkerBelowTargetPasses guards the scan
+// against over-reach. A .stem that declares root: true has said where its
+// project starts; scanning from a directory above it must not reopen that
+// question, and must not descend past it looking for one.
+func TestPreflight_TreeScopedDownscan_RootMarkerBelowTargetPasses(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"wiki/.stem":          "version: 2\nroot: true\nscope:\n  match: \"*.md\"\n",
+		"wiki/entities/.stem": "version: 2\nscope:\n  match: \"*.md\"\n",
+		"wiki/entities/a.md":  "---\ntitulo: x\n---\n# x\n",
+	})
+
+	if _, err := runCmd(t, "tree", root); err != nil &&
+		strings.Contains(err.Error(), "declared boundary") {
+		t.Fatalf("a declared boundary below the target must be honoured, got: %v", err)
+	}
+}
+
+// TestPreflight_TreeScopedDownscan_UnparseableStemFails extends the guarantee
+// the upward walk already gave. A .stem that cannot be parsed is broken
+// governance wherever it sits, and the scan must report it rather than collect
+// around it.
+func TestPreflight_TreeScopedDownscan_UnparseableStemFails(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"wiki/.stem": "version: 2\nscope:\n  match: [[[unclosed\n",
+		"wiki/a.md":  "---\ntitulo: x\n---\n# x\n",
+	})
+
+	_, err := runCmd(t, "tree", root)
+	if err == nil {
+		t.Fatal("an unparseable .stem below the target must fail the preflight")
+	}
+	if !strings.Contains(err.Error(), "parsing") {
+		t.Errorf("expected the parse failure to be reported, got: %v", err)
+	}
+}
+
+// TestPreflight_TreeScopedDownscan_StemignoreRespected keeps the scan inside
+// the same universe as every other traversal. A .stem the project has excluded
+// is not governing anything, so it cannot be the reason a command is refused.
+func TestPreflight_TreeScopedDownscan_StemignoreRespected(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"docs/.stemignore":  "nested/.stem\n",
+		"docs/nested/.stem": "version: 2\nscope:\n  match: \"*.md\"\n",
+		"docs/nested/a.md":  "---\ntitulo: x\n---\n# x\n",
+	})
+
+	_, err := runCmd(t, "tree", filepath.Join(root, "docs"))
+	if err != nil && strings.Contains(err.Error(), "declared boundary") {
+		t.Fatalf("an ignored .stem must not raise a boundary error: %v", err)
+	}
+}
