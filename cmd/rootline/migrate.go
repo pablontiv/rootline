@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -21,6 +22,7 @@ var (
 	migrateRename   string
 	migrateSplit    bool
 	migrateScaffold bool
+	migrateForce    bool
 )
 
 var migrateCmd = &cobra.Command{
@@ -42,6 +44,7 @@ func init() {
 	migrateCmd.Flags().StringVar(&migrateRename, "rename", "", "rename a field: old_field=new_field")
 	migrateCmd.Flags().BoolVar(&migrateSplit, "split", false, "split a flat .stem into hierarchical .stem files per level")
 	migrateCmd.Flags().BoolVar(&migrateScaffold, "scaffold", false, "scaffold missing required section fields in documents")
+	migrateCmd.Flags().BoolVar(&migrateForce, "force", false, "with --split: overwrite existing child .stem files")
 	rootCmd.AddCommand(migrateCmd)
 }
 
@@ -436,6 +439,8 @@ func runMigrateSplit(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Note: auto-generated aggregate for '%s'\n", name)
 	}
 
+	collisions := splitCollisions(absTarget, result.Stems)
+
 	if migrateDryRun {
 		for i, sf := range result.Stems {
 			if i > 0 {
@@ -446,9 +451,17 @@ func runMigrateSplit(cmd *cobra.Command, args []string) error {
 				relPath = sf.Path
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "# --- %s ---\n", relPath)
+			if collisions[sf.Path] {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "# (existing file will be overwritten)")
+			}
 			_, _ = fmt.Fprint(cmd.OutOrStdout(), sf.Content)
 		}
 		return nil
+	}
+
+	// Pre-flight guard: refuse before any write so a split is all-or-nothing.
+	if len(collisions) > 0 && !migrateForce {
+		return errSplitCollisions(absTarget, collisions)
 	}
 
 	// Write all .stem files.
@@ -462,4 +475,41 @@ func runMigrateSplit(cmd *cobra.Command, args []string) error {
 		"Split .stem into %d files across %d levels (derive/aggregate/links preserved at root)\n",
 		len(result.Stems), len(hierarchy.Levels))
 	return nil
+}
+
+// splitCollisions stats every child .stem target and reports which already exist.
+// The root .stem at <absTarget>/.stem is the input being rewritten in place, so it
+// is never a collision. The root is matched by path rather than by index so the
+// check stays correct if BuildSplitStems ever reorders its output.
+func splitCollisions(absTarget string, stems []migrate.StemOutput) map[string]bool {
+	rootPath := filepath.Join(absTarget, ".stem")
+	found := make(map[string]bool)
+	for _, sf := range stems {
+		if sf.Path == rootPath {
+			continue
+		}
+		if _, err := os.Stat(sf.Path); err == nil {
+			found[sf.Path] = true
+		}
+	}
+	return found
+}
+
+// errSplitCollisions renders the refusal, naming every colliding target so the
+// user sees the full scope in one error instead of discovering them one at a time.
+func errSplitCollisions(absTarget string, collisions map[string]bool) error {
+	rels := make([]string, 0, len(collisions))
+	for path := range collisions {
+		rel, err := filepath.Rel(absTarget, path)
+		if err != nil {
+			rel = path
+		}
+		rels = append(rels, rel)
+	}
+	sort.Strings(rels)
+
+	if len(rels) == 1 {
+		return fmt.Errorf("%s already exists (use --force to overwrite)", rels[0])
+	}
+	return fmt.Errorf("cannot split: %s already exist (use --force to overwrite)", strings.Join(rels, ", "))
 }
