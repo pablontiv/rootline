@@ -163,6 +163,36 @@ rootline schema apply --report proposals.json
 
 Data-only repairs (correct_value, add_field, etc.) are **ignored** — use `rootline repair apply` instead.
 
+**Path containment.** As with `repair apply`, a report is untrusted input: every `create_stem`
+target is checked against the scan root before a `.stem` is written, so a report naming
+`<root>/../../outside/.stem` no longer scaffolds outside the tree the command was pointed at.
+
+`schema propose` emits **absolute** targets, so the propose→apply loop depends on absolute paths
+staying valid — they are accepted and then confined, not refused outright. That is the one
+difference from `repair apply`, which rejects absolute paths as malformed input.
+
+The second difference is where refusals land. `schema apply` has no `rejected[]`, so a target
+outside the root is a validation failure and appears in `errors[]`:
+
+```bash
+rootline schema apply --report proposals.json
+# errors: containment violation: path "/tmp/outside/.stem" escapes root (root "/abs/scan")
+```
+
+With `--dry-run`, the output carries the same additive `resolved_targets` envelope that
+`repair apply` emits, so you can see where each `.stem` would land before writing:
+
+```json
+{
+  "resolved_targets": {
+    "accepted": { "/abs/scan/tasks/.stem": "/abs/scan/tasks/.stem" },
+    "rejected": { "/tmp/outside/.stem": "escapes root" }
+  }
+}
+```
+
+`resolved_targets` is omitted outside dry-run; the contract stays `version: 1`.
+
 Flags:
 - `--dry-run` — Preview changes without modifying files
 - `--report <file>` — Path to proposals JSON file (required)

@@ -3,7 +3,6 @@ package fix
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -211,7 +210,7 @@ func containProposalPaths(proposals []proposal.Proposal, root string, result *Re
 			// so an absolute path is malformed input rather than a real target.
 			absPath, err := ContainPath(root, path, PolicyRejectAbsolute)
 			if err != nil {
-				rejected[path] = containmentReason(err)
+				rejected[path] = ContainmentReason(err)
 				result.Rejected = append(result.Rejected, err.Error())
 				continue
 			}
@@ -220,16 +219,6 @@ func containProposalPaths(proposals []proposal.Proposal, root string, result *Re
 	}
 
 	return accepted, rejected
-}
-
-// containmentReason extracts the bare reason from a containment failure, for
-// the resolved-targets breakdown where the path is already the map key.
-func containmentReason(err error) string {
-	var cerr *ContainmentError
-	if errors.As(err, &cerr) {
-		return cerr.Message
-	}
-	return err.Error()
 }
 
 // hasRejectedPath reports whether any path of the proposal failed containment.

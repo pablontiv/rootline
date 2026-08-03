@@ -732,3 +732,200 @@ func TestAnalyzeWorksWithoutSchema(t *testing.T) {
 		t.Errorf("expected kind rootline/analyze, got %v", report["kind"])
 	}
 }
+
+// --- target containment (issue #69) ---
+
+// writeSchemaProposalsReport writes a one-proposal report into root and returns
+// its path. scanRoot is what schema apply confines targets to.
+func writeSchemaProposalsReport(t *testing.T, root, scanRoot, target string) string {
+	t.Helper()
+
+	report := SchemaProposalsReport{
+		Version: 1,
+		Kind:    "rootline/schema-proposals",
+		Path:    scanRoot,
+		Proposals: []SchemaProposal{
+			{
+				ID:           "bootstrap-flat",
+				Operation:    "create_stem",
+				Target:       target,
+				Confidence:   0.85,
+				PatchPreview: "version: 2\nschema:\n  title:\n    type: string\n",
+			},
+		},
+	}
+
+	data, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+
+	reportFile := filepath.Join(root, "report.json")
+	if err := os.WriteFile(reportFile, data, 0o644); err != nil {
+		t.Fatalf("writing report: %v", err)
+	}
+	return reportFile
+}
+
+func decodeSchemaApplyResult(t *testing.T, out string) *SchemaApplyResult {
+	t.Helper()
+
+	var result SchemaApplyResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("decoding schema apply result: %v\noutput: %s", err, out)
+	}
+	return &result
+}
+
+func TestSchemaApply_TargetContainment(t *testing.T) {
+	// Scenario 6: schema propose emits absolute targets, so an absolute target
+	// inside the scan root has to keep working — this is the regression guard on
+	// the propose->apply loop, not an edge case.
+	t.Run("AbsoluteTargetInsideRootIsApplied", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			"docs/doc1.md": "---\ntitle: Test\n---\nContent",
+		})
+		docsDir := filepath.Join(root, "docs")
+		target := filepath.Join(docsDir, ".stem")
+
+		reportFile := writeSchemaProposalsReport(t, root, docsDir, target)
+
+		out, err := executeSchemaApply(t, "--report", reportFile)
+		if err != nil {
+			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+		}
+
+		result := decodeSchemaApplyResult(t, out)
+		if len(result.Errors) != 0 {
+			t.Fatalf("errors = %v, want empty", result.Errors)
+		}
+		if len(result.Applied) == 0 {
+			t.Fatal("applied is empty, want the create_stem recorded")
+		}
+		if _, err := os.Stat(target); err != nil {
+			t.Errorf(".stem was not created: %v", err)
+		}
+	})
+
+	// Scenario 7: an absolute target above the scan root.
+	t.Run("AbsoluteTargetOutsideRootIsRejected", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			"docs/doc1.md": "---\ntitle: Test\n---\nContent",
+		})
+		docsDir := filepath.Join(root, "docs")
+		// One level above the declared scan root.
+		target := filepath.Join(root, "escaped.stem")
+
+		reportFile := writeSchemaProposalsReport(t, root, docsDir, target)
+
+		out, err := executeSchemaApply(t, "--report", reportFile)
+		if err != nil {
+			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+		}
+
+		result := decodeSchemaApplyResult(t, out)
+		if len(result.Applied) != 0 {
+			t.Errorf("applied = %v, want empty", result.Applied)
+		}
+		if len(result.Errors) != 1 {
+			t.Fatalf("errors = %v, want exactly one containment violation", result.Errors)
+		}
+		if !strings.Contains(result.Errors[0], "escapes root") {
+			t.Errorf("error %q does not give the containment reason", result.Errors[0])
+		}
+		if _, err := os.Stat(target); err == nil {
+			t.Error("a .stem was created outside the scan root")
+		}
+	})
+
+	// Scenario 5: the target only escapes once cleaned. filepath.Join(root,
+	// target) would have folded it back inside and reported it as contained.
+	t.Run("TargetEscapingAfterCleanIsRejected", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			"docs/doc1.md": "---\ntitle: Test\n---\nContent",
+		})
+		docsDir := filepath.Join(root, "docs")
+		target := filepath.Join(docsDir, "..", "..", "outside", ".stem")
+
+		reportFile := writeSchemaProposalsReport(t, root, docsDir, target)
+
+		out, err := executeSchemaApply(t, "--report", reportFile)
+		if err != nil {
+			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+		}
+
+		result := decodeSchemaApplyResult(t, out)
+		if len(result.Applied) != 0 {
+			t.Errorf("applied = %v, want empty", result.Applied)
+		}
+		if len(result.Errors) != 1 {
+			t.Fatalf("errors = %v, want exactly one containment violation", result.Errors)
+		}
+		if _, err := os.Stat(filepath.Clean(target)); err == nil {
+			t.Error("a .stem was created outside the scan root")
+		}
+	})
+
+	t.Run("DryRunReportsResolvedTargets", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			"docs/doc1.md": "---\ntitle: Test\n---\nContent",
+		})
+		docsDir := filepath.Join(root, "docs")
+		accepted := filepath.Join(docsDir, ".stem")
+		rejected := filepath.Join(root, "escaped.stem")
+
+		report := SchemaProposalsReport{
+			Version: 1,
+			Kind:    "rootline/schema-proposals",
+			Path:    docsDir,
+			Proposals: []SchemaProposal{
+				{ID: "inside", Operation: "create_stem", Target: accepted},
+				{ID: "outside", Operation: "create_stem", Target: rejected},
+			},
+		}
+		data, err := json.Marshal(report)
+		if err != nil {
+			t.Fatalf("marshal report: %v", err)
+		}
+		reportFile := filepath.Join(root, "report.json")
+		if err := os.WriteFile(reportFile, data, 0o644); err != nil {
+			t.Fatalf("writing report: %v", err)
+		}
+
+		out, err := executeSchemaApply(t, "--report", reportFile, "--dry-run")
+		if err != nil {
+			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+		}
+
+		result := decodeSchemaApplyResult(t, out)
+		if result.ResolvedTargets == nil {
+			t.Fatal("resolved_targets is absent, want it populated in dry-run")
+		}
+		if got := result.ResolvedTargets.Accepted[accepted]; got != accepted {
+			t.Errorf("resolved_targets.accepted[%s] = %q, want %q", accepted, got, accepted)
+		}
+		if got := result.ResolvedTargets.Rejected[rejected]; got != "escapes root" {
+			t.Errorf("resolved_targets.rejected[%s] = %q, want %q", rejected, got, "escapes root")
+		}
+		if _, err := os.Stat(rejected); err == nil {
+			t.Error("dry-run created a .stem outside the scan root")
+		}
+	})
+
+	t.Run("ResolvedTargetsOmittedOutsideDryRun", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			"docs/doc1.md": "---\ntitle: Test\n---\nContent",
+		})
+		docsDir := filepath.Join(root, "docs")
+		reportFile := writeSchemaProposalsReport(t, root, docsDir, filepath.Join(docsDir, ".stem"))
+
+		out, err := executeSchemaApply(t, "--report", reportFile)
+		if err != nil {
+			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+		}
+
+		if result := decodeSchemaApplyResult(t, out); result.ResolvedTargets != nil {
+			t.Errorf("resolved_targets = %+v, want absent outside dry-run", result.ResolvedTargets)
+		}
+	})
+}

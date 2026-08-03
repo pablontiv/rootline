@@ -158,6 +158,23 @@ Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new comman
 - Post-apply: runs `rootline validate --all` and includes results in output
 - Emits JSON: version 1, kind `"rootline/schema-apply"` with applied/skipped/errors/validation_summary
 
+**Path containment.** Each `create_stem` target is validated with
+`fix.ContainPath(scanRoot, target, fix.PolicyAcceptAbsolute)` before `ScaffoldSchema` runs, and
+`ScaffoldSchema` receives the directory of the *validated* target, not the raw one.
+
+Two deliberate differences from `repair apply`:
+- **Absolute targets are accepted, then confined** (`PolicyAcceptAbsolute`). `schema propose`
+  emits absolute `.stem` targets, so the propose→apply contract needs them to keep working.
+  `repair apply` uses `PolicyRejectAbsolute` because its report paths are root-relative by
+  construction.
+- **Refusals go to `errors[]`, not `rejected[]`.** `schema apply` has no `rejected[]`, so a
+  target outside the root is a validation failure rather than a semantic rejection.
+
+`--dry-run` adds the same additive `resolved_targets: {accepted, rejected}` envelope that
+`repair apply` emits (`fix.ResolvedTargetsBreakdown`); omitted otherwise, contract stays
+version 1. `fix.ContainmentReason(err)` is exported so both apply commands unwrap
+`ContainmentError` through one implementation.
+
 ## Fix All Schema Safety
 
 `fix --all` now applies **data-only repairs** only (correct_value, add_field, migrate_value):

@@ -1,6 +1,7 @@
 package fix
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -38,6 +39,16 @@ func (e *ContainmentError) Error() string {
 // single-line because they are embedded verbatim in JSON output.
 func containmentFailure(requested, root, message string) error {
 	return &ContainmentError{Requested: requested, Root: root, Message: message}
+}
+
+// ContainmentReason extracts the bare reason from a containment failure, for
+// output where the offending path is already carried alongside it.
+func ContainmentReason(err error) string {
+	var cerr *ContainmentError
+	if errors.As(err, &cerr) {
+		return cerr.Message
+	}
+	return err.Error()
 }
 
 // ContainPath checks that path resolves to a location inside root and returns
