@@ -56,7 +56,14 @@ while read local_ref local_sha remote_ref remote_sha; do
   # Requires just coverage-check to be available (added by T006).
   if git diff --name-only "$range" -- '*.go' 2>/dev/null | grep -q .; then
     echo "Checking coverage..."
-    if ! just coverage-check > /tmp/rootline-cov.log 2>&1; then
+    # git exports GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE/GIT_OBJECT_DIRECTORY into
+    # hook processes. Tests that shell out to git inherit them: internal/templates
+    # clones a template repo, and the inherited GIT_DIR makes the nested clone fail
+    # with "does not appear to be a git repository". That collapses coverage and
+    # blocks every push touching Go. Worse, a nested `git commit` under an inherited
+    # GIT_DIR writes into the real repository. Clear them for the test run only.
+    if ! env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY \
+        just coverage-check > /tmp/rootline-cov.log 2>&1; then
       cat /tmp/rootline-cov.log
       echo "Coverage below threshold. Run: just coverage-check"
       exit 1
