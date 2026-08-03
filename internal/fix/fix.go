@@ -52,7 +52,9 @@ func ApplyProposals(_ context.Context, report *proposal.Report, root string, rec
 			}
 			applied = append(applied, p)
 		case proposal.SetSection:
-			if err := applySetSection(p, root, recordMap); err != nil {
+			// fix --all builds proposals from scanned record paths, which are
+			// already root-relative; absolute input is tolerated but still confined.
+			if err := applySetSection(p, root, recordMap, PolicyAcceptAbsolute); err != nil {
 				return fmt.Errorf("set_section %s: %w", p.Heading, err)
 			}
 			applied = append(applied, p)
@@ -318,7 +320,7 @@ func applyMigrateValue(p proposal.Proposal, root string, recordMap map[string]*e
 			newContent = InsertWikiLinksBeforeHeading(newContent, p.WikiLinks)
 		}
 
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // path comes from a filesystem scan of root, never from a report
 			return err
 		}
 	}
@@ -364,12 +366,20 @@ func rewriteRecordFile(root, path string, fm map[string]any) error {
 		return err
 	}
 	newContent := RewriteFrontmatter(string(content), fm)
-	return os.WriteFile(absPath, []byte(newContent), 0644) //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
+	return os.WriteFile(absPath, []byte(newContent), 0644) //nolint:gosec // path comes from a filesystem scan of root, never from a report
 }
 
-func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Record) error {
+// applySetSection rewrites a named section of each target document. Both the
+// repair-apply path and the fix --all path reach it, so it validates containment
+// itself rather than trusting the caller to have done so; policy carries the
+// caller's trust model for absolute paths.
+func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Record, policy ContainmentPolicy) error {
 	for _, relPath := range p.Paths {
-		absPath := filepath.Join(root, relPath)
+		absPath, err := ContainPath(root, relPath, policy)
+		if err != nil {
+			return err
+		}
+
 		data, err := os.ReadFile(absPath)
 		if err != nil {
 			return err
@@ -401,7 +411,7 @@ func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Rec
 					content += "\n"
 				}
 				content += "\n" + heading + "\n\n" + newValue + "\n"
-				if err := os.WriteFile(absPath, []byte(content), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
+				if err := os.WriteFile(absPath, []byte(content), 0644); err != nil { //nolint:gosec // absPath is the path ContainPath validated and confined to root
 					return err
 				}
 				continue
@@ -470,7 +480,7 @@ func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Rec
 			return fmt.Errorf("unknown mode %q for set_section", p.Mode)
 		}
 
-		if err := os.WriteFile(absPath, []byte(content), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
+		if err := os.WriteFile(absPath, []byte(content), 0644); err != nil { //nolint:gosec // absPath is the path ContainPath validated and confined to root
 			return err
 		}
 	}
@@ -485,7 +495,7 @@ func applyCorrectLink(p proposal.Proposal, root string) error {
 			return err
 		}
 		newContent := strings.Replace(string(content), p.From, p.To, 1)
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
+		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // path comes from a filesystem scan of root, never from a report
 			return err
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pablontiv/rootline/internal/fix"
 	"github.com/pablontiv/rootline/internal/proposal"
 )
 
@@ -468,4 +469,298 @@ schema:
 			}
 		})
 	}
+}
+
+// --- path containment (issue #69) ---
+
+// containmentFixture builds a scan root holding the report and a governed
+// record, plus a sibling file one level above the root that must stay untouched.
+func containmentFixture(t *testing.T) (root, outside string) {
+	t.Helper()
+
+	base := t.TempDir()
+	root = filepath.Join(base, "scan")
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(`version: 2
+scope:
+  match: "*.md"
+schema:
+  estado:
+    type: enum
+    required: true
+    values: [Pending, Completed]
+`), 0644)
+	declareTestBoundary(t, root)
+
+	mustWriteFile(t, filepath.Join(root, "task.md"),
+		[]byte("---\nestado: Pending\n---\n# Task\n\n## Status\n\noriginal\n"), 0644)
+
+	outside = filepath.Join(base, "outside.md")
+	mustWriteFile(t, outside,
+		[]byte("---\nestado: Pending\n---\n# Outside\n\n## Status\n\nuntouched\n"), 0644)
+
+	return root, outside
+}
+
+// writeContainmentReport writes a repair report into root and returns its path.
+// The report directory is what repair apply resolves as the scan root.
+func writeContainmentReport(t *testing.T, root string, proposals []proposal.Proposal) string {
+	t.Helper()
+
+	data, err := json.Marshal(proposal.Report{
+		Version:   1,
+		Kind:      "rootline/proposals",
+		Proposals: proposals,
+	})
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+
+	reportFile := filepath.Join(root, "report.json")
+	mustWriteFile(t, reportFile, data, 0644)
+	return reportFile
+}
+
+func decodeRepairResult(t *testing.T, out string) *fix.RepairResult {
+	t.Helper()
+
+	var result fix.RepairResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("decoding repair result: %v\noutput: %s", err, out)
+	}
+	return &result
+}
+
+// assertRejected requires exactly one rejection naming both the offending path
+// and the reason, with nothing recorded as changed and nothing reported as an
+// I/O error — a containment violation is a policy rejection, not a failed write.
+func assertRejected(t *testing.T, result *fix.RepairResult, path, reason string) {
+	t.Helper()
+
+	if len(result.Rejected) != 1 {
+		t.Fatalf("rejected = %v, want exactly one entry", result.Rejected)
+	}
+	if !strings.Contains(result.Rejected[0], path) {
+		t.Errorf("rejection %q does not name the path %q", result.Rejected[0], path)
+	}
+	if !strings.Contains(result.Rejected[0], reason) {
+		t.Errorf("rejection %q does not give the reason %q", result.Rejected[0], reason)
+	}
+	if len(result.Changed) != 0 {
+		t.Errorf("changed = %v, want empty", result.Changed)
+	}
+	if len(result.Errors) != 0 {
+		t.Errorf("errors = %v, want empty (containment violations are not I/O errors)", result.Errors)
+	}
+}
+
+func TestRunRepairApply_PathContainment(t *testing.T) {
+	// Scenario 1: a relative path climbing above the scan root is rejected and
+	// the file it named is never opened for writing.
+	t.Run("RelativeEscapeRejected", func(t *testing.T) {
+		root, outside := containmentFixture(t)
+		before := mustReadFile(t, outside)
+
+		reportFile := writeContainmentReport(t, root, []proposal.Proposal{{
+			Type:        proposal.CorrectValue,
+			Field:       "estado",
+			From:        "Pending",
+			To:          "Completed",
+			Paths:       []string{"../outside.md"},
+			Description: "correct estado",
+		}})
+
+		resetFlags()
+		out, err := runCmd(t, "repair", "apply", "--report", reportFile, "-o", "json")
+		if err != nil {
+			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+		}
+
+		assertRejected(t, decodeRepairResult(t, out), "../outside.md", "escapes root")
+
+		if after := mustReadFile(t, outside); !bytes.Equal(before, after) {
+			t.Error("file outside the scan root was modified")
+		}
+	})
+
+	// Scenario 2: set_section reaches the filesystem through applySetSection
+	// rather than the frontmatter rewriters, so it needs its own guard.
+	t.Run("SetSectionEscapeRejected", func(t *testing.T) {
+		root, outside := containmentFixture(t)
+		before := mustReadFile(t, outside)
+
+		reportFile := writeContainmentReport(t, root, []proposal.Proposal{{
+			Type:        proposal.SetSection,
+			Heading:     "## Status",
+			Value:       "injected",
+			Mode:        "replace",
+			Paths:       []string{"../outside.md"},
+			Description: "rewrite status section",
+		}})
+
+		resetFlags()
+		out, err := runCmd(t, "repair", "apply", "--report", reportFile, "-o", "json")
+		if err != nil {
+			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+		}
+
+		assertRejected(t, decodeRepairResult(t, out), "../outside.md", "escapes root")
+
+		if after := mustReadFile(t, outside); !bytes.Equal(before, after) {
+			t.Error("file outside the scan root was modified via set_section")
+		}
+	})
+
+	// Scenario 3: an absolute path is refused on policy. Before this change it
+	// was joined onto the root and failed as a "no such file" I/O error, which
+	// hid the traversal attempt among ordinary failures.
+	t.Run("AbsolutePathRejected", func(t *testing.T) {
+		root, outside := containmentFixture(t)
+		before := mustReadFile(t, outside)
+
+		reportFile := writeContainmentReport(t, root, []proposal.Proposal{{
+			Type:        proposal.AddField,
+			Field:       "tampered",
+			Value:       "true",
+			Paths:       []string{outside},
+			Description: "add tampered field",
+		}})
+
+		resetFlags()
+		out, err := runCmd(t, "repair", "apply", "--report", reportFile, "-o", "json")
+		if err != nil {
+			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+		}
+
+		assertRejected(t, decodeRepairResult(t, out), outside, "absolute paths are not allowed")
+
+		if after := mustReadFile(t, outside); !bytes.Equal(before, after) {
+			t.Error("file named by an absolute path was modified")
+		}
+	})
+
+	// Scenario 4: --dry-run performs the same check and additionally reports the
+	// resolved destinations so a caller can see where writes would have landed.
+	t.Run("DryRunRejectsAndReportsResolvedTargets", func(t *testing.T) {
+		root, outside := containmentFixture(t)
+		before := mustReadFile(t, outside)
+
+		reportFile := writeContainmentReport(t, root, []proposal.Proposal{
+			{
+				Type:        proposal.CorrectValue,
+				Field:       "estado",
+				From:        "Pending",
+				To:          "Completed",
+				Paths:       []string{"../outside.md"},
+				Description: "correct estado outside root",
+			},
+			{
+				Type:        proposal.CorrectValue,
+				Field:       "estado",
+				From:        "Pending",
+				To:          "Completed",
+				Paths:       []string{"task.md"},
+				Description: "correct estado inside root",
+			},
+		})
+
+		resetFlags()
+		out, err := runCmd(t, "repair", "apply", "--report", reportFile, "--dry-run", "-o", "json")
+		if err != nil {
+			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+		}
+
+		result := decodeRepairResult(t, out)
+		if !result.DryRun {
+			t.Error("dry_run = false, want true")
+		}
+		if result.ResolvedTargets == nil {
+			t.Fatal("resolved_targets is absent, want it populated in dry-run")
+		}
+
+		wantAccepted := filepath.Join(root, "task.md")
+		if got := result.ResolvedTargets.Accepted["task.md"]; got != wantAccepted {
+			t.Errorf("resolved_targets.accepted[task.md] = %q, want %q", got, wantAccepted)
+		}
+		if got := result.ResolvedTargets.Rejected["../outside.md"]; got != "escapes root" {
+			t.Errorf("resolved_targets.rejected[../outside.md] = %q, want %q", got, "escapes root")
+		}
+
+		if after := mustReadFile(t, outside); !bytes.Equal(before, after) {
+			t.Error("dry-run modified a file outside the scan root")
+		}
+		if !strings.Contains(strings.Join(result.Changed, "\n"), "task.md") {
+			t.Errorf("changed = %v, want the contained proposal previewed", result.Changed)
+		}
+	})
+
+	// resolved_targets is dry-run only: an applied run already says what it did
+	// in changed[], so repeating the destinations would be noise.
+	t.Run("ResolvedTargetsOmittedOutsideDryRun", func(t *testing.T) {
+		root, _ := containmentFixture(t)
+
+		reportFile := writeContainmentReport(t, root, []proposal.Proposal{{
+			Type:        proposal.CorrectValue,
+			Field:       "estado",
+			From:        "Pending",
+			To:          "Completed",
+			Paths:       []string{"task.md"},
+			Description: "correct estado",
+		}})
+
+		resetFlags()
+		out, err := runCmd(t, "repair", "apply", "--report", reportFile, "-o", "json")
+		if err != nil {
+			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+		}
+
+		if result := decodeRepairResult(t, out); result.ResolvedTargets != nil {
+			t.Errorf("resolved_targets = %+v, want absent outside dry-run", result.ResolvedTargets)
+		}
+		if strings.Contains(out, "resolved_targets") {
+			t.Error("resolved_targets key present in JSON, want it omitted")
+		}
+	})
+
+	// Scenario 12: a contained set_section write is applied and recorded. It
+	// used to write the file but report nothing outside dry-run.
+	t.Run("ContainedSetSectionIsAppliedAndRecorded", func(t *testing.T) {
+		root, _ := containmentFixture(t)
+		taskFile := filepath.Join(root, "task.md")
+
+		reportFile := writeContainmentReport(t, root, []proposal.Proposal{{
+			Type:        proposal.SetSection,
+			Heading:     "## Status",
+			Value:       "rewritten",
+			Mode:        "replace",
+			Paths:       []string{"task.md"},
+			Description: "rewrite status section",
+		}})
+
+		resetFlags()
+		out, err := runCmd(t, "repair", "apply", "--report", reportFile, "-o", "json")
+		if err != nil {
+			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+		}
+
+		result := decodeRepairResult(t, out)
+		if len(result.Errors) != 0 {
+			t.Fatalf("errors = %v, want empty", result.Errors)
+		}
+		if len(result.Rejected) != 0 {
+			t.Fatalf("rejected = %v, want empty", result.Rejected)
+		}
+
+		changed := strings.Join(result.Changed, "\n")
+		if !strings.Contains(changed, "task.md") || !strings.Contains(changed, "## Status") {
+			t.Errorf("changed = %v, want an entry naming the file and the section", result.Changed)
+		}
+
+		if content := string(mustReadFile(t, taskFile)); !strings.Contains(content, "rewritten") {
+			t.Errorf("task.md was not rewritten:\n%s", content)
+		}
+	})
 }

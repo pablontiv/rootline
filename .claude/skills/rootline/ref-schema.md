@@ -174,7 +174,20 @@ Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new comman
 - Supports `--dry-run` for preview without writes
 - Emits JSON: version 1, kind "rootline/repair", with Changed/Skipped/Rejected/Errors
 
-Engine: `internal/fix/repair.go` → `ApplyRepair(proposals, dryRun, root)`
+**Path containment.** Report paths are untrusted. Every path is checked against the scan root
+before any file is opened, so an escaping (`../..`) or absolute path is never read or written.
+Violations land in `rejected[]` (a policy refusal), not `errors[]` (a failed write). A proposal
+is applied whole or not at all — one escaping path discards the whole proposal.
+
+With `--dry-run` the result adds `resolved_targets: {accepted: {reportPath: absPath}, rejected:
+{reportPath: reason}}`, so a caller can see where writes would land and why any were refused.
+Additive and omitted outside dry-run; the contract stays version 1.
+
+Engine: `internal/fix/repair.go` → `ApplyRepair(proposals, dryRun, root)`;
+guard: `internal/fix/contain.go` → `ContainPath(root, path, policy)`.
+`applySetSection` is reachable from both `repair apply` and `fix --all`, so it takes a
+`ContainmentPolicy` and checks containment itself: `PolicyRejectAbsolute` for report-supplied
+paths, `PolicyAcceptAbsolute` for scan-derived `fix --all` paths.
 
 ## Schema Generation Services (internal)
 
