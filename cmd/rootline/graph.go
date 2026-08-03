@@ -139,17 +139,8 @@ func runGraph(cmd *cobra.Command, args []string) error {
 
 	// JSON output.
 	if outputFormat == "json" {
-		nodes := make([]string, 0, len(g.Nodes))
-		for path := range g.Nodes {
-			nodes = append(nodes, path)
-		}
-		var allEdges []graph.Edge
-		for _, edges := range g.Edges {
-			allEdges = append(allEdges, edges...)
-		}
-		if allEdges == nil {
-			allEdges = []graph.Edge{}
-		}
+		nodes := g.SortedNodes()
+		allEdges := g.SortedEdges()
 		if broken == nil {
 			broken = []graph.BrokenLink{}
 		}
@@ -185,13 +176,11 @@ func renderDOT(cmd *cobra.Command, g *graph.Graph) {
 	w := cmd.OutOrStdout()
 	_, _ = fmt.Fprintln(w, "digraph {")
 	_, _ = fmt.Fprintln(w, "  rankdir=LR;")
-	for path := range g.Nodes {
+	for _, path := range g.SortedNodes() {
 		_, _ = fmt.Fprintf(w, "  %q;\n", path)
 	}
-	for _, edges := range g.Edges {
-		for _, e := range edges {
-			_, _ = fmt.Fprintf(w, "  %q -> %q [label=%q];\n", e.Source, e.Target, e.Type)
-		}
+	for _, e := range g.SortedEdges() {
+		_, _ = fmt.Fprintf(w, "  %q -> %q [label=%q];\n", e.Source, e.Target, e.Type)
 	}
 	_, _ = fmt.Fprintln(w, "}")
 }
@@ -230,13 +219,11 @@ func mermaidGraphText(g *graph.Graph) string {
 	}
 
 	_, _ = fmt.Fprintln(&sb, "graph TD;")
-	for path := range g.Nodes {
+	for _, path := range g.SortedNodes() {
 		_, _ = fmt.Fprintf(&sb, "  %s[%q];\n", id(path), path)
 	}
-	for _, edges := range g.Edges {
-		for _, e := range edges {
-			_, _ = fmt.Fprintf(&sb, "  %s --> |%s| %s;\n", id(e.Source), e.Type, id(e.Target))
-		}
+	for _, e := range g.SortedEdges() {
+		_, _ = fmt.Fprintf(&sb, "  %s --> |%s| %s;\n", id(e.Source), e.Type, id(e.Target))
 	}
 	return sb.String()
 }
