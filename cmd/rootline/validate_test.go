@@ -629,3 +629,30 @@ func TestValidateAll_HardErrorDriftDetection(t *testing.T) {
 		t.Fatalf("expected error during drift detection when .stem is unparseable, got success\noutput: %s", stdout)
 	}
 }
+
+// TestValidate_DirectoryArgumentError names the mistake instead of its
+// consequence.
+//
+// `validate docs` is a plausible thing to type — `--all` is the flag that is
+// easy to forget — and the answer was "no extractor for docs", which describes
+// an extractor-registry miss and sends the reader looking for a missing file
+// type. The directory is the actual condition, and the flag that handles it is
+// one word away.
+func TestValidate_DirectoryArgumentError(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":        "version: 2\nscope:\n  match: \"*.md\"\n",
+		"docs/a.md":    "---\ntitulo: x\n---\n# x\n",
+		"docs/b.md":    "---\ntitulo: y\n---\n# y\n",
+		"CHANGELOG.md": "---\ntitulo: z\n---\n# z\n",
+	})
+	target := filepath.Join(root, "docs")
+
+	_, err := runCmd(t, "validate", target)
+	if err == nil {
+		t.Fatal("validate must reject a directory argument")
+	}
+	want := target + " is a directory; use 'rootline validate --all " + target + "'"
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err.Error(), want)
+	}
+}

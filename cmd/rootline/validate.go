@@ -68,9 +68,16 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 			return fmt.Errorf("resolving path %s: %w", file, err)
 		}
 
-		// Check file exists
-		if _, err := os.Stat(absPath); err != nil {
+		// Check the path exists and is a file. A directory otherwise reaches the
+		// extractor registry as an unrecognised file type and comes back as
+		// "no extractor for <dir>", which describes a missing file type and
+		// hides the flag that actually handles directories.
+		info, err := os.Stat(absPath)
+		if err != nil {
 			return fmt.Errorf("file not found: %s", file)
+		}
+		if info.IsDir() {
+			return fmt.Errorf("%s is a directory; use 'rootline validate --all %s'", file, file)
 		}
 
 		// Check extractor exists

@@ -97,3 +97,24 @@ func TestExplainErrorPropagation_NoSchema(t *testing.T) {
 		t.Fatalf("explain should fail when no schema is found, but got nil error (silent degradation)")
 	}
 }
+
+// TestExplain_DirectoryArgumentError mirrors validate's directory message.
+//
+// explain traces one document, and has no --all to point at, so the message
+// names the argument shape it does accept rather than a flag.
+func TestExplain_DirectoryArgumentError(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":     "version: 2\nscope:\n  match: \"*.md\"\n",
+		"docs/a.md": "---\ntitulo: x\n---\n# x\n",
+	})
+	target := filepath.Join(root, "docs")
+
+	_, err := runCmd(t, "explain", target)
+	if err == nil {
+		t.Fatal("explain must reject a directory argument")
+	}
+	want := target + " is a directory; use 'rootline explain <file>'"
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err.Error(), want)
+	}
+}
