@@ -10,11 +10,20 @@ import (
 )
 
 // commandsExemptFromBoundaryPreflight lists commands that must run even when no
-// governance boundary is declared.
+// governance boundary is declared. They fall into two categories.
 //
-// `init` and `schema` create the very .stem files the preflight asks for, so
-// gating them on a declared boundary would be circular. The rest do not resolve
-// schemas at all.
+// Schema-creating — `init` and `schema` write the very .stem files the preflight
+// asks for, so gating them on a declared boundary would be circular.
+//
+// Schema-independent — `completion`, `hooks`, `help` and `migrate` resolve no
+// schema at all, and neither does `analyze`: it infers a schema from the
+// documents themselves. Gating it would block the one command that can tell an
+// ungoverned tree what its schema should be, and it is the entry point of the
+// `analyze --incremental` -> `schema apply` loop whose other end is already
+// exempt. This is not a general "read-only is safe" rule: `query` and `stats`
+// stay governed, because they skip schema resolution voluntarily and would
+// otherwise report records governed by .stem files collected from outside an
+// undeclared project.
 var commandsExemptFromBoundaryPreflight = map[string]bool{
 	"init":       true,
 	"schema":     true,
@@ -22,6 +31,7 @@ var commandsExemptFromBoundaryPreflight = map[string]bool{
 	"hooks":      true,
 	"help":       true,
 	"migrate":    true,
+	"analyze":    true,
 }
 
 // isExemptFromBoundaryPreflight reports whether cmd, or any command it hangs

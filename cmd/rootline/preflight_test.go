@@ -1,11 +1,32 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// unmarkedStemTree builds a project that has a .stem but never declares where
+// the project starts — the exact shape the boundary preflight rejects.
+func unmarkedStemTree(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	wiki := filepath.Join(root, "wiki")
+	if err := os.MkdirAll(wiki, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wiki, ".stem"),
+		[]byte("version: 2\nscope:\n  match: \"*.md\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wiki, "a.md"),
+		[]byte("---\nestado: Pending\n---\n# A\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
 
 // brokenStemTree builds a project whose .stem cannot be parsed.
 func brokenStemTree(t *testing.T) string {
@@ -107,5 +128,51 @@ func TestPreflight_MissingSchemaIsLeftToTheCommand(t *testing.T) {
 	resetFlags()
 	if _, err := runCmd(t, "schema", "propose", root); err != nil {
 		t.Fatalf("schema propose must work without a .stem, got: %v", err)
+	}
+}
+
+// TestPreflight_AnalyzeExemptionWorks covers the second exemption category.
+//
+// `analyze` infers a schema from the documents themselves and resolves no
+// .stem at all, so gating it on a declared boundary blocks the one command
+// that could tell an ungoverned tree what its schema should be. It is the
+// entry point of the `analyze --incremental` -> `schema apply` loop, and
+// `schema propose` — its sibling on the same loop — is already exempt.
+func TestPreflight_AnalyzeExemptionWorks(t *testing.T) {
+	root := unmarkedStemTree(t)
+
+	out, err := runCmd(t, "analyze", filepath.Join(root, "wiki"))
+	if err != nil {
+		t.Fatalf("analyze must stay exempt on an unmarked .stem tree, got: %v", err)
+	}
+
+	var report map[string]any
+	if jsonErr := json.Unmarshal([]byte(out), &report); jsonErr != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", jsonErr, out)
+	}
+	if report["kind"] != "rootline/analyze" {
+		t.Errorf("kind = %v, want rootline/analyze", report["kind"])
+	}
+}
+
+// TestPreflight_QueryStatsNotExempt pins the boundary of the exemption.
+//
+// `query` and `stats` skip schema resolution voluntarily, not because they are
+// schema-independent: an unmarked chain may have collected .stem files from
+// outside the project, and both would happily report records governed by them.
+// Widening the exemption to cover them is the accident this test prevents.
+func TestPreflight_QueryStatsNotExempt(t *testing.T) {
+	for _, cmd := range []string{"query", "stats"} {
+		t.Run(cmd, func(t *testing.T) {
+			root := unmarkedStemTree(t)
+
+			out, err := runCmd(t, cmd, filepath.Join(root, "wiki"))
+			if err == nil {
+				t.Fatalf("%s must stay governed by the preflight\noutput: %s", cmd, out)
+			}
+			if !strings.Contains(err.Error(), "declared boundary") {
+				t.Errorf("expected the boundary error, got: %v", err)
+			}
+		})
 	}
 }
