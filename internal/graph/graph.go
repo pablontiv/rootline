@@ -5,6 +5,7 @@ package graph
 import (
 	"context"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/pablontiv/picokit/fuzzy"
@@ -75,6 +76,57 @@ func Build(_ context.Context, records []*extract.Record) *Graph {
 	g.resolveByBasename()
 
 	return g
+}
+
+// SortedNodes returns every node path in lexical order.
+//
+// Nodes live in a map, and Go randomizes map iteration order per range
+// statement, so ranging g.Nodes directly leaks that randomization into any
+// rendered output. Determinism is a property of the graph, not of a single
+// renderer: every consumer must go through this accessor so the JSON, DOT and
+// Mermaid renderers cannot drift apart. Returns an empty slice for an empty graph.
+func (g *Graph) SortedNodes() []string {
+	nodes := make([]string, 0, len(g.Nodes))
+	for path := range g.Nodes {
+		nodes = append(nodes, path)
+	}
+	sort.Strings(nodes)
+	return nodes
+}
+
+// SortedEdges returns every edge from every source under the total order
+// (source, target, line, type) defined by compareEdges.
+// Returns an empty slice when the graph has no edges.
+func (g *Graph) SortedEdges() []Edge {
+	total := 0
+	for _, edges := range g.Edges {
+		total += len(edges)
+	}
+	all := make([]Edge, 0, total)
+	for _, edges := range g.Edges {
+		all = append(all, edges...)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		return compareEdges(all[i], all[j]) < 0
+	})
+	return all
+}
+
+// compareEdges orders two edges by source path, then target path, then line
+// number, then link type. The four keys together are a total order: two edges
+// agreeing on all of them are indistinguishable in the rendered output, so no
+// further tiebreak is observable.
+func compareEdges(a, b Edge) int {
+	if c := strings.Compare(a.Source, b.Source); c != 0 {
+		return c
+	}
+	if c := strings.Compare(a.Target, b.Target); c != 0 {
+		return c
+	}
+	if a.Line != b.Line {
+		return a.Line - b.Line
+	}
+	return strings.Compare(a.Type, b.Type)
 }
 
 // resolveByBasename rewrites edge targets that don't match any node

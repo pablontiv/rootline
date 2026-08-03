@@ -37,6 +37,12 @@ Default global output is JSON, so `--format dot|mermaid` only produces diagram t
 }
 ```
 
+Output is deterministic: `nodes` is sorted lexically by path and `edges` by
+`(source, target, line, type)`, so JSON, DOT and Mermaid are byte-stable across runs and safe to
+commit or diff. `tree` likewise picks its status column by sorting the enum-typed schema field
+names and taking the first, so a corpus declaring more than one enum field no longer alternates
+columns between runs.
+
 ## migrate
 
 Use `migrate` for schema diff reports and explicit schema/data migration operations.

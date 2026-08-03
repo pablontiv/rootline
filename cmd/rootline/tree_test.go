@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 // setupTreeProject creates a temp directory with .git marker, .stem, and
@@ -639,5 +640,129 @@ func TestTreeErrorPropagation_NoSchema(t *testing.T) {
 	// EXPECTATION: tree should fail when no schema is found, not silently build a tree
 	if err == nil {
 		t.Fatalf("tree should fail when no schema is found, but got nil error (silent degradation)")
+	}
+}
+
+func TestFirstEnumField(t *testing.T) {
+	tests := []struct {
+		name   string
+		schema map[string]rules.SchemaField
+		want   string
+	}{
+		{
+			name: "two enums picks lexically first",
+			schema: map[string]rules.SchemaField{
+				"tipo":   {Type: "enum", Values: []string{"task", "goal"}},
+				"estado": {Type: "enum", Values: []string{"Pending", "Completed"}},
+			},
+			want: "estado",
+		},
+		{
+			name: "single enum",
+			schema: map[string]rules.SchemaField{
+				"status": {Type: "enum", Values: []string{"Active", "Inactive"}},
+				"title":  {Type: "string"},
+			},
+			want: "status",
+		},
+		{
+			name: "no enum fields",
+			schema: map[string]rules.SchemaField{
+				"title": {Type: "string"},
+				"count": {Type: "number"},
+			},
+			want: "",
+		},
+		{
+			name:   "nil schema",
+			schema: nil,
+			want:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Repeat: map iteration is randomized per range, so one pass can pass by luck.
+			for run := 1; run <= 10; run++ {
+				if got := firstEnumField(tt.schema); got != tt.want {
+					t.Fatalf("run %d: firstEnumField() = %q, want %q", run, got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func TestTreeStatusDeterminism_TwoEnumFields(t *testing.T) {
+	// estado and tipo are both enum-typed; "estado" wins because e < t.
+	root := setupTreeProject(t, map[string]string{
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n" +
+			"  estado:\n    type: enum\n    values: [Pending, Completed]\n" +
+			"  tipo:\n    type: enum\n    values: [task, goal]\n",
+		"a.md": "---\nestado: Completed\ntipo: task\n---\n",
+		"b.md": "---\nestado: Pending\ntipo: goal\n---\n",
+	})
+
+	var first string
+	for run := 1; run <= 5; run++ {
+		out, err := runCmd(t, "tree", root, "-o", "table")
+		if err != nil {
+			t.Fatalf("run %d: unexpected error: %v", run, err)
+		}
+		if run == 1 {
+			first = out
+		} else if out != first {
+			t.Fatalf("run %d output differs from run 1:\n--- run 1 ---\n%s\n--- run %d ---\n%s",
+				run, first, run, out)
+		}
+		if !strings.Contains(out, "[Completed]") || !strings.Contains(out, "[Pending]") {
+			t.Fatalf("run %d: want estado values in status column, got:\n%s", run, out)
+		}
+		if strings.Contains(out, "[task]") || strings.Contains(out, "[goal]") {
+			t.Fatalf("run %d: tipo values leaked into status column:\n%s", run, out)
+		}
+	}
+}
+
+func TestTreeStatusFallback_UsesSameEnumField(t *testing.T) {
+	// A context with no pre-selected lifecycleField exercises the getStatusValue
+	// fallback. It must resolve the same field the primary path would pick.
+	ctx := &treeRenderContext{
+		effectiveSchema: map[string]rules.SchemaField{
+			"tipo":   {Type: "enum", Values: []string{"task", "goal"}},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}},
+		},
+	}
+	node := &treeNode{
+		Name:        "a.md",
+		IsLeaf:      true,
+		Frontmatter: map[string]any{"estado": "Completed", "tipo": "task"},
+	}
+
+	for run := 1; run <= 10; run++ {
+		if got := getStatusValue(node, ctx); got != "Completed" {
+			t.Fatalf("run %d: getStatusValue() = %q, want %q (estado, not tipo)", run, got, "Completed")
+		}
+	}
+}
+
+func TestTreeStatusFallback_MissingSelectedFieldIsDash(t *testing.T) {
+	// The record has a value for tipo but not for estado. Because both decision
+	// sites select estado, the deterministic answer is the em-dash — never tipo.
+	ctx := &treeRenderContext{
+		effectiveSchema: map[string]rules.SchemaField{
+			"tipo":   {Type: "enum", Values: []string{"task", "goal"}},
+			"estado": {Type: "enum", Values: []string{"Pending", "Completed"}},
+		},
+	}
+	node := &treeNode{
+		Name:        "a.md",
+		IsLeaf:      true,
+		Frontmatter: map[string]any{"tipo": "task"},
+	}
+
+	for run := 1; run <= 10; run++ {
+		if got := getStatusValue(node, ctx); got != "—" {
+			t.Fatalf("run %d: getStatusValue() = %q, want em-dash", run, got)
+		}
 	}
 }

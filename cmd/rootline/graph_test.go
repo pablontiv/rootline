@@ -685,3 +685,165 @@ func TestGraphErrorPropagation_NoSchema(t *testing.T) {
 		t.Fatalf("graph should fail when no schema is found, but got nil error (silent degradation)")
 	}
 }
+
+// setupOrderFixture writes four records whose creation order (r2, r1, r6, r3)
+// deliberately differs from their lexical order, so any renderer that leaks
+// Go's randomized map iteration into its output fails the fixed-order asserts.
+func setupOrderFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
+	for _, name := range []string{"r2.md", "r1.md", "r6.md", "r3.md"} {
+		mustWriteFile(t, filepath.Join(dir, name), []byte("---\n---\n# "+name+"\n"), 0644)
+	}
+	return dir
+}
+
+var wantOrderedNodes = []string{"r1.md", "r2.md", "r3.md", "r6.md"}
+
+func TestGraphJSONNodeOrder(t *testing.T) {
+	dir := setupOrderFixture(t)
+
+	// Five consecutive renders: a single pass could match by luck, five cannot.
+	for run := 1; run <= 5; run++ {
+		declareTestBoundary(t, dir)
+		out, err := runCmd(t, "graph", dir)
+		if err != nil {
+			t.Fatalf("run %d: unexpected error: %v\noutput: %s", run, err, out)
+		}
+		var result struct {
+			Version int      `json:"version"`
+			Nodes   []string `json:"nodes"`
+		}
+		if err := json.Unmarshal([]byte(out), &result); err != nil {
+			t.Fatalf("run %d: invalid JSON: %v\nraw: %s", run, err, out)
+		}
+		if result.Version != 1 {
+			t.Errorf("run %d: version = %d, want 1", run, result.Version)
+		}
+		if strings.Join(result.Nodes, ",") != strings.Join(wantOrderedNodes, ",") {
+			t.Fatalf("run %d: nodes = %v, want %v", run, result.Nodes, wantOrderedNodes)
+		}
+	}
+}
+
+func TestGraphDOTNodeOrder(t *testing.T) {
+	dir := setupOrderFixture(t)
+
+	for run := 1; run <= 5; run++ {
+		declareTestBoundary(t, dir)
+		out, err := runCmd(t, "graph", dir, "--format", "dot", "-o", "table")
+		if err != nil {
+			t.Fatalf("run %d: unexpected error: %v\noutput: %s", run, err, out)
+		}
+		got := dotNodeDecls(out)
+		if strings.Join(got, ",") != strings.Join(wantOrderedNodes, ",") {
+			t.Fatalf("run %d: DOT nodes = %v, want %v\nraw: %s", run, got, wantOrderedNodes, out)
+		}
+	}
+}
+
+// dotNodeDecls returns the node paths declared by a DOT document, in order.
+// Node declarations look like `  "r1.md";` — edges carry ` -> ` and are skipped.
+func dotNodeDecls(out string) []string {
+	var nodes []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, `"`) || strings.Contains(line, "->") {
+			continue
+		}
+		nodes = append(nodes, strings.Trim(strings.TrimSuffix(line, ";"), `"`))
+	}
+	return nodes
+}
+
+func TestGraphMermaidNodeOrder(t *testing.T) {
+	dir := setupOrderFixture(t)
+
+	for run := 1; run <= 5; run++ {
+		declareTestBoundary(t, dir)
+		out, err := runCmd(t, "graph", dir, "--format", "mermaid", "-o", "table")
+		if err != nil {
+			t.Fatalf("run %d: unexpected error: %v\noutput: %s", run, err, out)
+		}
+		got := mermaidNodeIDs(out)
+		want := []string{"r1_md", "r2_md", "r3_md", "r6_md"}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("run %d: mermaid nodes = %v, want %v\nraw: %s", run, got, want, out)
+		}
+	}
+}
+
+// mermaidNodeIDs returns the sanitized node IDs declared by a Mermaid diagram,
+// in order. Declarations look like `  r1_md["r1.md"];`; edges carry ` --> `.
+func mermaidNodeIDs(out string) []string {
+	var ids []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		idx := strings.Index(line, "[")
+		if idx <= 0 || strings.Contains(line, "-->") {
+			continue
+		}
+		ids = append(ids, line[:idx])
+	}
+	return ids
+}
+
+func TestGraphEdgeOrder(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
+
+	// Body line numbers are 1-based after the frontmatter is stripped. Links are
+	// emitted in file order (20, 15, 5) so only sorting can produce the want set.
+	body := make([]string, 21)
+	for i := range body {
+		body[i] = ""
+	}
+	body[0] = "# Source"
+	body[19] = "[[target.md]]" // body line 20
+	body[14] = "[[other.md]]"  // body line 15
+	body[4] = "[[target.md]]"  // body line 5
+	mustWriteFile(t, filepath.Join(dir, "source.md"),
+		[]byte("---\n---\n"+strings.Join(body, "\n")+"\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "target.md"), []byte("---\n---\n# Target\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "other.md"), []byte("---\n---\n# Other\n"), 0644)
+
+	want := []struct {
+		source, target string
+		line           int
+	}{
+		{"source.md", "other.md", 15},
+		{"source.md", "target.md", 5},
+		{"source.md", "target.md", 20},
+	}
+
+	for run := 1; run <= 5; run++ {
+		declareTestBoundary(t, dir)
+		out, err := runCmd(t, "graph", dir)
+		if err != nil {
+			t.Fatalf("run %d: unexpected error: %v\noutput: %s", run, err, out)
+		}
+		var result struct {
+			Edges []struct {
+				Source string `json:"source"`
+				Target string `json:"target"`
+				Line   int    `json:"line"`
+			} `json:"edges"`
+		}
+		if err := json.Unmarshal([]byte(out), &result); err != nil {
+			t.Fatalf("run %d: invalid JSON: %v\nraw: %s", run, err, out)
+		}
+		if len(result.Edges) != len(want) {
+			t.Fatalf("run %d: edges = %d, want %d: %+v", run, len(result.Edges), len(want), result.Edges)
+		}
+		for i, w := range want {
+			got := result.Edges[i]
+			if got.Source != w.source || got.Target != w.target || got.Line != w.line {
+				t.Fatalf("run %d: edge[%d] = %+v, want (%s→%s:%d)\nall: %+v",
+					run, i, got, w.source, w.target, w.line, result.Edges)
+			}
+		}
+	}
+}

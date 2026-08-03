@@ -48,10 +48,36 @@ type treeNode struct {
 // treeRenderContext holds schema information for rendering lifecycle field values.
 type treeRenderContext struct {
 	// lifecycleField is the name of the field that should be displayed as a status.
-	// If empty, the renderer will pick the first enum-typed field or any available status-like field.
+	// If empty, the renderer picks the lexically first enum-typed field name in the
+	// schema — enum field names are sorted alphabetically and the first is selected.
+	// Go provides no implicit ordering over a map, so the sort is what makes the
+	// choice reproducible across runs.
 	lifecycleField string
 	// effectiveSchema maps field names to their schema definitions.
 	effectiveSchema map[string]rules.SchemaField
+}
+
+// firstEnumField returns the lexically first enum-typed field name in schema,
+// or "" when schema is nil or holds no enum-typed field.
+//
+// Enum fields are the schema's status-like fields, and the tree renderer has to
+// display exactly one of them. Ranging the schema map and taking whatever comes
+// first picks a different field on every run, so the names are sorted and the
+// first is taken. Both decision sites — buildRenderContext and the getStatusValue
+// fallback — call this one helper, so the two cannot disagree about which field
+// the status column represents.
+func firstEnumField(schema map[string]rules.SchemaField) string {
+	names := make([]string, 0, len(schema))
+	for name, field := range schema {
+		if len(field.Values) > 0 {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	sort.Strings(names)
+	return names[0]
 }
 
 func runTree(cmd *cobra.Command, args []string) error {
@@ -232,14 +258,8 @@ func buildRenderContext(root string) *treeRenderContext {
 		if merged != nil && len(merged.Schema) > 0 {
 			ctx.effectiveSchema = merged.Schema
 
-			// Look for the first enum-typed field to use as the lifecycle field.
 			// Enum fields are typically used for status/state values.
-			for name, field := range merged.Schema {
-				if len(field.Values) > 0 {
-					ctx.lifecycleField = name
-					break
-				}
-			}
+			ctx.lifecycleField = firstEnumField(merged.Schema)
 		}
 	}
 
@@ -264,13 +284,13 @@ func getStatusValue(node *treeNode, ctx *treeRenderContext) string {
 		}
 	}
 
-	// Otherwise, pick the first enum-typed field from schema if available.
+	// Otherwise, pick the lexically first enum-typed field from schema if available.
+	// This is the same selection buildRenderContext makes, so a context built
+	// without a pre-resolved lifecycleField still lands on the same column.
 	if ctx != nil && ctx.effectiveSchema != nil {
-		for name, field := range ctx.effectiveSchema {
-			if len(field.Values) > 0 {
-				if val, ok := node.Frontmatter[name]; ok {
-					return fmt.Sprintf("%v", val)
-				}
+		if name := firstEnumField(ctx.effectiveSchema); name != "" {
+			if val, ok := node.Frontmatter[name]; ok {
+				return fmt.Sprintf("%v", val)
 			}
 		}
 	}

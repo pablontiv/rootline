@@ -378,3 +378,101 @@ func TestBuild_WikilinkBasenameFallbackUnchanged(t *testing.T) {
 		t.Fatalf("broken = %+v, want basename fallback to resolve wikilink", broken)
 	}
 }
+
+func TestSortedNodes_LexicalOrder(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("r2.md", nil),
+		makeRecord("r1.md", nil),
+		makeRecord("r6.md", nil),
+		makeRecord("r3.md", nil),
+	}
+	g := Build(context.Background(), records)
+
+	want := []string{"r1.md", "r2.md", "r3.md", "r6.md"}
+	got := g.SortedNodes()
+	if len(got) != len(want) {
+		t.Fatalf("SortedNodes() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("SortedNodes() = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestSortedNodes_EmptyGraph(t *testing.T) {
+	g := Build(context.Background(), nil)
+	got := g.SortedNodes()
+	if got == nil {
+		t.Fatal("SortedNodes() = nil, want empty non-nil slice")
+	}
+	if len(got) != 0 {
+		t.Fatalf("SortedNodes() = %v, want empty", got)
+	}
+}
+
+func TestSortedEdges_TotalOrder(t *testing.T) {
+	// source.md links twice to target.md (lines 20 and 5) and once to other.md (line 15).
+	// zsource.md sorts after source.md and proves cross-source ordering.
+	records := []*extract.Record{
+		makeRecord("zsource.md", []extract.Link{
+			{Target: "target.md", Type: "reference", Line: 1},
+		}),
+		makeRecord("source.md", []extract.Link{
+			{Target: "target.md", Type: "reference", Line: 20},
+			{Target: "other.md", Type: "reference", Line: 15},
+			{Target: "target.md", Type: "reference", Line: 5},
+		}),
+		makeRecord("target.md", nil),
+		makeRecord("other.md", nil),
+	}
+	g := Build(context.Background(), records)
+
+	want := []Edge{
+		{Source: "source.md", Target: "other.md", Type: "reference", Line: 15},
+		{Source: "source.md", Target: "target.md", Type: "reference", Line: 5},
+		{Source: "source.md", Target: "target.md", Type: "reference", Line: 20},
+		{Source: "zsource.md", Target: "target.md", Type: "reference", Line: 1},
+	}
+	got := g.SortedEdges()
+	if len(got) != len(want) {
+		t.Fatalf("SortedEdges() len = %d, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i].Source != want[i].Source || got[i].Target != want[i].Target ||
+			got[i].Line != want[i].Line || got[i].Type != want[i].Type {
+			t.Fatalf("SortedEdges()[%d] = %+v, want %+v (full: %+v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+func TestSortedEdges_TypeTiebreak(t *testing.T) {
+	// Same source, target and line: link type breaks the tie lexically.
+	records := []*extract.Record{
+		makeRecord("a.md", []extract.Link{
+			{Target: "b.md", Type: "reference", Line: 3},
+			{Target: "b.md", Type: "blocks", Line: 3},
+		}),
+		makeRecord("b.md", nil),
+	}
+	g := Build(context.Background(), records)
+
+	got := g.SortedEdges()
+	if len(got) != 2 {
+		t.Fatalf("SortedEdges() len = %d, want 2", len(got))
+	}
+	if got[0].Type != "blocks" || got[1].Type != "reference" {
+		t.Fatalf("SortedEdges() types = [%q %q], want [blocks reference]", got[0].Type, got[1].Type)
+	}
+}
+
+func TestSortedEdges_EmptyGraph(t *testing.T) {
+	g := Build(context.Background(), []*extract.Record{makeRecord("a.md", nil)})
+	got := g.SortedEdges()
+	if got == nil {
+		t.Fatal("SortedEdges() = nil, want empty non-nil slice")
+	}
+	if len(got) != 0 {
+		t.Fatalf("SortedEdges() = %+v, want empty", got)
+	}
+}
