@@ -100,7 +100,7 @@ func TestApplySetSection_CreateWithoutNewline(t *testing.T) {
 		Paths:   []string{relPath},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -150,7 +150,7 @@ More stuff.
 		Paths:   []string{relPath},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestApplySetSection_AppendWithoutNewline(t *testing.T) {
 		Paths:   []string{relPath},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestApplySetSection_ReplaceAtEOF(t *testing.T) {
 		Paths:   []string{relPath},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestApplySetSection_ReplaceDefaultMode(t *testing.T) {
 		Paths:   []string{relPath},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

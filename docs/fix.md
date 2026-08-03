@@ -104,6 +104,33 @@ report, use `rootline schema apply`, which does accept `kind: rootline/analyze`.
 
 Schema proposals (extend_enum, add_aggregate, remove_stem_field) are **silently rejected** — use `rootline schema apply` instead.
 
+**Path containment.** A report is untrusted input, so every path it names is checked against
+the scan root before any file is opened. A path that escapes the root — `../../../etc/shadow`
+or an absolute path — is refused outright and never read, let alone written. Refusals land in
+`rejected[]`, not `errors[]`, keeping a policy decision distinguishable from a failed write:
+
+```bash
+rootline repair apply --report fix-proposals.json
+# rejected: containment violation: path "../outside.md" escapes root (root "/abs/scan")
+```
+
+A proposal is applied whole or not at all, so a single escaping path discards the entire
+proposal rather than applying it partially.
+
+With `--dry-run`, the output additionally carries `resolved_targets` so you can see where each
+write would have landed and why any were refused before committing to the run:
+
+```json
+{
+  "resolved_targets": {
+    "accepted": { "tasks/T001.md": "/abs/scan/tasks/T001.md" },
+    "rejected": { "../outside.md": "escapes root" }
+  }
+}
+```
+
+`resolved_targets` is additive and omitted outside dry-run; the report contract stays `version: 1`.
+
 Flags:
 - `--dry-run` — Preview changes without modifying files
 - `--report <file>` — Path to proposals JSON file (required)

@@ -1202,7 +1202,7 @@ func TestApplySetSection_Replace(t *testing.T) {
 		Paths:   []string{relPath},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1243,7 +1243,7 @@ func TestApplySetSection_Append(t *testing.T) {
 		Paths:   []string{relPath},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1278,7 +1278,7 @@ func TestApplySetSection_Create(t *testing.T) {
 		Paths:   []string{relPath},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1320,7 +1320,7 @@ func TestApplySetSection_UnknownMode(t *testing.T) {
 		Paths:   []string{relPath},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err == nil {
 		t.Fatal("expected error for unknown mode")
 	}
@@ -1344,7 +1344,7 @@ func TestApplySetSection_HeadingNotFoundNoCreate(t *testing.T) {
 		Paths:   []string{relPath},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err == nil {
 		t.Fatal("expected error for heading not found in replace mode")
 	}
@@ -1364,7 +1364,7 @@ func TestApplySetSection_FileNotFound(t *testing.T) {
 		Paths:   []string{"nonexistent.md"},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err == nil {
 		t.Fatal("expected error for nonexistent file")
 	}
@@ -1386,7 +1386,7 @@ func TestApplySetSection_HeadingAtStart(t *testing.T) {
 		Paths:   []string{relPath},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1417,7 +1417,7 @@ func TestApplySetSection_CreateWhenFoundActsLikeAppend(t *testing.T) {
 		Paths:   []string{relPath},
 	}
 
-	err := applySetSection(p, dir, nil)
+	err := applySetSection(p, dir, nil, PolicyRejectAbsolute)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -3,6 +3,7 @@ package fix
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,8 +20,28 @@ type RepairResult struct {
 	DryRun   bool     `json:"dry_run"`
 	Changed  []string `json:"changed"`
 	Skipped  []string `json:"skipped"`
-	Rejected []string `json:"rejected"` // schema proposals silently rejected
+	Rejected []string `json:"rejected"` // schema proposals and containment violations
 	Errors   []string `json:"errors"`
+
+	// ResolvedTargets is populated in dry-run only, where the caller cannot
+	// inspect the outcome on disk and needs to see where each write would land.
+	ResolvedTargets *ResolvedTargetsBreakdown `json:"resolved_targets,omitempty"`
+}
+
+// ResolvedTargetsBreakdown reports where each report-supplied path resolved to,
+// and why any of them were refused. Keys are the paths exactly as the report
+// spelled them, so a caller can match entries back against its own input.
+type ResolvedTargetsBreakdown struct {
+	Accepted map[string]string `json:"accepted"` // report path -> validated absolute path
+	Rejected map[string]string `json:"rejected"` // report path -> reason for refusal
+}
+
+// repairTarget pairs a record with the containment-validated absolute path it
+// was read from. Handlers write to that path instead of re-deriving it, which
+// keeps the containment invariant local to the check that established it.
+type repairTarget struct {
+	abs    string
+	record *extract.Record
 }
 
 // ApplyRepair applies repair proposals (data-only corrections) to the filesystem.
@@ -29,6 +50,10 @@ type RepairResult struct {
 // Modifies Markdown frontmatter only — never touches .stem files.
 // Supports dryRun for preview mode. Post-validates modified files and rolls
 // back if validation fails.
+//
+// Reports are untrusted input, so every path they name is checked against root
+// before the filesystem is touched at all. Paths that escape are recorded in
+// Rejected, not Errors: they are a policy refusal rather than a failed write.
 func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*RepairResult, error) {
 	result := &RepairResult{
 		Version: 1,
@@ -40,20 +65,17 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*Repa
 		return result, nil
 	}
 
-	// Build record map for efficient lookup.
-	recordMap := make(map[string]*extract.Record)
-	reg := extract.NewRegistry()
-
-	// First pass: extract all affected records.
-	affectedPaths := make(map[string]bool)
-	for _, p := range proposals {
-		for _, path := range p.Paths {
-			affectedPaths[path] = true
-		}
+	// First pass: gate every proposal path on containment, before any read.
+	accepted, rejected := containProposalPaths(proposals, root, result)
+	if dryRun {
+		result.ResolvedTargets = &ResolvedTargetsBreakdown{Accepted: accepted, Rejected: rejected}
 	}
 
-	for path := range affectedPaths {
-		absPath := filepath.Join(root, path)
+	// Second pass: extract the records behind the paths that survived the gate.
+	targets := make(map[string]*repairTarget)
+	reg := extract.NewRegistry()
+
+	for path, absPath := range accepted {
 		// A directory otherwise reaches os.ReadFile and comes back as
 		// "read docs: is a directory" — the syscall that tripped over the path
 		// rather than an answer about the report. Repair takes document paths.
@@ -80,11 +102,16 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*Repa
 			continue
 		}
 
-		recordMap[path] = record
+		targets[path] = &repairTarget{abs: absPath, record: record}
 	}
 
-	// Second pass: classify and apply proposals.
+	// Third pass: classify and apply proposals.
 	for _, p := range proposals {
+		// A proposal is applied whole or not at all, so one bad path discards it.
+		if hasRejectedPath(p, rejected) {
+			continue
+		}
+
 		// Classify by surface.
 		surf := p.Surface()
 		if surf != proposal.SurfaceRepair {
@@ -95,37 +122,37 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*Repa
 		// Apply based on proposal type.
 		switch p.Type {
 		case proposal.CorrectValue, proposal.MigrateValue:
-			if err := applyRepairCorrectValue(&p, root, recordMap, result, dryRun); err != nil {
+			if err := applyRepairCorrectValue(&p, targets, result, dryRun); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("%s %s: %v", p.Type, p.Paths, err))
 			}
 
 		case proposal.AddField, proposal.ExtractBody, proposal.InferFromChildren, proposal.InferFromSiblings:
-			if err := applyRepairAddField(&p, root, recordMap, result, dryRun); err != nil {
+			if err := applyRepairAddField(&p, targets, result, dryRun); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("%s %s: %v", p.Type, p.Paths, err))
 			}
 
 		case proposal.SetField:
-			if err := applyRepairSetField(&p, root, recordMap, result, dryRun); err != nil {
+			if err := applyRepairSetField(&p, targets, result, dryRun); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("set_field %s: %v", p.Paths, err))
 			}
 
 		case proposal.SetSection:
-			if err := applyRepairSetSection(&p, root, recordMap, result, dryRun); err != nil {
+			if err := applyRepairSetSection(&p, root, result, dryRun); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("set_section %s: %v", p.Heading, err))
 			}
 
 		case proposal.CorrectOutlier:
-			if err := applyRepairCorrectValue(&p, root, recordMap, result, dryRun); err != nil {
+			if err := applyRepairCorrectValue(&p, targets, result, dryRun); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("correct_outlier %s: %v", p.Paths, err))
 			}
 
 		case proposal.PropagateAggregate:
-			if err := applyRepairCorrectValue(&p, root, recordMap, result, dryRun); err != nil {
+			if err := applyRepairCorrectValue(&p, targets, result, dryRun); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("propagate_aggregate %s: %v", p.Paths, err))
 			}
 
 		case proposal.CorrectLink:
-			if err := applyRepairCorrectLink(&p, root, result, dryRun); err != nil {
+			if err := applyRepairCorrectLink(&p, targets, result, dryRun); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("correct_link %s: %v", p.Paths, err))
 			}
 
@@ -135,18 +162,16 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*Repa
 		}
 	}
 
-	// Third pass: post-validate and rollback on failure.
+	// Fourth pass: post-validate and rollback on failure.
 	if !dryRun && len(result.Errors) == 0 {
-		for path, rec := range recordMap {
-			absPath := filepath.Join(root, path)
-
+		for path, tgt := range targets {
 			// Re-resolve effective stem.
-			dir := filepath.Dir(absPath)
-			effective, _ := rules.ResolveForRecord(dir, absPath)
+			dir := filepath.Dir(tgt.abs)
+			effective, _ := rules.ResolveForRecord(dir, tgt.abs)
 
 			// Validate.
 			ctx := context.Background()
-			errs := rules.Validate(ctx, rec, effective)
+			errs := rules.Validate(ctx, tgt.record, effective)
 			if len(errs) > 0 {
 				// Validation failed — rollback.
 				// Note: Since we've modified rec in-memory and written to file,
@@ -165,16 +190,67 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*Repa
 	return result, nil
 }
 
-// applyRepairCorrectValue updates a field value in a record's frontmatter.
-func applyRepairCorrectValue(p *proposal.Proposal, root string, recordMap map[string]*extract.Record, result *RepairResult, dryRun bool) error {
+// containProposalPaths validates every distinct path named by the proposals and
+// splits them into the accepted paths (mapped to their validated absolute form)
+// and the refused ones (mapped to the reason). Refusals are also appended to
+// result.Rejected so they surface in the command output.
+func containProposalPaths(proposals []proposal.Proposal, root string, result *RepairResult) (accepted, rejected map[string]string) {
+	accepted = make(map[string]string)
+	rejected = make(map[string]string)
+
+	for _, p := range proposals {
+		for _, path := range p.Paths {
+			if _, seen := accepted[path]; seen {
+				continue
+			}
+			if _, seen := rejected[path]; seen {
+				continue
+			}
+
+			// Repair reports carry root-relative record paths by construction,
+			// so an absolute path is malformed input rather than a real target.
+			absPath, err := ContainPath(root, path, PolicyRejectAbsolute)
+			if err != nil {
+				rejected[path] = containmentReason(err)
+				result.Rejected = append(result.Rejected, err.Error())
+				continue
+			}
+			accepted[path] = absPath
+		}
+	}
+
+	return accepted, rejected
+}
+
+// containmentReason extracts the bare reason from a containment failure, for
+// the resolved-targets breakdown where the path is already the map key.
+func containmentReason(err error) string {
+	var cerr *ContainmentError
+	if errors.As(err, &cerr) {
+		return cerr.Message
+	}
+	return err.Error()
+}
+
+// hasRejectedPath reports whether any path of the proposal failed containment.
+func hasRejectedPath(p proposal.Proposal, rejected map[string]string) bool {
 	for _, path := range p.Paths {
-		rec, ok := recordMap[path]
+		if _, bad := rejected[path]; bad {
+			return true
+		}
+	}
+	return false
+}
+
+// applyRepairCorrectValue updates a field value in a record's frontmatter.
+func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTarget, result *RepairResult, dryRun bool) error {
+	for _, path := range p.Paths {
+		tgt, ok := targets[path]
 		if !ok {
 			continue
 		}
 
-		rec.Frontmatter[p.Field] = p.To
-		absPath := filepath.Join(root, path)
+		tgt.record.Frontmatter[p.Field] = p.To
 
 		if dryRun {
 			result.Changed = append(result.Changed,
@@ -183,13 +259,13 @@ func applyRepairCorrectValue(p *proposal.Proposal, root string, recordMap map[st
 		}
 
 		// Read file, update frontmatter, write back.
-		content, err := os.ReadFile(absPath)
+		content, err := os.ReadFile(tgt.abs)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
 
-		newContent := RewriteFrontmatter(string(content), rec.Frontmatter)
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
+		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
+		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 
@@ -200,20 +276,19 @@ func applyRepairCorrectValue(p *proposal.Proposal, root string, recordMap map[st
 }
 
 // applyRepairAddField adds a missing field to a record's frontmatter.
-func applyRepairAddField(p *proposal.Proposal, root string, recordMap map[string]*extract.Record, result *RepairResult, dryRun bool) error {
+func applyRepairAddField(p *proposal.Proposal, targets map[string]*repairTarget, result *RepairResult, dryRun bool) error {
 	value := p.Value
 	if value == "" {
 		value = p.To
 	}
 
 	for _, path := range p.Paths {
-		rec, ok := recordMap[path]
+		tgt, ok := targets[path]
 		if !ok {
 			continue
 		}
 
-		rec.Frontmatter[p.Field] = value
-		absPath := filepath.Join(root, path)
+		tgt.record.Frontmatter[p.Field] = value
 
 		if dryRun {
 			result.Changed = append(result.Changed,
@@ -222,13 +297,13 @@ func applyRepairAddField(p *proposal.Proposal, root string, recordMap map[string
 		}
 
 		// Read file, update frontmatter, write back.
-		content, err := os.ReadFile(absPath)
+		content, err := os.ReadFile(tgt.abs)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
 
-		newContent := RewriteFrontmatter(string(content), rec.Frontmatter)
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
+		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
+		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 
@@ -239,15 +314,14 @@ func applyRepairAddField(p *proposal.Proposal, root string, recordMap map[string
 }
 
 // applyRepairSetField sets a field via SetField proposal.
-func applyRepairSetField(p *proposal.Proposal, root string, recordMap map[string]*extract.Record, result *RepairResult, dryRun bool) error {
+func applyRepairSetField(p *proposal.Proposal, targets map[string]*repairTarget, result *RepairResult, dryRun bool) error {
 	for _, path := range p.Paths {
-		rec, ok := recordMap[path]
+		tgt, ok := targets[path]
 		if !ok {
 			continue
 		}
 
-		rec.Frontmatter[p.Field] = p.Value
-		absPath := filepath.Join(root, path)
+		tgt.record.Frontmatter[p.Field] = p.Value
 
 		if dryRun {
 			result.Changed = append(result.Changed,
@@ -256,13 +330,13 @@ func applyRepairSetField(p *proposal.Proposal, root string, recordMap map[string
 		}
 
 		// Read file, update frontmatter, write back.
-		content, err := os.ReadFile(absPath)
+		content, err := os.ReadFile(tgt.abs)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
 
-		newContent := RewriteFrontmatter(string(content), rec.Frontmatter)
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
+		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
+		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 
@@ -272,38 +346,46 @@ func applyRepairSetField(p *proposal.Proposal, root string, recordMap map[string
 	return nil
 }
 
-// applyRepairSetSection applies a SetSection proposal.
-func applyRepairSetSection(p *proposal.Proposal, root string, recordMap map[string]*extract.Record, result *RepairResult, dryRun bool) error {
-	// Use the existing applySetSection logic from fix.go.
-	// We delegate to the same implementation.
-	if dryRun {
-		mode := p.Mode
-		if mode == "" {
-			mode = "replace"
-		}
-		for _, path := range p.Paths {
-			result.Changed = append(result.Changed,
-				fmt.Sprintf("%s section %s in %s", mode, p.Heading, path))
-		}
-		return nil
+// applyRepairSetSection applies a SetSection proposal by delegating to the
+// shared applySetSection, which re-checks containment because it is also
+// reachable from the fix --all pipeline.
+func applyRepairSetSection(p *proposal.Proposal, root string, result *RepairResult, dryRun bool) error {
+	mode := p.Mode
+	if mode == "" {
+		mode = "replace"
 	}
 
-	return applySetSection(*p, root, recordMap)
+	if !dryRun {
+		if err := applySetSection(*p, root, nil, PolicyRejectAbsolute); err != nil {
+			return err
+		}
+	}
+
+	// Recorded in both modes: an applied section write used to be invisible in
+	// the result even though dry-run previewed it.
+	for _, path := range p.Paths {
+		result.Changed = append(result.Changed,
+			fmt.Sprintf("%s section %s in %s", mode, p.Heading, path))
+	}
+	return nil
 }
 
 // applyRepairCorrectLink applies a CorrectLink proposal.
-func applyRepairCorrectLink(p *proposal.Proposal, root string, result *RepairResult, dryRun bool) error {
+func applyRepairCorrectLink(p *proposal.Proposal, targets map[string]*repairTarget, result *RepairResult, dryRun bool) error {
 	for _, path := range p.Paths {
-		absPath := filepath.Join(root, path)
-
 		if dryRun {
 			result.Changed = append(result.Changed,
 				fmt.Sprintf("correct link: %s -> %s in %s", p.From, p.To, path))
 			continue
 		}
 
+		tgt, ok := targets[path]
+		if !ok {
+			continue
+		}
+
 		// Read file, replace link, write back.
-		content, err := os.ReadFile(absPath)
+		content, err := os.ReadFile(tgt.abs)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
@@ -314,7 +396,7 @@ func applyRepairCorrectLink(p *proposal.Proposal, root string, result *RepairRes
 			newContent = replaceOnce(newContent, p.From, p.To)
 		}
 
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // repair intentionally rewrites proposal-selected paths under the caller-provided root
+		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 
