@@ -3,6 +3,7 @@ package fix
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/proposal"
@@ -295,4 +296,147 @@ func contains(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// --- path containment (issue #69) ---
+
+// escapeFixture returns a scan root and a sibling file one level above it, so a
+// "../outside.md" proposal path names a real file that must stay untouched.
+func escapeFixture(t *testing.T) (root, outside string) {
+	t.Helper()
+
+	base := t.TempDir()
+	root = filepath.Join(base, "scan")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	outside = filepath.Join(base, "outside.md")
+	body := "---\nestado: Pending\n---\n# Outside\n\n## Status\n\nuntouched\n"
+	if err := os.WriteFile(outside, []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	return root, outside
+}
+
+func TestApplyRepair_RejectsEscapingPath(t *testing.T) {
+	root, outside := escapeFixture(t)
+	before, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ApplyRepair([]proposal.Proposal{{
+		Type:        proposal.CorrectValue,
+		Field:       "estado",
+		Description: "correct estado",
+		Paths:       []string{"../outside.md"},
+		From:        "Pending",
+		To:          "Completed",
+	}}, false, root)
+	if err != nil {
+		t.Fatalf("ApplyRepair failed: %v", err)
+	}
+
+	if len(result.Rejected) != 1 {
+		t.Fatalf("Rejected = %v, want exactly one containment violation", result.Rejected)
+	}
+	if len(result.Changed) != 0 {
+		t.Errorf("Changed = %v, want empty", result.Changed)
+	}
+	// The escaping path must never be opened, so it cannot produce a read error.
+	if len(result.Errors) != 0 {
+		t.Errorf("Errors = %v, want empty", result.Errors)
+	}
+
+	after, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Error("file outside the root was modified")
+	}
+}
+
+func TestApplyRepair_RejectsAbsolutePath(t *testing.T) {
+	root, outside := escapeFixture(t)
+
+	result, err := ApplyRepair([]proposal.Proposal{{
+		Type:        proposal.AddField,
+		Field:       "tampered",
+		Description: "add tampered field",
+		Paths:       []string{outside},
+		Value:       "true",
+	}}, false, root)
+	if err != nil {
+		t.Fatalf("ApplyRepair failed: %v", err)
+	}
+
+	if len(result.Rejected) != 1 {
+		t.Fatalf("Rejected = %v, want exactly one containment violation", result.Rejected)
+	}
+	if len(result.Errors) != 0 {
+		t.Errorf("Errors = %v, want empty (a policy refusal is not an I/O error)", result.Errors)
+	}
+}
+
+func TestApplySetSection_ContainmentPolicy(t *testing.T) {
+	// applySetSection is reached from both repair apply and fix --all, so it
+	// carries its own guard rather than trusting the caller.
+	t.Run("rejects escaping path", func(t *testing.T) {
+		root, outside := escapeFixture(t)
+		before, err := os.ReadFile(outside)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		p := proposal.Proposal{
+			Type:    proposal.SetSection,
+			Heading: "## Status",
+			Value:   "injected",
+			Mode:    "replace",
+			Paths:   []string{"../outside.md"},
+		}
+		if err := applySetSection(p, root, nil, PolicyRejectAbsolute); err == nil {
+			t.Fatal("expected a containment error")
+		}
+
+		after, err := os.ReadFile(outside)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(before) != string(after) {
+			t.Error("file outside the root was modified")
+		}
+	})
+
+	// The fix --all path supplies scan-derived relative paths; the check must
+	// pass them through so that pipeline keeps behaving exactly as before.
+	t.Run("passes through a contained relative path", func(t *testing.T) {
+		root, _ := escapeFixture(t)
+		target := filepath.Join(root, "task.md")
+		if err := os.WriteFile(target, []byte("# Task\n\n## Status\n\noriginal\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		p := proposal.Proposal{
+			Type:    proposal.SetSection,
+			Heading: "## Status",
+			Value:   "rewritten",
+			Mode:    "replace",
+			Paths:   []string{"task.md"},
+		}
+		if err := applySetSection(p, root, nil, PolicyAcceptAbsolute); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		content, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := "rewritten"; !strings.Contains(string(content), want) {
+			t.Errorf("task.md does not contain %q:\n%s", want, content)
+		}
+	})
 }
