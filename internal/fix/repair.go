@@ -6,21 +6,39 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/proposal"
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
+// RolledBackFile records a file that was written and then restored because it
+// failed post-validation, together with the errors that triggered the restore.
+type RolledBackFile struct {
+	Path   string   `json:"path"`
+	Errors []string `json:"errors"`
+}
+
 // RepairResult represents the outcome of a repair operation.
 type RepairResult struct {
-	Version  int      `json:"version"`
-	Kind     string   `json:"kind"`
-	DryRun   bool     `json:"dry_run"`
-	Changed  []string `json:"changed"`
-	Skipped  []string `json:"skipped"`
-	Rejected []string `json:"rejected"` // schema proposals and containment violations
-	Errors   []string `json:"errors"`
+	Version int      `json:"version"`
+	Kind    string   `json:"kind"`
+	DryRun  bool     `json:"dry_run"`
+	Changed []string `json:"changed"`
+	// RolledBack lists files whose write was reverted after post-validation
+	// rejected the result. A caller cannot infer this from Changed and Errors
+	// alone, so the two outcomes are reported separately.
+	RolledBack []RolledBackFile `json:"rolled_back,omitempty"`
+	Skipped    []string         `json:"skipped"`
+	Rejected   []string         `json:"rejected"` // schema proposals and containment violations
+	Errors     []string         `json:"errors"`
+
+	// changedPaths runs parallel to Changed and names the file each entry
+	// describes, so a rollback can retract exactly its own entries without
+	// pattern-matching the human-readable message. Unexported: internal
+	// bookkeeping, not part of the JSON contract.
+	changedPaths []string
 
 	// ResolvedTargets is populated in dry-run only, where the caller cannot
 	// inspect the outcome on disk and needs to see where each write would land.
@@ -41,14 +59,34 @@ type ResolvedTargetsBreakdown struct {
 type repairTarget struct {
 	abs    string
 	record *extract.Record
+	// original holds the bytes read before any write, so a failed
+	// post-validation can restore them. They are captured during the read pass
+	// that already loads every file, so tracking them costs no extra I/O.
+	original []byte
+	// written records whether a handler actually wrote this target. Files that
+	// were only read must not be post-validated: reporting a pre-existing
+	// validation failure as a rollback would be a false accusation.
+	written bool
 }
 
 // ApplyRepair applies repair proposals (data-only corrections) to the filesystem.
 // It accepts only proposals with Surface() == SurfaceRepair and silently rejects
 // SurfaceSchema, SurfaceBootstrap, and SurfaceMigration proposals.
 // Modifies Markdown frontmatter only — never touches .stem files.
-// Supports dryRun for preview mode. Post-validates modified files and rolls
-// back if validation fails.
+// Supports dryRun for preview mode.
+//
+// Every file it writes is post-validated on its own and restored to its
+// pre-write bytes when validation rejects the result, so a run never leaves a
+// document in a state its own schema refuses. The check is per file by
+// construction: an error against one path — including a path that could not be
+// read at all — has no bearing on whether any other file is validated.
+// Reverted files are reported in RolledBack and withdrawn from Changed.
+//
+// This covers every handler that writes through a repairTarget. set_section is
+// the one exception: it resolves its own paths inside applySetSection and holds
+// no target, so its writes carry no captured original and are not post-validated
+// here. Stated rather than glossed over, because a doc comment promising a
+// rollback that does not happen is the defect this function was fixing.
 //
 // Reports are untrusted input, so every path they name is checked against root
 // before the filesystem is touched at all. Paths that escape are recorded in
@@ -101,7 +139,7 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*Repa
 			continue
 		}
 
-		targets[path] = &repairTarget{abs: absPath, record: record}
+		targets[path] = &repairTarget{abs: absPath, record: record, original: content}
 	}
 
 	// Third pass: classify and apply proposals.
@@ -161,32 +199,112 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*Repa
 		}
 	}
 
-	// Fourth pass: post-validate and rollback on failure.
-	if !dryRun && len(result.Errors) == 0 {
-		for path, tgt := range targets {
-			// Re-resolve effective stem.
-			dir := filepath.Dir(tgt.abs)
-			effective, _ := rules.ResolveForRecord(dir, tgt.abs)
-
-			// Validate.
-			ctx := context.Background()
-			errs := rules.Validate(ctx, tgt.record, effective)
-			if len(errs) > 0 {
-				// Validation failed — rollback.
-				// Note: Since we've modified rec in-memory and written to file,
-				// we cannot easily rollback without tracking originals.
-				// For now, document the validation failure.
-				var msgs []string
-				for _, e := range errs {
-					msgs = append(msgs, fmt.Sprintf("%s: %s", e.Field, e.Message))
-				}
-				result.Errors = append(result.Errors,
-					fmt.Sprintf("post-validation failed for %s: %s", path, msgs))
-			}
-		}
+	// Fourth pass: post-validate every written file and roll back the failures.
+	//
+	// The gate is per file and deliberately does NOT consult result.Errors.
+	// Gating the whole pass on a clean error list meant one unrelated read
+	// failure disabled post-validation for every other file in the run.
+	if !dryRun {
+		postValidateWrittenTargets(targets, result)
 	}
 
 	return result, nil
+}
+
+// postValidateWrittenTargets re-validates each written file and restores its
+// original bytes when validation rejects the result, so repair apply never
+// leaves a document in a state its own schema refuses.
+func postValidateWrittenTargets(targets map[string]*repairTarget, result *RepairResult) {
+	ctx := context.Background()
+
+	// Iterate in path order: map ranging is randomized and the result slices
+	// are user-visible output.
+	paths := make([]string, 0, len(targets))
+	for path := range targets {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+
+	for _, path := range paths {
+		tgt := targets[path]
+		if !tgt.written {
+			continue
+		}
+
+		msgs := validateWrittenTarget(ctx, tgt)
+		if len(msgs) == 0 {
+			continue
+		}
+
+		if err := os.WriteFile(tgt.abs, tgt.original, 0644); err != nil { //nolint:gosec // restoring the bytes previously read from this validated path
+			// The mutation stands and could not be undone. That is strictly
+			// worse than a rollback, so it is reported as an error rather than
+			// as a successful revert.
+			result.Errors = append(result.Errors,
+				fmt.Sprintf("post-validation failed for %s and rollback failed: %v", path, err))
+			continue
+		}
+
+		result.RolledBack = append(result.RolledBack, RolledBackFile{Path: path, Errors: msgs})
+		result.retractChanges(path)
+	}
+}
+
+// validateWrittenTarget re-reads the file from disk and validates it, returning
+// the formatted validation errors. Reading back rather than validating the
+// in-memory record is what makes this a real check: it also catches a write
+// that serialized to something other than the record it came from.
+func validateWrittenTarget(ctx context.Context, tgt *repairTarget) []string {
+	content, err := os.ReadFile(tgt.abs)
+	if err != nil {
+		return []string{fmt.Sprintf("re-reading after write: %v", err)}
+	}
+
+	reg := extract.NewRegistry()
+	ext := reg.ForFile(tgt.abs, "")
+	if ext == nil {
+		return nil
+	}
+	record, err := ext.Extract(tgt.record.Path, content)
+	if err != nil {
+		return []string{fmt.Sprintf("re-extracting after write: %v", err)}
+	}
+
+	effective, err := rules.ResolveForRecord(filepath.Dir(tgt.abs), tgt.abs)
+	if err != nil {
+		return nil
+	}
+
+	var msgs []string
+	for _, e := range rules.Validate(ctx, record, effective) {
+		msgs = append(msgs, fmt.Sprintf("%s: %s", e.Field, e.Message))
+	}
+	return msgs
+}
+
+// retractChanges drops the Changed entries belonging to path. A file that was
+// reverted was not changed, and leaving it listed would tell the caller a
+// mutation landed when the opposite is true.
+func (r *RepairResult) retractChanges(path string) {
+	kept := make([]string, 0, len(r.Changed))
+	keptPaths := make([]string, 0, len(r.changedPaths))
+	for i, entry := range r.Changed {
+		if i < len(r.changedPaths) && r.changedPaths[i] == path {
+			continue
+		}
+		kept = append(kept, entry)
+		if i < len(r.changedPaths) {
+			keptPaths = append(keptPaths, r.changedPaths[i])
+		}
+	}
+	r.Changed = kept
+	r.changedPaths = keptPaths
+}
+
+// recordChange appends a Changed entry together with the path it describes.
+func (r *RepairResult) recordChange(path, msg string) {
+	r.Changed = append(r.Changed, msg)
+	r.changedPaths = append(r.changedPaths, path)
 }
 
 // containProposalPaths validates every distinct path named by the proposals and
@@ -257,8 +375,9 @@ func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTar
 		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
+		tgt.written = true
 
-		result.Changed = append(result.Changed,
+		result.recordChange(path,
 			fmt.Sprintf("correct %s: %q->%q in %s", p.Field, p.From, p.To, path))
 	}
 	return nil
@@ -295,8 +414,9 @@ func applyRepairAddField(p *proposal.Proposal, targets map[string]*repairTarget,
 		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
+		tgt.written = true
 
-		result.Changed = append(result.Changed,
+		result.recordChange(path,
 			fmt.Sprintf("add %s=%q in %s", p.Field, value, path))
 	}
 	return nil
@@ -328,8 +448,9 @@ func applyRepairSetField(p *proposal.Proposal, targets map[string]*repairTarget,
 		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
+		tgt.written = true
 
-		result.Changed = append(result.Changed,
+		result.recordChange(path,
 			fmt.Sprintf("set %s=%q in %s", p.Field, p.Value, path))
 	}
 	return nil
@@ -388,8 +509,9 @@ func applyRepairCorrectLink(p *proposal.Proposal, targets map[string]*repairTarg
 		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
+		tgt.written = true
 
-		result.Changed = append(result.Changed,
+		result.recordChange(path,
 			fmt.Sprintf("correct link: %s -> %s in %s", p.From, p.To, path))
 	}
 	return nil

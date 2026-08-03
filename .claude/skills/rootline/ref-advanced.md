@@ -142,6 +142,18 @@ rootline repair apply --report repairs.json --dry-run
 rootline repair apply --report repairs.json
 ```
 
+`repair apply` post-validates each file it writes, on its own, and restores the
+pre-write bytes when validation rejects the result. Reverted files come back in
+`rolled_back` (`{path, errors}`) and are withdrawn from `changed`, so a document is
+never left in a state its own schema refuses. An unrelated failure elsewhere in the
+run — including a path that could not be read — does not disable the check for the
+rest.
+
+Frontmatter is rewritten through a `yaml.Node` round-trip, so key order and YAML
+comments survive and a one-field change produces a one-field diff. Inter-token
+whitespace and nested indentation are normalized by the encoder — do not expect a
+byte-identical block for untouched fields.
+
 **Legacy mixed apply** (preserved for backward compatibility):
 ```bash
 rootline apply report.json
