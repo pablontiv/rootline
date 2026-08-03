@@ -2,8 +2,14 @@ package rules
 
 import (
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -773,4 +779,124 @@ scope:
 	if !strings.Contains(found.Message, "root: true") || !strings.Contains(found.Message, "do not inherit") {
 		t.Errorf("message = %q, want to contain 'root: true' and 'do not inherit'", found.Message)
 	}
+}
+
+// TestStemHealthDocumentationDrift asserts that the stem-health check names
+// documented in docs/validate.md match the Name: literals emitted by
+// ValidateStemHealth in stemhealth.go.
+//
+// The code is the authoritative source: names are extracted from stemhealth.go
+// with the Go AST rather than a regex so the test survives formatting changes,
+// and without exporting a names list from production code.
+//
+// Documentation format contract (docs/validate.md): the section starts on a
+// line containing "**Stem Health**", each check is a list item whose first
+// backtick-wrapped token is the check name, and the section ends at the next
+// numbered list item.
+func TestStemHealthDocumentationDrift(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed; cannot locate test file")
+	}
+	testDir := filepath.Dir(thisFile)
+
+	codeNames := stemHealthNamesFromSource(t, filepath.Join(testDir, "stemhealth.go"))
+	if len(codeNames) == 0 {
+		t.Fatal("no check names extracted from stemhealth.go; AST parsing may have failed")
+	}
+
+	repoRoot := filepath.Dir(filepath.Dir(testDir))
+	docNames := stemHealthNamesFromDoc(t, filepath.Join(repoRoot, "docs", "validate.md"))
+
+	for name := range codeNames {
+		if !docNames[name] {
+			t.Errorf("check %q exists in stemhealth.go but is not documented in docs/validate.md", name)
+		}
+	}
+	for name := range docNames {
+		if !codeNames[name] {
+			t.Errorf("check %q is documented in docs/validate.md but does not exist in stemhealth.go", name)
+		}
+	}
+	if len(codeNames) != len(docNames) {
+		t.Errorf("check count mismatch: stemhealth.go has %d, docs/validate.md lists %d", len(codeNames), len(docNames))
+	}
+}
+
+// stemHealthNamesFromSource returns the distinct Name: string literals assigned
+// inside composite literals in the given Go source file.
+func stemHealthNamesFromSource(t *testing.T, path string) map[string]bool {
+	t.Helper()
+
+	fset := token.NewFileSet()
+	astFile, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", path, err)
+	}
+
+	names := make(map[string]bool)
+	ast.Inspect(astFile, func(node ast.Node) bool {
+		lit, ok := node.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+		for _, elt := range lit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			key, ok := kv.Key.(*ast.Ident)
+			if !ok || key.Name != "Name" {
+				continue
+			}
+			val, ok := kv.Value.(*ast.BasicLit)
+			if !ok || val.Kind != token.STRING {
+				continue
+			}
+			name, err := strconv.Unquote(val.Value)
+			if err != nil {
+				t.Fatalf("unquoting %s: %v", val.Value, err)
+			}
+			names[name] = true
+		}
+		return true
+	})
+	return names
+}
+
+// stemHealthNamesFromDoc returns the check names listed in the Stem Health
+// section of the given markdown file.
+func stemHealthNamesFromDoc(t *testing.T, path string) map[string]bool {
+	t.Helper()
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+
+	itemRe := regexp.MustCompile("^\\s*-\\s+`([^`]+)`")
+	nextItemRe := regexp.MustCompile(`^\s*\d+\.\s`)
+
+	names := make(map[string]bool)
+	inSection := false
+	for _, line := range strings.Split(string(content), "\n") {
+		if strings.Contains(line, "**Stem Health**") {
+			inSection = true
+			continue
+		}
+		if !inSection {
+			continue
+		}
+		if nextItemRe.MatchString(line) {
+			break
+		}
+		if m := itemRe.FindStringSubmatch(line); m != nil {
+			names[m[1]] = true
+		}
+	}
+
+	if len(names) == 0 {
+		t.Fatalf("no check names parsed from %s; the Stem Health section format may have changed", path)
+	}
+	return names
 }

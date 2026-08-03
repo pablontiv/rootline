@@ -106,12 +106,12 @@ Most commands output JSON by default. Use `--output table` for human-readable ta
 Rootline discovers schemas by **walking up** your directory tree:
 
 1. Start at the target path (file or directory)
-2. Collect `.stem` files at each level, moving up toward the filesystem root or a `root: true` marker
+2. Collect `.stem` files at each level, moving up until a `.stem` declares `root: true` — the governance boundary — or, if none does, until the filesystem root
 3. Merge collected schemas from root to leaf (parent → child)
 
 Each level can add new fields, override parent definitions, or remove inherited rules (with `null`). Type-driven merge rules ensure predictable inheritance (maps merge key-level; arrays and scalars replace entirely).
 
-A `.stem` file with `root: true` marks the governance boundary; walk-up discovery stops there. Without an explicit marker, discovery continues to the filesystem root. **Git is optional** — Rootline works in any directory, with or without Git.
+A `.stem` file with `root: true` marks the governance boundary; walk-up discovery stops there. The marker is required, not optional: if the walk reaches the filesystem root without finding one, the chain may have collected `.stem` files from outside your project, so the boundary preflight refuses to run governed commands. On a terminal it offers to add `root: true` for you; in a pipeline or CI it is a hard error, and the fix is to add the marker to the `.stem` at the top of your project. **Git is optional** — Rootline works in any directory, with or without Git, and never uses `.git` as a boundary.
 
 ### The `.stem` File
 

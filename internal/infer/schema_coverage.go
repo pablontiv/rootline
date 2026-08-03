@@ -40,12 +40,16 @@ func DetectMissingSchemata(scanRoot string) []Inference {
 			continue
 		}
 
+		// The err != nil arm carries this branch: WalkUp reports ErrNoSchemaFound
+		// when the walk finds nothing, and any IO or parse failure as its own
+		// error. The len(entries) == 0 disjunct is therefore unreachable today;
+		// it stays as a guard rather than a load-bearing condition.
 		entries, err := rules.WalkUp(dir)
 		if err != nil || len(entries) == 0 {
 			inferences = append(inferences, Inference{
 				Type:    "missing_schema",
 				Source:  dir,
-				Message: fmt.Sprintf("Directory contains %d markdown file(s) but no .stem schema (checked walk-up to .git root)", mdCount),
+				Message: fmt.Sprintf("Directory contains %d markdown file(s) but no .stem schema was found by walking upward from this directory. Add a .stem file here or above it.", mdCount),
 			})
 			continue
 		}
