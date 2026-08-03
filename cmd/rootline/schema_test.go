@@ -929,3 +929,220 @@ func TestSchemaApply_TargetContainment(t *testing.T) {
 		}
 	})
 }
+
+// --- Slice A Tests: Force Flag, Rejected Field, Unrecognized Operations ---
+
+// TestSchemaApplyForceFlag tests that --force flag gates overwrite of existing .stem files.
+// RED: test that:
+// 1. force flag is recognized
+// 2. without force: existing .stem is refused
+// 3. with force: existing .stem is overwritten
+func TestSchemaApplyForceFlag(t *testing.T) {
+	t.Run("ForceFlagIsRecognized", func(t *testing.T) {
+		// Use setupValidateProject to create proper project structure
+		root := setupValidateProject(t, map[string]string{
+			"doc1.md": "---\ntitle: Test\nauthor: Someone\n---\nContent",
+		})
+
+		// Create existing .stem
+		existingStem := "version: 2\nschema:\n  old_field:\n    type: string\n"
+		stemPath := filepath.Join(root, ".stem")
+		if err := os.WriteFile(stemPath, []byte(existingStem), 0o644); err != nil {
+			t.Fatalf("writing existing .stem: %v", err)
+		}
+
+		// Create proposals report targeting the existing .stem
+		report := SchemaProposalsReport{
+			Version: 1,
+			Kind:    "rootline/schema-proposals",
+			Path:    root,
+			Proposals: []SchemaProposal{
+				{
+					ID:            "test-force",
+					Operation:     "create_stem",
+					Target:        stemPath,
+					RequiresAgent: false,
+					PatchPreview:  "version: 2\nschema:\n  new_field:\n    type: string\n",
+				},
+			},
+		}
+		reportData, _ := json.Marshal(report)
+		reportFile := filepath.Join(root, "report.json")
+		if err := os.WriteFile(reportFile, reportData, 0o644); err != nil {
+			t.Fatalf("writing report: %v", err)
+		}
+
+		// Test 1: Without --force, existing .stem should be rejected
+		out, err := executeSchemaApply(t, "--report", reportFile)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		result := decodeSchemaApplyResult(t, out)
+		if len(result.Rejected) == 0 {
+			t.Error("expected rejected[]to contain entry for overwrite attempt without --force, got empty")
+		}
+		if len(result.Applied) > 0 {
+			t.Error("expected applied[] to be empty when overwrite is refused")
+		}
+
+		// Verify .stem was not modified
+		stillExisting := string(mustReadFile(t, stemPath))
+		if stillExisting != existingStem {
+			t.Error(".stem was modified despite --force not being passed")
+		}
+
+		// Test 2: With --force, existing .stem should be overwritten
+		out2, err := executeSchemaApply(t, "--report", reportFile, "--force")
+		if err != nil {
+			t.Fatalf("unexpected error with --force: %v", err)
+		}
+		result2 := decodeSchemaApplyResult(t, out2)
+		if len(result2.Applied) == 0 {
+			t.Error("expected applied[] to contain entry when --force is passed")
+		}
+		if len(result2.Rejected) > 0 {
+			t.Errorf("expected no rejections with --force, got: %v", result2.Rejected)
+		}
+	})
+
+}
+
+// TestSchemaApplyUnrecognizedOperation tests that unknown operations are rejected.
+func TestSchemaApplyUnrecognizedOperation(t *testing.T) {
+	root := t.TempDir()
+
+	// Create proposals report with unknown operation
+	report := SchemaProposalsReport{
+		Version: 1,
+		Kind:    "rootline/schema-proposals",
+		Path:    root,
+		Proposals: []SchemaProposal{
+			{
+				ID:            "unknown-op-1",
+				Operation:     "update_stem", // This is not a valid proposal-path operation
+				Target:        filepath.Join(root, ".stem"),
+				RequiresAgent: false,
+			},
+		},
+	}
+	reportData, _ := json.Marshal(report)
+	reportFile := filepath.Join(root, "report.json")
+	if err := os.WriteFile(reportFile, reportData, 0o644); err != nil {
+		t.Fatalf("writing report: %v", err)
+	}
+
+	out, err := executeSchemaApply(t, "--report", reportFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result := decodeSchemaApplyResult(t, out)
+
+	// Verify unknown operation is in rejected[], not errors[] or applied[]
+	if len(result.Rejected) == 0 {
+		t.Error("expected rejected[] to contain unknown operation, got empty")
+	}
+	if len(result.Applied) > 0 {
+		t.Error("expected applied[] to be empty for unknown operation")
+	}
+
+	// Check that the rejection message names the operation
+	found := false
+	for _, msg := range result.Rejected {
+		if strings.Contains(msg, "update_stem") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("rejection message should mention 'update_stem', got: %v", result.Rejected)
+	}
+}
+
+// TestSchemaApplyDryRunDistinction asserts that a dry run names the action it
+// would take. Reporting "create_stem" for a target that already exists is the
+// exact blind spot issue #59 describes: the caller approves a create and gets a
+// replacement.
+func TestSchemaApplyDryRunDistinction(t *testing.T) {
+	writeReport := func(t *testing.T, root, name, target string) string {
+		t.Helper()
+		report := SchemaProposalsReport{
+			Version: 1,
+			Kind:    "rootline/schema-proposals",
+			Path:    filepath.Dir(target),
+			Proposals: []SchemaProposal{{
+				ID:        name,
+				Operation: "create_stem",
+				Target:    target,
+			}},
+		}
+		data, err := json.Marshal(report)
+		if err != nil {
+			t.Fatalf("marshaling report: %v", err)
+		}
+		path := filepath.Join(root, name+".json")
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			t.Fatalf("writing report: %v", err)
+		}
+		return path
+	}
+
+	t.Run("absent target reports create", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			"docs/doc1.md": "---\ntitle: Test\n---\nContent",
+		})
+		target := filepath.Join(root, "docs", ".stem")
+		out, err := executeSchemaApply(t, "--report", writeReport(t, root, "create", target), "--dry-run")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		result := decodeSchemaApplyResult(t, out)
+		if len(result.Applied) != 1 {
+			t.Fatalf("applied = %v, want exactly one entry", result.Applied)
+		}
+		if !strings.HasPrefix(result.Applied[0], "create_stem: ") {
+			t.Errorf("applied[0] = %q, want a create_stem action", result.Applied[0])
+		}
+		if len(result.Rejected) != 0 {
+			t.Errorf("rejected = %v, want empty for a fresh target", result.Rejected)
+		}
+	})
+
+	t.Run("existing target without force is rejected, not applied", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			"docs/doc1.md": "---\ntitle: Test\n---\nContent",
+			"docs/.stem":   "version: 2\nschema:\n  old:\n    type: string\n",
+		})
+		target := filepath.Join(root, "docs", ".stem")
+		out, err := executeSchemaApply(t, "--report", writeReport(t, root, "reject", target), "--dry-run")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		result := decodeSchemaApplyResult(t, out)
+		if len(result.Applied) != 0 {
+			t.Errorf("applied = %v, want empty when the target exists and --force is absent", result.Applied)
+		}
+		if len(result.Rejected) != 1 || !strings.Contains(result.Rejected[0], "use --force to overwrite") {
+			t.Errorf("rejected = %v, want the already-exists refusal", result.Rejected)
+		}
+	})
+
+	t.Run("existing target with force reports overwrite, not create", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			"docs/doc1.md": "---\ntitle: Test\n---\nContent",
+			"docs/.stem":   "version: 2\nschema:\n  old:\n    type: string\n",
+		})
+		target := filepath.Join(root, "docs", ".stem")
+		out, err := executeSchemaApply(t, "--report", writeReport(t, root, "force", target), "--dry-run", "--force")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		result := decodeSchemaApplyResult(t, out)
+		if len(result.Applied) != 1 {
+			t.Fatalf("applied = %v, want exactly one entry", result.Applied)
+		}
+		if !strings.HasPrefix(result.Applied[0], "overwrite_stem: ") {
+			t.Errorf("applied[0] = %q, want an overwrite_stem action so the caller can tell a replacement from a create", result.Applied[0])
+		}
+	})
+}

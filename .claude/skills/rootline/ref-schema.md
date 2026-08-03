@@ -149,14 +149,15 @@ Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new comman
 
 ### schema apply
 
-`rootline schema apply --report <proposals.json> [--dry-run]` applies schema proposals to `.stem` files:
+`rootline schema apply --report <proposals.json> [--dry-run] [--force]` applies schema proposals to `.stem` files:
 - Input kind must be `"rootline/schema-proposals"`, version must be 1 (else structured error)
 - Skips proposals with `requires_agent: true`
-- `create_stem` operation: calls `ScaffoldSchema` to create the target `.stem` file
-- `update_stem` operation: calls `ApplySchemaInferences` on the target `.stem` file
+- `create_stem` operation: creates the target `.stem` file with the proposed schema
+- Unknown operations: rejected with message in `rejected[]` (policy refusal, not error)
+- **Flag: `--force`** — Overwrites existing `.stem` files when applying `create_stem` proposals. Without `--force`, proposals targeting existing files are rejected (policy refusal).
 - `--dry-run`: no files written; reports what would be done
 - Post-apply: runs `rootline validate --all` and includes results in output
-- Emits JSON: version 1, kind `"rootline/schema-apply"` with applied/skipped/errors/validation_summary
+- Emits JSON: version 1, kind `"rootline/schema-apply"` with applied/skipped/rejected/errors/validation_summary
 
 **Path containment.** Each `create_stem` target is validated with
 `fix.ContainPath(scanRoot, target, fix.PolicyAcceptAbsolute)` before `ScaffoldSchema` runs, and
@@ -167,8 +168,8 @@ Two deliberate differences from `repair apply`:
   emits absolute `.stem` targets, so the propose→apply contract needs them to keep working.
   `repair apply` uses `PolicyRejectAbsolute` because its report paths are root-relative by
   construction.
-- **Refusals go to `errors[]`, not `rejected[]`.** `schema apply` has no `rejected[]`, so a
-  target outside the root is a validation failure rather than a semantic rejection.
+- **Policy refusals go to `rejected[]`** (overwrite without `--force`, unknown operations).
+  Containment violations go to `errors[]` (operational failures).
 
 `--dry-run` adds the same additive `resolved_targets: {accepted, rejected}` envelope that
 `repair apply` emits (`fix.ResolvedTargetsBreakdown`); omitted otherwise, contract stays

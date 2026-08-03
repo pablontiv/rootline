@@ -12,9 +12,10 @@ import (
 
 // ApplyResult tracks what was modified during an apply operation.
 type ApplyResult struct {
-	Applied []string `json:"applied"`
-	Skipped []string `json:"skipped"`
-	DryRun  bool     `json:"dry_run,omitempty"`
+	Applied  []string `json:"applied"`
+	Skipped  []string `json:"skipped"`
+	Rejected []string `json:"rejected,omitempty"`
+	DryRun   bool     `json:"dry_run,omitempty"`
 }
 
 // ApplySchemaInferences applies schema-modifying inferences to a .stem file.
@@ -94,6 +95,10 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 				result.Applied = append(result.Applied, fmt.Sprintf("sequence: %s completed", inf.Field))
 				modified = true
 			}
+
+		default:
+			// Drift guard: this fires only if schema.go's routing filter admits a type this switch doesn't handle (wiring bug).
+			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: unknown inference type", inf.Type))
 		}
 	}
 

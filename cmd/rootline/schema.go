@@ -53,6 +53,7 @@ type SchemaApplyResult struct {
 	Kind              string             `json:"kind"`
 	Applied           []string           `json:"applied"`
 	Skipped           []string           `json:"skipped"`
+	Rejected          []string           `json:"rejected,omitempty"`
 	DryRun            bool               `json:"dry_run,omitempty"`
 	Errors            []string           `json:"errors,omitempty"`
 	ValidationSummary *ValidationSummary `json:"validation_summary,omitempty"`
@@ -88,6 +89,7 @@ Use --incremental to only show proposals not already covered by existing .stem f
 var (
 	schemaApplyReport string
 	schemaApplyDryRun bool
+	schemaApplyForce  bool
 )
 
 var schemaApplyCmd = &cobra.Command{
@@ -107,6 +109,7 @@ func init() {
 	schemaApplyCmd.Flags().StringVar(&schemaApplyReport, "report", "", "path to schema proposals report JSON file (required)")
 	_ = schemaApplyCmd.MarkFlagRequired("report")
 	schemaApplyCmd.Flags().BoolVar(&schemaApplyDryRun, "dry-run", false, "show changes without applying them")
+	schemaApplyCmd.Flags().BoolVar(&schemaApplyForce, "force", false, "overwrite existing .stem files")
 	schemaCmd.AddCommand(schemaApplyCmd)
 
 	rootCmd.AddCommand(schemaCmd)
@@ -244,12 +247,13 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	result := &SchemaApplyResult{
-		Version: 1,
-		Kind:    "rootline/schema-apply",
-		DryRun:  schemaApplyDryRun,
-		Applied: []string{},
-		Skipped: []string{},
-		Errors:  []string{},
+		Version:  1,
+		Kind:     "rootline/schema-apply",
+		DryRun:   schemaApplyDryRun,
+		Applied:  []string{},
+		Skipped:  []string{},
+		Rejected: []string{},
+		Errors:   []string{},
 	}
 
 	// Resolve absolute path from report.
@@ -290,12 +294,32 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 			}
 			resolved.Accepted[proposal.Target] = target
 
-			// Create a new .stem file at target.
+			// Overwrite guard: replacing a governed .stem discards root, scope,
+			// enum values, required markers, derive and aggregate in one write,
+			// so it is a policy refusal unless the caller opted in with --force.
+			_, statErr := os.Stat(target)
+			targetExists := statErr == nil
+			if targetExists && !schemaApplyForce {
+				result.Rejected = append(result.Rejected,
+					fmt.Sprintf(".stem already exists in %s (use --force to overwrite)", filepath.Dir(target)))
+				continue
+			}
+
+			// Name the action after what it actually does. A dry run is the only
+			// chance the caller has to notice that "create" means "replace".
+			action := "create_stem"
+			if targetExists {
+				action = "overwrite_stem"
+			}
+
 			if err := infer.ScaffoldSchema(filepath.Dir(target), schemaApplyDryRun); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("scaffold %s: %v", proposal.Target, err))
 			} else {
-				result.Applied = append(result.Applied, fmt.Sprintf("create_stem: %s", target))
+				result.Applied = append(result.Applied, fmt.Sprintf("%s: %s", action, target))
 			}
+		} else {
+			// Unknown operation: reject with descriptive message
+			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: unknown operation \"%s\"", proposal.ID, proposal.Operation))
 		}
 	}
 
@@ -360,6 +384,7 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	// Separate schema-modifying inferences from data-correction inferences.
 	// Schema-modifying: enum_values, required_field, constant_field, field_type, untyped_field, sequence_incomplete
 	// Data-correction: migrate_value, correct_value, add_field (these go to repair apply, not here)
+	// Routing filter: emits only schema-modifying types. Drift guard in apply.go:default catches divergence.
 	var schemaInferences []infer.ReportInference
 	for _, cat := range report.Categories {
 		for _, inf := range cat.Inferences {
@@ -378,12 +403,13 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 
 	// Format result as SchemaApplyResult
 	result := &SchemaApplyResult{
-		Version: 1,
-		Kind:    "rootline/schema-apply",
-		DryRun:  schemaApplyDryRun,
-		Applied: schemaResult.Applied,
-		Skipped: schemaResult.Skipped,
-		Errors:  []string{},
+		Version:  1,
+		Kind:     "rootline/schema-apply",
+		DryRun:   schemaApplyDryRun,
+		Applied:  schemaResult.Applied,
+		Skipped:  schemaResult.Skipped,
+		Rejected: schemaResult.Rejected,
+		Errors:   []string{},
 	}
 
 	// If not dry-run, run validation.
@@ -607,6 +633,13 @@ func renderSchemaApplyTable(cmd *cobra.Command, result *SchemaApplyResult) error
 		}
 	}
 
+	if len(result.Rejected) > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Rejected (policy):")
+		for _, r := range result.Rejected {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", r)
+		}
+	}
+
 	if len(result.Errors) > 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Errors:")
 		for _, e := range result.Errors {
@@ -622,7 +655,7 @@ func renderSchemaApplyTable(cmd *cobra.Command, result *SchemaApplyResult) error
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Total errors: %d\n", result.ValidationSummary.TotalErrors)
 	}
 
-	if len(result.Applied) == 0 && len(result.Skipped) == 0 && len(result.Errors) == 0 {
+	if len(result.Applied) == 0 && len(result.Skipped) == 0 && len(result.Rejected) == 0 && len(result.Errors) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No modifications to apply.")
 	}
 
