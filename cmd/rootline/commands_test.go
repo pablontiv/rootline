@@ -91,6 +91,7 @@ func resetFlags() {
 	migrateRename = ""
 	migrateSplit = false
 	migrateScaffold = false
+	migrateForce = false
 	analyzeIncremental = false
 	analyzeThreshold = 0.60
 	setDryRun = false
@@ -148,6 +149,10 @@ func resetFlags() {
 		f.Changed = false
 	}
 	if f := migrateCmd.Flags().Lookup("dry-run"); f != nil {
+		_ = f.Value.Set("false")
+		f.Changed = false
+	}
+	if f := migrateCmd.Flags().Lookup("force"); f != nil {
 		_ = f.Value.Set("false")
 		f.Changed = false
 	}

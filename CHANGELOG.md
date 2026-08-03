@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 - Root marker support: `.stem` files can now declare `root: true` to establish a schema discovery boundary
 - Stem-health check for nested root markers (`nested-root-marker` info-level diagnostic)
 - Interactive migration prompt: when running on a terminal, rootline prompts to add the root marker to existing projects
+- `migrate --split --force` — overwrite existing child `.stem` files (see the matching **BREAKING** entry below)
 
 ### Changed
 
@@ -25,9 +26,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 - Schema discovery is now stable: resolution depends only on the target path and filesystem `.stem` files, never on the process working directory.
 - `set` command no longer requires a `.git` directory to function.
 - `rootline init` now emits `root: true` in generated `.stem` files, marking new projects as their own boundaries.
+- **BREAKING**: `migrate --split` now refuses to overwrite existing child `.stem` files. It stats every child target before writing anything and fails with `<path> already exists (use --force to overwrite)`, leaving all files untouched. Invocations that previously succeeded by silently clobbering child stems must now pass `--force`. The root `.stem` at the target is the input being rewritten in place and is never guarded. `--dry-run` annotates each target that would be overwritten.
 
 ### Fixed
 
+- `migrate --split` emitted child `.stem` files without a version key, so every child parsed as version 0 and the loader rejected it with `stem version 0 is no longer supported`. Child stems now carry `version: 2`.
+- `migrate --split` dropped `root: true` from the regenerated root `.stem`, leaving the project with no declared boundary: walk-up escaped into ancestor `.stem` files and `validate --all` failed with `Schema discovery reached the filesystem root without finding a declared boundary`. The marker is now preserved when present (and not invented when absent).
 - False-green validation: `validate --all` on a directory outside any schema now correctly exits with an error instead of succeeding with zero validated records.
 - Schema discovery boundary violations: walking up the filesystem no longer accidentally collects `.stem` files from outside the project (e.g., from home directory).
 - Working directory dependence: schema resolution is now stable regardless of where commands are invoked from.

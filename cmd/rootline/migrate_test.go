@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -720,5 +721,103 @@ func TestMigrateSplit_PreservesExistingAggregate(t *testing.T) {
 	}
 	if !strings.Contains(rootStr, `estado:`) || !strings.Contains(rootStr, `Completed`) {
 		t.Errorf("expected original aggregate expression preserved, got:\n%s", rootStr)
+	}
+}
+
+// sentinelStem is written to a child target before invoking --split so tests can
+// prove byte-for-byte that no partial write happened.
+const sentinelStem = "version: 2\nschema:\n  test_marker:\n    type: string\n"
+
+func writeSentinelChildStem(t *testing.T, dir string) string {
+	t.Helper()
+	path := filepath.Join(dir, "E01-infra", ".stem")
+	mustWriteFile(t, path, []byte(sentinelStem), 0644)
+	return path
+}
+
+func TestRunMigrateSplit_PreFlightGuardCollisionsRefused(t *testing.T) {
+	dir := setupSplitDir(t)
+	sentinel := writeSentinelChildStem(t, dir)
+
+	out, err := runCmd(t, "migrate", dir, "--split")
+	if err == nil {
+		t.Fatalf("expected collision error, got success\noutput: %s", out)
+	}
+	if !strings.Contains(err.Error(), "already exist") ||
+		!strings.Contains(err.Error(), "use --force to overwrite") {
+		t.Errorf("expected collision message, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), filepath.Join("E01-infra", ".stem")) {
+		t.Errorf("expected colliding child path in message, got: %v", err)
+	}
+
+	// Zero partial writes: the sentinel must be byte-identical.
+	got, readErr := os.ReadFile(sentinel)
+	if readErr != nil {
+		t.Fatalf("reading sentinel: %v", readErr)
+	}
+	if string(got) != sentinelStem {
+		t.Errorf("sentinel child .stem was modified:\n%s", got)
+	}
+
+	// No other child .stem may have been created either.
+	if _, statErr := os.Stat(filepath.Join(dir, "E02-platform", ".stem")); statErr == nil {
+		t.Error("expected no child .stem written when the guard refuses")
+	}
+}
+
+func TestRunMigrateSplit_PreFlightGuardForceBypass(t *testing.T) {
+	dir := setupSplitDir(t)
+	sentinel := writeSentinelChildStem(t, dir)
+
+	out, err := runCmd(t, "migrate", dir, "--split", "--force")
+	if err != nil {
+		t.Fatalf("unexpected error with --force: %v\noutput: %s", err, out)
+	}
+
+	got, readErr := os.ReadFile(sentinel)
+	if readErr != nil {
+		t.Fatalf("reading child .stem: %v", readErr)
+	}
+	if string(got) == sentinelStem {
+		t.Error("expected child .stem to be overwritten with --force")
+	}
+	if !strings.Contains(string(got), "prefix: F") {
+		t.Errorf("expected regenerated child .stem, got:\n%s", got)
+	}
+}
+
+func TestRunMigrateSplit_DryRunAnnotatesCollisions(t *testing.T) {
+	dir := setupSplitDir(t)
+	sentinel := writeSentinelChildStem(t, dir)
+
+	out, err := runCmd(t, "migrate", dir, "--split", "--dry-run")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+	}
+
+	header := fmt.Sprintf("# --- %s ---\n# (existing file will be overwritten)\n", filepath.Join("E01-infra", ".stem"))
+	if !strings.Contains(out, header) {
+		t.Errorf("expected collision annotation directly after the header, got:\n%s", out)
+	}
+	// The root .stem is the input being rewritten; it is never a collision.
+	if strings.Contains(out, "# --- .stem ---\n# (existing file will be overwritten)") {
+		t.Errorf("root .stem must not be annotated as a collision, got:\n%s", out)
+	}
+	// A non-colliding child gets no annotation.
+	if strings.Contains(out, fmt.Sprintf("# --- %s ---\n# (existing file will be overwritten)", filepath.Join("E02-platform", ".stem"))) {
+		t.Errorf("non-colliding child must not be annotated, got:\n%s", out)
+	}
+
+	// Dry-run writes nothing.
+	got, readErr := os.ReadFile(sentinel)
+	if readErr != nil {
+		t.Fatalf("reading sentinel: %v", readErr)
+	}
+	if string(got) != sentinelStem {
+		t.Errorf("dry-run modified the sentinel:\n%s", got)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "E02-platform", ".stem")); statErr == nil {
+		t.Error("expected no child .stem written in dry-run mode")
 	}
 }
