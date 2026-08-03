@@ -230,6 +230,7 @@ func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.Sc
 // buildSplitChildYAML generates a child .stem with level-specific overrides.
 func buildSplitChildYAML(ls *infer.LevelSchema, extraFields map[string]rules.SchemaField) string {
 	var b strings.Builder
+	b.WriteString("version: 2\n")
 	b.WriteString("schema:\n")
 
 	// Sequence id.

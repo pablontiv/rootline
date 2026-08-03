@@ -340,5 +340,62 @@ func TestBuildSplitStems_NoScopeOmitted(t *testing.T) {
 	}
 }
 
+func TestBuildSplitStems_ChildVersionEmitted(t *testing.T) {
+	existing := &rules.StemFile{
+		Version: 2,
+		Scope:   rules.Scope{Match: "*.md"},
+		Schema: map[string]rules.SchemaField{
+			"id":     {Type: "sequence", Prefix: "E", Digits: 2},
+			"estado": {Type: "enum", Values: []string{"Pending", "Done"}, Required: true},
+			"tipo":   {Type: "enum", Values: []string{"feature", "historia"}},
+		},
+	}
+
+	hierarchy := makeHierarchy(
+		map[string]rules.SchemaField{
+			"estado": {Type: "enum", Values: []string{"Pending", "Done"}, Required: true},
+		},
+		[]infer.LevelSchema{
+			{
+				Level: infer.Level{
+					Prefix: "E", Digits: 2, Depth: 0,
+					DirPaths: []string{"E01-infra"},
+				},
+				OnlyHere: map[string]rules.SchemaField{
+					"id": {Type: "sequence", Prefix: "E", Digits: 2},
+				},
+			},
+			{
+				Level: infer.Level{
+					Prefix: "F", Digits: 2, Depth: 1,
+					DirPaths: []string{"E01-infra/F01-net"},
+				},
+				OnlyHere: map[string]rules.SchemaField{
+					"id":   {Type: "sequence", Prefix: "F", Digits: 2},
+					"tipo": {Type: "enum", Values: []string{"feature", "historia"}},
+				},
+			},
+		},
+	)
+
+	result := BuildSplitStems("/proj", existing, hierarchy)
+	if len(result.Stems) < 2 {
+		t.Fatalf("expected root plus at least one child stem, got %d", len(result.Stems))
+	}
+
+	for _, sf := range result.Stems {
+		parsed, err := rules.ParseStem(sf.Path, []byte(sf.Content))
+		if err != nil {
+			t.Fatalf("ParseStem(%s) failed: %v\ncontent:\n%s", sf.Path, err, sf.Content)
+		}
+		if parsed.Version != 2 {
+			t.Errorf("%s: expected Version 2, got %d\ncontent:\n%s", sf.Path, parsed.Version, sf.Content)
+		}
+		if !strings.HasPrefix(sf.Content, "version: 2\n") {
+			t.Errorf("%s: expected version on first line, got:\n%s", sf.Path, sf.Content)
+		}
+	}
+}
+
 // Ensure the extract.Record import is used (needed for infer.InferredSchema).
 var _ = (*extract.Record)(nil)
