@@ -239,7 +239,7 @@ func runSet(cmd *cobra.Command, args []string) error {
 	}
 
 	recordMap := []*extract.Record{record}
-	if err := fix.ApplyProposals(ctx, report, invocationRoot, recordMap); err != nil {
+	if _, err := fix.ApplyProposals(ctx, report, invocationRoot, recordMap, false); err != nil {
 		return fmt.Errorf("applying changes: %w", err)
 	}
 

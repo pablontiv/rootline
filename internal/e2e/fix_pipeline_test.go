@@ -196,8 +196,13 @@ func TestFixPipeline_AddField(t *testing.T) {
 		t.Errorf("add_field value = %q, want Pending", p.Value)
 	}
 
-	// Apply fix.
-	if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
+	// The .stem declares estado without a default:, so the proposal's value is
+	// engine-chosen. This pipeline test is about the apply mechanic, so it opts
+	// in; the no-fabrication default is covered in internal/fix.
+	if p.ValueSource != proposal.ValueSourceEnumFirst {
+		t.Errorf("value_source = %q, want %q", p.ValueSource, proposal.ValueSourceEnumFirst)
+	}
+	if _, err := fix.ApplyProposals(ctx, report, root, records, true); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 
@@ -226,7 +231,7 @@ func TestFixPipeline_CorrectValue(t *testing.T) {
 		t.Errorf("correct_value: %q -> %q, want Completo -> Completed", p.From, p.To)
 	}
 
-	if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
+	if _, err := fix.ApplyProposals(ctx, report, root, records, false); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 
@@ -254,7 +259,7 @@ func TestFixPipeline_MigrateValue(t *testing.T) {
 		t.Errorf("migrate to = %q, want Pending", p.To)
 	}
 
-	if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
+	if _, err := fix.ApplyProposals(ctx, report, root, records, false); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 
@@ -282,7 +287,7 @@ func TestFixPipeline_ExtractBody(t *testing.T) {
 		t.Errorf("extract_body to = %q, want Completed", p.To)
 	}
 
-	if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
+	if _, err := fix.ApplyProposals(ctx, report, root, records, false); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 
@@ -311,7 +316,7 @@ func TestFixPipeline_CorrectLink(t *testing.T) {
 		t.Errorf("correct_link to = %q, want to contain T001-full-name", p.To)
 	}
 
-	if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
+	if _, err := fix.ApplyProposals(ctx, report, root, records, false); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 
@@ -341,7 +346,7 @@ func TestFixPipeline_InferFromSiblings(t *testing.T) {
 		t.Errorf("infer value = %q, want a", p.Value)
 	}
 
-	if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
+	if _, err := fix.ApplyProposals(ctx, report, root, records, false); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 
@@ -374,7 +379,7 @@ func TestFixPipeline_CorrectOutlier(t *testing.T) {
 		t.Errorf("outlier: %q -> %q, want b -> a", p.From, p.To)
 	}
 
-	if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
+	if _, err := fix.ApplyProposals(ctx, report, root, records, false); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 
@@ -442,7 +447,7 @@ func TestFixPipeline_PropagateSingleLevel(t *testing.T) {
 	}
 
 	// Step 2: apply fix.
-	if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
+	if _, err := fix.ApplyProposals(ctx, report, root, records, false); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 
@@ -495,7 +500,7 @@ func TestFixPipeline_PropagateDeepHierarchy(t *testing.T) {
 			break // no more stale values
 		}
 
-		if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
+		if _, err := fix.ApplyProposals(ctx, report, root, records, false); err != nil {
 			t.Fatalf("apply pass %d: %v", pass, err)
 		}
 	}

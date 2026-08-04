@@ -30,7 +30,7 @@ estado: Pending
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -65,7 +65,7 @@ estado: Pending
 		},
 	}
 
-	result, err := ApplyRepair(proposals, true, tmpDir)
+	result, err := ApplyRepair(proposals, true, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -106,7 +106,7 @@ Some content.
 		},
 	}
 
-	if _, err := ApplyRepair(proposals, false, tmpDir); err != nil {
+	if _, err := ApplyRepair(proposals, false, tmpDir, false); err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
 
@@ -138,7 +138,7 @@ estado: Pending
 		},
 	}
 
-	result, err := ApplyRepair(proposals, true, tmpDir)
+	result, err := ApplyRepair(proposals, true, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -177,7 +177,7 @@ See [[oldname]] for details.
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestApplyRepair_CorrectLink_DryRun(t *testing.T) {
 		},
 	}
 
-	result, err := ApplyRepair(proposals, true, tmpDir)
+	result, err := ApplyRepair(proposals, true, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestApplyRepair_UnknownTypeRejected(t *testing.T) {
 		},
 	}
 
-	result, err := ApplyRepair(proposals, true, tmpDir)
+	result, err := ApplyRepair(proposals, true, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}

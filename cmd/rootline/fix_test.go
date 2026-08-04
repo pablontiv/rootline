@@ -18,18 +18,39 @@ func TestFixMissingRequired(t *testing.T) {
 	target := filepath.Join(dir, "missing.md")
 	mustWriteFile(t, target, []byte("---\ntipo: test\n---\n# Missing\n"), 0644)
 
+	// The fixture declares estado as a required enum with NO default:, so its
+	// value can only be guessed. Issue #60: guessing destroys the missing-data
+	// signal, so fix must report the gap and leave the document alone.
 	out, err := runCmd(t, "fix", target)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "added") {
-		t.Errorf("expected 'added' in output, got: %s", out)
+	if !strings.Contains(out, "skipped") {
+		t.Errorf("expected the skip reported, got: %s", out)
 	}
 
-	// Verify file was updated
+	content := mustReadFile(t, target)
+	if strings.Contains(string(content), "estado:") {
+		t.Errorf("expected no invented value written, got: %s", string(content))
+	}
+}
+
+func TestFixMissingRequired_FillMissingOptIn(t *testing.T) {
+	dir := setupTestDir(t)
+	target := filepath.Join(dir, "missing.md")
+	mustWriteFile(t, target, []byte("---\ntipo: test\n---\n# Missing\n"), 0644)
+
+	out, err := runCmd(t, "fix", "--fill-missing", target)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "added") {
+		t.Errorf("expected 'added' under --fill-missing, got: %s", out)
+	}
+
 	content := mustReadFile(t, target)
 	if !strings.Contains(string(content), "estado:") {
-		t.Errorf("expected estado field added to file, got: %s", string(content))
+		t.Errorf("expected the engine-chosen value written under opt-in, got: %s", string(content))
 	}
 }
 
@@ -62,8 +83,8 @@ func TestFixDryRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "would add") {
-		t.Errorf("expected 'would add' in dry-run output, got: %s", out)
+	if !strings.Contains(out, "skipped") {
+		t.Errorf("expected the skip reported in dry-run output, got: %s", out)
 	}
 
 	// Verify file was NOT modified
@@ -136,17 +157,65 @@ func TestFixAllJSON(t *testing.T) {
 	if batch.Kind != "rootline/fix-batch" {
 		t.Errorf("expected kind rootline/fix-batch, got %s", batch.Kind)
 	}
-	if batch.Summary.Fixed == 0 {
-		t.Error("expected at least 1 fixed file")
-	}
 	if batch.Summary.Total == 0 {
 		t.Error("expected total > 0")
 	}
 
-	// Verify file was actually updated
+	// estado has no declared default, so fix --all must not invent one.
+	content := mustReadFile(t, filepath.Join(dir, "broken.md"))
+	if strings.Contains(string(content), "estado:") {
+		t.Errorf("expected no invented value written, got: %s", string(content))
+	}
+}
+
+func TestFixAllJSON_ReportsSkippedProposals(t *testing.T) {
+	// The unfilled field must be explainable from the output alone.
+	dir := setupTestDir(t)
+	mustWriteFile(t, filepath.Join(dir, "broken.md"), []byte("---\ntipo: test\n---\n# Broken\n"), 0644)
+	mustChdir(t, dir)
+
+	out, err := runCmd(t, "fix", "--all", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var batch BatchFixResult
+	if err := json.Unmarshal([]byte(out), &batch); err != nil {
+		t.Fatalf("invalid JSON output: %v\nraw: %s", err, out)
+	}
+	if len(batch.SkippedProposals) == 0 {
+		t.Fatalf("expected the declined proposal reported in JSON, got: %s", out)
+	}
+	sp := batch.SkippedProposals[0]
+	if sp.Field != "estado" {
+		t.Errorf("expected the skipped field named, got %q", sp.Field)
+	}
+	if sp.ValueSource != "enum_first" {
+		t.Errorf("expected provenance in the output, got %q", sp.ValueSource)
+	}
+}
+
+func TestFixAllJSON_FillMissingOptIn(t *testing.T) {
+	dir := setupTestDir(t)
+	mustWriteFile(t, filepath.Join(dir, "broken.md"), []byte("---\ntipo: test\n---\n# Broken\n"), 0644)
+	mustChdir(t, dir)
+
+	out, err := runCmd(t, "fix", "--all", "--fill-missing", "--output", "json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var batch BatchFixResult
+	if err := json.Unmarshal([]byte(out), &batch); err != nil {
+		t.Fatalf("invalid JSON output: %v\nraw: %s", err, out)
+	}
+	if batch.Summary.Fixed == 0 {
+		t.Error("expected at least 1 fixed file under --fill-missing")
+	}
+
 	content := mustReadFile(t, filepath.Join(dir, "broken.md"))
 	if !strings.Contains(string(content), "estado:") {
-		t.Errorf("expected estado field added to file, got: %s", string(content))
+		t.Errorf("expected the engine-chosen value written under opt-in, got: %s", string(content))
 	}
 }
 
@@ -396,7 +465,9 @@ func TestFixAllApplyMissingField(t *testing.T) {
 	mustWriteFile(t, filepath.Join(dir, "missing.md"), []byte("---\ntipo: test\n---\n# Missing estado\n"), 0644)
 	mustChdir(t, dir)
 
-	out, err := runCmd(t, "fix", "--all", "--output", "json")
+	// The subject here is the add_field apply mechanic, not the default
+	// no-fabrication policy (covered by TestFixAllJSON), so opt in explicitly.
+	out, err := runCmd(t, "fix", "--all", "--fill-missing", "--output", "json")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -969,7 +1040,9 @@ func TestFixAllDataRepairsApplied(t *testing.T) {
 
 	mustChdir(t, dir)
 
-	out, err := runCmd(t, "fix", "--all", "--output", "json")
+	// Exercises both repair kinds together; add_field needs the opt-in because
+	// the fixture declares estado without a default:.
+	out, err := runCmd(t, "fix", "--all", "--fill-missing", "--output", "json")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
