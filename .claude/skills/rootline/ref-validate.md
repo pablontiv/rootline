@@ -76,6 +76,49 @@ Each issue includes `rule`, `field`, `message`, `source`, `severity`, and option
 
 Link-check rules (emitted when the effective `.stem` sets `links.checks`): `link_resolve` (target missing, case-sensitive; carries fuzzy `suggestion`; wikilinks infer `.md` so `[[b]]` matches `b.md` and `[[sub/README]]` matches `sub/README.md`, while markdown targets resolve literally; root-anchored `/x.md` resolves against the scan root, or the governance boundary for single-file `validate`; resolution is clamped to that root, so a target escaping it via `..` or via a symlink pointing outside the tree never resolves, while a symlink staying inside still does), `link_anchor` (`#anchor` matches no heading slug in the target), `link_encoding` (raw space in target; use `%20`). These are not auto-fixable by `fix` — repair the link or the target file manually. `checks.cycles: true` additionally makes `graph --check` fail on link cycles; without it cycles are printed as informational and only broken links set the exit code (override per-run with `--fail-cycles`).
 
+### Body-Sourced Field Validation
+
+Schema fields with `source:` directives (body-extracted fields) now participate in validation. The `required` and `enum` constraints apply to values extracted from the document body:
+
+**Extraction directives**:
+- `source: body.h1` — extracts the text of the first H1 heading (e.g., `# My Document` → `"My Document"`)
+- `source: body.section["## Heading"]` — extracts content under the named section (e.g., `## Notes` with content below it)
+
+**Precedence**: Frontmatter takes absolute precedence. If a field key exists in the record's YAML frontmatter, that value is used and body extraction is skipped.
+
+**Constraint application**:
+- `required: true` with `source:` — fails if extraction yields empty or missing section
+- `enum: [values...]` with `source:` — validates extracted value against the allowed list
+- Both are checked in Phase 1 auto-checks; no dependency on the derive pipeline
+
+**This can turn a passing document into a failing one.** Before, a body-sourced field
+resolved to nothing, so its `enum` never ran. Now the extracted text is checked. A `.stem`
+pairing `values:` with `source: body.section[...]` over free-form prose will start reporting
+`enum` errors on documents that validated cleanly before. Either drop `values:` from the
+field, widen the list, or set `severity: off` on it.
+
+**Example**:
+
+```yaml
+# .stem
+schema:
+  notes:
+    type: string
+    required: true
+    source: body.section["## Notes"]
+  status:
+    type: enum
+    values: [approved, pending, rejected]
+    source: body.section["## Status"]
+```
+
+In validation:
+- Document with `## Notes` section + content → passes `required`
+- Document without section → fails `required`
+- Document with `## Status` containing "approved" → passes `enum`
+- Document with "invalid" in that section → fails `enum`
+- Document with frontmatter `notes: "value"` and no body section → passes (frontmatter wins)
+
 ### Reporting Format
 
 Use this exact shape in responses:
