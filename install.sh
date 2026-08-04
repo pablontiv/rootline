@@ -50,11 +50,47 @@ resolve_install_dir() {
 
 get_latest_version() {
     log "Fetching latest version..."
-    VERSION="$(fetch "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/')"
+    RELEASE_URL="$(fetch_latest_release_url 2>/dev/null || true)"
+    VERSION="$(version_from_release_url "$RELEASE_URL" || true)"
+    if [ -z "$VERSION" ]; then
+        VERSION="$(fetch_latest_version_from_api || true)"
+    fi
     if [ -z "$VERSION" ]; then
         abort "Could not determine latest version. Check https://github.com/${REPO}/releases"
     fi
     log "Latest version: $VERSION"
+}
+
+fetch_latest_release_url() {
+    LATEST_URL="https://github.com/${REPO}/releases/latest"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSIL -o /dev/null -w '%{url_effective}\n' "$LATEST_URL"
+    elif command -v wget >/dev/null 2>&1; then
+        wget --server-response --spider "$LATEST_URL" 2>&1 |
+            awk 'tolower($1) == "location:" { location=$2 } END { sub(/\r$/, "", location); print location }'
+    else
+        return 1
+    fi
+}
+
+version_from_release_url() {
+    RELEASE_PREFIX="https://github.com/${REPO}/releases/tag/"
+    case "$1" in
+        "${RELEASE_PREFIX}"*)
+            RELEASE_VERSION="${1#"$RELEASE_PREFIX"}"
+            case "$RELEASE_VERSION" in
+                ""|*/*) return 1 ;;
+                *) printf '%s\n' "$RELEASE_VERSION" ;;
+            esac
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+fetch_latest_version_from_api() {
+    fetch "https://api.github.com/repos/${REPO}/releases/latest" |
+        grep '"tag_name"' |
+        sed -E 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/'
 }
 
 download_and_install() {
@@ -149,4 +185,6 @@ abort() {
     exit 1
 }
 
-main
+if [ "${ROOTLINE_INSTALLER_TESTING:-}" != "1" ]; then
+    main
+fi
