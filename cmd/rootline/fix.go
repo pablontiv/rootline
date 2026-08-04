@@ -211,6 +211,8 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	}
 
 	report := proposal.Analyze(records, effective, allErrs)
+	report.Path = scanRoot
+	report.Root = root
 	appendAggregateProposals(report, root, records, effective)
 	if !fixNoPropagate {
 		appendPropagateProposals(report, records, effective)

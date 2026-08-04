@@ -142,6 +142,14 @@ rootline repair apply --report repairs.json --dry-run
 rootline repair apply --report repairs.json
 ```
 
+**Report root (both apply commands).** The paths in a report resolve against the directory
+that was SCANNED, not the directory the report file sits in. `fix --all` and `schema propose`
+both record it (`path` + absolute `root`). One shared precedence chain: `--root <dir>` >
+report `root` > report `path` > the report file's own directory (the pre-`root` behaviour,
+kept so old reports still apply). The resolved root comes back in the output envelope as
+`root`, so a run that changed nothing tells you where it looked. This is why storing a report
+in `reports/` or an artifacts directory now works instead of silently doing nothing.
+
 **Exit status (both apply commands).** Non-zero exactly when `errors[]` or `rolled_back[]`
 is non-empty; `rejected[]` and `skipped[]` alone exit `0`. `rolled_back[]` is a separate
 condition — a successful revert leaves `errors[]` empty, so testing `errors[]` alone reads a
