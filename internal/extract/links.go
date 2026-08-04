@@ -13,7 +13,26 @@ type Link struct {
 	Source string `json:"source,omitempty"` // "body" or "frontmatter:<fieldname>"
 	Style  string `json:"style,omitempty"`  // StyleWikilink or StyleMarkdown
 	Anchor string `json:"anchor,omitempty"` // fragment part of markdown targets, without '#'
+
+	// Resolution records what the link resolver concluded about Target.
+	// Extraction never sets it; rules.PrepareLinks does. Consumers that
+	// report broken links read this instead of guessing from the node set,
+	// so every command agrees on which links are broken. Not serialized:
+	// it is pipeline state, not part of any command's JSON contract.
+	Resolution string `json:"-"`
 }
+
+// Link resolution states carried by Link.Resolution.
+//
+// LinkUnchecked is the zero value, meaning nothing has resolved this link yet;
+// consumers fall back to their own matching. Keeping it as the zero value lets
+// callers that build links in memory behave exactly as they did before
+// resolution existed.
+const (
+	LinkUnchecked  = ""
+	LinkResolved   = "resolved"
+	LinkUnresolved = "unresolved"
+)
 
 // Link styles produced by extraction.
 const (

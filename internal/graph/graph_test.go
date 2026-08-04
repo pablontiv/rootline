@@ -476,3 +476,26 @@ func TestSortedEdges_EmptyGraph(t *testing.T) {
 		t.Fatalf("SortedEdges() = %+v, want empty", got)
 	}
 }
+
+// A prepared link is authoritative. rules.PrepareLinks already applied the
+// basename fallback against the same record set, so Build must not re-run it
+// and must trust the recorded outcome: an unresolved target is broken even if
+// a same-named node exists, and a resolved one is not broken even though it
+// names no node. That second case is the crux of issue #62 — an existing but
+// ungoverned file resolved fine, and calling it broken is what made graph and
+// validate disagree, because the schema declares what is governed, not what
+// exists.
+func TestBuild_PreparedResolutionIsAuthoritative(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("dir/missing.md", nil),
+		makeRecord("a.md", []extract.Link{
+			{Target: "missing.md", Style: extract.StyleWikilink, Line: 1, Resolution: extract.LinkUnresolved},
+			{Target: "ungoverned.md", Style: extract.StyleMarkdown, Line: 2, Resolution: extract.LinkResolved},
+		}),
+	}
+	g := Build(context.Background(), records)
+	broken := g.BrokenLinks()
+	if len(broken) != 1 || broken[0].Target != "missing.md" {
+		t.Fatalf("broken = %+v, want only the unresolved target, left verbatim", broken)
+	}
+}

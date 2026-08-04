@@ -27,10 +27,16 @@ type Edge struct {
 	Type   string `json:"type"`
 	Line   int    `json:"line"`
 
-	// noFallback excludes the edge from basename fallback resolution.
-	// Markdown targets are path-resolved upstream; an unresolved one must
-	// stay verbatim so BrokenLinks reports it, matching validate.
-	noFallback bool
+	// resolution carries extract.Link.Resolution for this edge. When the
+	// links were prepared by rules.PrepareLinks it is authoritative and
+	// BrokenLinks trusts it instead of the node set; when it is the zero
+	// value nothing resolved this link and BrokenLinks falls back to node
+	// membership, which is how in-memory callers have always behaved.
+	resolution string
+
+	// markdown excludes the edge from the unchecked basename fallback: a
+	// markdown destination names a path literally, so it stays verbatim.
+	markdown bool
 }
 
 // BrokenLink represents a link whose target doesn't match any record.
@@ -43,8 +49,12 @@ type BrokenLink struct {
 }
 
 // Build constructs a Graph from a slice of records.
-// Link targets are resolved relative to the source record's directory.
-// Unresolved targets get a basename fallback lookup across all nodes.
+//
+// Targets are expected to be resolved already, by rules.PrepareLinks, which
+// rewrites them to root-relative node keys and records whether each resolved.
+// Build no longer does any resolution of its own beyond a directory join for
+// links nothing has looked at, so graph and validate cannot disagree about
+// which links are broken (issue #62).
 func Build(_ context.Context, records []*extract.Record) *Graph {
 	g := &Graph{
 		Nodes: make(map[string]*extract.Record, len(records)),
@@ -58,8 +68,9 @@ func Build(_ context.Context, records []*extract.Record) *Graph {
 	for _, rec := range records {
 		for _, link := range rec.Links {
 			target := link.Target
-			markdown := link.Style == extract.StyleMarkdown
-			if !markdown {
+			// An unprepared wikilink still gets the directory join it always
+			// had; a prepared one already carries its root-relative key.
+			if link.Resolution == extract.LinkUnchecked && link.Style != extract.StyleMarkdown {
 				target = resolveTarget(rec.Path, link.Target)
 			}
 			g.Edges[rec.Path] = append(g.Edges[rec.Path], Edge{
@@ -67,13 +78,15 @@ func Build(_ context.Context, records []*extract.Record) *Graph {
 				Target:     target,
 				Type:       link.Type,
 				Line:       link.Line,
-				noFallback: markdown,
+				resolution: link.Resolution,
+				markdown:   link.Style == extract.StyleMarkdown,
 			})
 		}
 	}
 
-	// Second pass: resolve unmatched targets by basename fallback.
-	g.resolveByBasename()
+	// Links nothing resolved keep the historical basename fallback, so callers
+	// that build a graph without preparing links behave exactly as before.
+	g.resolveUncheckedByBasename()
 
 	return g
 }
@@ -127,37 +140,6 @@ func compareEdges(a, b Edge) int {
 		return a.Line - b.Line
 	}
 	return strings.Compare(a.Type, b.Type)
-}
-
-// resolveByBasename rewrites edge targets that don't match any node
-// by searching for a unique basename match (with and without .md).
-func (g *Graph) resolveByBasename() {
-	// Build basename index: basename → list of full paths.
-	idx := make(map[string][]string, len(g.Nodes))
-	for path := range g.Nodes {
-		base := filepath.Base(path)
-		idx[base] = append(idx[base], path)
-		// Also index without .md extension.
-		noExt := strings.TrimSuffix(base, ".md")
-		if noExt != base {
-			idx[noExt] = append(idx[noExt], path)
-		}
-	}
-
-	for src, edges := range g.Edges {
-		for i, edge := range edges {
-			if edge.noFallback {
-				continue
-			}
-			if _, exists := g.Nodes[edge.Target]; exists {
-				continue // already resolved
-			}
-			// Try basename lookup.
-			if matches, ok := idx[edge.Target]; ok && len(matches) == 1 {
-				g.Edges[src][i].Target = matches[0]
-			}
-		}
-	}
 }
 
 // DetectCycles finds all cycles in the graph using DFS.
@@ -216,7 +198,14 @@ func (g *Graph) DetectCycles() [][]string {
 	return cycles
 }
 
-// BrokenLinks returns links whose targets don't match any record in the graph.
+// BrokenLinks returns links whose targets do not resolve.
+//
+// Brokenness comes from the resolver, not from node membership. A target that
+// exists on disk but is not a governed record resolved fine — the schema
+// declares what is governed, not what exists — so it is an edge to a non-node
+// rather than a broken link. Reporting it broken is what made graph and
+// validate disagree in issue #62. Edges nothing resolved keep the historical
+// node-membership check.
 func (g *Graph) BrokenLinks() []BrokenLink {
 	nodeNames := make([]string, 0, len(g.Nodes))
 	for name := range g.Nodes {
@@ -226,7 +215,7 @@ func (g *Graph) BrokenLinks() []BrokenLink {
 	var broken []BrokenLink
 	for _, edges := range g.Edges {
 		for _, edge := range edges {
-			if _, exists := g.Nodes[edge.Target]; !exists {
+			if edge.isBroken(g.Nodes) {
 				bl := BrokenLink{
 					Source: edge.Source,
 					Target: edge.Target,
@@ -368,4 +357,52 @@ func resolveTarget(sourcePath, target string) string {
 		return filepath.Clean(filepath.Join(dir, target))
 	}
 	return target
+}
+
+// resolveUncheckedByBasename rewrites unchecked edge targets that match no node
+// by searching for a unique basename match, with and without ".md".
+//
+// Prepared edges are excluded: rules.PrepareLinks already applied the same
+// fallback against the same record set, and re-running it here could rewrite a
+// target the resolver deliberately left alone.
+func (g *Graph) resolveUncheckedByBasename() {
+	idx := make(map[string][]string, len(g.Nodes))
+	for path := range g.Nodes {
+		base := filepath.Base(path)
+		idx[base] = append(idx[base], path)
+		if noExt := strings.TrimSuffix(base, ".md"); noExt != base {
+			idx[noExt] = append(idx[noExt], path)
+		}
+	}
+
+	for src, edges := range g.Edges {
+		for i, edge := range edges {
+			if edge.resolution != extract.LinkUnchecked || edge.markdown {
+				continue
+			}
+			if _, exists := g.Nodes[edge.Target]; exists {
+				continue
+			}
+			if matches, ok := idx[edge.Target]; ok && len(matches) == 1 {
+				g.Edges[src][i].Target = matches[0]
+			}
+		}
+	}
+}
+
+// isBroken reports whether an edge should be listed as a broken link.
+//
+// A prepared edge answers from its own resolution outcome. An unprepared one
+// (resolution is the zero value) falls back to node membership, preserving the
+// behavior every in-memory caller relied on before resolution existed.
+func (e Edge) isBroken(nodes map[string]*extract.Record) bool {
+	switch e.resolution {
+	case extract.LinkResolved:
+		return false
+	case extract.LinkUnresolved:
+		return true
+	default:
+		_, exists := nodes[e.Target]
+		return !exists
+	}
 }

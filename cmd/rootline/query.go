@@ -233,7 +233,7 @@ func scanForTraversal(ctx context.Context, absQueryRoot string) ([]*extract.Reco
 	// Mirror the `graph` command's link preparation so both commands see
 	// the same edge universe for the same root.
 	rules.FilterLinksByStyles(all, absGraphRoot)
-	rules.ResolveMarkdownTargets(all, absGraphRoot)
+	rules.PrepareLinks(all, absGraphRoot)
 
 	derive.DeriveAllSimple(ctx, all, absGraphRoot)
 	derive.EnrichBuiltinsSimple(ctx, all, absGraphRoot)

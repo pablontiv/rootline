@@ -111,7 +111,9 @@ links:
     cycles: true                # graph --check fails on link cycles (default: informational)
 ```
 
-**Validation**: Check failures surface in `validate` as rules `link_resolve` (with fuzzy suggestion), `link_anchor`, `link_encoding`. Absolute targets (`/...`), external schemes, images, and pure fragments are not checked.
+**Validation**: Check failures surface in `validate` as rules `link_resolve` (with fuzzy suggestion), `link_anchor`, `link_encoding`. External schemes, images, and pure fragments are not checked.
+
+**One resolver**: `validate`, `graph` and `query` traversal share one resolver, so they agree on which links are broken. Wikilinks infer `.md` (`[[b]]`→`b.md`, `[[sub/README]]`→`sub/README.md`), markdown targets resolve literally, `/x.md` resolves against the scan root, and a path-less target matches a uniquely-named record anywhere. A resolved target is never broken even when `scope.match`/`.stemignore` excludes it: the schema declares what is governed, not what exists.
 
 **Query link traversal**: `--has-inbound` and `--has-outbound` predicates search both wiki-link and markdown-link styles (governed by `.stem links.styles`). Combine with `--inbound-type` / `--outbound-type` to restrict to one link type.
 
