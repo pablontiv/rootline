@@ -27,6 +27,10 @@ func PrepareLinks(records []*extract.Record, root string) {
 	index := basenameIndex(records)
 	for _, rec := range records {
 		dir := filepath.Dir(filepath.Join(root, rec.Path))
+		fallback := false
+		if eff, err := ResolveForRecord(dir, rec.Path); err == nil && eff != nil {
+			fallback = eff.Links.BasenameFallback
+		}
 		for i, link := range rec.Links {
 			res := ResolveLinkTarget(ResolveRequest{
 				BaseDir: dir,
@@ -43,7 +47,7 @@ func PrepareLinks(records []*extract.Record, root string) {
 				rec.Links[i].Target = rel
 				continue
 			}
-			if match, ok := index.lookup(link.Target); ok {
+			if match, ok := index.lookup(link.Target); ok && fallback {
 				rec.Links[i].Resolution = extract.LinkResolved
 				rec.Links[i].Target = match
 				continue

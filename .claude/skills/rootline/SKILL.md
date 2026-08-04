@@ -109,9 +109,12 @@ links:
     anchors: true               # #anchor matches a heading slug in the target
     encoding: true              # no raw spaces in targets (use %20)
     cycles: true                # graph --check fails on link cycles (default: informational)
+  basename_fallback: false      # opt-in: bare target matches a uniquely-named record anywhere
 ```
 
 **Validation**: Check failures surface in `validate` as rules `link_resolve` (with fuzzy suggestion), `link_anchor`, `link_encoding`. External schemes, images, and pure fragments are not checked.
+
+**Basename fallback**: `links.basename_fallback` (default off) lets a path-less target match a uniquely-named record anywhere — the wiki convention. It needs a full-tree index, which `graph` and `query` traversal have and `validate` does not, so with it ON `validate` reports `link_unverifiable` (warning) instead of guessing or staying silent. Off is what makes every command agree.
 
 **One resolver**: `validate`, `graph` and `query` traversal share one resolver, so they agree on which links are broken. Wikilinks infer `.md` (`[[b]]`→`b.md`, `[[sub/README]]`→`sub/README.md`), markdown targets resolve literally, `/x.md` resolves against the scan root, and a path-less target matches a uniquely-named record anywhere. A resolved target is never broken even when `scope.match`/`.stemignore` excludes it: the schema declares what is governed, not what exists.
 

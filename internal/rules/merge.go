@@ -179,6 +179,12 @@ func mergeLinkSchema(parent, child LinkSchema) LinkSchema {
 
 	result := LinkSchema{}
 
+	// BasenameFallback: a child that opts in wins; otherwise inherit. It is a
+	// bool, so "not set" and "set false" are indistinguishable — a child
+	// cannot opt back out of a parent's fallback, matching how the other
+	// scalar link settings inherit.
+	result.BasenameFallback = parent.BasenameFallback || child.BasenameFallback
+
 	// Allowed: child replaces (array semantics).
 	if child.Allowed != nil {
 		result.Allowed = child.Allowed

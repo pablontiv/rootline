@@ -65,6 +65,22 @@ func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath, root str
 				Style:   linkStyle(link),
 			})
 			if !res.OK {
+				// Basename fallback matches a target against every record in
+				// the tree, and CheckLinks sees one record at a time. Calling
+				// the link broken would be wrong — graph may well resolve it —
+				// and staying silent would put the two commands back into
+				// disagreement, so say plainly that this one is undecidable
+				// here and name the command that can decide it.
+				if schema.BasenameFallback && schema.Checks.Resolve {
+					errs = append(errs, ValidationError{
+						Rule:     "link_unverifiable",
+						Field:    "links",
+						Message:  fmt.Sprintf("link target %q cannot be verified: links.basename_fallback matches against every record, which this command does not scan (check it with 'rootline graph --check')", link.Target),
+						Source:   "links.checks",
+						Severity: "warning",
+					})
+					continue
+				}
 				if schema.Checks.Resolve {
 					msg := fmt.Sprintf("link target %q does not resolve to an existing file (case-sensitive)", link.Target)
 					if res.Suggestion != "" {

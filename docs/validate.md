@@ -86,6 +86,33 @@ symlink that stays inside the root still resolves normally. Link targets are doc
 text, and resolution would otherwise report on — and with `anchors` enabled, read — files
 outside the tree being governed.
 
+### Basename fallback (`links.basename_fallback`)
+
+Off by default. Turning it on lets a target that names no path match a uniquely-named record
+anywhere in the tree — the wiki convention where `wiki/sources/witness.md` writes
+`[[supports:tool-a.md]]` for `wiki/entities/tool-a.md`:
+
+```yaml
+links:
+  basename_fallback: true
+```
+
+**This is the one place the commands intentionally differ, and it is a real trade.** Matching a
+bare name needs an index of every record. `graph` and `query` traversal scan the whole tree and
+have one; `validate` checks records one at a time and never does. So with the knob on, `validate`
+cannot decide such a link. It does not guess and it does not stay quiet — it reports
+`link_unverifiable` as a **warning** naming the command that can decide it:
+
+```console
+$ rootline validate wiki/sources/witness.md
+link target "tool-a.md" cannot be verified: links.basename_fallback matches against every
+record, which this command does not scan (check it with 'rootline graph --check')
+```
+
+Leaving the knob off is what makes every command answer identically. Turning it on is a
+deliberate choice to buy the wiki ergonomic at the cost of one check `validate` can no longer
+make — declared in the schema rather than discovered as a silent disagreement.
+
 Resolution asks the filesystem, not the record set. A target that exists on disk resolves even
 when `scope.match` or `.stemignore` excludes it from governance: the schema declares what is
 *governed*, not what *exists*.
