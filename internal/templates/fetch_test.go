@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pablontiv/rootline/internal/gitenv"
 )
 
 // runGit is a helper to run git commands in tests.
@@ -13,11 +15,24 @@ func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...) //nolint:gosec
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = append(gitenv.ClearedEnv(), "GIT_TERMINAL_PROMPT=0")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v failed: %v\n%s", args, err, out)
 	}
+}
+
+// runGitOutput runs git and returns the output as a string.
+// Uses isolated environment to avoid confounding effects.
+func runGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...) //nolint:gosec
+	cmd.Env = gitenv.ClearedEnv()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git -C %s %v failed: %v\n%s", dir, args, err, out)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // makeFixtureRepo creates a minimal git repo with the given .stem files.
@@ -520,5 +535,70 @@ func TestCopyFile_IOCopyError(t *testing.T) {
 	err := copyFile(src, dst)
 	if err == nil {
 		t.Fatal("expected error when dst is a directory")
+	}
+}
+
+// snapshotRepo captures the observable state of a repository: HEAD, commit count,
+// tracked files and working-tree status. Comparing a snapshot taken before and after
+// an operation proves whether that operation wrote into the repository.
+func snapshotRepo(t *testing.T, dir string) string {
+	t.Helper()
+	return strings.Join([]string{
+		"head=" + runGitOutput(t, dir, "rev-parse", "HEAD"),
+		"commits=" + runGitOutput(t, dir, "rev-list", "--count", "HEAD"),
+		"tracked=" + runGitOutput(t, dir, "ls-files"),
+		"status=" + runGitOutput(t, dir, "status", "--porcelain"),
+	}, "\n")
+}
+
+// TestFetchFromURL_HostileGitEnvironment proves the package ignores the caller's git
+// environment. It points every repo-scoping git variable at a throwaway repository the
+// test creates, runs the full fixture-build and clone path, and asserts both that the
+// fetch succeeds and that the throwaway repository is untouched.
+//
+// Regression test for issue #81: an inherited GIT_DIR made the nested `git clone` fail
+// and, worse, made the nested `git commit` land a real commit in the caller's repository.
+func TestFetchFromURL_HostileGitEnvironment(t *testing.T) {
+	// t.Setenv forbids t.Parallel, so this test runs sequentially.
+	throwaway := t.TempDir()
+	runGit(t, throwaway, "init")
+	runGit(t, throwaway, "config", "user.email", "throwaway@example.com")
+	runGit(t, throwaway, "config", "user.name", "Throwaway")
+	if err := os.WriteFile(filepath.Join(throwaway, "file.txt"), []byte("initial\n"), 0644); err != nil {
+		t.Fatalf("seeding throwaway repo: %v", err)
+	}
+	runGit(t, throwaway, "add", "file.txt")
+	runGit(t, throwaway, "commit", "-m", "initial")
+
+	before := snapshotRepo(t, throwaway)
+
+	// Hostile environment: every repo-scoping variable points at the throwaway repo,
+	// exactly as git exports them into hook processes.
+	t.Setenv("GIT_DIR", filepath.Join(throwaway, ".git"))
+	t.Setenv("GIT_WORK_TREE", throwaway)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(throwaway, ".git", "index"))
+	t.Setenv("GIT_OBJECT_DIRECTORY", filepath.Join(throwaway, ".git", "objects"))
+
+	stemContent := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"
+	fixture := makeFixtureRepo(t, map[string]string{".stem": stemContent})
+
+	dest := t.TempDir()
+	files, err := FetchFromURL("file://"+fixture, "", dest, false, false)
+	if err != nil {
+		t.Fatalf("FetchFromURL under a hostile git environment: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d: %v", len(files), files)
+	}
+	data, err := os.ReadFile(filepath.Join(dest, ".stem"))
+	if err != nil {
+		t.Fatalf("reading dest .stem: %v", err)
+	}
+	if string(data) != stemContent {
+		t.Fatalf("content mismatch:\ngot:  %q\nwant: %q", string(data), stemContent)
+	}
+
+	if after := snapshotRepo(t, throwaway); after != before {
+		t.Fatalf("the throwaway repository was written to.\nbefore:\n%s\n\nafter:\n%s", before, after)
 	}
 }

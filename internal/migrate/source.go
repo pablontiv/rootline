@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pablontiv/rootline/internal/gitenv"
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
@@ -46,6 +47,7 @@ func loadFromGit(stemPath string) (*rules.StemFile, error) {
 
 	// Use git show to read the HEAD version.
 	cmd := exec.Command("git", "-C", gitRoot, "show", "HEAD:"+relPath) //nolint:gosec // relPath is derived from filesystem paths, not user input
+	cmd.Env = gitenv.ClearedEnv()
 	out, err := cmd.Output()
 	if err != nil {
 		// File might not exist in HEAD (new .stem).
