@@ -349,3 +349,128 @@ func TestExtractBodySection(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveBodyValue(t *testing.T) {
+	const sectionBody = "# Title\n\n## Notes\n\nSection content\n\n## End\n\nAfter"
+
+	tests := []struct {
+		name      string
+		directive string
+		record    *Record
+		wantValue string
+		wantOK    bool
+	}{
+		{
+			// Precedence between frontmatter and an extracted value is the
+			// caller's job; ResolveBodyValue only ever reads the body.
+			name:      "frontmatter is never consulted",
+			directive: "body.h1",
+			record: &Record{
+				Frontmatter: map[string]any{"title": "Frontmatter Title"},
+				Body:        "# Body Title\n\nContent",
+			},
+			wantValue: "Body Title", wantOK: true,
+		},
+		{
+			// Sections is keyed "# My Title" and holds the CONTENT, but body.h1
+			// must return the heading TEXT, so the map cannot serve it.
+			name:      "h1 ignores the sections map and reads the body",
+			directive: "body.h1",
+			record: &Record{
+				Body:     "# My Title\n\nContent here",
+				Sections: map[string]string{"# My Title": "Content here"},
+			},
+			wantValue: "My Title", wantOK: true,
+		},
+		{
+			name:      "h1 resolves when sections is nil",
+			directive: "body.h1",
+			record:    &Record{Body: "# My Title\n\nContent here"},
+			wantValue: "My Title", wantOK: true,
+		},
+		{
+			name:      "h1 absent",
+			directive: "body.h1",
+			record:    &Record{Body: "No heading here\n\nJust content"},
+			wantOK:    false,
+		},
+		{
+			name:      "section resolves through the sections map",
+			directive: `body.section["## Notes"]`,
+			record: &Record{
+				Body:     sectionBody,
+				Sections: map[string]string{"## Notes": "Section content", "## End": "After"},
+			},
+			wantValue: "Section content", wantOK: true,
+		},
+		{
+			name:      "section falls back to the body when sections is nil",
+			directive: `body.section["## Notes"]`,
+			record:    &Record{Body: sectionBody},
+			wantValue: "Section content", wantOK: true,
+		},
+		{
+			name:      "section absent",
+			directive: `body.section["## Missing"]`,
+			record:    &Record{Body: "# Title\n\n## First\n\nContent"},
+			wantOK:    false,
+		},
+		{
+			name:      "section present but empty does not resolve",
+			directive: `body.section["## Notes"]`,
+			record: &Record{
+				Body:     "# Title\n\n## Notes\n\n## End\n\nContent",
+				Sections: map[string]string{"## Notes": "", "## End": "Content"},
+			},
+			wantOK: false,
+		},
+		{
+			name:      "unknown directive",
+			directive: "body.unknown",
+			record:    &Record{Body: "# Title\n\nContent"},
+			wantOK:    false,
+		},
+		{
+			name:      "malformed section directive",
+			directive: "body.section[oops]",
+			record:    &Record{Body: "# Title\n\n## Notes\n\nContent"},
+			wantOK:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			val, ok := ResolveBodyValue(tt.record, tt.directive)
+			if ok != tt.wantOK || val != tt.wantValue {
+				t.Errorf("ResolveBodyValue(%q) = %q, %v; want %q, %v",
+					tt.directive, val, ok, tt.wantValue, tt.wantOK)
+			}
+		})
+	}
+}
+
+// TestResolveBodyValue_H1IsDeterministic guards the reason body.h1 bypasses
+// record.Sections: recovering the heading text by ranging over that map
+// returned an arbitrary heading, because Go randomises map iteration order.
+// The first H1 in the body is the contract, on every run.
+func TestResolveBodyValue_H1IsDeterministic(t *testing.T) {
+	record := &Record{
+		Body: "# First Title\n\nContent\n\n# Second Title\n\nMore",
+		Sections: map[string]string{
+			"# First Title":  "Content",
+			"# Second Title": "More",
+		},
+	}
+	for i := range 50 {
+		val, ok := ResolveBodyValue(record, "body.h1")
+		if !ok || val != "First Title" {
+			t.Fatalf("iteration %d: got %q, %v; want 'First Title', true", i, val, ok)
+		}
+	}
+}
+
+func TestResolveBodyValue_NilRecord(t *testing.T) {
+	if val, ok := ResolveBodyValue(nil, "body.h1"); ok || val != "" {
+		t.Errorf("ResolveBodyValue(nil) = %q, %v; want '', false", val, ok)
+	}
+}

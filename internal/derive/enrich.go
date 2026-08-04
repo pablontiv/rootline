@@ -3,7 +3,6 @@ package derive
 import (
 	"context"
 	"path/filepath"
-	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -44,20 +43,7 @@ func EnrichBuiltins(ctx context.Context, records []*extract.Record, root string,
 					continue
 				}
 
-				var value string
-				if field.Extract == "body.h1" {
-					value = extract.ExtractBodyH1(rec.Body)
-				} else if strings.HasPrefix(field.Extract, "body.section[") {
-					// Parse body.section["## Heading"] format
-					start := strings.Index(field.Extract, "[\"")
-					end := strings.LastIndex(field.Extract, "\"]")
-					if start >= 0 && end > start {
-						heading := field.Extract[start+2 : end]
-						value = extract.ExtractBodySection(rec.Body, heading)
-					}
-				}
-
-				if value != "" {
+				if value, ok := extract.ResolveBodyValue(rec, field.Extract); ok {
 					rec.Derived[name] = value
 				}
 			}
