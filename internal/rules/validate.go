@@ -424,30 +424,52 @@ func IsIndexFile(path string, stem *StemFile) bool {
 }
 
 // ValidateStructure checks structural integrity rules that don't require a .stem file.
-// It validates that a file contains exactly one YAML document (not multiple).
-// Returns errors for violations, nil for valid single-document files.
+// It validates that the leading frontmatter block holds exactly one YAML document.
+//
+// Only that leading block is inspected. Thematic breaks and fenced code blocks in
+// the Markdown body are ordinary content and are never read as YAML document
+// separators. An unterminated leading block is left to the extractor, which
+// already reports it as a malformed-frontmatter error.
 func ValidateStructure(content []byte, path string) []ValidationError {
-	text := string(content)
+	text := strings.TrimPrefix(string(content), "\xef\xbb\xbf")
 
-	// Only applies to files that start with YAML frontmatter delimiter.
-	if !strings.HasPrefix(text, "---\n") && !strings.HasPrefix(text, "---\r\n") {
+	start, end, _, ok := extract.FrontmatterBounds(text)
+	if !ok {
 		return nil
 	}
 
-	// Count --- lines. Single doc: exactly 2 (opening + closing).
-	// Multi-doc: 3 or more (opening + closing + 1 or more intra-doc separators).
-	count := strings.Count(text, "\n---")
-	if count > 2 {
-		return []ValidationError{{
-			Rule:     "multiple_yaml_documents",
-			Field:    "_document",
-			Message:  fmt.Sprintf("file contains %d YAML documents; expected exactly 1", count-1),
-			Source:   path,
-			Severity: "error",
-		}}
+	count := countYAMLDocuments(text[start:end])
+	if count <= 1 {
+		return nil
 	}
 
-	return nil
+	return []ValidationError{{
+		Rule:     "multiple_yaml_documents",
+		Field:    "_document",
+		Message:  fmt.Sprintf("frontmatter contains %d YAML documents; expected exactly 1", count),
+		Source:   path,
+		Severity: "error",
+	}}
+}
+
+// countYAMLDocuments reports how many YAML documents a frontmatter region holds.
+// A document marker at column 0 ("---" or "...") starts another document only
+// when further non-blank content follows it; a region merely terminated by "..."
+// is still a single document.
+func countYAMLDocuments(region string) int {
+	count := 1
+	marked := false
+	for _, raw := range strings.Split(region, "\n") {
+		line := strings.TrimSuffix(raw, "\r")
+		switch {
+		case line == "---" || line == "...":
+			marked = true
+		case marked && strings.TrimSpace(line) != "":
+			count++
+			marked = false
+		}
+	}
+	return count
 }
 
 // formatCondition renders a condition map as a readable string.

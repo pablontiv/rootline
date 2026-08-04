@@ -15,6 +15,28 @@ Use `validate` to check Markdown records against the effective `.stem` schema.
 
 `validate` exits non-zero when validation errors exist. If JSON was requested, parse stdout anyway.
 
+### Frontmatter Scope
+
+Only the **leading** `---`-delimited block is frontmatter. Everything after its closing
+delimiter is Markdown body:
+
+- `---`, `***`, and `___` thematic breaks in the body are ordinary content. They are never
+  read as YAML document separators, no matter how many appear.
+- Content inside fenced code blocks (` ``` ` and `~~~`) is never parsed as frontmatter or as
+  a delimiter.
+- A file whose first line is `---` opens a frontmatter block (Jekyll/Hugo convention), even
+  when the author meant a thematic break. Put a heading or a blank line first to avoid this.
+
+Two structural rules can fire on the frontmatter block itself:
+
+| Rule | Fires when | Fix |
+|---|---|---|
+| `malformed_yaml` | the leading block is unterminated, or its YAML does not parse | close the block with `---`; quote values containing `:` |
+| `multiple_yaml_documents` | the frontmatter region holds more than one YAML document (a column-0 `...` or `---` marker followed by further content) | keep a single document in the block |
+
+Neither rule inspects the body. Do not advise rewriting body `---` separators as `***` — that
+workaround is obsolete.
+
 ### Flags
 
 | Flag | Use |
