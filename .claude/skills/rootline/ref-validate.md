@@ -52,7 +52,7 @@ Batch:
 
 Each issue includes `rule`, `field`, `message`, `source`, `severity`, and optional `suggestion`.
 
-Link-check rules (emitted when the effective `.stem` sets `links.checks`): `link_resolve` (target missing, case-sensitive; carries fuzzy `suggestion`), `link_anchor` (`#anchor` matches no heading slug in the target), `link_encoding` (raw space in target; use `%20`). These are not auto-fixable by `fix` — repair the link or the target file manually. `checks.cycles: true` additionally makes `graph --check` fail on link cycles; without it cycles are printed as informational and only broken links set the exit code (override per-run with `--fail-cycles`).
+Link-check rules (emitted when the effective `.stem` sets `links.checks`): `link_resolve` (target missing, case-sensitive; carries fuzzy `suggestion`; wikilinks infer `.md` so `[[b]]` matches `b.md` and `[[sub/README]]` matches `sub/README.md`, while markdown targets resolve literally; root-anchored `/x.md` resolves against the scan root, or the governance boundary for single-file `validate`; resolution is clamped to that root, so a target escaping it via `..` or via a symlink pointing outside the tree never resolves, while a symlink staying inside still does), `link_anchor` (`#anchor` matches no heading slug in the target), `link_encoding` (raw space in target; use `%20`). These are not auto-fixable by `fix` — repair the link or the target file manually. `checks.cycles: true` additionally makes `graph --check` fail on link cycles; without it cycles are printed as informational and only broken links set the exit code (override per-run with `--fail-cycles`).
 
 ### Reporting Format
 

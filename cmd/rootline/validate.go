@@ -110,7 +110,7 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 
 		// Validate
 		errs = append(errs, rules.Validate(ctx, record, effective)...)
-		errs = append(errs, rules.CheckLinks(record.Links, effective.Links, absPath, linkCache)...)
+		errs = append(errs, rules.CheckLinks(record.Links, effective.Links, absPath, rules.SchemaRoot(absPath), linkCache)...)
 		errs = append(errs, rules.ExtractionErrors(record)...)
 		errs = append(errs, structErrs...)
 
@@ -187,7 +187,7 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 			continue
 		}
 		errs := rules.Validate(ctx, rec, effective)
-		errs = append(errs, rules.CheckLinks(rec.Links, effective.Links, absPath, linkCache)...)
+		errs = append(errs, rules.CheckLinks(rec.Links, effective.Links, absPath, root, linkCache)...)
 		errs = append(errs, rules.ExtractionErrors(rec)...)
 		if content, readErr := os.ReadFile(absPath); readErr == nil {
 			errs = append(errs, rules.ValidateStructure(content, rec.Path)...)

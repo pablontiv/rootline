@@ -41,7 +41,7 @@ links:
 			t.Fatalf("resolve %s: %v", rec.Path, err)
 		}
 		all := rules.Validate(ctx, rec, effective)
-		all = append(all, rules.CheckLinks(rec.Links, effective.Links, absPath, cache)...)
+		all = append(all, rules.CheckLinks(rec.Links, effective.Links, absPath, root, cache)...)
 		for _, e := range all {
 			errsByRule[e.Rule]++
 		}

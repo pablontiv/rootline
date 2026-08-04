@@ -90,6 +90,10 @@ func ResolveLinkTarget(req ResolveRequest) LinkResolution {
 		cur = filepath.Join(cur, entry)
 	}
 
+	if !withinRoot(req.Root, cur) {
+		return LinkResolution{}
+	}
+
 	info, err := os.Stat(cur)
 	if err != nil {
 		return LinkResolution{}
@@ -102,6 +106,57 @@ func ResolveLinkTarget(req ResolveRequest) LinkResolution {
 		cur = filepath.Join(cur, entry)
 	}
 	return LinkResolution{Path: cur, OK: true}
+}
+
+// withinRoot reports whether a resolved path stayed inside root.
+//
+// Link targets are document-controlled text, and a target may contain ".."
+// components, so resolution can otherwise walk above the tree being governed
+// and report on files outside it — with links.checks.anchors enabled that
+// means reading them. Rootline already treats path containment as an
+// invariant elsewhere (internal/fix/contain.go), so resolution honors it too.
+// An empty root means no boundary is known and nothing can be judged against
+// it; callers that need containment must pass one.
+func withinRoot(root, path string) bool {
+	if root == "" {
+		return true
+	}
+	// Compare real paths: a lexical check alone cannot see through a symlink
+	// inside the tree that points out of it. EvalSymlinks is applied to both
+	// sides so a root that is itself reached through a symlink (/tmp on macOS)
+	// still compares equal. A path that cannot be evaluated does not exist
+	// yet, so fall back to the lexical form and let the later Stat decide.
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		realRoot = root
+	}
+	realPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		realPath = path
+	}
+	rel, err := filepath.Rel(realRoot, realPath)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// SchemaRoot returns the directory of the root-most .stem governing path — the
+// declared governance boundary, or the top of the discovered chain when none
+// declares `root: true`.
+//
+// Root-anchored links ("/x.md") are relative to the wiki root, and a
+// single-file `validate` invocation has no scan root to use. The schema
+// boundary is the closest thing the engine actually knows about, and it is the
+// same directory `validate --all` would be pointed at. Returns "" when no
+// schema governs the path, which leaves root-anchored targets unresolved
+// rather than silently anchoring them somewhere arbitrary.
+func SchemaRoot(path string) string {
+	entries, err := WalkUp(path)
+	if err != nil || len(entries) == 0 {
+		return ""
+	}
+	return filepath.Dir(entries[0].Path)
 }
 
 // inferMarkdown retries a missing final path component with a ".md" suffix.

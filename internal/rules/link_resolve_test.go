@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -97,5 +98,143 @@ func TestResolveLinkTarget_WikilinkWithExplicitExtension(t *testing.T) {
 	got := ResolveLinkTarget(ResolveRequest{BaseDir: dir, Target: "b.md", Style: extract.StyleWikilink})
 	if !got.OK || got.Path != filepath.Join(dir, "b.md") {
 		t.Errorf("explicit .md wikilink should resolve as-is, got %+v", got)
+	}
+}
+
+// Root-anchored targets are the idiomatic form in an ADO code wiki — the
+// stated target of links.checks. validate used to skip them with a bare
+// `continue`, so a dangling /x.md passed validation while graph flagged it
+// (issue #62 sub-defect 3).
+func TestResolveLinkTarget_RootAnchored(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "docs", "README.md"), "# Docs\n")
+	writeFile(t, filepath.Join(root, "deep", "src.md"), "body")
+
+	got := ResolveLinkTarget(ResolveRequest{
+		BaseDir: filepath.Join(root, "deep"), Root: root,
+		Target: "/docs/README.md", Style: extract.StyleMarkdown,
+	})
+	if !got.OK {
+		t.Fatalf("/docs/README.md should resolve against root, got %+v", got)
+	}
+	if want := filepath.Join(root, "docs", "README.md"); got.Path != want {
+		t.Errorf("Path = %q, want %q", got.Path, want)
+	}
+}
+
+func TestResolveLinkTarget_RootAnchoredMissingIsBroken(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "src.md"), "body")
+	got := ResolveLinkTarget(ResolveRequest{
+		BaseDir: root, Root: root, Target: "/nonexistent.md", Style: extract.StyleMarkdown,
+	})
+	if got.OK {
+		t.Errorf("missing root-anchored target must not resolve, got %+v", got)
+	}
+}
+
+// Without a root there is nothing to anchor to, so the target cannot be
+// judged. Better unresolved than anchored somewhere arbitrary.
+func TestResolveLinkTarget_RootAnchoredWithoutRootIsUnresolved(t *testing.T) {
+	dir := t.TempDir()
+	got := ResolveLinkTarget(ResolveRequest{
+		BaseDir: dir, Target: "/docs/README.md", Style: extract.StyleMarkdown,
+	})
+	if got.OK {
+		t.Errorf("root-anchored target with no root must not resolve, got %+v", got)
+	}
+}
+
+func TestSchemaRoot(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".stem"), "version: 2\nroot: true\n")
+	writeFile(t, filepath.Join(root, "sub", ".stem"), "version: 2\n")
+	writeFile(t, filepath.Join(root, "sub", "a.md"), "body")
+
+	if got := SchemaRoot(filepath.Join(root, "sub", "a.md")); got != root {
+		t.Errorf("SchemaRoot = %q, want the boundary %q", got, root)
+	}
+	if got := SchemaRoot(filepath.Join(t.TempDir(), "orphan.md")); got != "" {
+		t.Errorf("SchemaRoot with no governing schema = %q, want \"\"", got)
+	}
+}
+
+// A link target must never resolve outside the root it is anchored to.
+// Removing validate's blanket skip of "/"-prefixed targets newly exposes this
+// path to document-controlled text, and rootline already treats path
+// containment as an invariant (see internal/fix/contain.go, issue #69).
+func TestResolveLinkTarget_CannotEscapeRoot(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(filepath.Dir(root), "outside-"+filepath.Base(root)+".md")
+	if err := os.WriteFile(outside, []byte("# Outside\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Remove(outside) }()
+	writeFile(t, filepath.Join(root, "deep", "src.md"), "body")
+	base := filepath.Join(root, "deep")
+	escape := "../" + filepath.Base(outside)
+
+	for _, tc := range []struct{ name, target string }{
+		{"root-anchored", "/" + escape},
+		{"relative", "../" + escape},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ResolveLinkTarget(ResolveRequest{
+				BaseDir: base, Root: root, Target: tc.target, Style: extract.StyleMarkdown,
+			})
+			if got.OK {
+				t.Errorf("target %q escaped the root and resolved to %q", tc.target, got.Path)
+			}
+		})
+	}
+}
+
+// Containment must not reject legitimate parent traversal that stays inside.
+func TestResolveLinkTarget_ParentTraversalInsideRootIsAllowed(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a.md"), "# A\n")
+	writeFile(t, filepath.Join(root, "deep", "src.md"), "body")
+
+	got := ResolveLinkTarget(ResolveRequest{
+		BaseDir: filepath.Join(root, "deep"), Root: root, Target: "../a.md", Style: extract.StyleMarkdown,
+	})
+	if !got.OK {
+		t.Errorf("../a.md stays inside root and must resolve, got %+v", got)
+	}
+}
+
+// A lexical containment check cannot see through a symlink inside the tree
+// that points out of it, so containment compares real paths.
+func TestResolveLinkTarget_SymlinkCannotEscapeRoot(t *testing.T) {
+	root := t.TempDir()
+	outsideDir := t.TempDir()
+	writeFile(t, filepath.Join(outsideDir, "secret.md"), "# Secret\n")
+	writeFile(t, filepath.Join(root, "src.md"), "body")
+	if err := os.Symlink(outsideDir, filepath.Join(root, "escape")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	got := ResolveLinkTarget(ResolveRequest{
+		BaseDir: root, Root: root, Target: "escape/secret.md", Style: extract.StyleMarkdown,
+	})
+	if got.OK {
+		t.Errorf("symlink escaping the root must not resolve, got %q", got.Path)
+	}
+}
+
+// A symlink that stays inside the root is legitimate and must still resolve.
+func TestResolveLinkTarget_SymlinkInsideRootResolves(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "real", "page.md"), "# Page\n")
+	writeFile(t, filepath.Join(root, "src.md"), "body")
+	if err := os.Symlink(filepath.Join(root, "real"), filepath.Join(root, "alias")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	got := ResolveLinkTarget(ResolveRequest{
+		BaseDir: root, Root: root, Target: "alias/page.md", Style: extract.StyleMarkdown,
+	})
+	if !got.OK {
+		t.Errorf("symlink inside the root must resolve, got %+v", got)
 	}
 }

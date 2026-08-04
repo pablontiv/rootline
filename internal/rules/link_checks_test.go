@@ -28,7 +28,7 @@ func mdLink(target string) extract.Link {
 
 func TestCheckLinks_NilChecksIsNoop(t *testing.T) {
 	schema := LinkSchema{Styles: []string{extract.StyleMarkdown}}
-	errs := CheckLinks([]extract.Link{mdLink("missing.md")}, schema, "/nonexistent/src.md", nil)
+	errs := CheckLinks([]extract.Link{mdLink("missing.md")}, schema, "/nonexistent/src.md", "", nil)
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors without checks, got %+v", errs)
 	}
@@ -36,7 +36,7 @@ func TestCheckLinks_NilChecksIsNoop(t *testing.T) {
 
 func TestCheckLinks_EncodingRejectsRawSpaces(t *testing.T) {
 	schema := mdChecksSchema(LinkChecks{Encoding: true})
-	errs := CheckLinks([]extract.Link{mdLink("my file.md")}, schema, "/tmp/src.md", nil)
+	errs := CheckLinks([]extract.Link{mdLink("my file.md")}, schema, "/tmp/src.md", "", nil)
 	if len(errs) != 1 || errs[0].Rule != "link_encoding" {
 		t.Fatalf("expected 1 link_encoding error, got %+v", errs)
 	}
@@ -47,7 +47,7 @@ func TestCheckLinks_ResolveExisting(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "guides", "setup.md"), "# Setup\n")
 	writeFile(t, filepath.Join(dir, "src.md"), "body")
 	schema := mdChecksSchema(LinkChecks{Resolve: true})
-	errs := CheckLinks([]extract.Link{mdLink("guides/setup.md")}, schema, filepath.Join(dir, "src.md"), nil)
+	errs := CheckLinks([]extract.Link{mdLink("guides/setup.md")}, schema, filepath.Join(dir, "src.md"), dir, nil)
 	if len(errs) != 0 {
 		t.Fatalf("expected resolve to pass, got %+v", errs)
 	}
@@ -58,7 +58,7 @@ func TestCheckLinks_ResolveBrokenWithSuggestion(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "guides", "setup.md"), "# Setup\n")
 	writeFile(t, filepath.Join(dir, "src.md"), "body")
 	schema := mdChecksSchema(LinkChecks{Resolve: true})
-	errs := CheckLinks([]extract.Link{mdLink("guides/setpu.md")}, schema, filepath.Join(dir, "src.md"), nil)
+	errs := CheckLinks([]extract.Link{mdLink("guides/setpu.md")}, schema, filepath.Join(dir, "src.md"), dir, nil)
 	if len(errs) != 1 || errs[0].Rule != "link_resolve" {
 		t.Fatalf("expected 1 link_resolve error, got %+v", errs)
 	}
@@ -73,7 +73,7 @@ func TestCheckLinks_ResolveCaseMismatchIsBroken(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "src.md"), "body")
 	schema := mdChecksSchema(LinkChecks{Resolve: true})
 	// APFS would resolve this case-insensitively; ADO/git will not.
-	errs := CheckLinks([]extract.Link{mdLink("guides/setup.md")}, schema, filepath.Join(dir, "src.md"), nil)
+	errs := CheckLinks([]extract.Link{mdLink("guides/setup.md")}, schema, filepath.Join(dir, "src.md"), dir, nil)
 	if len(errs) != 1 || errs[0].Rule != "link_resolve" {
 		t.Fatalf("expected case mismatch to be broken, got %+v", errs)
 	}
@@ -86,10 +86,10 @@ func TestCheckLinks_ResolveDirectoryTargetNeedsReadme(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "src.md"), "body")
 	schema := mdChecksSchema(LinkChecks{Resolve: true})
 	src := filepath.Join(dir, "src.md")
-	if errs := CheckLinks([]extract.Link{mdLink("guides/")}, schema, src, nil); len(errs) != 0 {
+	if errs := CheckLinks([]extract.Link{mdLink("guides/")}, schema, src, dir, nil); len(errs) != 0 {
 		t.Fatalf("dir with README should resolve, got %+v", errs)
 	}
-	if errs := CheckLinks([]extract.Link{mdLink("empty/")}, schema, src, nil); len(errs) != 1 {
+	if errs := CheckLinks([]extract.Link{mdLink("empty/")}, schema, src, dir, nil); len(errs) != 1 {
 		t.Fatalf("dir without README should be broken, got %+v", errs)
 	}
 }
@@ -99,20 +99,38 @@ func TestCheckLinks_ResolveDecodesPercent20(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "my page.md"), "# P\n")
 	writeFile(t, filepath.Join(dir, "src.md"), "body")
 	schema := mdChecksSchema(LinkChecks{Resolve: true})
-	errs := CheckLinks([]extract.Link{mdLink("my%20page.md")}, schema, filepath.Join(dir, "src.md"), nil)
+	errs := CheckLinks([]extract.Link{mdLink("my%20page.md")}, schema, filepath.Join(dir, "src.md"), dir, nil)
 	if len(errs) != 0 {
 		t.Fatalf("%%20 target should resolve, got %+v", errs)
 	}
 }
 
-func TestCheckLinks_SkipsAbsoluteAndFilteredStyles(t *testing.T) {
+func TestCheckLinks_SkipsFilteredStyles(t *testing.T) {
 	schema := mdChecksSchema(LinkChecks{Resolve: true, Encoding: true})
 	links := []extract.Link{
-		mdLink("/Root/Page.md"), // absolute: skipped until root-anchored resolution lands
 		{Target: "no such file", Type: "reference", Style: extract.StyleWikilink, Line: 1}, // filtered style
 	}
-	if errs := CheckLinks(links, schema, "/tmp/src.md", nil); len(errs) != 0 {
+	if errs := CheckLinks(links, schema, "/tmp/src.md", "", nil); len(errs) != 0 {
 		t.Fatalf("expected no errors, got %+v", errs)
+	}
+}
+
+// Root-anchored targets are the idiomatic ADO code-wiki form. validate used to
+// skip them outright, so a dangling /x.md passed while graph flagged it
+// (issue #62 sub-defect 3). They are now resolved against the scan root.
+func TestCheckLinks_RootAnchoredIsChecked(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "docs", "Page.md"), "# Page\n")
+	writeFile(t, filepath.Join(root, "deep", "src.md"), "body")
+	src := filepath.Join(root, "deep", "src.md")
+	schema := mdChecksSchema(LinkChecks{Resolve: true})
+
+	if errs := CheckLinks([]extract.Link{mdLink("/docs/Page.md")}, schema, src, root, nil); len(errs) != 0 {
+		t.Errorf("existing root-anchored target should resolve, got %+v", errs)
+	}
+	errs := CheckLinks([]extract.Link{mdLink("/docs/Missing.md")}, schema, src, root, nil)
+	if len(errs) != 1 || errs[0].Rule != "link_resolve" {
+		t.Errorf("missing root-anchored target should be reported, got %+v", errs)
 	}
 }
 
@@ -132,7 +150,7 @@ func TestCheckLinks_WikilinkResolvesWithoutExtension(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "t.md"), "body")
 	schema := wikiChecksSchema(LinkChecks{Resolve: true})
 
-	if errs := CheckLinks([]extract.Link{wikiLink("b")}, schema, filepath.Join(dir, "t.md"), nil); len(errs) != 0 {
+	if errs := CheckLinks([]extract.Link{wikiLink("b")}, schema, filepath.Join(dir, "t.md"), dir, nil); len(errs) != 0 {
 		t.Fatalf("[[b]] with b.md present must resolve, got %+v", errs)
 	}
 }
@@ -143,7 +161,7 @@ func TestCheckLinks_WikilinkPathQualifiedResolves(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "t.md"), "body")
 	schema := wikiChecksSchema(LinkChecks{Resolve: true})
 
-	if errs := CheckLinks([]extract.Link{wikiLink("sub/README")}, schema, filepath.Join(dir, "t.md"), nil); len(errs) != 0 {
+	if errs := CheckLinks([]extract.Link{wikiLink("sub/README")}, schema, filepath.Join(dir, "t.md"), dir, nil); len(errs) != 0 {
 		t.Fatalf("[[sub/README]] must resolve, got %+v", errs)
 	}
 }
@@ -153,7 +171,7 @@ func TestCheckLinks_WikilinkGenuinelyMissingIsBroken(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "t.md"), "body")
 	schema := wikiChecksSchema(LinkChecks{Resolve: true})
 
-	errs := CheckLinks([]extract.Link{wikiLink("nope")}, schema, filepath.Join(dir, "t.md"), nil)
+	errs := CheckLinks([]extract.Link{wikiLink("nope")}, schema, filepath.Join(dir, "t.md"), dir, nil)
 	if len(errs) != 1 || errs[0].Rule != "link_resolve" {
 		t.Fatalf("missing wikilink target must be reported, got %+v", errs)
 	}
@@ -182,13 +200,13 @@ func TestCheckLinks_AnchorValidAndInvalid(t *testing.T) {
 	cache := NewHeadingCache()
 
 	good := extract.Link{Target: "master.md", Anchor: "6-zonas-inciertas-black-boxes", Type: "reference", Style: extract.StyleMarkdown, Line: 1}
-	if errs := CheckLinks([]extract.Link{good}, schema, src, cache); len(errs) != 0 {
+	if errs := CheckLinks([]extract.Link{good}, schema, src, dir, cache); len(errs) != 0 {
 		t.Fatalf("valid anchor rejected: %+v", errs)
 	}
 
 	bad := good
 	bad.Anchor = "7-no-existe"
-	errs := CheckLinks([]extract.Link{bad}, schema, src, cache)
+	errs := CheckLinks([]extract.Link{bad}, schema, src, dir, cache)
 	if len(errs) != 1 || errs[0].Rule != "link_anchor" {
 		t.Fatalf("expected 1 link_anchor error, got %+v", errs)
 	}
@@ -200,7 +218,7 @@ func TestCheckLinks_AnchorNilCacheStillWorks(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "src.md"), "body")
 	schema := mdChecksSchema(LinkChecks{Resolve: true, Anchors: true})
 	link := extract.Link{Target: "master.md", Anchor: "intro", Type: "reference", Style: extract.StyleMarkdown, Line: 1}
-	if errs := CheckLinks([]extract.Link{link}, schema, filepath.Join(dir, "src.md"), nil); len(errs) != 0 {
+	if errs := CheckLinks([]extract.Link{link}, schema, filepath.Join(dir, "src.md"), dir, nil); len(errs) != 0 {
 		t.Fatalf("nil cache should parse on the fly: %+v", errs)
 	}
 }
@@ -218,7 +236,7 @@ func TestCheckLinks_AnchorCacheReuse(t *testing.T) {
 		{Target: "target.md", Anchor: "section2", Type: "reference", Style: extract.StyleMarkdown, Line: 2},
 	}
 
-	if errs := CheckLinks(links, schema, src, cache); len(errs) != 0 {
+	if errs := CheckLinks(links, schema, src, dir, cache); len(errs) != 0 {
 		t.Fatalf("both anchors should pass; got %+v", errs)
 	}
 	if len(cache.slugs) != 1 {

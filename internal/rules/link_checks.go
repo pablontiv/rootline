@@ -24,13 +24,14 @@ func NewHeadingCache() *HeadingCache {
 
 // CheckLinks runs filesystem-backed link checks (links.checks in .stem)
 // against a record's links. sourceAbsPath is the absolute path of the record
-// file; relative targets resolve against its directory. Links whose style is
-// not in the schema's effective styles are skipped, as are absolute targets
-// (root-relative ADO form lands in a follow-up).
+// file; relative targets resolve against its directory. root is the scan root
+// that root-anchored ("/x.md") targets rebase onto — pass "" when no root is
+// in scope and such targets stay unresolved. Links whose style is not in the
+// schema's effective styles are skipped.
 //
 // Resolution runs through ResolveLinkTarget, the same entry point graph and
 // query use, so the commands cannot disagree about whether a link is broken.
-func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath string, cache *HeadingCache) []ValidationError {
+func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath, root string, cache *HeadingCache) []ValidationError {
 	if schema.Checks == nil {
 		return nil
 	}
@@ -56,13 +57,10 @@ func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath string, c
 			})
 		}
 
-		if strings.HasPrefix(link.Target, "/") {
-			continue
-		}
-
 		if schema.Checks.Resolve || schema.Checks.Anchors {
 			res := ResolveLinkTarget(ResolveRequest{
 				BaseDir: filepath.Dir(sourceAbsPath),
+				Root:    root,
 				Target:  link.Target,
 				Style:   linkStyle(link),
 			})
