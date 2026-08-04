@@ -36,6 +36,12 @@ type BatchFixResult struct {
 	// not the schema, chose their value. Carried so the operator can see the
 	// field was left unfilled deliberately.
 	SkippedProposals []proposal.Proposal `json:"skipped_proposals,omitempty"`
+
+	// LinkFindings reports link problems fix will not repair. Rewriting a
+	// link body on a fuzzy guess is a destructive edit outside fix's
+	// data-repair contract, but staying silent about a defect validate does
+	// report made a clean fix followed by a failing validate read as a bug.
+	LinkFindings []proposal.LinkFinding `json:"link_findings,omitempty"`
 }
 
 // FixSummary holds aggregate counts for batch fix.
@@ -189,6 +195,8 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	// First pass: collect all records, their effective stems, and errors.
 	allErrs := make(map[string][]rules.ValidationError)
 	effectiveStems := make(map[string]*rules.StemFile)
+	linkCache := rules.NewHeadingCache()
+	var linkFindings []proposal.LinkFinding
 
 	for _, rec := range records {
 		absPath := filepath.Join(root, rec.Path)
@@ -200,6 +208,15 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 		effectiveStems[rec.Path] = effective
 
 		errs := rules.Validate(ctx, rec, effective)
+
+		// Link checks never reached fix, so a record validate failed with
+		// link_resolve came back from fix as a clean run — with no warning,
+		// even though the error already carries a fuzzy suggestion.
+		for _, e := range rules.CheckLinks(rec.Links, effective.Links, absPath, root, linkCache) {
+			linkFindings = append(linkFindings, proposal.LinkFinding{
+				Path: rec.Path, Rule: e.Rule, Message: e.Message, Suggestion: e.Suggestion,
+			})
+		}
 
 		if len(errs) > 0 {
 			allErrs[rec.Path] = errs
@@ -228,10 +245,16 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	// In normal apply, we only apply data proposals.
 	separateSchemaAndDataProposals(report)
 
+	report.LinkFindings = linkFindings
+
 	// In dry-run mode, use proposal engine for richer output.
 	if fixDryRun {
 		if outputFormat == "table" {
-			return renderProposalTable(cmd, report)
+			if err := renderProposalTable(cmd, report); err != nil {
+				return err
+			}
+			renderLinkFindings(cmd, report.LinkFindings)
+			return nil
 		}
 		return outputJSON(cmd, report, false)
 	}
@@ -250,6 +273,7 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	results := proposalsToFixResults(report, records)
 	batch := newBatchFixResultWithSuggestions(results, len(report.SchemaSuggestions))
 	batch.SkippedProposals = skippedProposals
+	batch.LinkFindings = linkFindings
 
 	if outputFormat == "table" {
 		return renderFixTable(cmd, batch)
@@ -398,6 +422,24 @@ func newBatchFixResultWithSuggestions(results []*FixResult, schemaSuggestionsCou
 	}
 }
 
+// renderLinkFindings prints the link problems fix reported but did not repair.
+// Shared by the dry-run preview and the applied run so the preview cannot go
+// quiet about something the real run reports.
+func renderLinkFindings(cmd *cobra.Command, findings []proposal.LinkFinding) {
+	if len(findings) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Link findings: %d (reported, not repaired)\n", len(findings))
+	for _, f := range findings {
+		line := fmt.Sprintf("  %s: %s (%s)", f.Path, f.Message, f.Rule)
+		if f.Suggestion != "" {
+			line += fmt.Sprintf(" — did you mean %q?", f.Suggestion)
+		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
+	}
+}
+
 func renderProposalTable(cmd *cobra.Command, report *proposal.Report) error {
 	headers := []string{"Type", "Field", "Description", "Files"}
 	var rows [][]string
@@ -455,6 +497,7 @@ func renderFixTable(cmd *cobra.Command, batch *BatchFixResult) error {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note: %d schema proposals were skipped (data-only repairs applied).\n", batch.SchemaSuggestions)
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "To apply schema changes, use 'rootline schema propose' or manually edit .stem files.")
 	}
+	renderLinkFindings(cmd, batch.LinkFindings)
 
 	return nil
 }

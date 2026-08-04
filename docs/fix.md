@@ -5,6 +5,23 @@ estado: Completed
 
 The `rootline fix` command goes beyond simple mechanical repairs. It analyzes validation errors and proposes intelligent solutions based on data patterns and heuristics.
 
+## Link findings
+
+`fix --all` reports link problems it will not repair, under `link_findings` in JSON and as a
+"Link findings" block in table output:
+
+```console
+$ rootline fix --all docs/
+Link findings: 1 (reported, not repaired)
+  a.md: link target "guied.md" does not resolve to an existing file (case-sensitive) (link_resolve) — did you mean "guide.md"?
+```
+
+`fix` does not rewrite link bodies. Correcting a link on a fuzzy guess is a destructive edit
+outside its data-repair contract — the suggestion is offered so a human can make the call. Before
+this, a record `validate` failed with `link_resolve` came back from `fix` as a clean run, which
+read as a tool bug.
+
+
 ## Proposal Types
 
 Rootline categorizes issues into specific proposal types to preserve semantic meaning.
