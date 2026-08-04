@@ -18,6 +18,12 @@ fmt:
 test:
     go test ./... -race
 
+# Run deterministic offline tests for the public installers. PowerShell coverage
+# runs when pwsh is available locally and unconditionally on the Windows CI leg.
+test-install:
+    sh tests/installers/install-sh-test.sh
+    if command -v pwsh >/dev/null 2>&1; then pwsh -NoProfile -File tests/installers/install-ps1-test.ps1; else echo "pwsh not found; PowerShell installer tests skipped locally"; fi
+
 # Show coverage per package and total
 coverage:
     go test ./... -coverprofile=coverage.out
@@ -101,4 +107,3 @@ validate:
 # Fix docs (propagate aggregates)
 fix-docs:
     rootline fix --all docs/roadmap/
-

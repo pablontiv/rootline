@@ -30,12 +30,29 @@ jobs:
       - run: go build -o rootline ./cmd/rootline/
       - run: ./rootline validate --all docs/roadmap/
 
+  installer-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Test install.sh resolver
+        if: runner.os != 'Windows'
+        shell: bash
+        run: sh tests/installers/install-sh-test.sh
+      - name: Test install.ps1 resolver
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/installers/install-ps1-test.ps1
+
   release:
     uses: pablontiv/crossbeam/.github/workflows/go-release.yml@v1
-    needs: [ci, gitleaks, docs-validate]
+    needs: [ci, gitleaks, docs-validate, installer-tests]
     if: github.event_name == 'push'
     with:
-      quality-gate-jobs: '["ci","gitleaks","docs-validate"]'
+      quality-gate-jobs: '["ci","gitleaks","docs-validate","installer-tests"]'
       binary-name: rootline
     permissions:
       contents: write
@@ -70,9 +87,10 @@ jobs:
         shell: bash
         run: |
           set -eu
-          # Retry: the scripts hit the GitHub API and release CDN, which flake.
+          # Retry transient release-page and CDN failures.
           for attempt in 1 2 3; do
             if sh install.sh; then break; fi
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
             echo "install.sh attempt ${attempt} failed; retrying in 5s..."
             sleep 5
           done
@@ -85,7 +103,11 @@ jobs:
         run: |
           for ($i = 1; $i -le 3; $i++) {
             try { & ./install.ps1; break }
-            catch { Write-Host "install.ps1 attempt $i failed: $_"; Start-Sleep 5 }
+            catch {
+              if ($i -eq 3) { throw }
+              Write-Host "install.ps1 attempt $i failed: $_; retrying in 5s..."
+              Start-Sleep 5
+            }
           }
           # install.ps1 installs to %LOCALAPPDATA%\rootline\bin and only updates
           # the persistent User PATH, not this job's PATH — invoke by full path.

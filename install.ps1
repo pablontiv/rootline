@@ -21,13 +21,63 @@ function Get-Arch {
 
 function Get-LatestVersion {
     Write-Host "Fetching latest version..."
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
-    $version = $release.tag_name
+    $version = $null
+    try {
+        $releaseUrl = Get-LatestReleaseUrl
+        $version = Get-VersionFromReleaseUrl -ReleaseUrl $releaseUrl
+    }
+    catch {
+        $version = $null
+    }
+
+    if (-not $version) {
+        $version = Get-LatestVersionFromApi
+    }
+
     if (-not $version) {
         throw "Could not determine latest version. Check https://github.com/$Repo/releases"
     }
     Write-Host "Latest version: $version"
     return $version
+}
+
+function Get-LatestReleaseUrl {
+    $response = Invoke-WebRequest `
+        -Uri "https://github.com/$Repo/releases/latest" `
+        -Method Head `
+        -MaximumRedirection 5 `
+        -UseBasicParsing
+
+    if ($response.BaseResponse.ResponseUri) {
+        return $response.BaseResponse.ResponseUri.AbsoluteUri
+    }
+    if ($response.BaseResponse.RequestMessage.RequestUri) {
+        return $response.BaseResponse.RequestMessage.RequestUri.AbsoluteUri
+    }
+    if ($response.Headers.Location) {
+        return $response.Headers.Location
+    }
+    return $null
+}
+
+function Get-VersionFromReleaseUrl {
+    param([string]$ReleaseUrl)
+
+    $prefix = "https://github.com/$Repo/releases/tag/"
+    if (-not $ReleaseUrl -or -not $ReleaseUrl.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        return $null
+    }
+
+    $version = $ReleaseUrl.Substring($prefix.Length)
+    if (-not $version -or $version.Contains("/")) {
+        return $null
+    }
+    return [Uri]::UnescapeDataString($version)
+}
+
+function Get-LatestVersionFromApi {
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
+    return $release.tag_name
 }
 
 function Get-InstallDir {
@@ -116,4 +166,6 @@ function Verify-Installation {
     }
 }
 
-Main
+if ($env:ROOTLINE_INSTALLER_TESTING -ne "1") {
+    Main
+}
