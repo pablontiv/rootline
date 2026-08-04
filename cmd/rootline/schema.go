@@ -27,6 +27,7 @@ type SchemaProposal struct {
 	Target        string  `json:"target"`    // path to .stem file
 	Confidence    float64 `json:"confidence"`
 	RequiresAgent bool    `json:"requires_agent"`
+	Patch         string  `json:"patch,omitempty"` // full YAML markup to be written
 	PatchPreview  string  `json:"patch_preview"`
 }
 
@@ -35,6 +36,7 @@ type SchemaProposalsReport struct {
 	Version     int              `json:"version"`
 	Kind        string           `json:"kind"`
 	Path        string           `json:"path"`
+	Root        string           `json:"root,omitempty"` // absolute path to scan root
 	Incremental bool             `json:"incremental"`
 	Proposals   []SchemaProposal `json:"proposals"`
 	Summary     ProposalsSummary `json:"summary"`
@@ -151,6 +153,7 @@ func runSchemaPropose(cmd *cobra.Command, args []string) error {
 			Version:     1,
 			Kind:        "rootline/schema-proposals",
 			Path:        scanRoot,
+			Root:        root,
 			Incremental: schemaProposeIncremental,
 			Proposals:   []SchemaProposal{},
 			Summary:     ProposalsSummary{},
@@ -191,6 +194,7 @@ func runSchemaPropose(cmd *cobra.Command, args []string) error {
 		Version:     1,
 		Kind:        "rootline/schema-proposals",
 		Path:        scanRoot,
+		Root:        root,
 		Incremental: schemaProposeIncremental,
 		Proposals:   proposals,
 	}
@@ -257,13 +261,17 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	// Resolve absolute path from report.
-	scanRoot := report.Path
-	if !filepath.IsAbs(scanRoot) {
-		absRoot, err := filepath.Abs(scanRoot)
-		if err != nil {
-			return fmt.Errorf("resolving path: %w", err)
+	// Prefer report.Root if set (absolute path); otherwise fall back to report.Path (CWD-relative)
+	scanRoot := report.Root
+	if scanRoot == "" {
+		scanRoot = report.Path
+		if !filepath.IsAbs(scanRoot) {
+			absRoot, err := filepath.Abs(scanRoot)
+			if err != nil {
+				return fmt.Errorf("resolving path: %w", err)
+			}
+			scanRoot = absRoot
 		}
-		scanRoot = absRoot
 	}
 
 	resolved := &fix.ResolvedTargetsBreakdown{
@@ -294,6 +302,12 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 			}
 			resolved.Accepted[proposal.Target] = target
 
+			// Check for empty patch before write attempt
+			if proposal.Patch == "" {
+				result.Errors = append(result.Errors, fmt.Sprintf("create_stem: %s: patch content required; re-run 'schema propose' to generate it", proposal.Target))
+				continue
+			}
+
 			// Overwrite guard: replacing a governed .stem discards root, scope,
 			// enum values, required markers, derive and aggregate in one write,
 			// so it is a policy refusal unless the caller opted in with --force.
@@ -312,9 +326,15 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 				action = "overwrite_stem"
 			}
 
-			if err := infer.ScaffoldSchema(filepath.Dir(target), schemaApplyDryRun); err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("scaffold %s: %v", proposal.Target, err))
+			// Write the patch content byte-identical to what was proposed (not regenerated)
+			if !schemaApplyDryRun {
+				if err := os.WriteFile(target, []byte(proposal.Patch), 0o644); err != nil {
+					result.Errors = append(result.Errors, fmt.Sprintf("write %s: %v", proposal.Target, err))
+				} else {
+					result.Applied = append(result.Applied, fmt.Sprintf("%s: %s", action, target))
+				}
 			} else {
+				// In dry-run, just record the action without writing
 				result.Applied = append(result.Applied, fmt.Sprintf("%s: %s", action, target))
 			}
 		} else {
@@ -329,8 +349,12 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 
 	// If not dry-run, run validation.
 	if !schemaApplyDryRun {
-		validationResult := runPostApplyValidation(ctx, scanRoot)
-		result.ValidationSummary = validationResult
+		validationResult, validationErr := runPostApplyValidation(ctx, scanRoot)
+		if validationErr != nil {
+			result.Errors = append(result.Errors, validationErr.Error())
+		} else {
+			result.ValidationSummary = validationResult
+		}
 	}
 
 	// Output result.
@@ -414,8 +438,12 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 
 	// If not dry-run, run validation.
 	if !schemaApplyDryRun {
-		validationResult := runPostApplyValidation(ctx, root)
-		result.ValidationSummary = validationResult
+		validationResult, validationErr := runPostApplyValidation(ctx, root)
+		if validationErr != nil {
+			result.Errors = append(result.Errors, validationErr.Error())
+		} else {
+			result.ValidationSummary = validationResult
+		}
 	}
 
 	// Output result.
@@ -426,7 +454,11 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 }
 
 // runPostApplyValidation runs validate --all on the root and returns a summary.
-func runPostApplyValidation(ctx context.Context, root string) *ValidationSummary {
+//
+// A failed scan returns an error rather than an empty summary. An all-zero
+// ValidationSummary is indistinguishable from a clean run, so swallowing the
+// scan error here would report a green result for a root that was never read.
+func runPostApplyValidation(ctx context.Context, root string) (*ValidationSummary, error) {
 	reg := extract.NewRegistry()
 	resolver := func(dir string) (*rules.StemFile, error) {
 		entries, err := rules.WalkUp(dir)
@@ -440,7 +472,7 @@ func runPostApplyValidation(ctx context.Context, root string) *ValidationSummary
 	// not have one yet, so a missing schema must not stop it.
 	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver), index.AllowUngoverned())
 	if err != nil {
-		return &ValidationSummary{}
+		return nil, fmt.Errorf("post-apply validation scan of %s: %w", root, err)
 	}
 
 	derive.DeriveAllSimple(ctx, records, root)
@@ -473,7 +505,7 @@ func runPostApplyValidation(ctx context.Context, root string) *ValidationSummary
 		ValidFiles:   validCount,
 		InvalidFiles: invalidCount,
 		TotalErrors:  totalErrors,
-	}
+	}, nil
 }
 
 // generateSchemaProposals analyzes records and generates schema proposals.
@@ -505,6 +537,7 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 				Target:        stemPath,
 				Confidence:    0.9,
 				RequiresAgent: false,
+				Patch:         yaml,
 				PatchPreview:  truncatePreview(yaml, 200),
 			}
 			proposals = append(proposals, proposal)
@@ -525,6 +558,7 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 			Target:        stemPath,
 			Confidence:    0.85,
 			RequiresAgent: false,
+			Patch:         yaml,
 			PatchPreview:  truncatePreview(yaml, 200),
 		}
 		proposals = append(proposals, proposal)

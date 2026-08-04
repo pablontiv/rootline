@@ -491,10 +491,12 @@ func TestSchemaApplyCreateStem(t *testing.T) {
 	docsDir := filepath.Join(root, "docs")
 
 	// Create a schema proposals report with create_stem
+	patchContent := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n  author:\n    type: string\n"
 	report := SchemaProposalsReport{
 		Version: 1,
 		Kind:    "rootline/schema-proposals",
 		Path:    docsDir,
+		Root:    root,
 		Proposals: []SchemaProposal{
 			{
 				ID:            "bootstrap-flat",
@@ -502,6 +504,7 @@ func TestSchemaApplyCreateStem(t *testing.T) {
 				Target:        filepath.Join(docsDir, ".stem"),
 				Confidence:    0.85,
 				RequiresAgent: false,
+				Patch:         patchContent,
 				PatchPreview:  "version: 2\nschema:\n  title:\n    type: string\n  author:\n    type: string\n",
 			},
 		},
@@ -740,16 +743,21 @@ func TestAnalyzeWorksWithoutSchema(t *testing.T) {
 func writeSchemaProposalsReport(t *testing.T, root, scanRoot, target string) string {
 	t.Helper()
 
+	patchContent := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"
+	// Root should be the absolute version of the scan root
+	absRoot, _ := filepath.Abs(scanRoot)
 	report := SchemaProposalsReport{
 		Version: 1,
 		Kind:    "rootline/schema-proposals",
 		Path:    scanRoot,
+		Root:    absRoot,
 		Proposals: []SchemaProposal{
 			{
 				ID:           "bootstrap-flat",
 				Operation:    "create_stem",
 				Target:       target,
 				Confidence:   0.85,
+				Patch:        patchContent,
 				PatchPreview: "version: 2\nschema:\n  title:\n    type: string\n",
 			},
 		},
@@ -952,16 +960,19 @@ func TestSchemaApplyForceFlag(t *testing.T) {
 		}
 
 		// Create proposals report targeting the existing .stem
+		patchContent := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  new_field:\n    type: string\n"
 		report := SchemaProposalsReport{
 			Version: 1,
 			Kind:    "rootline/schema-proposals",
 			Path:    root,
+			Root:    root,
 			Proposals: []SchemaProposal{
 				{
 					ID:            "test-force",
 					Operation:     "create_stem",
 					Target:        stemPath,
 					RequiresAgent: false,
+					Patch:         patchContent,
 					PatchPreview:  "version: 2\nschema:\n  new_field:\n    type: string\n",
 				},
 			},
@@ -1066,14 +1077,17 @@ func TestSchemaApplyUnrecognizedOperation(t *testing.T) {
 func TestSchemaApplyDryRunDistinction(t *testing.T) {
 	writeReport := func(t *testing.T, root, name, target string) string {
 		t.Helper()
+		patchContent := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"
 		report := SchemaProposalsReport{
 			Version: 1,
 			Kind:    "rootline/schema-proposals",
 			Path:    filepath.Dir(target),
+			Root:    root,
 			Proposals: []SchemaProposal{{
 				ID:        name,
 				Operation: "create_stem",
 				Target:    target,
+				Patch:     patchContent,
 			}},
 		}
 		data, err := json.Marshal(report)
@@ -1143,6 +1157,285 @@ func TestSchemaApplyDryRunDistinction(t *testing.T) {
 		}
 		if !strings.HasPrefix(result.Applied[0], "overwrite_stem: ") {
 			t.Errorf("applied[0] = %q, want an overwrite_stem action so the caller can tell a replacement from a create", result.Applied[0])
+		}
+	})
+}
+
+// writeProposalsReport builds a single-proposal report on disk. Shared by the
+// patch-fidelity and root-resolution tests, which differ only in the fields
+// they exercise.
+func writeProposalsReport(t *testing.T, scanPath, scanRoot, target, patch string) string {
+	t.Helper()
+	report := SchemaProposalsReport{
+		Version: 1,
+		Kind:    "rootline/schema-proposals",
+		Path:    scanPath,
+		Root:    scanRoot,
+		Proposals: []SchemaProposal{{
+			ID:        "p1",
+			Operation: "create_stem",
+			Target:    target,
+			Patch:     patch,
+		}},
+	}
+	data, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshaling report: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "proposals.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("writing report: %v", err)
+	}
+	return path
+}
+
+// TestSchemaProposePopulatesFullPatch asserts that propose records the whole
+// inferred schema, not just the 200-char display preview. Without the full
+// patch there is nothing for apply to write except a re-derivation.
+func TestSchemaProposePopulatesFullPatch(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		"task1.md": "---\nstatus: done\ntype: feature\n---\n# Task 1\n",
+		"task2.md": "---\nstatus: pending\ntype: bug\n---\n# Task 2\n",
+	})
+
+	stdout, err := executeSchemaPropose(t, root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var report SchemaProposalsReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	if len(report.Proposals) == 0 {
+		t.Fatal("expected at least one proposal")
+	}
+
+	p := report.Proposals[0]
+	if p.Patch == "" {
+		t.Fatal("patch is empty; propose must record the full YAML it inferred")
+	}
+	for _, want := range []string{"version: 2", "schema:", "status", "type"} {
+		if !strings.Contains(p.Patch, want) {
+			t.Errorf("patch is missing %q; got:\n%s", want, p.Patch)
+		}
+	}
+	if p.PatchPreview == "" {
+		t.Error("patch_preview must stay populated for display")
+	}
+	if len(p.PatchPreview) > 203 {
+		t.Errorf("patch_preview is %d chars; it must stay truncated for display", len(p.PatchPreview))
+	}
+}
+
+// TestSchemaApplyWritesProposedPatchVerbatim is the propose->apply contract:
+// the bytes a reviewer approved are the bytes that land on disk. Before this
+// change apply ignored the proposal body and re-derived an untyped schema, so
+// approving a proposal approved something the tool would never produce.
+func TestSchemaApplyWritesProposedPatchVerbatim(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		"task1.md": "---\nstatus: done\n---\n# Task 1\n",
+		"task2.md": "---\nstatus: pending\n---\n# Task 2\n",
+	})
+
+	stdout, err := executeSchemaPropose(t, root)
+	if err != nil {
+		t.Fatalf("propose: %v", err)
+	}
+	var report SchemaProposalsReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(report.Proposals) == 0 {
+		t.Fatal("expected at least one proposal")
+	}
+	proposed := report.Proposals[0].Patch
+
+	reportPath := filepath.Join(t.TempDir(), "proposals.json")
+	data, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshaling report: %v", err)
+	}
+	if err := os.WriteFile(reportPath, data, 0o644); err != nil {
+		t.Fatalf("writing report: %v", err)
+	}
+
+	if _, err := executeSchemaApply(t, "--report", reportPath); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	written := string(mustReadFile(t, report.Proposals[0].Target))
+	if written != proposed {
+		t.Errorf("written .stem does not match the proposed patch.\nproposed:\n%s\nwritten:\n%s", proposed, written)
+	}
+	// The regression this guards: the old path emitted untyped shells.
+	if strings.Contains(written, "type: string") && !strings.Contains(proposed, "type: string") {
+		t.Error("written schema was re-derived rather than taken from the proposal")
+	}
+}
+
+// TestSchemaApplyEmptyPatchRejected covers legacy reports that predate the
+// patch field. Refusing is the point: the old fallback silently wrote untyped
+// shells over whatever was there.
+func TestSchemaApplyEmptyPatchRejected(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		"test.md": "---\ntitle: Test\n---\nContent",
+	})
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		t.Fatalf("resolving root: %v", err)
+	}
+	stemPath := filepath.Join(absRoot, ".stem")
+
+	reportPath := writeProposalsReport(t, absRoot, absRoot, stemPath, "")
+
+	out, err := executeSchemaApply(t, "--report", reportPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	result := decodeSchemaApplyResult(t, out)
+
+	found := false
+	for _, e := range result.Errors {
+		if strings.Contains(e, "patch content required") && strings.Contains(e, "schema propose") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("errors = %v, want one telling the caller to re-run schema propose", result.Errors)
+	}
+	if len(result.Applied) != 0 {
+		t.Errorf("applied = %v, want empty for a proposal with no patch", result.Applied)
+	}
+	if _, statErr := os.Stat(stemPath); statErr == nil {
+		t.Error("a .stem was written despite the proposal carrying no patch")
+	}
+}
+
+// TestSchemaApplyRootResolution covers the scan root the post-apply validation
+// runs against. report.Root is absolute, so a report stays applicable from any
+// working directory; reports without it keep the old CWD-relative behaviour.
+func TestSchemaApplyRootResolution(t *testing.T) {
+	const patch = "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"
+
+	t.Run("propose records an absolute root", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			"test.md": "---\ntitle: Test\n---\nContent",
+		})
+		stdout, err := executeSchemaPropose(t, root)
+		if err != nil {
+			t.Fatalf("propose: %v", err)
+		}
+		var report SchemaProposalsReport
+		if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+			t.Fatalf("invalid JSON: %v", err)
+		}
+		if !filepath.IsAbs(report.Root) {
+			t.Errorf("root = %q, want an absolute path so the report survives a change of directory", report.Root)
+		}
+	})
+
+	t.Run("root wins over a path that would resolve elsewhere", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			"docs/test.md": "---\ntitle: Test\n---\nContent",
+		})
+		docsDir := filepath.Join(root, "docs")
+		// Path is a bare relative name that would resolve against the test
+		// process CWD; Root is the real location.
+		reportPath := writeProposalsReport(t, "docs", docsDir, filepath.Join(docsDir, ".stem"), patch)
+
+		out, err := executeSchemaApply(t, "--report", reportPath)
+		if err != nil {
+			t.Fatalf("apply: %v", err)
+		}
+		result := decodeSchemaApplyResult(t, out)
+		if len(result.Applied) != 1 {
+			t.Fatalf("applied = %v (errors %v), want the proposal applied via report.Root", result.Applied, result.Errors)
+		}
+		if _, statErr := os.Stat(filepath.Join(docsDir, ".stem")); statErr != nil {
+			t.Errorf("no .stem at the root-resolved location: %v", statErr)
+		}
+	})
+
+	t.Run("legacy report without root keeps path-based resolution", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			"test.md": "---\ntitle: Test\n---\nContent",
+		})
+		absRoot, err := filepath.Abs(root)
+		if err != nil {
+			t.Fatalf("resolving root: %v", err)
+		}
+		reportPath := writeProposalsReport(t, absRoot, "", filepath.Join(absRoot, ".stem"), patch)
+
+		out, err := executeSchemaApply(t, "--report", reportPath)
+		if err != nil {
+			t.Fatalf("apply: %v", err)
+		}
+		result := decodeSchemaApplyResult(t, out)
+		if len(result.Applied) != 1 {
+			t.Errorf("applied = %v (errors %v), want legacy path resolution to still work", result.Applied, result.Errors)
+		}
+	})
+}
+
+// TestPostApplyValidationErrorPropagation tests that validation errors surface in results.
+func TestPostApplyValidationErrorPropagation(t *testing.T) {
+	// A scan root that does not exist must surface as an error. This is issue
+	// #59 sub-defect 4b: applying a report from another directory resolved the
+	// scan root to a path that was never there, and the swallowed scan error
+	// was reported as total_files: 0 — indistinguishable from a clean run.
+	t.Run("unscannable root surfaces an error instead of an all-zero summary", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "does-not-exist")
+		reportPath := writeProposalsReport(t, missing, missing,
+			filepath.Join(missing, ".stem"), "version: 2\nschema:\n  title:\n    type: string\n")
+
+		out, err := executeSchemaApply(t, "--report", reportPath)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		result := decodeSchemaApplyResult(t, out)
+
+		foundScanError := false
+		for _, e := range result.Errors {
+			if strings.Contains(e, "post-apply validation scan") {
+				foundScanError = true
+			}
+		}
+		if !foundScanError {
+			t.Errorf("errors = %v, want one naming the failed post-apply validation scan", result.Errors)
+		}
+		if result.ValidationSummary != nil {
+			t.Errorf("validation_summary = %+v, want it omitted when the scan failed", result.ValidationSummary)
+		}
+	})
+
+	// The complement: a scan that succeeds must report the real numbers,
+	// including failures caused by the schema that was just written.
+	t.Run("successful scan reports real counts for the freshly written schema", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			"docs/a.md": "---\nestado: Pending\n---\nContent",
+			"docs/b.md": "---\nestado: Bogus\n---\nContent",
+		})
+		docsDir := filepath.Join(root, "docs")
+		target := filepath.Join(docsDir, ".stem")
+		patch := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    required: true\n    values: [Pending, Done]\n"
+		reportPath := writeProposalsReport(t, docsDir, docsDir, target, patch)
+
+		out, err := executeSchemaApply(t, "--report", reportPath)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		result := decodeSchemaApplyResult(t, out)
+
+		if result.ValidationSummary == nil {
+			t.Fatalf("validation_summary is nil; a successful scan must report one. errors=%v", result.Errors)
+		}
+		if result.ValidationSummary.TotalFiles != 2 {
+			t.Errorf("total_files = %d, want 2", result.ValidationSummary.TotalFiles)
+		}
+		// b.md violates the enum the patch just introduced, so a green summary
+		// here would mean validation ran against something that cannot fail.
+		if result.ValidationSummary.InvalidFiles == 0 || result.ValidationSummary.TotalErrors == 0 {
+			t.Errorf("summary = %+v, want the enum violation in b.md counted", result.ValidationSummary)
 		}
 	})
 }

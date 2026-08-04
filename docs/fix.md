@@ -162,6 +162,21 @@ rootline schema apply --report proposals.json
 
 Data-only repairs (correct_value, add_field, etc.) are **ignored** — use `rootline repair apply` instead.
 
+**What propose proposes is what apply writes.** Each `create_stem` proposal carries a `patch`
+field holding the complete inferred YAML, and `schema apply` writes those bytes verbatim. It does
+not re-derive the schema at apply time, so the artifact a reviewer approved is the artifact that
+lands on disk. The neighbouring `patch_preview` is the same YAML truncated to 200 characters for
+display; it is not the write source. A proposal with no `patch` — a report generated before this
+field existed — is refused with an instruction to re-run `schema propose`, rather than falling
+back to a generator that emits untyped `type: string` shells.
+
+**Where the scan root comes from.** `schema propose` records an absolute `root`, so a report
+applies from any working directory — the usual CI shape, where proposals are written into an
+`artifacts/` directory and applied from elsewhere. Reports without `root` keep the older behaviour
+of resolving `path` against the caller's working directory. Post-apply validation runs against
+that root, and a scan that fails surfaces in `errors[]` rather than as an all-zero
+`validation_summary`, which reads identically to a clean run.
+
 **Path containment.** As with `repair apply`, a report is untrusted input: every `create_stem`
 target is checked against the scan root before a `.stem` is written, so a report naming
 `<root>/../../outside/.stem` no longer scaffolds outside the tree the command was pointed at.

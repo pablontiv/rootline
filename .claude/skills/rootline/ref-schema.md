@@ -143,7 +143,9 @@ Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new comman
 
 `rootline schema propose <dir> [--incremental] [--output json|table]` generates read-only schema proposals:
 - Detects whether the directory has a hierarchical structure (E##/F##/S###/T### patterns) and calls `GenerateHierarchicalSchema` or `GenerateFlatSchema`
-- Emits JSON: version 1, kind `"rootline/schema-proposals"`, with `proposals` array (id, operation, target, confidence, requires_agent, patch_preview) and summary
+- Emits JSON: version 1, kind `"rootline/schema-proposals"`, with `proposals` array (id, operation, target, confidence, requires_agent, `patch`, `patch_preview`) and summary
+- `patch` carries the **full** inferred YAML and is what `schema apply` writes. `patch_preview` is the same YAML truncated to 200 chars, for display only — never apply from it
+- `root` carries the **absolute** scan root, so the report stays applicable from any working directory
 - `--incremental`: skips proposals covered by existing `.stem` files
 - Never creates, modifies, or deletes any file
 
@@ -152,16 +154,18 @@ Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new comman
 `rootline schema apply --report <proposals.json> [--dry-run] [--force]` applies schema proposals to `.stem` files:
 - Input kind must be `"rootline/schema-proposals"`, version must be 1 (else structured error)
 - Skips proposals with `requires_agent: true`
-- `create_stem` operation: creates the target `.stem` file with the proposed schema
+- `create_stem` operation: writes `proposal.patch` **byte-identical** to the target `.stem`. Apply never re-derives the schema, so what a reviewer approved is what lands on disk
+- A proposal with an empty or missing `patch` is refused into `errors[]` with an instruction to re-run `schema propose`; it is never silently scaffolded into untyped `type: string` shells
 - Unknown operations: rejected with message in `rejected[]` (policy refusal, not error)
 - **Flag: `--force`** — Overwrites existing `.stem` files when applying `create_stem` proposals. Without `--force`, proposals targeting existing files are rejected (policy refusal).
 - `--dry-run`: no files written; reports what would be done
-- Post-apply: runs `rootline validate --all` and includes results in output
+- Scan root: `report.root` when present, else `report.path` resolved against the caller's CWD (legacy reports)
+- Post-apply: runs `rootline validate --all` against that scan root. A failed scan surfaces in `errors[]` — it is never reported as an all-zero `validation_summary`, which would be indistinguishable from a clean run
 - Emits JSON: version 1, kind `"rootline/schema-apply"` with applied/skipped/rejected/errors/validation_summary
 
 **Path containment.** Each `create_stem` target is validated with
-`fix.ContainPath(scanRoot, target, fix.PolicyAcceptAbsolute)` before `ScaffoldSchema` runs, and
-`ScaffoldSchema` receives the directory of the *validated* target, not the raw one.
+`fix.ContainPath(scanRoot, target, fix.PolicyAcceptAbsolute)` before anything is written, and the
+write targets the *validated* path, not the raw one.
 
 Two deliberate differences from `repair apply`:
 - **Absolute targets are accepted, then confined** (`PolicyAcceptAbsolute`). `schema propose`
