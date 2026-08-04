@@ -22,6 +22,32 @@ type ValidationError struct {
 	Suggestion string `json:"suggestion,omitempty"`
 }
 
+// resolveFieldValue resolves a field value using frontmatter-first precedence.
+// Priority:
+// 1. If the field exists in record.Frontmatter, return that value.
+// 2. If the field has an Extract directive, try to extract from the body.
+// 3. Otherwise, return (nil, false).
+//
+// This ensures frontmatter always takes precedence over body extraction,
+// implementing the spec's "Frontmatter Precedence Over Body Extraction" requirement.
+func resolveFieldValue(record *extract.Record, name string, field SchemaField) (any, bool) {
+	// Frontmatter takes precedence (highest priority).
+	if v, ok := record.Frontmatter[name]; ok {
+		return v, true
+	}
+
+	// If no frontmatter value and field has an Extract directive, try body extraction.
+	if field.Extract != "" {
+		bodyVal, exists := extract.ResolveBodyValue(record, field.Extract)
+		if exists && bodyVal != "" {
+			return bodyVal, true
+		}
+	}
+
+	// Field does not exist.
+	return nil, false
+}
+
 // Validate checks a Record's frontmatter against the effective StemFile.
 // It runs schema-level auto-checks (required, enum) and explicit
 // validation rules (non_empty, enum, requires, exists).
@@ -35,7 +61,7 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 
 	// Phase 1: Schema auto-checks.
 	for name, field := range effective.Schema {
-		val, exists := record.Frontmatter[name]
+		val, exists := resolveFieldValue(record, name, field)
 
 		// Skip if severity is "off"
 		if field.Severity == "off" {

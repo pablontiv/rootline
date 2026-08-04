@@ -2,6 +2,8 @@ package rules
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -1113,5 +1115,187 @@ func TestValidateLinks_EmptyStyleDefaultsToWikilink(t *testing.T) {
 	links := []extract.Link{{Target: "x", Type: "reference"}} // no Style set (legacy shape)
 	if errs := validateLinks(links, schema, "test.stem"); len(errs) != 1 {
 		t.Fatalf("legacy style-less wikilink not validated: %+v", errs)
+	}
+}
+
+// --- Body-sourced field validation (issue #77) ---
+
+// bodySourceStem builds a single-field schema backed by a `source:` directive.
+func bodySourceStem(name string, field SchemaField) *StemFile {
+	field.Source = "root/.stem"
+	return &StemFile{Schema: map[string]SchemaField{name: field}}
+}
+
+// TestValidatePhase1_BodySourcedFields covers Phase 1 resolution of fields
+// carrying a `source:` directive. Both directions matter: a satisfied body
+// source must pass, and an unsatisfied one must still fail — a fix that makes
+// the check unconditionally pass is not a fix.
+func TestValidatePhase1_BodySourcedFields(t *testing.T) {
+	sectionField := SchemaField{Type: "string", Required: true, Extract: `body.section["## Notes"]`}
+	h1Field := SchemaField{Type: "string", Required: true, Extract: "body.h1"}
+	statusField := SchemaField{Type: "enum", Values: []string{"approved", "pending"}, Extract: `body.section["## Status"]`}
+
+	tests := []struct {
+		name        string
+		field       string
+		stem        *StemFile
+		frontmatter map[string]any
+		body        string
+		wantRule    string // "" means no error expected
+	}{
+		{
+			name:  "section present with content satisfies required",
+			field: "notes",
+			stem:  bodySourceStem("notes", sectionField),
+			body:  "# Title\n\n## Notes\n\nThis is the notes section\n",
+		},
+		{
+			name:     "section absent still fails required",
+			field:    "notes",
+			stem:     bodySourceStem("notes", sectionField),
+			body:     "# Title\n\nNo notes section here\n",
+			wantRule: "required",
+		},
+		{
+			name:     "section present but empty fails required",
+			field:    "notes",
+			stem:     bodySourceStem("notes", sectionField),
+			body:     "# Title\n\n## Notes\n\n## End\n\nOther content\n",
+			wantRule: "required",
+		},
+		{
+			name:  "h1 present satisfies required",
+			field: "titulo",
+			stem:  bodySourceStem("titulo", h1Field),
+			body:  "# My Document Title\n\nContent here\n",
+		},
+		{
+			name:     "h1 absent still fails required",
+			field:    "titulo",
+			stem:     bodySourceStem("titulo", h1Field),
+			body:     "## Section Header\n\nNo h1 here\n",
+			wantRule: "required",
+		},
+		{
+			name:        "frontmatter wins over the body section",
+			field:       "notes",
+			stem:        bodySourceStem("notes", sectionField),
+			frontmatter: map[string]any{"notes": "Explicit frontmatter value"},
+			body:        "# Title\n\n## Notes\n\nBody section with different content\n",
+		},
+		{
+			name:  "enum accepts an extracted value inside the list",
+			field: "status",
+			stem:  bodySourceStem("status", statusField),
+			body:  "# Title\n\n## Status\n\napproved\n",
+		},
+		{
+			name:     "enum rejects an extracted value outside the list",
+			field:    "status",
+			stem:     bodySourceStem("status", statusField),
+			body:     "# Title\n\n## Status\n\ninvalid-value\n",
+			wantRule: "enum",
+		},
+		{
+			name:  "required is reported before enum when the section is missing",
+			field: "status",
+			stem: bodySourceStem("status", SchemaField{
+				Type: "enum", Values: []string{"approved", "pending"},
+				Required: true, Extract: `body.section["## Status"]`,
+			}),
+			body:     "# Title\n\nNo status section\n",
+			wantRule: "required",
+		},
+		{
+			name:     "a field without source: still requires frontmatter",
+			field:    "estado",
+			stem:     bodySourceStem("estado", SchemaField{Type: "string", Required: true}),
+			body:     "# Title\n\n## Estado\n\nActivo\n",
+			wantRule: "required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fm := tt.frontmatter
+			if fm == nil {
+				fm = map[string]any{}
+			}
+			record := &extract.Record{
+				Path: "test.md", Type: "markdown", Frontmatter: fm, Body: tt.body,
+			}
+
+			errs := Validate(context.Background(), record, tt.stem)
+
+			if tt.wantRule == "" {
+				if len(errs) != 0 {
+					t.Fatalf("got %d errors, want 0: %+v", len(errs), errs)
+				}
+				return
+			}
+			if len(errs) != 1 {
+				t.Fatalf("got %d errors, want 1 (%s): %+v", len(errs), tt.wantRule, errs)
+			}
+			if errs[0].Rule != tt.wantRule {
+				t.Errorf("rule = %q, want %q", errs[0].Rule, tt.wantRule)
+			}
+			if errs[0].Field != tt.field {
+				t.Errorf("field = %q, want %q", errs[0].Field, tt.field)
+			}
+		})
+	}
+}
+
+// TestValidatePhase1_BodySourcedFieldRespectsMatchScope drives the real
+// resolution path (ResolveForRecord -> FilterSchemaByMatch) rather than a
+// hand-built schema, so that match: scoping is actually exercised: the field
+// must fire on a matching record and be absent entirely on a non-matching one.
+func TestValidatePhase1_BodySourcedFieldRespectsMatchScope(t *testing.T) {
+	dir := t.TempDir()
+	stemYAML := `version: 2
+root: true
+scope:
+  match: "*"
+schema:
+  content:
+    type: string
+    required: true
+    match: "T*"
+    source: body.section["## Content"]
+`
+	if err := os.WriteFile(filepath.Join(dir, ".stem"), []byte(stemYAML), 0o600); err != nil {
+		t.Fatalf("writing .stem: %v", err)
+	}
+
+	body := "# Title\n\nNo content section\n"
+
+	// T001.md matches "T*" — the required body field applies and is unsatisfied.
+	effective, err := ResolveForRecord(dir, "T001.md")
+	if err != nil {
+		t.Fatalf("resolving matching record: %v", err)
+	}
+	if _, ok := effective.Schema["content"]; !ok {
+		t.Fatal("matching record: field \"content\" dropped from the effective schema")
+	}
+	errs := Validate(context.Background(), &extract.Record{
+		Path: "T001.md", Type: "markdown", Frontmatter: map[string]any{}, Body: body,
+	}, effective)
+	if len(errs) != 1 || errs[0].Rule != "required" {
+		t.Fatalf("matching record: got %+v, want one required error", errs)
+	}
+
+	// README.md does not match "T*" — the field must not be evaluated at all.
+	effective, err = ResolveForRecord(dir, "README.md")
+	if err != nil {
+		t.Fatalf("resolving non-matching record: %v", err)
+	}
+	if _, ok := effective.Schema["content"]; ok {
+		t.Error("non-matching record: field survived match: scoping")
+	}
+	errs = Validate(context.Background(), &extract.Record{
+		Path: "README.md", Type: "markdown", Frontmatter: map[string]any{}, Body: body,
+	}, effective)
+	if len(errs) != 0 {
+		t.Fatalf("non-matching record: got %+v, want no errors", errs)
 	}
 }
