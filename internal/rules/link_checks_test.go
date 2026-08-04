@@ -268,8 +268,14 @@ func TestCheckLinks_BasenameFallbackTargetIsUnverifiable(t *testing.T) {
 	if errs[0].Rule != "link_unverifiable" {
 		t.Errorf("Rule = %q, want link_unverifiable", errs[0].Rule)
 	}
-	if errs[0].Severity != "warning" {
-		t.Errorf("Severity = %q, want warning — the link may well resolve", errs[0].Severity)
+	if errs[0].Severity != "warn" {
+		t.Errorf("Severity = %q, want warn — the link may well resolve", errs[0].Severity)
+	}
+	// Severity is not cosmetic: only "warn" is routed to Warnings, so any
+	// other value would make the record invalid.
+	if r := NewValidationResult("t.md", errs); !r.Valid || len(r.Warnings) != 1 {
+		t.Errorf("unverifiable link must not invalidate the record: valid=%v errors=%d warnings=%d",
+			r.Valid, len(r.Errors), len(r.Warnings))
 	}
 }
 

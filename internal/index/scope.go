@@ -28,3 +28,25 @@ func MatchesScope(filePath string, effectiveStem *rules.StemFile) bool {
 	}
 	return matched
 }
+
+// IsIgnored reports whether absPath is excluded by a .stemignore anywhere
+// between root and the file's own directory.
+//
+// Scan applies .stemignore while walking, but a command handed an explicit
+// file never walks. Without this, `validate <file>` checked a file that
+// `validate --all` skipped, so the pre-commit hook and CI enforced different
+// rules on the same file.
+func IsIgnored(root, absPath string) bool {
+	var stack []ignoreEntry
+	dir := filepath.Dir(absPath)
+	for {
+		if patterns, err := parseStemignore(filepath.Join(dir, ".stemignore")); err == nil && len(patterns) > 0 {
+			stack = append(stack, ignoreEntry{dir: dir, patterns: patterns})
+		}
+		if dir == root || dir == filepath.Dir(dir) {
+			break
+		}
+		dir = filepath.Dir(dir)
+	}
+	return isIgnored(absPath, stack)
+}

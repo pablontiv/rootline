@@ -61,13 +61,7 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 
 	// Index and extract records.
 	reg := extract.NewRegistry()
-	resolver := func(dir string) (*rules.StemFile, error) {
-		entries, err := rules.WalkUp(dir)
-		if err != nil || len(entries) == 0 {
-			return nil, err
-		}
-		return rules.MergeStemFiles(entries), nil
-	}
+	resolver := stemScopeResolver()
 
 	// Bootstrap scan: this command derives a schema from documents that may
 	// not have one yet, so a missing schema must not stop it.

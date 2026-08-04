@@ -80,6 +80,10 @@ rootline graph docs/epics/ --where 'estado == "Specified"' --check  # Check only
 
 ### With --check
 
+`graph` and `query` scan the same record set `validate --all` does: `scope.match` and
+`.stemignore` both apply. A file the schema declares out of governance is not a node, contributes
+no edges, and cannot fail `--check`. A tree carrying no schema at all is still graphed.
+
 ### How a link target resolves
 
 `graph` resolves links through the same engine `validate` uses, so the two agree on which links

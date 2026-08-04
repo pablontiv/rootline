@@ -12,7 +12,6 @@ import (
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/graph"
-	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/query"
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
@@ -109,7 +108,7 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		reg := extract.NewRegistry()
-		records, err = index.Scan(ctx, absRoot, reg)
+		records, err = scanGoverned(ctx, absRoot, reg)
 		if err != nil {
 			return fmt.Errorf("scanning %s: %w", scanRoot, err)
 		}
@@ -225,7 +224,7 @@ func scanForTraversal(ctx context.Context, absQueryRoot string) ([]*extract.Reco
 	}
 
 	reg := extract.NewRegistry()
-	all, err := index.Scan(ctx, absGraphRoot, reg)
+	all, err := scanGoverned(ctx, absGraphRoot, reg)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("scanning graph root %s: %w", absGraphRoot, err)
 	}

@@ -114,6 +114,8 @@ links:
 
 **Validation**: Check failures surface in `validate` as rules `link_resolve` (with fuzzy suggestion), `link_anchor`, `link_encoding`. External schemes, images, and pure fragments are not checked.
 
+**One record set**: `validate` (both modes), `graph`, `query` and `fix --all` apply the same `scope.match` and `.stemignore` filters. `validate <file>` on an excluded file reports a `skipped` warning instead of validating it, so the pre-commit hook and CI agree.
+
 **`resolve` is always on**: broken-target detection needs no declaration (it matches `graph --check`, which never had an opt-in). Set `links.checks.resolve: false` to opt out. `anchors` and `encoding` remain opt-in.
 
 **Basename fallback**: `links.basename_fallback` (default off) lets a path-less target match a uniquely-named record anywhere — the wiki convention. It needs a full-tree index, which `graph` and `query` traversal have and `validate` does not, so with it ON `validate` reports `link_unverifiable` (warning) instead of guessing or staying silent. Off is what makes every command agree.

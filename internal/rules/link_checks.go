@@ -79,11 +79,14 @@ func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath, root str
 				// here and name the command that can decide it.
 				if schema.BasenameFallback && resolve {
 					errs = append(errs, ValidationError{
-						Rule:     "link_unverifiable",
-						Field:    "links",
-						Message:  fmt.Sprintf("link target %q cannot be verified: links.basename_fallback matches against every record, which this command does not scan (check it with 'rootline graph --check')", link.Target),
-						Source:   "links.checks",
-						Severity: "warning",
+						Rule:    "link_unverifiable",
+						Field:   "links",
+						Message: fmt.Sprintf("link target %q cannot be verified: links.basename_fallback matches against every record, which this command does not scan (check it with 'rootline graph --check')", link.Target),
+						Source:  "links.checks",
+						// "warn" is the severity NewValidationResult routes to
+						// warnings; anything else counts as an error and would
+						// fail the run for a link that may well be fine.
+						Severity: "warn",
 					})
 					continue
 				}
