@@ -52,7 +52,7 @@ func TestApplyRepair_RollsBackOnPostValidationFailure(t *testing.T) {
 		To:          "TOTALLY_INVALID",
 	}}
 
-	result, err := ApplyRepair(proposals, false, dir)
+	result, err := ApplyRepair(proposals, false, dir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestApplyRepair_RolledBackFileIsNotReportedAsChanged(t *testing.T) {
 		To:    "NOPE",
 	}}
 
-	result, err := ApplyRepair(proposals, false, dir)
+	result, err := ApplyRepair(proposals, false, dir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestApplyRepair_UnrelatedErrorDoesNotDisablePostValidation(t *testing.T) {
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, dir)
+	result, err := ApplyRepair(proposals, false, dir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestApplyRepair_ValidWriteSurvivesAlongsideRollback(t *testing.T) {
 		{Type: proposal.CorrectValue, Field: "estado", Paths: []string{"bad.md"}, From: "Pending", To: "INVALID"},
 	}
 
-	result, err := ApplyRepair(proposals, false, dir)
+	result, err := ApplyRepair(proposals, false, dir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestApplyRepair_CorrectLinkIsPostValidatedAndRolledBack(t *testing.T) {
 		{Type: proposal.CorrectLink, Field: "links", Paths: []string{"a.md"}, From: "target", To: "renamed"},
 	}
 
-	result, err := ApplyRepair(proposals, false, dir)
+	result, err := ApplyRepair(proposals, false, dir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestApplyRepair_DryRunNeverRollsBack(t *testing.T) {
 		To:    "INVALID",
 	}}
 
-	result, err := ApplyRepair(proposals, true, dir)
+	result, err := ApplyRepair(proposals, true, dir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}

@@ -91,7 +91,7 @@ type repairTarget struct {
 // Reports are untrusted input, so every path they name is checked against root
 // before the filesystem is touched at all. Paths that escape are recorded in
 // Rejected, not Errors: they are a policy refusal rather than a failed write.
-func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*RepairResult, error) {
+func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string, fillMissing bool) (*RepairResult, error) {
 	result := &RepairResult{
 		Version: 1,
 		Kind:    "rootline/repair",
@@ -146,6 +146,14 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*Repa
 	for _, p := range proposals {
 		// A proposal is applied whole or not at all, so one bad path discards it.
 		if hasRejectedPath(p, rejected) {
+			continue
+		}
+
+		// A value the engine picked because the schema declared none stays out
+		// of the document unless the caller explicitly asked for it.
+		if p.Type == proposal.AddField && proposal.IsEngineChosen(p.ValueSource) && !fillMissing {
+			result.Skipped = append(result.Skipped,
+				fmt.Sprintf("%s: engine-chosen value (%s); pass --fill-missing to apply", p.Field, p.ValueSource))
 			continue
 		}
 

@@ -247,7 +247,9 @@ func TestApplyFixes_MissingRequired(t *testing.T) {
 		{Rule: "required", Field: "estado", Message: "field estado is required"},
 	}
 
-	added, corrected := ApplyFixes(context.Background(), record, effective, errs)
+	// estado declares no default:, so filling it requires the opt-in. The
+	// refusal path is covered by TestApplyFixes_DoesNotInventValueWithoutOptIn.
+	added, corrected, _ := ApplyFixes(context.Background(), record, effective, errs, true)
 	if len(added) != 1 {
 		t.Errorf("expected 1 field added, got %d", len(added))
 	}
@@ -273,7 +275,7 @@ func TestApplyFixes_InvalidEnum(t *testing.T) {
 		{Rule: "enum", Field: "estado", Message: `value "Completd" not in allowed values`},
 	}
 
-	added, corrected := ApplyFixes(context.Background(), record, effective, errs)
+	added, corrected, _ := ApplyFixes(context.Background(), record, effective, errs, false)
 	if len(added) != 0 {
 		t.Errorf("expected 0 added, got %d", len(added))
 	}
@@ -293,7 +295,7 @@ func TestApplyFixes_NilEffective(t *testing.T) {
 	errs := []rules.ValidationError{
 		{Rule: "required", Field: "estado"},
 	}
-	added, corrected := ApplyFixes(context.Background(), record, nil, errs)
+	added, corrected, _ := ApplyFixes(context.Background(), record, nil, errs, false)
 	if len(added) != 0 || len(corrected) != 0 {
 		t.Error("expected no changes with nil effective")
 	}
@@ -310,7 +312,7 @@ func TestApplyFixes_UnknownField(t *testing.T) {
 	errs := []rules.ValidationError{
 		{Rule: "required", Field: "unknown_field"},
 	}
-	added, corrected := ApplyFixes(context.Background(), record, effective, errs)
+	added, corrected, _ := ApplyFixes(context.Background(), record, effective, errs, false)
 	if len(added) != 0 || len(corrected) != 0 {
 		t.Error("expected no changes for unknown field")
 	}
@@ -329,7 +331,7 @@ func TestApplyFixes_RequiredWithDefault(t *testing.T) {
 	errs := []rules.ValidationError{
 		{Rule: "required", Field: "estado"},
 	}
-	added, _ := ApplyFixes(context.Background(), record, effective, errs)
+	added, _, _ := ApplyFixes(context.Background(), record, effective, errs, false)
 	if len(added) != 1 {
 		t.Fatalf("expected 1 added, got %d", len(added))
 	}
@@ -758,7 +760,7 @@ func TestApplyProposals_ExtendEnum(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -799,7 +801,7 @@ func TestApplyProposals_CorrectValue(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -834,7 +836,7 @@ func TestApplyProposals_SkipCorrectValueAfterExtendEnum(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -877,7 +879,7 @@ func TestApplyProposals_AddField(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -913,7 +915,7 @@ func TestApplyProposals_MigrateValue(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -952,7 +954,7 @@ func TestApplyProposals_CorrectLink(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -972,7 +974,7 @@ func TestApplyProposals_EmptyReport(t *testing.T) {
 		Proposals: nil,
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1001,7 +1003,7 @@ func TestApplyProposals_ExtractBody(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1119,7 +1121,7 @@ func TestApplyProposals_RemoveStemField(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1172,7 +1174,7 @@ func TestApplySetField(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, []*extract.Record{rec})
+	_, err := ApplyProposals(context.Background(), report, dir, []*extract.Record{rec}, false)
 	if err != nil {
 		t.Fatalf("ApplyProposals: %v", err)
 	}
@@ -1458,7 +1460,7 @@ func TestApplyProposals_CorrectOutlier(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1493,7 +1495,7 @@ func TestApplyProposals_PropagateAggregate(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1523,7 +1525,7 @@ func TestApplyProposals_AddAggregate(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1561,7 +1563,7 @@ func TestApplyProposals_AddAggregate_NoPaths(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error for empty paths: %v", err)
 	}
@@ -1588,7 +1590,7 @@ func TestApplyProposals_RemoveStemField_NoPaths(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error for empty paths: %v", err)
 	}
@@ -1619,7 +1621,7 @@ func TestApplyProposals_SetSection(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

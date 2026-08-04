@@ -24,7 +24,9 @@ import (
 // already separated into SchemaSuggestions by the caller and are not processed here.
 // The report's Proposals slice is updated to reflect only the proposals that were
 // actually applied.
-func ApplyProposals(_ context.Context, report *proposal.Report, root string, records []*extract.Record) error {
+// Declined proposals are returned, not dropped: a silent skip reads as "nothing
+// needed doing", the opposite of the truth.
+func ApplyProposals(_ context.Context, report *proposal.Report, root string, records []*extract.Record, fillMissing bool) ([]proposal.Proposal, error) {
 	// Build record map for quick lookup.
 	recordMap := make(map[string]*extract.Record)
 	for _, rec := range records {
@@ -33,44 +35,52 @@ func ApplyProposals(_ context.Context, report *proposal.Report, root string, rec
 
 	// Apply only data-level proposals (pre-separated from schema proposals).
 	var applied []proposal.Proposal
+	var skipped []proposal.Proposal
 
 	for _, p := range report.Proposals {
+		// A value the engine picked because the schema declared none is not
+		// data — writing it would erase the very signal the missing field was
+		// raising. It is proposed for review, not applied, unless asked for.
+		if p.Type == proposal.AddField && proposal.IsEngineChosen(p.ValueSource) && !fillMissing {
+			skipped = append(skipped, p)
+			continue
+		}
 		switch p.Type {
 		case proposal.MigrateValue:
 			if err := applyMigrateValue(p, root, recordMap); err != nil {
-				return fmt.Errorf("migrate_value %s: %w", p.Paths[0], err)
+				return nil, fmt.Errorf("migrate_value %s: %w", p.Paths[0], err)
 			}
 			applied = append(applied, p)
 		case proposal.CorrectValue:
 			if err := applyCorrectValue(p, root, recordMap); err != nil {
-				return fmt.Errorf("correct_value %s: %w", p.Paths[0], err)
+				return nil, fmt.Errorf("correct_value %s: %w", p.Paths[0], err)
 			}
 			applied = append(applied, p)
 		case proposal.ExtractBody, proposal.InferFromChildren, proposal.AddField, proposal.InferFromSiblings, proposal.SetField:
 			if err := applySetField(p, root, recordMap); err != nil {
-				return fmt.Errorf("%s %s: %w", p.Type, p.Paths[0], err)
+				return nil, fmt.Errorf("%s %s: %w", p.Type, p.Paths[0], err)
 			}
 			applied = append(applied, p)
 		case proposal.SetSection:
 			// fix --all builds proposals from scanned record paths, which are
 			// already root-relative; absolute input is tolerated but still confined.
 			if err := applySetSection(p, root, recordMap, PolicyAcceptAbsolute); err != nil {
-				return fmt.Errorf("set_section %s: %w", p.Heading, err)
+				return nil, fmt.Errorf("set_section %s: %w", p.Heading, err)
 			}
 			applied = append(applied, p)
 		case proposal.CorrectOutlier:
 			if err := applyCorrectValue(p, root, recordMap); err != nil {
-				return fmt.Errorf("correct_outlier %s: %w", p.Paths[0], err)
+				return nil, fmt.Errorf("correct_outlier %s: %w", p.Paths[0], err)
 			}
 			applied = append(applied, p)
 		case proposal.PropagateAggregate:
 			if err := applyCorrectValue(p, root, recordMap); err != nil {
-				return fmt.Errorf("propagate_aggregate %s: %w", p.Paths[0], err)
+				return nil, fmt.Errorf("propagate_aggregate %s: %w", p.Paths[0], err)
 			}
 			applied = append(applied, p)
 		case proposal.CorrectLink:
 			if err := applyCorrectLink(p, root); err != nil {
-				return fmt.Errorf("correct_link %s: %w", p.Paths[0], err)
+				return nil, fmt.Errorf("correct_link %s: %w", p.Paths[0], err)
 			}
 			applied = append(applied, p)
 		}
@@ -79,11 +89,11 @@ func ApplyProposals(_ context.Context, report *proposal.Report, root string, rec
 	// Update report to reflect only applied proposals.
 	report.Proposals = applied
 
-	return nil
+	return skipped, nil
 }
 
 // ApplyFixes modifies the record's frontmatter in-place based on validation errors.
-func ApplyFixes(_ context.Context, record *extract.Record, effective *rules.StemFile, errs []rules.ValidationError) (added []string, corrected []string) {
+func ApplyFixes(_ context.Context, record *extract.Record, effective *rules.StemFile, errs []rules.ValidationError, fillMissing bool) (added []string, corrected []string, skipped []string) {
 	if effective == nil {
 		return
 	}
@@ -97,10 +107,13 @@ func ApplyFixes(_ context.Context, record *extract.Record, effective *rules.Stem
 
 		switch e.Rule {
 		case "required":
-			// Add missing required field with default or first enum value
-			value := sf.Default
-			if value == "" && len(sf.Values) > 0 {
-				value = sf.Values[0]
+			// This path consumes no proposals, so provenance is read straight
+			// off the schema: anything other than a declared default: is the
+			// engine inventing a value.
+			value, source := proposal.AddFieldValue(sf)
+			if proposal.IsEngineChosen(source) && !fillMissing {
+				skipped = append(skipped, fmt.Sprintf("%s (no default declared; pass --fill-missing to write %q)", field, value))
+				continue
 			}
 			record.Frontmatter[field] = value
 			added = append(added, fmt.Sprintf("%s=%q", field, value))

@@ -148,3 +148,23 @@ For a file target, replace each `--all <dir>` command with the file form shown a
 ### Mutation Scope
 
 `fix --all` may update documents and `.stem` files through proposals such as `add_field`, `correct_value`, `migrate_value`, `extend_enum`, `remove_stem_field`, `add_aggregate`, and `propagate_aggregate`. Report this scope before applying unless the user already authorized repairs.
+
+### Missing required fields are reported, not invented
+
+An `add_field` proposal carries `value_source`:
+
+| `value_source` | Meaning | Applied by default |
+|---|---|---|
+| `schema_default` | the field's declared `default:` | yes |
+| `enum_first` | first member of `values`, no `default:` declared | no |
+| `empty` | empty string, nothing declared at all | no |
+| absent | report predates provenance | yes (treated as `schema_default`) |
+
+A required field whose schema declares no `default:` is left alone and the skip is
+reported. Do NOT read that as a failure: the validation error survives on purpose,
+because writing a guessed value would erase the missing-data signal the schema author
+asked for. Pass `--fill-missing` only when the user explicitly wants engine-chosen
+values written.
+
+Never "fix" a lingering `required field ... is missing` error by editing the document
+yourself to make validation pass. Surface it and ask what the value should be.

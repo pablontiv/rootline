@@ -76,6 +76,7 @@ func resetFlags() {
 	newDryRun = false
 	fixDryRun = false
 	fixAll = false
+	fixFillMissing = false
 	hooksForce = false
 	treeWhere = nil
 	statsWhere = nil
@@ -103,6 +104,7 @@ func resetFlags() {
 	schemaApplyForce = false
 	reportPath = ""
 	repairDryRun = false
+	repairFillMissing = false
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
 	if f := treeCmd.Flags().Lookup("where"); f != nil {

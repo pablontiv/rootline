@@ -147,7 +147,8 @@ pre-write bytes when validation rejects the result. Reverted files come back in
 `rolled_back` (`{path, errors}`) and are withdrawn from `changed`, so a document is
 never left in a state its own schema refuses. An unrelated failure elsewhere in the
 run — including a path that could not be read — does not disable the check for the
-rest.
+rest. `add_field` proposals whose `value_source` is `enum_first` or `empty` are
+skipped unless `--fill-missing` is passed; see `ref-validate.md`.
 
 Frontmatter is rewritten through a `yaml.Node` round-trip, so key order and YAML
 comments survive and a one-field change produces a one-field diff. Inter-token

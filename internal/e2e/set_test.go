@@ -111,7 +111,7 @@ func TestSet_FullPipeline(t *testing.T) {
 	}
 
 	recordMap := []*extract.Record{record}
-	if err := fix.ApplyProposals(context.Background(), report, root, recordMap); err != nil {
+	if _, err := fix.ApplyProposals(context.Background(), report, root, recordMap, false); err != nil {
 		t.Fatalf("ApplyProposals: %v", err)
 	}
 
@@ -207,7 +207,7 @@ func TestSet_AppendToSection(t *testing.T) {
 		Proposals: proposals,
 	}
 
-	if err := fix.ApplyProposals(context.Background(), report, root, []*extract.Record{record}); err != nil {
+	if _, err := fix.ApplyProposals(context.Background(), report, root, []*extract.Record{record}, false); err != nil {
 		t.Fatalf("ApplyProposals: %v", err)
 	}
 
@@ -280,7 +280,7 @@ func TestSet_ReadValueFromFile(t *testing.T) {
 		Proposals: proposals,
 	}
 
-	if err := fix.ApplyProposals(context.Background(), report, root, []*extract.Record{record}); err != nil {
+	if _, err := fix.ApplyProposals(context.Background(), report, root, []*extract.Record{record}, false); err != nil {
 		t.Fatalf("ApplyProposals: %v", err)
 	}
 
@@ -423,7 +423,7 @@ estado: Pending
 		Proposals: proposals,
 	}
 
-	if err := fix.ApplyProposals(context.Background(), report, root, []*extract.Record{record}); err != nil {
+	if _, err := fix.ApplyProposals(context.Background(), report, root, []*extract.Record{record}, false); err != nil {
 		t.Fatalf("ApplyProposals without stem: %v", err)
 	}
 

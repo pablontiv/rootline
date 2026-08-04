@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	repairDryRun bool
-	reportPath   string
+	repairDryRun      bool
+	repairFillMissing bool
+	reportPath        string
 )
 
 var repairCmd = &cobra.Command{
@@ -44,6 +45,7 @@ func init() {
 	repairApplyCmd.Flags().StringVar(&reportPath, "report", "", "path to fix report JSON (produced by 'rootline fix --all <dir> --dry-run -o json'; required)")
 	_ = repairApplyCmd.MarkFlagRequired("report")
 	repairApplyCmd.Flags().BoolVar(&repairDryRun, "dry-run", false, "preview changes without modifying files")
+	repairApplyCmd.Flags().BoolVar(&repairFillMissing, "fill-missing", false, "also apply add_field proposals whose value the engine chose rather than the schema declaring it")
 
 	repairCmd.AddCommand(repairApplyCmd)
 	rootCmd.AddCommand(repairCmd)
@@ -80,7 +82,7 @@ func runRepairApply(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Apply repair.
-	result, err := fix.ApplyRepair(report.Proposals, repairDryRun, root)
+	result, err := fix.ApplyRepair(report.Proposals, repairDryRun, root, repairFillMissing)
 	if err != nil {
 		return fmt.Errorf("applying repair: %w", err)
 	}

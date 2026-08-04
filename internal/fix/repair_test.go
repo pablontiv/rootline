@@ -38,7 +38,7 @@ tipo: Epic
 	}
 
 	// Apply repair (dry-run false).
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestApplyRepair_SchemaProposalRejected(t *testing.T) {
 	}
 
 	// Apply repair.
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}
@@ -147,7 +147,7 @@ estado: Inprogres
 	}
 
 	// Apply repair with dry-run = true.
-	result, err := ApplyRepair(proposals, true, tmpDir)
+	result, err := ApplyRepair(proposals, true, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}
@@ -200,7 +200,7 @@ estado: Pending
 	}
 
 	// Apply repair.
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}
@@ -267,7 +267,7 @@ estado: Pendng
 	}
 
 	// Apply repair.
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestApplyRepair_DirectoryPathReported(t *testing.T) {
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestApplyRepair_RejectsEscapingPath(t *testing.T) {
 		Paths:       []string{"../outside.md"},
 		From:        "Pending",
 		To:          "Completed",
-	}}, false, root)
+	}}, false, root, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}
@@ -406,7 +406,7 @@ func TestApplyRepair_RejectsAbsolutePath(t *testing.T) {
 		Description: "add tampered field",
 		Paths:       []string{outside},
 		Value:       "true",
-	}}, false, root)
+	}}, false, root, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair failed: %v", err)
 	}

@@ -423,7 +423,7 @@ schema:
 
 // TestApplyRepair_EmptyProposals tests ApplyRepair with empty proposal list
 func TestApplyRepair_EmptyProposals(t *testing.T) {
-	result, err := ApplyRepair([]proposal.Proposal{}, false, t.TempDir())
+	result, err := ApplyRepair([]proposal.Proposal{}, false, t.TempDir(), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -447,7 +447,7 @@ func TestApplyRepair_ReadError(t *testing.T) {
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("unexpected error for missing file: %v", err)
 	}
@@ -483,7 +483,7 @@ estado: "Pending"
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -523,7 +523,7 @@ estado: Pending
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -557,7 +557,7 @@ estado: Pending
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -593,7 +593,7 @@ Some body content here.
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -633,7 +633,7 @@ Old notes.
 		},
 	}
 
-	result, err := ApplyRepair(proposals, true, tmpDir)
+	result, err := ApplyRepair(proposals, true, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -681,7 +681,7 @@ Existing.
 		},
 	}
 
-	result, err := ApplyRepair(proposals, true, tmpDir)
+	result, err := ApplyRepair(proposals, true, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -726,7 +726,7 @@ estado: Outlier
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -762,7 +762,7 @@ total: 10
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -836,7 +836,7 @@ func TestApplyProposals_SetField(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -885,7 +885,7 @@ func TestApplyProposals_MultipleTypes(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -947,7 +947,7 @@ func TestApplyProposals_InferFromChildren(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -981,7 +981,7 @@ func TestApplyProposals_InferFromSiblings(t *testing.T) {
 		},
 	}
 
-	err := ApplyProposals(context.Background(), report, dir, records)
+	_, err := ApplyProposals(context.Background(), report, dir, records, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1015,7 +1015,7 @@ estado: Pending
 		},
 	}
 
-	result, err := ApplyRepair(proposals, true, tmpDir)
+	result, err := ApplyRepair(proposals, true, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -1059,7 +1059,7 @@ estado: Pending
 		},
 	}
 
-	result, err := ApplyRepair(proposals, true, tmpDir)
+	result, err := ApplyRepair(proposals, true, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -1105,7 +1105,7 @@ See [[oldlink]].
 		},
 	}
 
-	result, err := ApplyRepair(proposals, true, tmpDir)
+	result, err := ApplyRepair(proposals, true, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -1148,7 +1148,7 @@ estado: Pending
 		},
 	}
 
-	result, err := ApplyRepair(proposals, true, tmpDir)
+	result, err := ApplyRepair(proposals, true, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -1206,7 +1206,7 @@ estado: Completed
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}
@@ -1235,7 +1235,7 @@ func TestApplyRepair_InvalidExtractor(t *testing.T) {
 		},
 	}
 
-	result, err := ApplyRepair(proposals, false, tmpDir)
+	result, err := ApplyRepair(proposals, false, tmpDir, false)
 	if err != nil {
 		t.Fatalf("ApplyRepair: %v", err)
 	}

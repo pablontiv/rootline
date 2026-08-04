@@ -32,6 +32,10 @@ type BatchFixResult struct {
 	Results           []*FixResult `json:"results"`
 	Summary           FixSummary   `json:"summary"`
 	SchemaSuggestions int          `json:"schema_suggestions,omitempty"`
+	// SkippedProposals holds add_field proposals declined because the engine,
+	// not the schema, chose their value. Carried so the operator can see the
+	// field was left unfilled deliberately.
+	SkippedProposals []proposal.Proposal `json:"skipped_proposals,omitempty"`
 }
 
 // FixSummary holds aggregate counts for batch fix.
@@ -45,6 +49,7 @@ var (
 	fixDryRun      bool
 	fixAll         bool
 	fixNoPropagate bool
+	fixFillMissing bool
 )
 
 var fixCmd = &cobra.Command{
@@ -67,6 +72,7 @@ func init() {
 	fixCmd.Flags().BoolVar(&fixDryRun, "dry-run", false, "show proposed changes without modifying files")
 	fixCmd.Flags().BoolVar(&fixAll, "all", false, "fix all files in scope from current directory")
 	fixCmd.Flags().BoolVar(&fixNoPropagate, "no-propagate", false, "skip aggregate propagation proposals")
+	fixCmd.Flags().BoolVar(&fixFillMissing, "fill-missing", false, "also write values the engine chose for required fields the schema gave no default: for")
 	rootCmd.AddCommand(fixCmd)
 }
 
@@ -118,7 +124,11 @@ func runFix(cmd *cobra.Command, args []string) error {
 		}
 
 		// Apply fixes to frontmatter
-		added, corrected := fix.ApplyFixes(ctx, record, effective, errs)
+		added, corrected, skipped := fix.ApplyFixes(ctx, record, effective, errs, fixFillMissing)
+
+		for _, sk := range skipped {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s: skipped %s\n", file, sk)
+		}
 
 		if fixDryRun {
 			for _, a := range added {
@@ -231,8 +241,11 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	}
 
 	// Apply proposals if any.
+	var skippedProposals []proposal.Proposal
 	if len(report.Proposals) > 0 {
-		if err := fix.ApplyProposals(ctx, report, root, records); err != nil {
+		var err error
+		skippedProposals, err = fix.ApplyProposals(ctx, report, root, records, fixFillMissing)
+		if err != nil {
 			return err
 		}
 	}
@@ -240,6 +253,7 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	// Convert proposals to BatchFixResult for output compatibility.
 	results := proposalsToFixResults(report, records)
 	batch := newBatchFixResultWithSuggestions(results, len(report.SchemaSuggestions))
+	batch.SkippedProposals = skippedProposals
 
 	if outputFormat == "table" {
 		return renderFixTable(cmd, batch)
@@ -429,6 +443,15 @@ func renderFixTable(cmd *cobra.Command, batch *BatchFixResult) error {
 		rows = append(rows, []string{r.Path, fixed, changesStr})
 	}
 	renderTable(cmd.OutOrStdout(), headers, rows)
+
+	if len(batch.SkippedProposals) > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note: %d required field(s) left unfilled; schema declares no default:.\n", len(batch.SkippedProposals))
+		for _, sp := range batch.SkippedProposals {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %v: %s (engine would have written %q)\n", sp.Paths, sp.Field, sp.Value)
+		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Invalid on purpose. Pass --fill-missing to write them.")
+	}
 
 	// Note about schema suggestions if present
 	if batch.SchemaSuggestions > 0 {
