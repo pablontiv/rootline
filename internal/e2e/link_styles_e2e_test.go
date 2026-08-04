@@ -61,7 +61,7 @@ func TestE2E_LinkStyles_WikilinkRepoUnaffected(t *testing.T) {
 			t.Fatal(err)
 		}
 		errs := rules.Validate(ctx, rec, effective)
-		errs = append(errs, rules.CheckLinks(rec.Links, effective.Links, absPath, nil)...)
+		errs = append(errs, rules.CheckLinks(rec.Links, effective.Links, absPath, root, nil)...)
 		if len(errs) != 0 {
 			t.Errorf("%s: unexpected errors %+v", rec.Path, errs)
 		}

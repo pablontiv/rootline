@@ -46,9 +46,49 @@ Batch validation runs four phases in order:
    - `unknown-check-keys` — keys under `links.checks` are recognized (fuzzy "did you mean?" on typos)
    - `nested-root-marker` — reports (info) a `.stem` that declares `root: true` below another one that already does, since records under it stop inheriting the ancestor
 
-2. **Document Validation** — Checks each record against its effective schema: required fields, enum values, non_empty, exists, requires rules.
+2. **Document Validation** — Checks each record against its effective schema: required fields, enum values, non_empty, exists, requires rules. When the effective `.stem` declares `links.checks`, link targets are resolved here too — see [Link resolution](#link-resolution).
 3. **Structural Validation** — Directory-level rules: `require_index` (must have README.md), `min_children`/`max_children` constraints.
 4. **Drift Detection** — Warns when an index file's field value contradicts its children (e.g., parent says "Completed" but children are "Pending").
+
+## Link resolution
+
+`links.checks` resolves targets through the same engine `graph` and `query` use, so the
+commands cannot disagree about whether a link is broken.
+
+| Target form | Resolves to |
+|---|---|
+| `[[b]]` (wikilink, no extension) | `b.md` beside the source |
+| `[[sub/README]]` | `sub/README.md` |
+| `[b](b.md)` (markdown) | `b.md` literally — markdown targets never infer an extension |
+| `[x](/docs/Page.md)` (root-anchored) | `docs/Page.md` under the scan root |
+| `[x](guides/)` (directory) | `guides/README.md` |
+| `[x](my%20page.md)` | `my page.md` — percent escapes decode |
+
+Two rules are deliberate rather than incidental:
+
+- **`.md` is inferred only for wikilinks, and only on the last path component.** A markdown
+  destination carries its extension by convention and Azure DevOps resolves it literally, so
+  inferring one would accept links the published wiki rejects. A missing intermediate directory
+  is a missing directory, not a file to guess at.
+- **Matching is case-sensitive on every component.** APFS is case-insensitive; Azure DevOps and
+  git are not, so a link that works locally can 404 once published. Rootline reports the
+  mismatch rather than hiding it.
+
+Root-anchored targets (`/x.md`) resolve against the scan root. For `validate --all` that is the
+directory you pointed the command at; for a single-file `rootline validate <file>` it is the
+governance boundary — the directory of the root-most `.stem`. When no schema governs the file,
+a root-anchored target cannot be anchored and stays unresolved rather than guessing.
+
+Resolution is clamped to the root. A target that walks out of the tree does not resolve —
+whether it escapes with `..` (root-anchored `/../secrets.md` or relative `../../secrets.md`) or
+through a symlink inside the tree that points outside it. Containment compares real paths, so a
+symlink that stays inside the root still resolves normally. Link targets are document-controlled
+text, and resolution would otherwise report on — and with `anchors` enabled, read — files
+outside the tree being governed.
+
+Resolution asks the filesystem, not the record set. A target that exists on disk resolves even
+when `scope.match` or `.stemignore` excludes it from governance: the schema declares what is
+*governed*, not what *exists*.
 
 ## Single File Result
 
