@@ -258,3 +258,94 @@ func TestExtractSections_NoPanicsOnEdgeCases(t *testing.T) {
 		_ = len(tables)
 	}
 }
+
+func TestExtractBodyH1(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		expected string
+	}{
+		{
+			name:     "simple h1",
+			body:     "# Hello World\n\nSome content",
+			expected: "Hello World",
+		},
+		{
+			name:     "h1 with extra spaces",
+			body:     "#  Spaced Title  \n\nContent",
+			expected: "Spaced Title",
+		},
+		{
+			name:     "no h1",
+			body:     "## Section\n\nContent without H1",
+			expected: "",
+		},
+		{
+			name:     "empty body",
+			body:     "",
+			expected: "",
+		},
+		{
+			name:     "h1 at end of body",
+			body:     "Some content\n\n# Final Title",
+			expected: "Final Title",
+		},
+		{
+			name:     "h1 only",
+			body:     "# Only H1",
+			expected: "Only H1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ExtractBodyH1(tt.body)
+			if result != tt.expected {
+				t.Errorf("ExtractBodyH1() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestExtractBodySection(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		heading  string
+		expected string
+	}{
+		{
+			name:     "simple section",
+			body:     "# Title\n\n## Introduction\n\nIntro content\n\n## Next Section\n\nOther",
+			heading:  "## Introduction",
+			expected: "Intro content",
+		},
+		{
+			name:     "section with multiple lines",
+			body:     "## Details\n\nLine 1\nLine 2\nLine 3\n\n## End\n\nAfter",
+			heading:  "## Details",
+			expected: "Line 1\nLine 2\nLine 3",
+		},
+		{
+			name:     "nonexistent section",
+			body:     "## First\n\nContent",
+			heading:  "## Missing",
+			expected: "",
+		},
+		{
+			name:     "empty body",
+			body:     "",
+			heading:  "## Section",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ExtractBodySection(tt.body, tt.heading)
+			if result != tt.expected {
+				t.Errorf("ExtractBodySection() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
