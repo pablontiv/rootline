@@ -53,7 +53,13 @@ func TestE2E_LinkStyles_WikilinkRepoUnaffected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Validation: the markdown link to a NONEXISTENT c.md produces no errors.
+	// Validation: the markdown link to a NONEXISTENT c.md produces no errors,
+	// because links.styles leaves markdown ungoverned here. The wikilink to
+	// b.md resolves. This used to be true for a second, wrong reason — the
+	// schema declares no links.checks, and validate skipped every check
+	// without one while graph failed on the same corpus. Broken-target
+	// detection is always on now, so this asserts agreement rather than
+	// asserting that validate simply was not looking.
 	for _, rec := range records {
 		absPath := filepath.Join(root, rec.Path)
 		effective, err := rules.ResolveForRecord(filepath.Dir(absPath), rec.Path)
@@ -79,6 +85,51 @@ func TestE2E_LinkStyles_WikilinkRepoUnaffected(t *testing.T) {
 	}
 	if edges[0].Target == "c.md" {
 		t.Error("markdown link leaked into wikilink-only graph")
+	}
+
+	// Both engines agree on this corpus: neither reports a broken link.
+	if broken := g.BrokenLinks(); len(broken) != 0 {
+		t.Errorf("graph broken = %+v, want none — validate reports none either", broken)
+	}
+}
+
+// The corpus above with an ACTUALLY broken wikilink: both engines must now
+// report it. Before, validate stayed silent without a links.checks block while
+// graph --check failed, which is the disagreement issue #62 was filed for.
+func TestE2E_LinkStyles_BrokenWikilinkFailsBothEngines(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem": "version: 2\nlinks:\n  allowed: [reference]\n",
+		"a.md":  "[[nope]]\n",
+		"b.md":  "# B\n",
+	})
+	ctx := context.Background()
+	records, err := index.Scan(ctx, root, extract.NewRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var validateErrs int
+	for _, rec := range records {
+		absPath := filepath.Join(root, rec.Path)
+		effective, err := rules.ResolveForRecord(filepath.Dir(absPath), rec.Path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range rules.CheckLinks(rec.Links, effective.Links, absPath, root, nil) {
+			if e.Severity == "error" {
+				validateErrs++
+			}
+		}
+	}
+
+	rules.FilterLinksByStyles(records, root)
+	rules.PrepareLinks(records, root)
+	g := graph.Build(ctx, records)
+	graphBroken := len(g.BrokenLinks())
+
+	if validateErrs != 1 || graphBroken != 1 {
+		t.Errorf("engines disagree: validate errors = %d, graph broken = %d, want 1 and 1",
+			validateErrs, graphBroken)
 	}
 }
 
