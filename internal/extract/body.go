@@ -204,3 +204,49 @@ func lineOffset(source []byte, line int) int {
 	}
 	return len(source)
 }
+
+// ExtractBodyH1 returns the text of the first H1 heading in the body,
+// stripping the "# " prefix. Returns empty string if no H1 is found.
+func ExtractBodyH1(body string) string {
+	lines := strings.Split(body, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "# ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "# "))
+		}
+	}
+	return ""
+}
+
+// ExtractBodySection extracts the content under a specific heading in the body.
+// heading should be the full heading line (e.g., "## Heading").
+// Returns empty string if the section is not found.
+func ExtractBodySection(body string, heading string) string {
+	lines := strings.Split(body, "\n")
+	var result []string
+	found := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == heading {
+			found = true
+			continue
+		}
+
+		if found {
+			// Stop at the next heading (any level)
+			if strings.HasPrefix(trimmed, "#") && trimmed != "" {
+				break
+			}
+			// Skip the heading line itself, collect content
+			if trimmed != "" {
+				result = append(result, line)
+			}
+		}
+	}
+
+	if len(result) > 0 {
+		return strings.TrimSpace(strings.Join(result, "\n"))
+	}
+	return ""
+}
