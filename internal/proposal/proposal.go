@@ -58,6 +58,11 @@ type Proposal struct {
 	WikiLinks     []string `json:"wiki_links,omitempty"`
 	AggregateExpr string   `json:"aggregate_expr,omitempty"`
 	MigrationNote string   `json:"migration_note,omitempty"` // rationale for schema evolution proposals
+	// ValueSource records where Value came from on an add_field proposal, so a
+	// reviewer can tell a schema-declared value from one the engine picked. It
+	// is set on every generated add_field proposal and omitted for proposal
+	// types where provenance carries no meaning.
+	ValueSource string `json:"value_source,omitempty"`
 	// set_section fields
 	Heading string `json:"heading,omitempty"`
 	Mode    string `json:"mode,omitempty"` // "replace" (default) or "append"
@@ -461,7 +466,32 @@ func detectInferFromChildren(records []*extract.Record, effective *rules.StemFil
 	return nil
 }
 
+// Value provenance for add_field proposals. Only ValueSourceSchemaDefault
+// reflects a value the schema author actually declared; the other two are the
+// engine choosing a legal token because nothing was declared.
+const (
+	ValueSourceSchemaDefault = "schema_default" // the field's declared default:
+	ValueSourceEnumFirst     = "enum_first"     // first member of values, no default declared
+	ValueSourceEmpty         = "empty"          // empty string, nothing declared at all
+)
+
+// IsEngineChosen reports whether a value was synthesized by the engine rather
+// than declared by the schema.
+//
+// An empty source means the proposal predates provenance — a report file written
+// by an earlier rootline. Those are treated as schema-declared so that reports
+// which used to apply cleanly keep doing so; proposals generated in-process
+// always carry the marker, so this never weakens the fix --all guarantee.
+func IsEngineChosen(valueSource string) bool {
+	return valueSource == ValueSourceEnumFirst || valueSource == ValueSourceEmpty
+}
+
 // detectAddField finds required fields that are missing from records.
+//
+// A value is still proposed in every case, because seeing the candidate is
+// useful, but it is tagged with its origin so callers can refuse to write one
+// the schema never declared. Filling a required field that has no default:
+// destroys exactly the missing-data signal the author asked for.
 func detectAddField(effective *rules.StemFile, errs map[string][]rules.ValidationError) []Proposal {
 	var proposals []Proposal
 
@@ -474,20 +504,32 @@ func detectAddField(effective *rules.StemFile, errs map[string][]rules.Validatio
 			if !ok {
 				continue
 			}
-			defaultVal := sf.Default
-			if defaultVal == "" && len(sf.Values) > 0 {
-				defaultVal = sf.Values[0]
-			}
+			defaultVal, source := AddFieldValue(sf)
 			proposals = append(proposals, Proposal{
 				Type:        AddField,
 				Field:       e.Field,
 				Description: fmt.Sprintf("required field %q is missing", e.Field),
 				Paths:       []string{path},
 				Value:       defaultVal,
+				ValueSource: source,
 			})
 		}
 	}
 	return proposals
+}
+
+// AddFieldValue picks the value to propose for a missing required field and
+// reports where it came from. It is exported because the single-file fix path
+// has no Proposal to inspect and must derive provenance from the schema itself,
+// and both paths must agree on what counts as engine-chosen.
+func AddFieldValue(sf rules.SchemaField) (value, source string) {
+	if sf.Default != "" {
+		return sf.Default, ValueSourceSchemaDefault
+	}
+	if len(sf.Values) > 0 {
+		return sf.Values[0], ValueSourceEnumFirst
+	}
+	return "", ValueSourceEmpty
 }
 
 // extractEnumValue extracts the invalid value from a validation error message.
