@@ -28,9 +28,19 @@ type RepairResult struct {
 	// It is reported because the failure this field exists to expose is silent:
 	// a report resolved against the wrong root produces a run that touches
 	// nothing and, before this was surfaced, said nothing about why.
-	Root    string   `json:"root,omitempty"`
-	DryRun  bool     `json:"dry_run"`
-	Changed []string `json:"changed"`
+	Root string `json:"root,omitempty"`
+	// Complete is the run's own verdict on whether it carried through everything
+	// it accepted. It is true exactly when Errors and RolledBack are both empty,
+	// which is also exactly when the command exits 0.
+	//
+	// It is not redundant with the exit status. A report saved as a CI artifact
+	// is read long after the exit code is gone, and a consumer must not have to
+	// re-implement the rule — or parse prose — to learn whether the tree is in
+	// the state it asked for. Rejections and skips do not make a run incomplete:
+	// the command refused or deferred those on purpose and said so.
+	Complete bool     `json:"complete"`
+	DryRun   bool     `json:"dry_run"`
+	Changed  []string `json:"changed"`
 	// RolledBack lists files whose write was reverted after post-validation
 	// rejected the result. A caller cannot infer this from Changed and Errors
 	// alone, so the two outcomes are reported separately.
@@ -105,6 +115,7 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*Repa
 	}
 
 	if len(proposals) == 0 {
+		result.seal()
 		return result, nil
 	}
 
@@ -214,7 +225,16 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string) (*Repa
 		postValidateWrittenTargets(targets, result)
 	}
 
+	result.seal()
 	return result, nil
+}
+
+// seal records the run's completeness verdict. It is called once, after every
+// pass has had its say, so Complete can never disagree with the fields it
+// summarizes — and so it stays in step with the exit-status rule by
+// construction rather than by two places remembering the same thing.
+func (r *RepairResult) seal() {
+	r.Complete = len(r.Errors) == 0 && len(r.RolledBack) == 0
 }
 
 // postValidateWrittenTargets re-validates each written file and restores its
@@ -242,7 +262,7 @@ func postValidateWrittenTargets(targets map[string]*repairTarget, result *Repair
 			continue
 		}
 
-		if err := os.WriteFile(tgt.abs, tgt.original, 0644); err != nil { //nolint:gosec // restoring the bytes previously read from this validated path
+		if err := WriteFileAtomic(tgt.abs, tgt.original, 0o644); err != nil {
 			// The mutation stands and could not be undone. That is strictly
 			// worse than a rollback, so it is reported as an error rather than
 			// as a successful revert.
@@ -378,7 +398,7 @@ func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTar
 		}
 
 		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
-		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
+		if err := WriteFileAtomic(tgt.abs, []byte(newContent), 0o644); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 		tgt.written = true
@@ -417,7 +437,7 @@ func applyRepairAddField(p *proposal.Proposal, targets map[string]*repairTarget,
 		}
 
 		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
-		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
+		if err := WriteFileAtomic(tgt.abs, []byte(newContent), 0o644); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 		tgt.written = true
@@ -451,7 +471,7 @@ func applyRepairSetField(p *proposal.Proposal, targets map[string]*repairTarget,
 		}
 
 		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
-		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
+		if err := WriteFileAtomic(tgt.abs, []byte(newContent), 0o644); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 		tgt.written = true
@@ -512,7 +532,7 @@ func applyRepairCorrectLink(p *proposal.Proposal, targets map[string]*repairTarg
 			newContent = replaceOnce(newContent, p.From, p.To)
 		}
 
-		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
+		if err := WriteFileAtomic(tgt.abs, []byte(newContent), 0o644); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 		tgt.written = true
