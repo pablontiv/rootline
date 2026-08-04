@@ -142,6 +142,14 @@ rootline repair apply --report repairs.json --dry-run
 rootline repair apply --report repairs.json
 ```
 
+**Exit status (both apply commands).** Non-zero exactly when `errors[]` or `rolled_back[]`
+is non-empty; `rejected[]` and `skipped[]` alone exit `0`. `rolled_back[]` is a separate
+condition — a successful revert leaves `errors[]` empty, so testing `errors[]` alone reads a
+reverted run as a success. The JSON payload is always emitted on stdout before the non-zero
+exit, and the short failure line goes to stderr, so `repair apply ... && deploy` now stops on
+failure while still giving you a parseable result. `--dry-run` follows the same rule: a preview
+that cannot resolve a path exits `1`, which makes it usable as a CI precondition check.
+
 `repair apply` post-validates each file it writes, on its own, and restores the
 pre-write bytes when validation rejects the result. Reverted files come back in
 `rolled_back` (`{path, errors}`) and are withdrawn from `changed`, so a document is

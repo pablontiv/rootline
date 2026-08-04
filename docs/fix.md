@@ -90,6 +90,31 @@ An `analyze` report is therefore not a valid input here — produce the report w
 `rootline fix --all <dir> --dry-run -o json`. For the schema-surface half of an analyze
 report, use `rootline schema apply`, which does accept `kind: rootline/analyze`.
 
+**Exit status.** `repair apply` and `schema apply` exit non-zero exactly when the run failed to
+carry through something it accepted — that is, when `errors[]` or `rolled_back[]` came back
+non-empty. Everything else exits `0`. The payload is always written to stdout first, so a
+failing run stays machine-readable; the short `Error: apply failed: ...` line goes to stderr.
+
+| Outcome | Field | Exit | Why |
+|---------|-------|------|-----|
+| Applied cleanly | `changed[]` | `0` | The command did what it was asked. |
+| Refused on policy | `rejected[]` | `0` | A deliberate refusal, already reported — a containment violation, a schema proposal handed to `repair apply`, an existing `.stem` without `--force`. |
+| Deferred | `skipped[]` | `0` | Nothing was attempted; `requires_agent` work is left for a human. |
+| Could not be done | `errors[]` | `1` | An unreadable path, a failed write, an unresolvable target. |
+| Written, then reverted | `rolled_back[]` | `1` | Post-validation rejected the result and the pre-write bytes were restored. The caller asked for a change that could not be made, so a tidy revert is still a failure. |
+
+`rolled_back[]` is a separate condition, not a subset of `errors[]`: a successful revert leaves
+`errors[]` empty, so a script testing only `errors[]` would read that run as a success.
+
+`--dry-run` is not an exception. A preview that cannot resolve a path reports it in `errors[]`
+and exits `1`, which makes `repair apply --report r.json --dry-run` usable as a CI precondition
+check. A dry run performs no writes, so it can never populate `rolled_back[]`.
+
+```bash
+rootline repair apply --report fix-proposals.json && deploy
+# the deploy no longer runs when the repair failed
+```
+
 `repair apply` applies only repair-surface proposals to document frontmatter:
 - correct_value
 - add_field
@@ -116,6 +141,12 @@ rootline repair apply --report fix-proposals.json
 
 A proposal is applied whole or not at all, so a single escaping path discards the entire
 proposal rather than applying it partially.
+
+`schema apply` classifies the identical event the identical way: a `create_stem` target outside
+the scan root lands in `rejected[]` and the run still exits `0`. It previously reported that
+refusal in `errors[]`, which made the two commands disagree about the same containment decision
+and — once the exit rule above exists — would have turned a deliberate refusal into a build
+failure.
 
 With `--dry-run`, the output additionally carries `resolved_targets` so you can see where each
 write would have landed and why any were refused before committing to the run:
