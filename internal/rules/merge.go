@@ -199,9 +199,19 @@ func mergeLinkSchema(parent, child LinkSchema) LinkSchema {
 		result.Styles = parent.Styles
 	}
 
-	// Checks: child replaces when declared (struct semantics).
+	// Checks: child replaces when declared (struct semantics), except that an
+	// undeclared resolve inherits rather than reverting to the default.
+	//
+	// resolve is tri-state and defaults to on, so wholesale replacement would
+	// let a child declaring only `encoding: true` silently switch a parent's
+	// `resolve: false` back on. Opting out of a check has to survive being
+	// inherited, or the opt-out is worthless in any nested tree.
 	if child.Checks != nil {
-		result.Checks = child.Checks
+		merged := *child.Checks
+		if merged.Resolve == nil && parent.Checks != nil {
+			merged.Resolve = parent.Checks.Resolve
+		}
+		result.Checks = &merged
 	} else {
 		result.Checks = parent.Checks
 	}

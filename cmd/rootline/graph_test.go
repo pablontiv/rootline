@@ -298,7 +298,8 @@ func TestFilterLinksBySchema_ChecksOnlySchema(t *testing.T) {
 		Path:  "a.md",
 		Links: []extract.Link{{Target: "b.md", Style: extract.StyleWikilink}},
 	}
-	schema := rules.LinkSchema{Checks: &rules.LinkChecks{Resolve: true}}
+	resolveOn := true
+	schema := rules.LinkSchema{Checks: &rules.LinkChecks{Resolve: &resolveOn}}
 	filterLinksBySchema([]*extract.Record{rec}, schema)
 	if len(rec.Links) != 1 {
 		t.Fatalf("links = %d, want 1 (checks-only schema must not drop links)", len(rec.Links))

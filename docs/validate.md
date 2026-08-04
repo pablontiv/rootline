@@ -86,6 +86,22 @@ symlink that stays inside the root still resolves normally. Link targets are doc
 text, and resolution would otherwise report on — and with `anchors` enabled, read — files
 outside the tree being governed.
 
+### Broken-target detection is always on
+
+`links.checks.resolve` needs no opt-in. `graph --check` has always failed on a broken link with
+no schema declaration, so leaving `validate` silent unless `links.checks` declared `resolve` meant
+the two commands disagreed on the one property both claim to check.
+
+A repository that genuinely wants dangling links opts out explicitly:
+
+```yaml
+links:
+  checks:
+    resolve: false
+```
+
+`anchors` and `encoding` stay opt-in — only `resolve` flipped.
+
 ### Basename fallback (`links.basename_fallback`)
 
 Off by default. Turning it on lets a target that names no path match a uniquely-named record

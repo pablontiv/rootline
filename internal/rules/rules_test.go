@@ -659,7 +659,7 @@ links:
 	if len(ls.Styles) != 1 || ls.Styles[0] != "markdown" {
 		t.Errorf("Styles = %v, want [markdown]", ls.Styles)
 	}
-	if ls.Checks == nil || !ls.Checks.Resolve || !ls.Checks.Anchors || !ls.Checks.Encoding {
+	if ls.Checks == nil || ls.Checks.Resolve == nil || !*ls.Checks.Resolve || !ls.Checks.Anchors || !ls.Checks.Encoding {
 		t.Errorf("Checks = %+v, want all true", ls.Checks)
 	}
 	if ls.IsEmpty() {

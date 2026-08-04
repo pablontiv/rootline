@@ -468,18 +468,52 @@ func TestMergeStemFiles_ChildValidateNilDoesNotReplaceParent(t *testing.T) {
 }
 
 func TestMergeLinkSchema_StylesAndChecksChildReplace(t *testing.T) {
-	parent := LinkSchema{Styles: []string{"wikilink"}, Checks: &LinkChecks{Resolve: true}}
+	parent := LinkSchema{Styles: []string{"wikilink"}, Checks: &LinkChecks{Resolve: boolPtr(true)}}
 	child := LinkSchema{Styles: []string{"markdown"}}
 	got := mergeLinkSchema(parent, child)
 	if len(got.Styles) != 1 || got.Styles[0] != "markdown" {
 		t.Errorf("Styles = %v, want child's [markdown]", got.Styles)
 	}
-	if got.Checks == nil || !got.Checks.Resolve {
+	if got.Checks == nil || got.Checks.Resolve == nil || !*got.Checks.Resolve {
 		t.Errorf("Checks = %+v, want inherited from parent", got.Checks)
 	}
+	// The child replaces the checks block, except that an undeclared resolve
+	// inherits: it is tri-state and defaults to on, so wholesale replacement
+	// would let a child declaring only encoding switch a parent's opt-out back
+	// on without saying so.
 	child2 := LinkSchema{Checks: &LinkChecks{Encoding: true}}
 	got2 := mergeLinkSchema(parent, child2)
-	if got2.Checks == nil || got2.Checks.Resolve || !got2.Checks.Encoding {
-		t.Errorf("Checks = %+v, want child replacement", got2.Checks)
+	if got2.Checks == nil || !got2.Checks.Encoding {
+		t.Errorf("Checks = %+v, want the child's encoding", got2.Checks)
+	}
+	if got2.Checks.Resolve == nil || !*got2.Checks.Resolve {
+		t.Errorf("Checks = %+v, want the parent's resolve inherited", got2.Checks)
+	}
+}
+
+// resolve is tri-state and defaults to on, so a child declaring only another
+// check must not silently switch a parent's opt-out back on.
+func TestMergeLinkSchema_ChildDoesNotResetParentResolveOptOut(t *testing.T) {
+	off := false
+	parent := LinkSchema{Checks: &LinkChecks{Resolve: &off}}
+	child := LinkSchema{Checks: &LinkChecks{Encoding: true}}
+
+	got := mergeLinkSchema(parent, child)
+	if got.ShouldResolve() {
+		t.Errorf("child declaring only encoding re-enabled the parent's resolve opt-out: %+v", got.Checks)
+	}
+	if !got.Checks.Encoding {
+		t.Errorf("child's own encoding declaration was lost: %+v", got.Checks)
+	}
+}
+
+// A child that explicitly turns resolve back on still wins.
+func TestMergeLinkSchema_ChildCanReenableResolve(t *testing.T) {
+	off, on := false, true
+	parent := LinkSchema{Checks: &LinkChecks{Resolve: &off}}
+	child := LinkSchema{Checks: &LinkChecks{Resolve: &on}}
+
+	if !mergeLinkSchema(parent, child).ShouldResolve() {
+		t.Error("child's explicit resolve: true must win over the parent's opt-out")
 	}
 }

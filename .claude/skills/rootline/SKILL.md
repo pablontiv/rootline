@@ -105,7 +105,7 @@ version: 2
 links:
   styles: [wikilink, markdown]  # governed styles; default [wikilink]
   checks:
-    resolve: true               # target exists (case-sensitive; dir targets need README.md)
+    resolve: false              # OPT-OUT only — broken-target detection is on by default
     anchors: true               # #anchor matches a heading slug in the target
     encoding: true              # no raw spaces in targets (use %20)
     cycles: true                # graph --check fails on link cycles (default: informational)
@@ -113,6 +113,8 @@ links:
 ```
 
 **Validation**: Check failures surface in `validate` as rules `link_resolve` (with fuzzy suggestion), `link_anchor`, `link_encoding`. External schemes, images, and pure fragments are not checked.
+
+**`resolve` is always on**: broken-target detection needs no declaration (it matches `graph --check`, which never had an opt-in). Set `links.checks.resolve: false` to opt out. `anchors` and `encoding` remain opt-in.
 
 **Basename fallback**: `links.basename_fallback` (default off) lets a path-less target match a uniquely-named record anywhere — the wiki convention. It needs a full-tree index, which `graph` and `query` traversal have and `validate` does not, so with it ON `validate` reports `link_unverifiable` (warning) instead of guessing or staying silent. Off is what makes every command agree.
 
