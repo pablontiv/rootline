@@ -394,6 +394,7 @@ func TestSchemaApplyDryRun(t *testing.T) {
 				Target:        filepath.Join(testDir, ".stem"),
 				Confidence:    0.85,
 				RequiresAgent: false,
+				Patch:         "version: 2\nschema:\n  title:\n    type: string\n",
 				PatchPreview:  "version: 2\nschema:\n  title:\n    type: string\n",
 			},
 		},
@@ -827,6 +828,8 @@ func TestSchemaApply_TargetContainment(t *testing.T) {
 		reportFile := writeSchemaProposalsReport(t, root, docsDir, target)
 
 		out, err := executeSchemaApply(t, "--report", reportFile)
+		// A containment refusal is a policy rejection, not a failed write, so
+		// the run still exits 0 and says what it declined.
 		if err != nil {
 			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
 		}
@@ -835,11 +838,14 @@ func TestSchemaApply_TargetContainment(t *testing.T) {
 		if len(result.Applied) != 0 {
 			t.Errorf("applied = %v, want empty", result.Applied)
 		}
-		if len(result.Errors) != 1 {
-			t.Fatalf("errors = %v, want exactly one containment violation", result.Errors)
+		if len(result.Errors) != 0 {
+			t.Errorf("errors = %v, want empty: containment is a rejection", result.Errors)
 		}
-		if !strings.Contains(result.Errors[0], "escapes root") {
-			t.Errorf("error %q does not give the containment reason", result.Errors[0])
+		if len(result.Rejected) != 1 {
+			t.Fatalf("rejected = %v, want exactly one containment violation", result.Rejected)
+		}
+		if !strings.Contains(result.Rejected[0], "escapes root") {
+			t.Errorf("rejection %q does not give the containment reason", result.Rejected[0])
 		}
 		if _, err := os.Stat(target); err == nil {
 			t.Error("a .stem was created outside the scan root")
@@ -858,6 +864,7 @@ func TestSchemaApply_TargetContainment(t *testing.T) {
 		reportFile := writeSchemaProposalsReport(t, root, docsDir, target)
 
 		out, err := executeSchemaApply(t, "--report", reportFile)
+		// A containment refusal is a policy rejection, not a failed write.
 		if err != nil {
 			t.Fatalf("unexpected error: %v\noutput: %s", err, out)
 		}
@@ -866,8 +873,11 @@ func TestSchemaApply_TargetContainment(t *testing.T) {
 		if len(result.Applied) != 0 {
 			t.Errorf("applied = %v, want empty", result.Applied)
 		}
-		if len(result.Errors) != 1 {
-			t.Fatalf("errors = %v, want exactly one containment violation", result.Errors)
+		if len(result.Errors) != 0 {
+			t.Errorf("errors = %v, want empty: containment is a rejection", result.Errors)
+		}
+		if len(result.Rejected) != 1 {
+			t.Fatalf("rejected = %v, want exactly one containment violation", result.Rejected)
 		}
 		if _, err := os.Stat(filepath.Clean(target)); err == nil {
 			t.Error("a .stem was created outside the scan root")
@@ -882,13 +892,14 @@ func TestSchemaApply_TargetContainment(t *testing.T) {
 		accepted := filepath.Join(docsDir, ".stem")
 		rejected := filepath.Join(root, "escaped.stem")
 
+		patchContent := "version: 2\nschema:\n  title:\n    type: string\n"
 		report := SchemaProposalsReport{
 			Version: 1,
 			Kind:    "rootline/schema-proposals",
 			Path:    docsDir,
 			Proposals: []SchemaProposal{
-				{ID: "inside", Operation: "create_stem", Target: accepted},
-				{ID: "outside", Operation: "create_stem", Target: rejected},
+				{ID: "inside", Operation: "create_stem", Target: accepted, Patch: patchContent},
+				{ID: "outside", Operation: "create_stem", Target: rejected, Patch: patchContent},
 			},
 		}
 		data, err := json.Marshal(report)
@@ -1289,8 +1300,9 @@ func TestSchemaApplyEmptyPatchRejected(t *testing.T) {
 	reportPath := writeProposalsReport(t, absRoot, absRoot, stemPath, "")
 
 	out, err := executeSchemaApply(t, "--report", reportPath)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	// Empty patch causes an error in the result, which results in non-zero exit
+	if err == nil {
+		t.Fatal("expected error for empty patch, got none")
 	}
 	result := decodeSchemaApplyResult(t, out)
 
@@ -1389,8 +1401,9 @@ func TestPostApplyValidationErrorPropagation(t *testing.T) {
 			filepath.Join(missing, ".stem"), "version: 2\nschema:\n  title:\n    type: string\n")
 
 		out, err := executeSchemaApply(t, "--report", reportPath)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		// A missing scan root causes an error in the result, which results in non-zero exit
+		if err == nil {
+			t.Fatal("expected error for unscannable root, got none")
 		}
 		result := decodeSchemaApplyResult(t, out)
 

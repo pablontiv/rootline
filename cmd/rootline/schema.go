@@ -294,9 +294,14 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 			// they are accepted, then confined.
 			target, err := fix.ContainPath(scanRoot, proposal.Target, fix.PolicyAcceptAbsolute)
 			if err != nil {
-				// A refused target is a validation failure, not a feature gap:
-				// schema apply has no rejected[], so it belongs in errors[].
-				result.Errors = append(result.Errors, err.Error())
+				// A target outside the scan root is a policy refusal, not a
+				// failed write: the command declined on purpose and named the
+				// path it declined. It belongs in rejected[], which is where
+				// repair apply already puts the identical event — and rejected[]
+				// exists here now, so the older note that it did not is stale.
+				// Classifying it as an error would make the two commands
+				// disagree about the same containment decision.
+				result.Rejected = append(result.Rejected, err.Error())
 				resolved.Rejected[proposal.Target] = fix.ContainmentReason(err)
 				continue
 			}
@@ -357,11 +362,18 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Output result.
+	// Emit the payload first, then let the run's own outcome decide the exit
+	// status. schema apply performs no post-validation rollback, so it has no
+	// rolled_back[] to count.
 	if outputFormat == "table" {
-		return renderSchemaApplyTable(cmd, result)
+		if err := renderSchemaApplyTable(cmd, result); err != nil {
+			return err
+		}
+	} else if err := outputJSON(cmd, result, false); err != nil {
+		return err
 	}
-	return outputJSON(cmd, result, false)
+
+	return applyExitError(len(result.Errors), 0)
 }
 
 // runSchemaApplyFromAnalyze processes an analyze report and applies schema-modifying inferences to .stem files.
@@ -446,11 +458,18 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 		}
 	}
 
-	// Output result.
+	// Emit the payload first, then let the run's own outcome decide the exit
+	// status. The analyze path writes through ApplySchemaInferences, which has
+	// no rollback of its own, so there is no rolled_back[] to count.
 	if outputFormat == "table" {
-		return renderSchemaApplyTable(cmd, result)
+		if err := renderSchemaApplyTable(cmd, result); err != nil {
+			return err
+		}
+	} else if err := outputJSON(cmd, result, false); err != nil {
+		return err
 	}
-	return outputJSON(cmd, result, false)
+
+	return applyExitError(len(result.Errors), 0)
 }
 
 // runPostApplyValidation runs validate --all on the root and returns a summary.
