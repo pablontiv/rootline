@@ -100,6 +100,7 @@ func resetFlags() {
 	schemaProposeIncremental = false
 	schemaApplyReport = ""
 	schemaApplyDryRun = false
+	schemaApplyForce = false
 	reportPath = ""
 	repairDryRun = false
 

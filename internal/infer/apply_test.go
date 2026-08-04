@@ -855,3 +855,83 @@ func TestApplySchemaInferences_FieldTypeThenEnumSameNewField(t *testing.T) {
 		t.Errorf("expected 3 enum values, got %v", sf.Values)
 	}
 }
+
+// TestApplySchemaInferences_UnknownInferenceType tests that unknown inference types are rejected.
+func TestApplySchemaInferences_UnknownInferenceType(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	if err := os.WriteFile(stemPath, []byte("version: 2\nschema:\n  estado:\n    type: string\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Unknown inference type → should be rejected
+	inferences := []ReportInference{
+		{Type: "unknown_type", Field: "estado", Value: "test"},
+	}
+
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
+	if err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	if len(result.Rejected) == 0 {
+		t.Error("expected rejected[] to contain unknown inference type")
+	}
+	if len(result.Applied) > 0 {
+		t.Errorf("expected no applied for unknown type, got %d", len(result.Applied))
+	}
+
+	// Verify the rejection message mentions the unknown type
+	found := false
+	for _, msg := range result.Rejected {
+		if strings.Contains(msg, "unknown_type") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("rejection message should mention 'unknown_type', got: %v", result.Rejected)
+	}
+}
+
+// TestApplySchemaInferences_MixedKnownAndUnknown tests that known types are applied and unknown types are rejected in one run.
+func TestApplySchemaInferences_MixedKnownAndUnknown(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	if err := os.WriteFile(stemPath, []byte("version: 2\nschema:\n  estado:\n    type: string\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Mix of known and unknown types
+	inferences := []ReportInference{
+		{Type: "required_field", Field: "estado"},
+		{Type: "unknown_op", Field: "estado", Value: "test"},
+		{Type: "field_type", Field: "nuevo", Value: "integer"},
+	}
+
+	result, err := ApplySchemaInferences(stemPath, inferences, false)
+	if err != nil {
+		t.Fatalf("apply error: %v", err)
+	}
+
+	// Should have some applied (known types) and some rejected (unknown types)
+	if len(result.Applied) == 0 {
+		t.Error("expected some applied for known types")
+	}
+	if len(result.Rejected) == 0 {
+		t.Error("expected some rejected for unknown types")
+	}
+
+	// Verify the file was modified for the known types
+	data, _ := os.ReadFile(stemPath)
+	stem, err := rules.ParseStem(stemPath, data)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if !stem.Schema["estado"].Required {
+		t.Error("expected estado to be required (from known inference)")
+	}
+	if stem.Schema["nuevo"].Type != "integer" {
+		t.Error("expected nuevo field with type integer (from known inference)")
+	}
+}

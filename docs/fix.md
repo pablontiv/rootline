@@ -158,8 +158,7 @@ rootline schema apply --report proposals.json
 
 `schema apply` accepts a report from `rootline analyze` or `rootline schema propose` and applies only schema-surface proposals to `.stem` files:
 - create_stem
-- update_stem
-- extend_enum
+- extend_enum (analyze path only)
 
 Data-only repairs (correct_value, add_field, etc.) are **ignored** — use `rootline repair apply` instead.
 
@@ -171,11 +170,12 @@ target is checked against the scan root before a `.stem` is written, so a report
 staying valid — they are accepted and then confined, not refused outright. That is the one
 difference from `repair apply`, which rejects absolute paths as malformed input.
 
-The second difference is where refusals land. `schema apply` has no `rejected[]`, so a target
-outside the root is a validation failure and appears in `errors[]`:
+The second difference is where refusals land. `schema apply` has a `rejected[]` field for policy refusals (overwrite without `--force`, unknown operations) and `errors[]` for operational failures (containment violations, scan errors):
 
 ```bash
 rootline schema apply --report proposals.json
+# rejected: ".stem already exists in /docs (use --force to overwrite)"
+# OR
 # errors: containment violation: path "/tmp/outside/.stem" escapes root (root "/abs/scan")
 ```
 
