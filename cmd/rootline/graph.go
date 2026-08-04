@@ -68,7 +68,6 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	}
 
 	rules.FilterLinksByStyles(records, absRoot)
-	rules.PrepareLinks(records, absRoot)
 
 	derive.EnrichBuiltinsSimple(ctx, records, absRoot)
 
@@ -77,6 +76,17 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("filtering records: %w", err)
 	}
+
+	// Link checks read the target the author wrote, so they run before
+	// PrepareLinks rewrites targets to resolved node keys. Resolution decodes
+	// percent escapes, so checking afterwards would flag an already-correct
+	// %20 target for the raw space its decoded form contains.
+	var linkIssues []linkCheckIssue
+	if graphCheck {
+		linkIssues = collectLinkCheckIssues(records, absRoot)
+	}
+
+	rules.PrepareLinks(records, absRoot)
 
 	// Load .stem schema: filter links and read the cycle-failure opt-in.
 	//
@@ -104,7 +114,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 
 	// --check mode: report issues and exit.
 	if graphCheck {
-		hasProblems := (failCycles && len(cycles) > 0) || len(broken) > 0
+		hasProblems := (failCycles && len(cycles) > 0) || len(broken) > 0 || len(linkIssues) > 0
 		if len(cycles) > 0 {
 			header := "Cycles found"
 			if !failCycles {
@@ -131,7 +141,13 @@ func runGraph(cmd *cobra.Command, args []string) error {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), msg)
 			}
 		}
-		if len(cycles) == 0 && len(broken) == 0 {
+		if len(linkIssues) > 0 {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Link check failures: %d\n", len(linkIssues))
+			for _, li := range linkIssues {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s (%s)\n", li.path, li.message, li.rule)
+			}
+		}
+		if len(cycles) == 0 && len(broken) == 0 && len(linkIssues) == 0 {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No cycles or broken links found.")
 		}
 		if hasProblems {
@@ -175,6 +191,39 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// linkCheckIssue is one links.checks failure attributed to its record.
+type linkCheckIssue struct {
+	path    string
+	rule    string
+	message string
+}
+
+// collectLinkCheckIssues runs the schema's declared links.checks over every
+// record so `graph --check` sees the same anchor and encoding failures
+// `validate` does.
+//
+// Resolution failures are deliberately skipped: the graph already reports an
+// unresolvable target as a broken link, and reporting it twice under two names
+// would be noise. Checks stay opt-in — a schema declaring none yields nothing.
+func collectLinkCheckIssues(records []*extract.Record, root string) []linkCheckIssue {
+	cache := rules.NewHeadingCache()
+	var issues []linkCheckIssue
+	for _, rec := range records {
+		absPath := filepath.Join(root, rec.Path)
+		effective, err := rules.ResolveForRecord(filepath.Dir(absPath), rec.Path)
+		if err != nil || effective == nil {
+			continue
+		}
+		for _, e := range rules.CheckLinks(rec.Links, effective.Links, absPath, root, cache) {
+			if e.Rule == "link_resolve" {
+				continue
+			}
+			issues = append(issues, linkCheckIssue{path: rec.Path, rule: e.Rule, message: e.Message})
+		}
+	}
+	return issues
 }
 
 func renderDOT(cmd *cobra.Command, g *graph.Graph) {

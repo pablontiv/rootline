@@ -89,6 +89,11 @@ a uniquely-named record anywhere. A resolved target is never reported broken **e
 schema does not govern it** — `scope.match` and `.stemignore` declare what is *governed*, not
 what *exists*, so such a link is an edge to a non-node. Unresolved targets are reported verbatim.
 
+When the effective `.stem` declares `links.checks`, `--check` also reports the anchor and
+encoding failures `validate` reports, so a green `graph --check` now means what it looks like it
+means. Resolution failures stay under "Broken links" rather than being listed twice. Checks are
+opt-in: a schema declaring none reports nothing extra.
+
 Prints a text report and exits 1 when a blocking problem is found (broken links always block; cycles block only with `--fail-cycles` or `links.checks.cycles: true`, otherwise they are informational):
 
 ```text
