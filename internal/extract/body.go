@@ -250,3 +250,51 @@ func ExtractBodySection(body string, heading string) string {
 	}
 	return ""
 }
+
+// ResolveBodyValue resolves a `source:` directive against a record's body.
+// It deliberately never consults frontmatter: precedence between an explicit
+// frontmatter value and an extracted one belongs to the caller, and the derive
+// pipeline needs the extracted value even when frontmatter also carries the key.
+//
+// Supported directives:
+//   - body.h1                       the text of the first H1 heading
+//   - body.section["## Heading"]    the content under that heading
+//
+// The second form prefers record.Sections, which the AST extractors populate
+// with keys in the same "## Heading" shape the directive uses. When Sections is
+// nil — the non-AST registries leave it so — it falls back to parsing the body.
+//
+// Returns ok=false for an unknown directive or an empty result.
+func ResolveBodyValue(record *Record, directive string) (string, bool) {
+	if record == nil {
+		return "", false
+	}
+
+	// body.h1 must yield the heading TEXT, whereas record.Sections is keyed by
+	// "# Title" and stores the section CONTENT. The map cannot answer this
+	// directive, and ranging over it to recover the text would be
+	// non-deterministic: Go randomises map iteration order, so a document with
+	// more than one H1 would resolve to an arbitrary heading. Parse the body,
+	// which returns the first H1.
+	if directive == "body.h1" {
+		value := ExtractBodyH1(record.Body)
+		return value, value != ""
+	}
+
+	if strings.HasPrefix(directive, "body.section[") {
+		start := strings.Index(directive, "[\"")
+		end := strings.LastIndex(directive, "\"]")
+		if start < 0 || end <= start {
+			return "", false
+		}
+		heading := directive[start+2 : end]
+
+		if content, ok := record.Sections[heading]; ok && content != "" {
+			return content, true
+		}
+		value := ExtractBodySection(record.Body, heading)
+		return value, value != ""
+	}
+
+	return "", false
+}
