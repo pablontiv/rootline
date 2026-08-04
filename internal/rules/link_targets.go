@@ -2,7 +2,6 @@ package rules
 
 import (
 	"path/filepath"
-	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
 )
@@ -21,15 +20,16 @@ func ResolveMarkdownTargets(records []*extract.Record, root string) {
 			if link.Style != extract.StyleMarkdown {
 				continue
 			}
-			base, target := dir, link.Target
-			if strings.HasPrefix(target, "/") {
-				base, target = root, strings.TrimPrefix(target, "/")
-			}
-			resolved, _, ok := resolveCaseSensitive(base, target)
-			if !ok {
+			res := ResolveLinkTarget(ResolveRequest{
+				BaseDir: dir,
+				Root:    root,
+				Target:  link.Target,
+				Style:   extract.StyleMarkdown,
+			})
+			if !res.OK {
 				continue
 			}
-			if rel, err := filepath.Rel(root, resolved); err == nil {
+			if rel, err := filepath.Rel(root, res.Path); err == nil {
 				rec.Links[i].Target = rel
 			}
 		}

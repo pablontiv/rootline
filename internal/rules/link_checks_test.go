@@ -108,11 +108,54 @@ func TestCheckLinks_ResolveDecodesPercent20(t *testing.T) {
 func TestCheckLinks_SkipsAbsoluteAndFilteredStyles(t *testing.T) {
 	schema := mdChecksSchema(LinkChecks{Resolve: true, Encoding: true})
 	links := []extract.Link{
-		mdLink("/Root/Page.md"), // absolute: skipped
+		mdLink("/Root/Page.md"), // absolute: skipped until root-anchored resolution lands
 		{Target: "no such file", Type: "reference", Style: extract.StyleWikilink, Line: 1}, // filtered style
 	}
 	if errs := CheckLinks(links, schema, "/tmp/src.md", nil); len(errs) != 0 {
 		t.Fatalf("expected no errors, got %+v", errs)
+	}
+}
+
+// Wikilinks with checks had zero coverage: every case above pins StyleMarkdown.
+// This is the combination issue #62's headline reproduction exercises.
+func wikiChecksSchema(c LinkChecks) LinkSchema {
+	return LinkSchema{Styles: []string{extract.StyleWikilink}, Checks: &c}
+}
+
+func wikiLink(target string) extract.Link {
+	return extract.Link{Target: target, Type: "reference", Style: extract.StyleWikilink, Line: 1}
+}
+
+func TestCheckLinks_WikilinkResolvesWithoutExtension(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "b.md"), "# B\n")
+	writeFile(t, filepath.Join(dir, "t.md"), "body")
+	schema := wikiChecksSchema(LinkChecks{Resolve: true})
+
+	if errs := CheckLinks([]extract.Link{wikiLink("b")}, schema, filepath.Join(dir, "t.md"), nil); len(errs) != 0 {
+		t.Fatalf("[[b]] with b.md present must resolve, got %+v", errs)
+	}
+}
+
+func TestCheckLinks_WikilinkPathQualifiedResolves(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "sub", "README.md"), "# Sub\n")
+	writeFile(t, filepath.Join(dir, "t.md"), "body")
+	schema := wikiChecksSchema(LinkChecks{Resolve: true})
+
+	if errs := CheckLinks([]extract.Link{wikiLink("sub/README")}, schema, filepath.Join(dir, "t.md"), nil); len(errs) != 0 {
+		t.Fatalf("[[sub/README]] must resolve, got %+v", errs)
+	}
+}
+
+func TestCheckLinks_WikilinkGenuinelyMissingIsBroken(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "t.md"), "body")
+	schema := wikiChecksSchema(LinkChecks{Resolve: true})
+
+	errs := CheckLinks([]extract.Link{wikiLink("nope")}, schema, filepath.Join(dir, "t.md"), nil)
+	if len(errs) != 1 || errs[0].Rule != "link_resolve" {
+		t.Fatalf("missing wikilink target must be reported, got %+v", errs)
 	}
 }
 
