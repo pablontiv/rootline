@@ -80,6 +80,15 @@ rootline graph docs/epics/ --where 'estado == "Specified"' --check  # Check only
 
 ### With --check
 
+### How a link target resolves
+
+`graph` resolves links through the same engine `validate` uses, so the two agree on which links
+are broken. Wikilinks infer `.md` (`[[b]]`→`b.md`, `[[sub/README]]`→`sub/README.md`), markdown
+targets resolve literally, `/x.md` resolves against the scan root, and a path-less target matches
+a uniquely-named record anywhere. A resolved target is never reported broken **even when the
+schema does not govern it** — `scope.match` and `.stemignore` declare what is *governed*, not
+what *exists*, so such a link is an edge to a non-node. Unresolved targets are reported verbatim.
+
 Prints a text report and exits 1 when a blocking problem is found (broken links always block; cycles block only with `--fail-cycles` or `links.checks.cycles: true`, otherwise they are informational):
 
 ```text
