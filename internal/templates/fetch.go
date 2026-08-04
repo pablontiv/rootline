@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pablontiv/rootline/internal/gitenv"
 	"gopkg.in/yaml.v3"
 )
 
@@ -63,7 +64,7 @@ func FetchFromURL(url, tag, dest string, force, dryRun bool) ([]string, error) {
 	defer cancel()
 
 	gitCmd := exec.CommandContext(ctx, "git", cloneArgs...)
-	gitCmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	gitCmd.Env = append(gitenv.ClearedEnv(), "GIT_TERMINAL_PROMPT=0")
 	out, err := gitCmd.CombinedOutput()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
