@@ -102,9 +102,9 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 		return record, nil
 	}
 
-	// Find closing delimiter.
-	closeIdx := findClosingDelimiter(text)
-	if closeIdx < 0 {
+	// Find closing delimiter. Only the leading block is frontmatter.
+	fmStart, fmEnd, bodyStart, ok := FrontmatterBounds(text)
+	if !ok {
 		record.Body = text
 		record.Errors = append(record.Errors, ExtractionError{
 			Line:    1,
@@ -114,7 +114,7 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 	}
 
 	// Parse YAML frontmatter.
-	fmContent := text[4:closeIdx]
+	fmContent := text[fmStart:fmEnd]
 	if err := yaml.Unmarshal([]byte(fmContent), &record.Frontmatter); err != nil {
 		record.Errors = append(record.Errors, ExtractionError{
 			Line:    1,
@@ -125,7 +125,6 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 	}
 
 	// Body is everything after closing delimiter.
-	bodyStart := closeIdx + 4 // len("---\n")
 	if bodyStart < len(text) {
 		record.Body = strings.TrimLeft(text[bodyStart:], "\r\n")
 	}
@@ -164,32 +163,6 @@ func stripBOM(text string) string {
 		return text[3:]
 	}
 	return text
-}
-
-// findClosingDelimiter finds the index of the closing "---" delimiter.
-// Returns -1 if not found.
-func findClosingDelimiter(text string) int {
-	// Skip the opening "---\n".
-	search := text[4:]
-	for i := 0; i < len(search); {
-		nl := strings.Index(search[i:], "\n")
-		var line string
-		var lineStart int
-		if nl < 0 {
-			// Last line without trailing newline.
-			lineStart = i
-			line = strings.TrimRight(search[i:], "\r")
-			i = len(search)
-		} else {
-			lineStart = i
-			line = strings.TrimRight(search[i:i+nl], "\r")
-			i += nl + 1
-		}
-		if line == "---" {
-			return lineStart + 4 // offset from full text
-		}
-	}
-	return -1
 }
 
 var boldColonRe = regexp.MustCompile(`\*\*([^*]+)\*\*:\s*(.+)`)
