@@ -121,6 +121,16 @@ func ApplyFixes(_ context.Context, record *extract.Record, effective *rules.Stem
 }
 
 // RewriteFrontmatter rebuilds a markdown file with updated frontmatter.
+//
+// Existing keys keep their original position, comments and scalar quoting style,
+// so a one-field mutation yields a one-field diff. Keys the map introduces are
+// appended after the existing ones; keys it omits are removed.
+//
+// The preserved guarantee is bounded by what a yaml.Node round-trip provides:
+// yaml.v3 re-emits from the node tree rather than the source bytes, so
+// inter-token whitespace and nested indentation are normalized. Frontmatter that
+// does not parse as a YAML mapping falls back to the sorted, comment-less
+// rebuild this function used previously.
 func RewriteFrontmatter(original string, fm map[string]any) string {
 	// Find frontmatter boundaries
 	if !strings.HasPrefix(original, "---\n") {
@@ -137,7 +147,12 @@ func RewriteFrontmatter(original string, fm map[string]any) string {
 	if endIdx == -1 {
 		return original
 	}
+	fmText := original[4 : 4+endIdx+1]
 	body := original[4+endIdx+5:]
+
+	if rendered, ok := renderPreservedFrontmatter(fmText, fm); ok {
+		return "---\n" + rendered + "---\n" + body
+	}
 
 	var b strings.Builder
 	b.WriteString("---\n")
@@ -148,6 +163,8 @@ func RewriteFrontmatter(original string, fm map[string]any) string {
 }
 
 // WriteFrontmatterFields writes frontmatter fields to a builder in sorted order.
+// It is the fallback path for frontmatter that RewriteFrontmatter cannot parse
+// as a YAML mapping, and the writer used when a document has no frontmatter yet.
 func WriteFrontmatterFields(b *strings.Builder, fm map[string]any) {
 	keys := make([]string, 0, len(fm))
 	for k := range fm {
