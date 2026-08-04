@@ -84,6 +84,11 @@ rootline graph docs/epics/ --where 'estado == "Specified"' --check  # Check only
 `.stemignore` both apply. A file the schema declares out of governance is not a node, contributes
 no edges, and cannot fail `--check`. A tree carrying no schema at all is still graphed.
 
+Typed link rules and `links.checks.cycles` resolve **per record**, like link styles. Hardening
+declared in a subdirectory used to evaporate when the command ran from the repository root — the
+most likely CI invocation. A cycle now fails the check when any node in it is governed by a schema
+that asked for it, leaving unrelated cycles in never-opted-in subtrees informational.
+
 ### How a link target resolves
 
 `graph` resolves links through the same engine `validate` uses, so the two agree on which links

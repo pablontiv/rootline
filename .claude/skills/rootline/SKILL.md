@@ -114,6 +114,8 @@ links:
 
 **Validation**: Check failures surface in `validate` as rules `link_resolve` (with fuzzy suggestion), `link_anchor`, `link_encoding`. External schemes, images, and pure fragments are not checked.
 
+**Per-record schema**: typed link rules and `links.checks.cycles` resolve per record, not from the invocation root, so a rule or cycle opt-in declared in a subdirectory still applies when the command runs from the parent. `query --select links` honors `links.styles` with or without a traversal flag, and `query` traversal applies typed-rule filtering exactly as `graph` does.
+
 **One record set**: `validate` (both modes), `graph`, `query` and `fix --all` apply the same `scope.match` and `.stemignore` filters. `validate <file>` on an excluded file reports a `skipped` warning instead of validating it, so the pre-commit hook and CI agree.
 
 **`resolve` is always on**: broken-target detection needs no declaration (it matches `graph --check`, which never had an opt-in). Set `links.checks.resolve: false` to opt out. `anchors` and `encoding` remain opt-in.

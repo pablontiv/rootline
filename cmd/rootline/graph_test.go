@@ -7,9 +7,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/rules"
 )
 
 func TestGraphJSON_Empty(t *testing.T) {
@@ -234,87 +231,6 @@ func TestGraphFormat_Invalid(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unknown format") {
 		t.Errorf("expected 'unknown format' error, got: %v", err)
-	}
-}
-
-func TestFilterLinksBySchema_WithRules(t *testing.T) {
-	records := []*extract.Record{
-		{
-			Path: "a.md",
-			Links: []extract.Link{
-				{Target: "T001-task.md", Type: "blocks", Line: 1},
-				{Target: "something", Type: "reference", Line: 2},
-			},
-		},
-	}
-	schema := rules.LinkSchema{
-		Allowed: []string{"blocks", "reference"},
-		Rules:   map[string]rules.LinkRule{"blocks": {Target: "T*"}},
-	}
-
-	filterLinksBySchema(records, schema)
-
-	if len(records[0].Links) != 1 {
-		t.Fatalf("expected 1 link after filter, got %d", len(records[0].Links))
-	}
-	if records[0].Links[0].Type != "blocks" {
-		t.Errorf("expected blocks link, got %s", records[0].Links[0].Type)
-	}
-}
-
-func TestFilterLinksBySchema_EmptySchema(t *testing.T) {
-	records := []*extract.Record{
-		{
-			Path: "a.md",
-			Links: []extract.Link{
-				{Target: "b.md", Type: "reference", Line: 1},
-				{Target: "c.md", Type: "blocks", Line: 2},
-			},
-		},
-	}
-	schema := rules.LinkSchema{}
-
-	filterLinksBySchema(records, schema)
-
-	if len(records[0].Links) != 2 {
-		t.Errorf("expected 2 links (no filtering), got %d", len(records[0].Links))
-	}
-}
-
-func TestFilterLinksBySchema_StylesOnlySchema(t *testing.T) {
-	rec := &extract.Record{
-		Path:  "a.md",
-		Links: []extract.Link{{Target: "b.md", Type: "reference", Style: extract.StyleMarkdown}},
-	}
-	schema := rules.LinkSchema{Styles: []string{"markdown"}}
-	filterLinksBySchema([]*extract.Record{rec}, schema)
-	if len(rec.Links) != 1 {
-		t.Fatalf("links = %d, want 1 (styles-only schema must not drop links)", len(rec.Links))
-	}
-}
-
-func TestFilterLinksBySchema_ChecksOnlySchema(t *testing.T) {
-	rec := &extract.Record{
-		Path:  "a.md",
-		Links: []extract.Link{{Target: "b.md", Style: extract.StyleWikilink}},
-	}
-	resolveOn := true
-	schema := rules.LinkSchema{Checks: &rules.LinkChecks{Resolve: &resolveOn}}
-	filterLinksBySchema([]*extract.Record{rec}, schema)
-	if len(rec.Links) != 1 {
-		t.Fatalf("links = %d, want 1 (checks-only schema must not drop links)", len(rec.Links))
-	}
-}
-
-func TestFilterLinksBySchema_AllowedOnlySchema(t *testing.T) {
-	rec := &extract.Record{
-		Path:  "a.md",
-		Links: []extract.Link{{Target: "b.md", Type: "reference", Style: extract.StyleWikilink}},
-	}
-	schema := rules.LinkSchema{Allowed: []string{"reference"}}
-	filterLinksBySchema([]*extract.Record{rec}, schema)
-	if len(rec.Links) != 1 {
-		t.Fatalf("links = %d, want 1 (typed filtering applies only when rules are declared)", len(rec.Links))
 	}
 }
 
