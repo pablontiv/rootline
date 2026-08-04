@@ -87,11 +87,18 @@ func runRepairApply(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("applying repair: %w", err)
 	}
 
-	// Output result.
+	// Emit the payload first, then let the run's own outcome decide the exit
+	// status. A caller that sees a non-zero exit must still be able to read
+	// what happened from stdout.
 	if outputFormat == "table" {
-		return renderRepairTable(cmd, result)
+		if err := renderRepairTable(cmd, result); err != nil {
+			return err
+		}
+	} else if err := outputJSON(cmd, result, false); err != nil {
+		return err
 	}
-	return outputJSON(cmd, result, false)
+
+	return applyExitError(len(result.Errors), len(result.RolledBack))
 }
 
 // renderRepairTable renders the repair result in table format.
