@@ -8,7 +8,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/pablontiv/picokit/fuzzy"
 	"github.com/pablontiv/rootline/internal/extract"
 )
 
@@ -27,7 +26,10 @@ func NewHeadingCache() *HeadingCache {
 // against a record's links. sourceAbsPath is the absolute path of the record
 // file; relative targets resolve against its directory. Links whose style is
 // not in the schema's effective styles are skipped, as are absolute targets
-// (root-relative ADO form is out of scope).
+// (root-relative ADO form lands in a follow-up).
+//
+// Resolution runs through ResolveLinkTarget, the same entry point graph and
+// query use, so the commands cannot disagree about whether a link is broken.
 func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath string, cache *HeadingCache) []ValidationError {
 	if schema.Checks == nil {
 		return nil
@@ -59,12 +61,16 @@ func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath string, c
 		}
 
 		if schema.Checks.Resolve || schema.Checks.Anchors {
-			resolved, suggestion, ok := resolveCaseSensitive(filepath.Dir(sourceAbsPath), link.Target)
-			if !ok {
+			res := ResolveLinkTarget(ResolveRequest{
+				BaseDir: filepath.Dir(sourceAbsPath),
+				Target:  link.Target,
+				Style:   linkStyle(link),
+			})
+			if !res.OK {
 				if schema.Checks.Resolve {
 					msg := fmt.Sprintf("link target %q does not resolve to an existing file (case-sensitive)", link.Target)
-					if suggestion != "" {
-						msg += fmt.Sprintf(" (did you mean %q?)", suggestion)
+					if res.Suggestion != "" {
+						msg += fmt.Sprintf(" (did you mean %q?)", res.Suggestion)
 					}
 					errs = append(errs, ValidationError{
 						Rule:       "link_resolve",
@@ -72,13 +78,13 @@ func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath string, c
 						Message:    msg,
 						Source:     "links.checks",
 						Severity:   "error",
-						Suggestion: suggestion,
+						Suggestion: res.Suggestion,
 					})
 				}
 				continue
 			}
 			if schema.Checks.Anchors && link.Anchor != "" {
-				errs = append(errs, checkAnchor(link, resolved, cache)...)
+				errs = append(errs, checkAnchor(link, res.Path, cache)...)
 			}
 		}
 	}
@@ -156,61 +162,5 @@ func slugifyHeading(h string) string {
 	return b.String()
 }
 
-// resolveCaseSensitive resolves a relative link target against baseDir,
-// requiring exact-case matches for every target path component (APFS is
-// case-insensitive; ADO and git are not). Directory targets resolve to their
-// README.md. Returns the resolved absolute path, a fuzzy suggestion for the
-// first unmatched component (may be empty), and whether resolution succeeded.
-func resolveCaseSensitive(baseDir, target string) (string, string, bool) {
-	decoded, err := url.PathUnescape(target)
-	if err != nil {
-		decoded = target
-	}
-
-	cur := baseDir
-	for _, comp := range strings.Split(filepath.ToSlash(filepath.Clean(decoded)), "/") {
-		switch comp {
-		case "", ".":
-			continue
-		case "..":
-			cur = filepath.Dir(cur)
-			continue
-		}
-		entry, suggestion, ok := findEntry(cur, comp)
-		if !ok {
-			return "", suggestion, false
-		}
-		cur = filepath.Join(cur, entry)
-	}
-
-	info, err := os.Stat(cur)
-	if err != nil {
-		return "", "", false
-	}
-	if info.IsDir() {
-		entry, suggestion, ok := findEntry(cur, "README.md")
-		if !ok {
-			return "", suggestion, false
-		}
-		cur = filepath.Join(cur, entry)
-	}
-	return cur, "", true
-}
-
-// findEntry looks for an exact-case directory entry, returning a fuzzy
-// suggestion from the directory's entries when absent.
-func findEntry(dir, name string) (string, string, bool) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return "", "", false
-	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if e.Name() == name {
-			return name, "", true
-		}
-		names = append(names, e.Name())
-	}
-	suggestion := fuzzy.Match(name, names)
-	return "", suggestion, false
-}
+// Resolution lives in link_resolve.go: every command shares one resolver so
+// that validate, graph and query cannot disagree about a link's validity.
