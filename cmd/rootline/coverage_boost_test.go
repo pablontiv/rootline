@@ -65,17 +65,33 @@ func TestValidateAll(t *testing.T) {
 
 // TestValidateStaged tests the validate --staged command
 func TestValidateStaged(t *testing.T) {
-	dir := setupTestDir(t)
+	dir := makeStagedRepo(t, map[string]string{
+		".stem": `version: 2
+root: true
+scope:
+  match: "*.md"
+schema:
+  title:
+    type: string
+    required: true
+`,
+		"document.md": `---
+title: Fixture
+---
+
+# Document
+`,
+	})
 	mustChdir(t, dir)
 
 	resetFlags()
 	out, err := runCmd(t, "validate", "--staged")
 	if err != nil {
-		// Expected to fail with no git repo or no staged files
-		t.Logf("validate --staged error (expected): %v", err)
+		t.Fatalf("unexpected validate --staged error: %v\noutput: %s", err, out)
 	}
-
-	_ = out
+	if !strings.Contains(out, `"path":"document.md"`) {
+		t.Fatalf("expected staged document result, got: %s", out)
+	}
 }
 
 // TestCompletionBashScript tests bash completion generation
