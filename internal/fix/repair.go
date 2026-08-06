@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/proposal"
 	"github.com/pablontiv/rootline/internal/rules"
 )
@@ -273,7 +274,7 @@ func postValidateWrittenTargets(targets map[string]*repairTarget, result *Repair
 		// The restore is atomic for the same reason the write was, and it
 		// matters more here: a revert that half-succeeded would leave the
 		// document in a state worse than the write it was undoing.
-		if err := WriteFileAtomic(tgt.abs, tgt.original, 0o644); err != nil {
+		if err := fsx.WriteFileAtomic(tgt.abs, tgt.original, newFileMode); err != nil {
 			// The mutation stands and could not be undone. That is strictly
 			// worse than a rollback, so it is reported as an error rather than
 			// as a successful revert.
@@ -412,7 +413,7 @@ func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTar
 		if p.Type == proposal.MigrateValue && len(p.WikiLinks) > 0 {
 			newContent = InsertWikiLinksBeforeHeading(newContent, p.WikiLinks)
 		}
-		if err := WriteFileAtomic(tgt.abs, []byte(newContent), 0o644); err != nil {
+		if err := fsx.WriteFileAtomic(tgt.abs, []byte(newContent), newFileMode); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 		tgt.written = true
@@ -451,7 +452,7 @@ func applyRepairAddField(p *proposal.Proposal, targets map[string]*repairTarget,
 		}
 
 		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
-		if err := WriteFileAtomic(tgt.abs, []byte(newContent), 0o644); err != nil {
+		if err := fsx.WriteFileAtomic(tgt.abs, []byte(newContent), newFileMode); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 		tgt.written = true
@@ -485,7 +486,7 @@ func applyRepairSetField(p *proposal.Proposal, targets map[string]*repairTarget,
 		}
 
 		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
-		if err := WriteFileAtomic(tgt.abs, []byte(newContent), 0o644); err != nil {
+		if err := fsx.WriteFileAtomic(tgt.abs, []byte(newContent), newFileMode); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 		tgt.written = true
@@ -546,7 +547,7 @@ func applyRepairCorrectLink(p *proposal.Proposal, targets map[string]*repairTarg
 			newContent = replaceOnce(newContent, p.From, p.To)
 		}
 
-		if err := WriteFileAtomic(tgt.abs, []byte(newContent), 0o644); err != nil {
+		if err := fsx.WriteFileAtomic(tgt.abs, []byte(newContent), newFileMode); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 		tgt.written = true
