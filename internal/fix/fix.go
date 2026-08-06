@@ -14,10 +14,24 @@ import (
 
 	"github.com/pablontiv/picokit/fuzzy"
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/proposal"
 	"github.com/pablontiv/rootline/internal/rules"
 	"gopkg.in/yaml.v3"
 )
+
+// newFileMode is the mode every write in this package hands to
+// fsx.WriteFileAtomic. It is a CREATE-NEW default and nothing more: when the
+// target already exists, fsx keeps the mode the target already has and ignores
+// this value entirely.
+//
+// It is named rather than repeated as a literal 0o644 because the bare literal
+// reads like an instruction to set the mode, which is what it used to be. This
+// package once carried its own atomic writer that applied the caller's mode
+// unconditionally, so every rewrite widened a 0600 governed document to 0644.
+// Rewriting a record's frontmatter is a content operation and must not change
+// who may read the file.
+const newFileMode = 0o644
 
 // ApplyProposals applies repair-surface proposals from a report to the filesystem.
 // Schema-surface proposals (extend_enum, add_aggregate, remove_stem_field) are
@@ -284,7 +298,7 @@ func applyExtendEnum(p proposal.Proposal, root string) error {
 	if err != nil {
 		return err
 	}
-	return WriteFileAtomic(stemPath, out, 0o644)
+	return fsx.WriteFileAtomic(stemPath, out, newFileMode)
 }
 
 func addEnumValueToNode(node *yaml.Node, field, value string) error {
@@ -350,7 +364,7 @@ func applyMigrateValue(p proposal.Proposal, root string, recordMap map[string]*e
 			newContent = InsertWikiLinksBeforeHeading(newContent, p.WikiLinks)
 		}
 
-		if err := WriteFileAtomic(absPath, []byte(newContent), 0o644); err != nil {
+		if err := fsx.WriteFileAtomic(absPath, []byte(newContent), newFileMode); err != nil {
 			return err
 		}
 	}
@@ -396,7 +410,7 @@ func rewriteRecordFile(root, path string, fm map[string]any) error {
 		return err
 	}
 	newContent := RewriteFrontmatter(string(content), fm)
-	return WriteFileAtomic(absPath, []byte(newContent), 0o644)
+	return fsx.WriteFileAtomic(absPath, []byte(newContent), newFileMode)
 }
 
 // applySetSection rewrites a named section of each target document. Both the
@@ -441,7 +455,7 @@ func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Rec
 					content += "\n"
 				}
 				content += "\n" + heading + "\n\n" + newValue + "\n"
-				if err := WriteFileAtomic(absPath, []byte(content), 0o644); err != nil {
+				if err := fsx.WriteFileAtomic(absPath, []byte(content), newFileMode); err != nil {
 					return err
 				}
 				continue
@@ -510,7 +524,7 @@ func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Rec
 			return fmt.Errorf("unknown mode %q for set_section", p.Mode)
 		}
 
-		if err := WriteFileAtomic(absPath, []byte(content), 0o644); err != nil {
+		if err := fsx.WriteFileAtomic(absPath, []byte(content), newFileMode); err != nil {
 			return err
 		}
 	}
@@ -525,7 +539,7 @@ func applyCorrectLink(p proposal.Proposal, root string) error {
 			return err
 		}
 		newContent := strings.Replace(string(content), p.From, p.To, 1)
-		if err := WriteFileAtomic(absPath, []byte(newContent), 0o644); err != nil {
+		if err := fsx.WriteFileAtomic(absPath, []byte(newContent), newFileMode); err != nil {
 			return err
 		}
 	}
@@ -579,7 +593,7 @@ func removeStemSchemaField(stemPath, fieldName string) error {
 				if marshalErr != nil {
 					return marshalErr
 				}
-				return WriteFileAtomic(stemPath, out, 0o644)
+				return fsx.WriteFileAtomic(stemPath, out, newFileMode)
 			}
 		}
 
@@ -635,5 +649,5 @@ func addAggregateToStem(stemPath, fieldName, expr string) error {
 	if err != nil {
 		return err
 	}
-	return WriteFileAtomic(stemPath, out, 0o644)
+	return fsx.WriteFileAtomic(stemPath, out, newFileMode)
 }
