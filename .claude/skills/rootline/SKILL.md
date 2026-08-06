@@ -28,6 +28,9 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 - Governed commands (`validate`, `fix`, `query`, `tree`, `graph`, `describe`, `explain`, `set`, `stats`) fail on a tree with no `.stem` or an unparseable one. Without a terminal they exit non-zero; the error names the exact one-line fix.
 - If a governed command reports "Schema discovery reached the filesystem root without finding a declared boundary", the fix is to add `root: true` to the project's top-level `.stem` (one line). Then retry. Do **not** use `init --force` to migrate an existing project — it re-infers and overwrites the schema.
 - `rootline init` writes `root: true` for new projects, so they never hit this.
+- `init`, template installation, and write-producing `migrate` modes replace each
+  generated file atomically. This is a per-file guarantee, not rollback for an
+  entire multi-file run.
 - Bootstrap commands (`schema propose`, `analyze`) work without any `.stem` — they derive one. `init` and `migrate` also run without a marker.
 
 ## Deterministic Execution Rules
@@ -37,7 +40,7 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 3. **Validation exit code**: `validate` returns non-zero when errors exist. If JSON was requested, parse stdout and continue the workflow.
 4. **Mutations**: run the command-specific preview first. Apply changes only when the user explicitly requested a write (`arregla`, `aplica`, `cambia`, `set`, `crea`, `corrige`, `fix`, `apply`) or approves the preview.
 5. **Verify writes**: after any mutation, run the smallest matching `rootline validate` command and show `git diff -- <target>` when files changed.
-6. **Schema vs. data mutations are separate**: Use `schema apply --report <file>` for schema proposals and `repair apply --report <file>` for data-only repairs. There is no generic `apply` command. Always inspect proposals before applying.
+6. **Schema vs. data mutations are separate**: Use `schema apply --report <file>` for `rootline/analyze` or schema-proposal reports and `repair apply --report <file>` only for version 1 `rootline/proposals` data-repair reports produced by `fix --all --dry-run`. There is no generic `apply` command. Always inspect proposals before applying.
 7. **Expressions**: `--where` uses expr syntax: `==`, `!=`, `in`, `contains`, `&&`, `||`, booleans, and `field != nil` for existence.
 8. **Field extraction**: `--field a.b.c` extracts one JSON dot path. Do not rely on multiple `--field` values.
 
@@ -170,6 +173,8 @@ Use `--create` only when the user wants a missing field created with a value. `-
 rootline analyze <dir> -o json
 rootline analyze <dir> --incremental -o json
 ```
+
+Analyze always parses Markdown ASTs: section-pattern, invariant, and formal-dependency categories are expected to run. `--threshold` controls section-pattern sensitivity, and structural naming checks score directory names separately from record-file stems.
 
 Do not apply results automatically. For `apply`, inspect the report first and treat the command as a write to `.stem` and documents.
 

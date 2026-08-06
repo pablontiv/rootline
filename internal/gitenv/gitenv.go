@@ -16,19 +16,9 @@ import (
 // that respects the explicit repository scope (passed via -C, etc.) without inheriting
 // caller's repo context.
 func ClearedEnv() []string {
-	// Denylist of repo-scoping variables to remove.
-	removed := map[string]bool{
-		"GIT_DIR":                          true,
-		"GIT_WORK_TREE":                    true,
-		"GIT_INDEX_FILE":                   true,
-		"GIT_OBJECT_DIRECTORY":             true,
-		"GIT_ALTERNATE_OBJECT_DIRECTORIES": true,
-		"GIT_COMMON_DIR":                   true,
-		"GIT_NAMESPACE":                    true,
-		"GIT_CEILING_DIRECTORIES":          true,
-		"GIT_DISCOVERY_ACROSS_FILESYSTEM":  true,
-		"GIT_PREFIX":                       true,
-		"GIT_INDEX_VERSION":                true,
+	removed := make(map[string]bool, len(scopingVars))
+	for _, name := range scopingVars {
+		removed[name] = true
 	}
 
 	var cleared []string
@@ -41,4 +31,32 @@ func ClearedEnv() []string {
 		}
 	}
 	return cleared
+}
+
+// scopingVars is the denylist of repo-scoping variables ClearedEnv removes.
+var scopingVars = []string{
+	"GIT_DIR",
+	"GIT_WORK_TREE",
+	"GIT_INDEX_FILE",
+	"GIT_OBJECT_DIRECTORY",
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	"GIT_COMMON_DIR",
+	"GIT_NAMESPACE",
+	"GIT_CEILING_DIRECTORIES",
+	"GIT_DISCOVERY_ACROSS_FILESYSTEM",
+	"GIT_PREFIX",
+	"GIT_INDEX_VERSION",
+}
+
+// ScopingVars returns the names of the repo-scoping git variables ClearedEnv removes.
+//
+// ClearedEnv covers the common case — a git subprocess that must target its own
+// directory. A caller that instead needs its OWN process to stop inheriting the
+// caller's repository (a test fixture, or any code re-entered from a git hook, which
+// git always invokes with GIT_DIR and GIT_INDEX_FILE exported) has to unset the names
+// itself; this is that list, so the two never drift apart.
+func ScopingVars() []string {
+	names := make([]string, len(scopingVars))
+	copy(names, scopingVars)
+	return names
 }

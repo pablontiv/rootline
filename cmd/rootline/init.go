@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -127,7 +128,7 @@ func runInitFlat(cmd *cobra.Command, absTarget, target string, records []*extrac
 		return nil
 	}
 
-	if err := os.WriteFile(stemPath, []byte(yaml), 0644); err != nil {
+	if err := fsx.WriteFileAtomic(stemPath, []byte(yaml), 0o644); err != nil {
 		return fmt.Errorf("writing .stem: %w", err)
 	}
 
@@ -198,7 +199,7 @@ func runInitHierarchical(cmd *cobra.Command, absTarget, target string, hierarchy
 
 	// Write all .stem files.
 	for _, sf := range stemFiles {
-		if err := os.WriteFile(sf.path, []byte(sf.content), 0644); err != nil {
+		if err := fsx.WriteFileAtomic(sf.path, []byte(sf.content), 0o644); err != nil {
 			return fmt.Errorf("writing %s: %w", sf.path, err)
 		}
 	}

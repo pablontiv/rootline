@@ -182,3 +182,31 @@ func TestDetectStructural_NoNamingInconsistency_NoPattern(t *testing.T) {
 		}
 	}
 }
+
+func TestDetectStructural_NamingInconsistencyInRecordFileStems(t *testing.T) {
+	root := t.TempDir()
+	mkDir(t, root, nil, []string{"T01-task.md", "T02-task.md", "T03-task.md", "notes.md"})
+
+	got := DetectStructural(root)
+	for _, inf := range got {
+		if inf.Type == "naming_inconsistency" && inf.Source == root {
+			return
+		}
+	}
+	t.Fatalf("expected naming_inconsistency for record file stem outlier, got: %v", got)
+}
+
+func TestDetectStructural_ScoresFilesAndDirectoriesSeparately(t *testing.T) {
+	root := t.TempDir()
+	mkDir(t, root,
+		[]string{"archive", "examples", "notes"},
+		[]string{"T01-task.md", "T02-task.md", "T03-task.md"},
+	)
+
+	got := DetectStructural(root)
+	for _, inf := range got {
+		if inf.Type == "naming_inconsistency" {
+			t.Fatalf("matching files must not make unrelated directories outliers: %v", got)
+		}
+	}
+}

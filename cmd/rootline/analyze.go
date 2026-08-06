@@ -23,9 +23,8 @@ var analyzeCmd = &cobra.Command{
 	Long: `Run all inference detectors on documents in the given directory
 and produce a structured report of findings.
 
-The generated report can be processed by:
-  rootline schema apply  -- applies schema-modifying proposals to .stem files
-  rootline repair apply  -- applies data-only repairs to document frontmatter`,
+The generated report can be processed by rootline schema apply to apply
+schema-modifying inferences to .stem files.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runAnalyze,
 }
@@ -60,7 +59,7 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
 	// Index and extract records.
-	reg := extract.NewRegistry()
+	reg := extract.NewASTRegistry()
 	resolver := stemScopeResolver()
 
 	// Bootstrap scan: this command derives a schema from documents that may

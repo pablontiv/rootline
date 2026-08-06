@@ -69,6 +69,38 @@ tipo: Epic
 	}
 }
 
+func TestApplyRepair_MigrateValueRepair(t *testing.T) {
+	tmpDir := t.TempDir()
+	testPath := filepath.Join(tmpDir, "test.md")
+	original := "---\nestado: Pending (blocked by T001)\n---\n# Test\n"
+	if err := os.WriteFile(testPath, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ApplyRepair([]proposal.Proposal{{
+		Type:        proposal.MigrateValue,
+		Field:       "estado",
+		Description: "normalize embedded status detail",
+		Paths:       []string{"test.md"},
+		From:        "Pending (blocked by T001)",
+		To:          "Pending",
+	}}, false, tmpDir, false)
+	if err != nil {
+		t.Fatalf("ApplyRepair failed: %v", err)
+	}
+	if len(result.Rejected) != 0 || len(result.Changed) != 1 {
+		t.Fatalf("migrate_value must be applied as repair: changed=%v rejected=%v", result.Changed, result.Rejected)
+	}
+
+	updated, err := os.ReadFile(testPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(updated), "estado: Pending\n") {
+		t.Fatalf("migrate_value did not normalize frontmatter:\n%s", updated)
+	}
+}
+
 func TestApplyRepair_SchemaProposalRejected(t *testing.T) {
 	// Setup: Create a temporary directory with a test file.
 	tmpDir := t.TempDir()
