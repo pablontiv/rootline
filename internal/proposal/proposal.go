@@ -76,7 +76,25 @@ type Report struct {
 	Root              string     `json:"root,omitempty"` // absolute scan root
 	Proposals         []Proposal `json:"proposals"`
 	SchemaSuggestions []Proposal `json:"schema_suggestions,omitempty"`
-	Summary           Summary    `json:"summary"`
+
+	// LinkFindings reports link problems that will be surfaced rather than
+	// repaired. Dry-run is the preview of what fix will do, so omitting them
+	// there would hide the same defect the field exists to expose.
+	LinkFindings []LinkFinding `json:"link_findings,omitempty"`
+
+	Summary Summary `json:"summary"`
+}
+
+// LinkFinding is one links.checks failure reported rather than repaired.
+//
+// fix does not rewrite link bodies: correcting a link on a fuzzy guess is a
+// destructive edit outside its data-repair contract. The suggestion validate
+// already computed is carried through so a human can make the call.
+type LinkFinding struct {
+	Path       string `json:"path"`
+	Rule       string `json:"rule"`
+	Message    string `json:"message"`
+	Suggestion string `json:"suggestion,omitempty"`
 }
 
 // Summary holds aggregate counts for a report.
