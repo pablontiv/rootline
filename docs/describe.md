@@ -119,6 +119,34 @@ Array projection syntax `field[].subfield` works for:
 - Query results: `rows[].path`, `rows[].frontmatter.*`, `rows[].derived.*`
 - Graph results: `edges[]`, `broken_links[]`
 
+### Repeating `--field`
+
+`--field` is repeatable. One path emits the bare value it resolves to; several emit a JSON array in **flag order**:
+
+```bash
+rootline query docs/ --count --field kind
+# "rootline/count"
+
+rootline query docs/ --count --field kind --field meta.count
+# ["rootline/count",6]
+
+rootline query docs/ --count --field meta.count --field kind
+# [6,"rootline/count"]
+```
+
+An array is the only shape that keeps N results distinguishable without inventing keys the envelope never had. All paths resolve against the same document, so a failure on the last one fails the whole run rather than emitting a partial array.
+
+### `--field` requires `--output json`
+
+Extraction reads the JSON envelope, so a non-JSON format has nothing to read:
+
+```console
+$ rootline stats docs/ -o table --field kind
+Error: --field requires --output json: extraction reads the JSON envelope, and "table" has none
+```
+
+Previously the flag was applied only inside the JSON writer, so it worked under the default `-o json` and stopped working the moment a caller added `-o table` — silently. Commands that emit no envelope at all (`init`, `new`, `set`, `hooks`, `completion`) reject `--field` for the same reason. See [Output Formats](output.md).
+
 This allows tools, editors, and AI assistants to guide authoring
 and extract specific fields without Python postprocessing.
 

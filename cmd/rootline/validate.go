@@ -440,9 +440,13 @@ func outputJSON(cmd *cobra.Command, v any, hasErrors bool) error {
 		return fmt.Errorf("marshaling JSON: %w", err)
 	}
 
-	// Apply --field extraction
-	if len(fieldPath) > 0 {
-		extracted, err := extractField(data, fieldPath[0])
+	// Apply --field extraction. The flag is documented "(repeatable)" and
+	// registered as a StringSliceVar, but only fieldPath[0] was read, so
+	// `--field a --field b` returned only a and the result depended purely on
+	// argument order. Several paths now yield a JSON array in flag order; a
+	// single path keeps emitting the bare value, so no existing caller moves.
+	if paths := effectiveFieldPaths(); len(paths) > 0 {
+		extracted, err := extractFields(data, paths)
 		if err != nil {
 			return err
 		}
@@ -460,18 +464,41 @@ func outputJSON(cmd *cobra.Command, v any, hasErrors bool) error {
 }
 
 // extractField navigates a JSON structure by dot-separated path.
+//
+// The single-path form, kept for callers that render their own JSON instead of
+// going through outputJSON. Repeatable --field reaches those callers only once
+// they adopt extractFields.
 func extractField(data []byte, path string) ([]byte, error) {
+	return extractFields(data, []string{path})
+}
+
+// extractFields navigates a JSON structure once per requested path.
+//
+// One path marshals to the bare value it resolves to, which is what every
+// existing caller pipes into jq or a shell variable. Several marshal to a JSON
+// array in flag order — the only shape that keeps N results distinguishable
+// without inventing keys the envelope never had. The paths are resolved against
+// the same document, so a failure on the third one fails the whole run rather
+// than emitting a partial array.
+func extractFields(data []byte, paths []string) ([]byte, error) {
 	var obj any
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return nil, fmt.Errorf("parsing JSON for field extraction: %w", err)
 	}
 
-	current, err := extractFieldPath(obj, splitDotPath(path), path)
-	if err != nil {
-		return nil, err
+	values := make([]any, 0, len(paths))
+	for _, path := range paths {
+		value, err := extractFieldPath(obj, splitDotPath(path), path)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, value)
 	}
 
-	return json.Marshal(current)
+	if len(values) == 1 {
+		return json.Marshal(values[0])
+	}
+	return json.Marshal(values)
 }
 
 func extractFieldPath(current any, parts []string, fullPath string) (any, error) {

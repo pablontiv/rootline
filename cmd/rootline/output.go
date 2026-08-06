@@ -85,6 +85,43 @@ func validateOutputFormat(cmd *cobra.Command) error {
 	return nil
 }
 
+// effectiveFieldPaths returns the --field values the caller actually asked for.
+//
+// Cobra can leave empty strings behind when a command is re-executed in the
+// same process, and an empty path is not a request for extraction — treating it
+// as one would make the flag fire on runs that never passed it.
+func effectiveFieldPaths() []string {
+	var paths []string
+	for _, p := range fieldPath {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths
+}
+
+// validateFieldFlag rejects a --field the command cannot honour.
+//
+// Extraction reads the JSON envelope, and it was applied inside outputJSON
+// only: the table, CSV, JSONL and diagram writers never saw it. So --field
+// worked under the default -o json and stopped working the moment a caller
+// added -o table, with no diagnostic and no scoping in --help. This follows the
+// project's existing precedent for incompatible pairs, where --outbound-type
+// without --has-outbound errors cleanly.
+func validateFieldFlag(cmd *cobra.Command) error {
+	if len(effectiveFieldPaths()) == 0 {
+		return nil
+	}
+
+	if supported, declared := commandOutputFormats[cmd.CommandPath()]; declared && supported == nil {
+		return fmt.Errorf("%s does not support --field: it emits no JSON envelope to extract from", cmd.CommandPath())
+	}
+	if outputFormat != "json" {
+		return fmt.Errorf("--field requires --output json: extraction reads the JSON envelope, and %q has none", outputFormat)
+	}
+	return nil
+}
+
 // orList renders a value list the way the existing `unknown format %q (use dot
 // or mermaid)` message does.
 func orList(values []string) string {
