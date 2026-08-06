@@ -63,8 +63,34 @@ func TestValidateStagedNoFiles(t *testing.T) {
 	}
 }
 
+// TestGetStagedFilesIgnoresAmbientGitScope pins the fixture against an inherited git
+// scope. `getStagedFiles` runs `git diff --cached` with the process environment, which
+// is correct in production: a pre-commit hook wants the index git handed it. But git
+// exports GIT_DIR / GIT_INDEX_FILE into every hook it runs, so the same suite executed
+// from `.githooks/pre-push` read the outer repository's index instead of the fixture's
+// and reported zero staged files. Issue #121 cleared the environment for the fixture's
+// own git writes; the production reader was still inheriting it.
+func TestGetStagedFilesIgnoresAmbientGitScope(t *testing.T) {
+	foreign := t.TempDir()
+	runFixtureGit(t, foreign, "init", "--quiet")
+	t.Setenv("GIT_DIR", filepath.Join(foreign, ".git"))
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(foreign, ".git", "index"))
+
+	dir := makeStagedRepo(t, map[string]string{"document.md": "# Document\n"})
+	mustChdir(t, dir)
+
+	files, err := getStagedFiles()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(files) != 1 || files[0] != "document.md" {
+		t.Fatalf("expected only document.md, got: %v", files)
+	}
+}
+
 func makeStagedRepo(t *testing.T, stagedFiles map[string]string) string {
 	t.Helper()
+	isolateAmbientGitScope(t)
 	dir := t.TempDir()
 	runFixtureGit(t, dir, "init", "--quiet")
 
@@ -80,6 +106,28 @@ func makeStagedRepo(t *testing.T, stagedFiles map[string]string) string {
 	}
 
 	return dir
+}
+
+// isolateAmbientGitScope removes every repo-scoping git variable from the test process
+// for the duration of the test, restoring the previous values afterwards. Production
+// code deliberately inherits these — see TestGetStagedFilesIgnoresAmbientGitScope — so
+// a fixture repository is only authoritative once the ambient scope is gone.
+func isolateAmbientGitScope(t *testing.T) {
+	t.Helper()
+	for _, name := range gitenv.ScopingVars() {
+		previous, present := os.LookupEnv(name)
+		if !present {
+			continue
+		}
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatalf("unset %s: %v", name, err)
+		}
+		t.Cleanup(func() {
+			if err := os.Setenv(name, previous); err != nil {
+				t.Fatalf("restore %s: %v", name, err)
+			}
+		})
+	}
 }
 
 func runFixtureGit(t *testing.T, dir string, args ...string) {

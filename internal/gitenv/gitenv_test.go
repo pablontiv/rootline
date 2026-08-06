@@ -47,6 +47,38 @@ func envMap(env []string) map[string]string {
 	return m
 }
 
+// TestScopingVars_IsTheDenylistClearedEnvApplies verifies that the exported list is
+// the single source of truth: every name it reports is actually removed by ClearedEnv.
+// Callers that must neutralise an inherited git scope (test fixtures, hook-invoked
+// runs) iterate this list, so a name present here but not in the denylist — or the
+// reverse — would silently leave one variable leaking through.
+func TestScopingVars_IsTheDenylistClearedEnvApplies(t *testing.T) {
+	names := ScopingVars()
+	if len(names) == 0 {
+		t.Fatal("ScopingVars returned no names")
+	}
+
+	for _, name := range names {
+		t.Setenv(name, "/hostile/scope")
+	}
+
+	cleared := envMap(ClearedEnv())
+	for _, name := range names {
+		if value, found := cleared[name]; found {
+			t.Errorf("ScopingVars reports %s but ClearedEnv kept it with value %q", name, value)
+		}
+	}
+}
+
+// TestScopingVars_ReturnsCopy verifies a caller cannot mutate the package's denylist.
+func TestScopingVars_ReturnsCopy(t *testing.T) {
+	first := ScopingVars()
+	first[0] = "MUTATED"
+	if ScopingVars()[0] == "MUTATED" {
+		t.Error("ScopingVars should return a copy, not the package-level slice")
+	}
+}
+
 // TestClearedEnv_PreservesOtherVars verifies non-denylisted variables remain.
 func TestClearedEnv_PreservesOtherVars(t *testing.T) {
 	preservedVars := map[string]string{ //nolint:gosec
