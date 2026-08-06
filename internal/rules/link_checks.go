@@ -32,7 +32,13 @@ func NewHeadingCache() *HeadingCache {
 // Resolution runs through ResolveLinkTarget, the same entry point graph and
 // query use, so the commands cannot disagree about whether a link is broken.
 func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath, root string, cache *HeadingCache) []ValidationError {
-	if schema.Checks == nil {
+	// Broken-target detection needs no opt-in, so a schema with no checks
+	// block still resolves. Anchors and encoding remain opt-in and are
+	// guarded individually below.
+	resolve := schema.ShouldResolve()
+	anchors := schema.Checks != nil && schema.Checks.Anchors
+	encoding := schema.Checks != nil && schema.Checks.Encoding
+	if !resolve && !anchors && !encoding {
 		return nil
 	}
 
@@ -47,7 +53,7 @@ func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath, root str
 			continue
 		}
 
-		if schema.Checks.Encoding && strings.Contains(link.Target, " ") {
+		if encoding && strings.Contains(link.Target, " ") {
 			errs = append(errs, ValidationError{
 				Rule:     "link_encoding",
 				Field:    "links",
@@ -57,7 +63,7 @@ func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath, root str
 			})
 		}
 
-		if schema.Checks.Resolve || schema.Checks.Anchors {
+		if resolve || anchors {
 			res := ResolveLinkTarget(ResolveRequest{
 				BaseDir: filepath.Dir(sourceAbsPath),
 				Root:    root,
@@ -71,7 +77,7 @@ func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath, root str
 				// and staying silent would put the two commands back into
 				// disagreement, so say plainly that this one is undecidable
 				// here and name the command that can decide it.
-				if schema.BasenameFallback && schema.Checks.Resolve {
+				if schema.BasenameFallback && resolve {
 					errs = append(errs, ValidationError{
 						Rule:     "link_unverifiable",
 						Field:    "links",
@@ -81,7 +87,7 @@ func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath, root str
 					})
 					continue
 				}
-				if schema.Checks.Resolve {
+				if resolve {
 					msg := fmt.Sprintf("link target %q does not resolve to an existing file (case-sensitive)", link.Target)
 					if res.Suggestion != "" {
 						msg += fmt.Sprintf(" (did you mean %q?)", res.Suggestion)
@@ -97,7 +103,7 @@ func CheckLinks(links []extract.Link, schema LinkSchema, sourceAbsPath, root str
 				}
 				continue
 			}
-			if schema.Checks.Anchors && link.Anchor != "" {
+			if anchors && link.Anchor != "" {
 				errs = append(errs, checkAnchor(link, res.Path, cache)...)
 			}
 		}

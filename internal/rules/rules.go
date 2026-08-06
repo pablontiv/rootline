@@ -77,10 +77,23 @@ type LinkSchema struct {
 // LinkChecks enables filesystem-backed link checks (ADO code-wiki conventions).
 // Cycles opts graph --check into treating link cycles as failures.
 type LinkChecks struct {
-	Resolve  bool `yaml:"resolve" json:"resolve,omitempty"`
-	Anchors  bool `yaml:"anchors" json:"anchors,omitempty"`
-	Encoding bool `yaml:"encoding" json:"encoding,omitempty"`
-	Cycles   bool `yaml:"cycles" json:"cycles,omitempty"`
+	// Resolve is tri-state: unset means on. Broken-target detection is the
+	// one property graph and validate both claim to check, and graph has
+	// always checked it unconditionally, so leaving it opt-in kept the two
+	// disagreeing by default. Setting it false opts out explicitly.
+	Resolve  *bool `yaml:"resolve" json:"resolve,omitempty"`
+	Anchors  bool  `yaml:"anchors" json:"anchors,omitempty"`
+	Encoding bool  `yaml:"encoding" json:"encoding,omitempty"`
+	Cycles   bool  `yaml:"cycles" json:"cycles,omitempty"`
+}
+
+// ShouldResolve reports whether broken-target detection runs. It is on unless
+// the schema explicitly turns it off, and on when no checks block exists.
+func (ls LinkSchema) ShouldResolve() bool {
+	if ls.Checks == nil || ls.Checks.Resolve == nil {
+		return true
+	}
+	return *ls.Checks.Resolve
 }
 
 // knownCheckKeys lists the keys LinkChecks consumes; keep in sync with its
