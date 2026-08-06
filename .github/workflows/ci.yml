@@ -5,6 +5,14 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      force-bump:
+        description: Force a deliberate major release
+        required: true
+        type: choice
+        options:
+          - major
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -50,10 +58,11 @@ jobs:
   release:
     uses: pablontiv/crossbeam/.github/workflows/go-release.yml@v1
     needs: [ci, gitleaks, docs-validate, installer-tests]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
     with:
       quality-gate-jobs: '["ci","gitleaks","docs-validate","installer-tests"]'
       binary-name: rootline
+      force-bump: ${{ inputs['force-bump'] }}
     permissions:
       contents: write
       id-token: write
@@ -74,7 +83,7 @@ jobs:
   # docs-validate — while it proves its value. Tracked in docs/roadmap/T012.
   installer-smoke:
     needs: [release]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:

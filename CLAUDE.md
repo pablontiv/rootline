@@ -105,19 +105,23 @@ Format: `type(scope): description` — scope is optional. Add `!` before `:` for
 
 ### Version Strategy
 
-Standard semver, derived automatically from conventional commits by the release workflow:
+Versions are derived from conventional commits by the release workflow, with MAJOR releases reserved for an explicit maintainer decision:
 
 | Commit type | Bump |
 |---|---|
 | `fix`, `perf` | patch |
 | `feat` | minor |
-| `feat!`, `fix!` (breaking `!`) | major |
+| `feat!`, `fix!` (breaking `!`) | minor |
+
+`docs`, `test`, `refactor`, `ci`, `chore`, and `style` remain non-release-worthy. If the complete commit range since the latest tag contains only those types, the workflow produces no tag and no GitHub Release. This removes the previous contradiction where this table documented those types as `none` while CI still created a PATCH release for them.
 
 ## Release Flow
 
-Releases are fully automated via CI. On push to `master`, the `go-release` reusable workflow (from `pablontiv/crossbeam@v1`) analyzes conventional commits since the last tag, creates version tags, and triggers goreleaser to build multi-platform binaries. Smoke tests verify `--version` and `--help` before creating GitHub Releases. Version is injected at build time via `-ldflags -X main.version={{.Version}}`.
+Release-worthy pushes to `master` are automated via CI. The `go-release` reusable workflow (from `pablontiv/crossbeam@v1`) analyzes conventional commits since the latest tag, creates a PATCH or MINOR tag, and triggers goreleaser to build multi-platform binaries. A range containing only `docs`, `test`, `refactor`, `ci`, `chore`, or `style` commits stops without creating a tag or release. Smoke tests verify `--version` and `--help` before creating GitHub Releases. Version is injected at build time via `-ldflags -X main.version={{.Version}}`.
 
-No manual release steps are needed — just push to master with conventional commit messages. The Justfile contains only development recipes (`check`, `test`, `fmt`, `validate`). Release logic lives in crossbeam shared workflows.
+MAJOR releases are deliberate. Before cutting one, a maintainer must review the full commit range since the latest tag, confirm that the compatibility break warrants a MAJOR, and verify that `master` is green and points at the exact commit to release. Then run `gh workflow run ci.yml --ref master -f force-bump=major`, or dispatch the **CI** workflow from the Actions UI with `master` selected and **Force a deliberate major release** set to `major`. The dispatch runs the normal quality gates and passes `force-bump: major` to crossbeam; do not use it to compensate for malformed commit history or a failing branch.
+
+The Justfile contains only development recipes (`check`, `test`, `fmt`, `validate`). Release logic lives in crossbeam shared workflows.
 
 ## Auto-update
 
