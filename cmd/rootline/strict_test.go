@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,11 +47,7 @@ func TestValidateWarnOnlyNoExitCode(t *testing.T) {
 		t.Fatalf("expected no error for warn-only, got: %v", err)
 	}
 	// Should show valid=true
-	var result map[string]any
-	if err := json.Unmarshal([]byte(out), &result); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	if result["valid"] != true {
+	if result := firstResult(t, out); result["valid"] != true {
 		t.Errorf("expected valid=true with only warnings, got: %v", result["valid"])
 	}
 }

@@ -1,6 +1,10 @@
 package infer
 
-import "encoding/json"
+import (
+	"cmp"
+	"encoding/json"
+	"slices"
+)
 
 // AnalyzeReport is the top-level output of the analyze command.
 type AnalyzeReport struct {
@@ -66,6 +70,7 @@ func (r *AnalyzeReport) AddCategory(id, name string, inferences []Inference, age
 			RequiresAgent: agentTypes[inf.Type],
 		}
 	}
+	slices.SortFunc(reportInfs, compareReportInferences)
 
 	r.Categories = append(r.Categories, CategoryResult{
 		ID:             id,
@@ -73,6 +78,33 @@ func (r *AnalyzeReport) AddCategory(id, name string, inferences []Inference, age
 		InferenceCount: len(inferences),
 		Inferences:     reportInfs,
 	})
+}
+
+// compareReportInferences defines the stable total order used by the analyze
+// JSON contract. Fields are compared in serialized order so later additions
+// must be handled deliberately rather than inheriting detector traversal order.
+func compareReportInferences(a, b ReportInference) int {
+	for _, result := range []int{
+		cmp.Compare(a.Type, b.Type),
+		cmp.Compare(a.Source, b.Source),
+		cmp.Compare(a.Field, b.Field),
+		cmp.Compare(a.Value, b.Value),
+		cmp.Compare(a.From, b.From),
+		cmp.Compare(a.To, b.To),
+		slices.Compare(a.Paths, b.Paths),
+		cmp.Compare(a.Message, b.Message),
+	} {
+		if result != 0 {
+			return result
+		}
+	}
+	if a.RequiresAgent == b.RequiresAgent {
+		return 0
+	}
+	if !a.RequiresAgent {
+		return -1
+	}
+	return 1
 }
 
 // Finalize computes the summary from all categories.

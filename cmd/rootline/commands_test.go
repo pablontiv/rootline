@@ -515,11 +515,7 @@ func TestValidateSingleFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	var result map[string]any
-	if err := json.Unmarshal([]byte(out), &result); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	if result["valid"] != true {
+	if result := firstResult(t, out); result["valid"] != true {
 		t.Errorf("expected valid=true, got %v", result["valid"])
 	}
 }

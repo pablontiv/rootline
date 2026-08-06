@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/rules"
 	"gopkg.in/yaml.v3"
@@ -156,7 +157,7 @@ func renameFieldInFile(absPath, oldField, newField string) error {
 		return nil
 	}
 
-	return os.WriteFile(absPath, []byte(newContent), 0644) //nolint:gosec // migrate intentionally rewrites validated repository documents
+	return fsx.WriteFileAtomic(absPath, []byte(newContent), 0o644)
 }
 
 // renameFrontmatterField renames a key in the YAML frontmatter of a markdown string.
@@ -297,7 +298,7 @@ func renameFieldInStem(stemPath, oldField, newField string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(stemPath, out, 0644)
+	return fsx.WriteFileAtomic(stemPath, out, 0o644)
 }
 
 // renameSchemaKey renames a key under the "schema" mapping in a YAML AST node.

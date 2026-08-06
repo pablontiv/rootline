@@ -160,6 +160,57 @@ rootline repair apply --report fix-proposals.json && deploy
 # the deploy no longer runs when the repair failed
 ```
 
+### Atomicity contract
+
+An apply run makes two guarantees and deliberately does not make a third. Stated plainly, because
+the cost of guessing is a half-written governed document.
+
+**Per file: atomic.** Every write goes to a staging file in the target's own directory and is
+renamed over the target. A file is therefore only ever observed as its old self or its new self,
+never as a truncated middle. A bare write truncates and then writes, so a process killed in
+between leaves a document its own schema would reject. If the write fails, the target is untouched
+and the staging file is removed.
+
+**Per file: validated, and reverted if it fails.** After a write, the file is re-read and
+validated on its own. If validation rejects the result, the pre-write bytes are restored, the file
+moves from `changed[]` to `rolled_back[]`, and the run reports failure. The check is per file: an
+error against one path — including a path that could not be read at all — never disables the check
+for the rest.
+
+**Per run: best-effort with honest reporting. NOT all-or-nothing.** A run that fails partway leaves
+the files it already wrote in place. It does not buffer every rewrite and flush at the end, and it
+does not roll the whole run back.
+
+That is a deliberate choice, not an omission. Run-level atomicity would mean holding every
+rewritten document in memory until the last proposal succeeded, and it would still not be atomic
+against a kill — the flush itself is many writes. Worse, it makes the common case worse: one
+unreadable path in a hundred-file report would discard ninety-nine good repairs. Best-effort plus
+an exact account of what happened is more useful and more honest than a guarantee that cannot be
+kept.
+
+So a run is answerable rather than transactional. Read the envelope to know where it got to:
+
+| Field | Meaning |
+|-------|---------|
+| `complete` | `true` iff the run carried through everything it accepted. Same condition as exit `0`. |
+| `changed[]` | written and validated — these are on disk |
+| `rolled_back[]` | written, rejected by validation, restored — these are back to their original bytes |
+| `rejected[]` | never attempted, refused on policy |
+| `skipped[]` | never attempted, deferred |
+| `errors[]` | attempted or resolved and failed |
+
+`complete` is not redundant with the exit status. A report saved as a CI artifact is read long
+after `$?` is gone, and a consumer should not have to re-derive the rule — or parse prose — to
+learn whether the tree is in the state it asked for:
+
+```bash
+rootline repair apply --report r.json -o json > result.json   # exit status observed here
+jq -e .complete result.json                                    # ...and still answerable here
+```
+
+Recovering from a partial run is a re-run: the report is declarative, and re-applying it skips what
+is already correct. Take a `--dry-run` first if you want to see what remains.
+
 `repair apply` applies only repair-surface proposals to document frontmatter:
 - correct_value
 - add_field

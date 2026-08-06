@@ -12,7 +12,8 @@ rootline stats                                    # Current directory
 rootline stats docs/epics/                        # Specific path
 rootline stats --from docs/epics/                 # Explicit root
 rootline stats --where 'estado != "Completed"'    # Filtered
-rootline stats -o json                            # JSON output
+rootline stats -o json                            # JSON output (default)
+rootline stats -o table                           # Summary line
 ```
 
 ### Flags
@@ -48,3 +49,4 @@ rootline stats docs/roadmap/ --where "tipo == 'software'"
 ```
 
 The JSON result contains only the versioned command kind and the filtered total. Use `--where` for field-specific slices.
+`stats` supports `-o json` and `-o table` only. `-o jsonl` and `-o csv` are rejected — see [Output Formats](output.md).

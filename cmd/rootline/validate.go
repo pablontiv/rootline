@@ -132,15 +132,14 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 		results = append(results, rules.NewValidationResult(file, errs))
 	}
 
-	// Single file → single result; multiple → batch
-	if len(results) == 1 {
-		hasErr := validateHasFailure(rules.NewBatchValidationResult(results))
-		if outputFormat == "table" {
-			return renderValidateTable(cmd, rules.NewBatchValidationResult(results))
-		}
-		return outputJSON(cmd, results[0], hasErr)
-	}
-	batch := rules.NewBatchValidationResult(results)
+	// One file, several files or none: the envelope is the same shape, so a
+	// consumer never has to branch on how the command was invoked.
+	return emitValidateEnvelope(cmd, rules.NewValidationEnvelope(rules.ValidationEnvelopeInput{Results: results}))
+}
+
+// emitValidateEnvelope writes the envelope in the requested format and maps it
+// to the process exit code. Every validate path ends here.
+func emitValidateEnvelope(cmd *cobra.Command, batch *rules.BatchValidationResult) error {
 	if outputFormat == "table" {
 		return renderValidateTable(cmd, batch)
 	}
@@ -159,12 +158,19 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Phase 1: Stem health checks.
+	// Phase 1: Stem health checks. These describe `.stem` files, never records,
+	// so they travel in their own collection and never reach summary.total.
 	var results []*rules.ValidationResult
+	var notices []rules.Notice
 	stemHealth, stemErr := rules.ValidateStemHealth(ctx, root)
-	if stemErr == nil {
-		results = append(results, stemHealthToResults(stemHealth)...)
+	if stemErr != nil {
+		notices = append(notices, rules.Notice{
+			Severity: rules.SeverityWarn,
+			Code:     "stem_health_unavailable",
+			Message:  stemErr.Error(),
+		})
 	}
+	health := rules.StemHealthDiagnostics(stemHealth)
 
 	// Phase 2: Document validation.
 	reg := extract.NewASTRegistry()
@@ -172,7 +178,29 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 
 	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
-		return fmt.Errorf("scanning: %w", err)
+		// A corpus that cannot be scanned is exactly the case Phase 1 explains:
+		// no .stem anywhere, or one that does not parse. Returning the raw error
+		// discarded every diagnostic and wrote a non-JSON line to a consumer
+		// that asked for JSON, so the failure is reported inside the envelope.
+		notices = append(notices, rules.Notice{
+			Severity: rules.SeverityError,
+			Code:     "scan_failed",
+			Message:  fmt.Sprintf("scanning: %v", err),
+		})
+		return emitValidateEnvelope(cmd, rules.NewValidationEnvelope(rules.ValidationEnvelopeInput{
+			StemHealth: health,
+			Notices:    notices,
+		}))
+	}
+
+	if len(records) == 0 {
+		// A path that was renamed or emptied used to report total: 1, valid: 1
+		// — the stem-files-exist pseudo-record — and a CI gate read it as green.
+		notices = append(notices, rules.Notice{
+			Severity: rules.SeverityWarn,
+			Code:     "no_records",
+			Message:  "no records found in scope",
+		})
 	}
 
 	derive.DeriveAllSimple(ctx, records, root)
@@ -210,11 +238,18 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Structural directory validation.
+	// Structural directory validation. A directory is not a record either, so
+	// its verdict travels beside the documents rather than among them.
+	var structural []*rules.ValidationResult
 	for dir := range visitedDirs {
 		entries, walkErr := rules.WalkUp(dir)
 		if walkErr != nil {
-			return fmt.Errorf("resolving schema for structural validation in %s: %w", dir, walkErr)
+			notices = append(notices, rules.Notice{
+				Severity: rules.SeverityError,
+				Code:     "schema_resolution_failed",
+				Message:  fmt.Sprintf("resolving schema for structural validation in %s: %v", dir, walkErr),
+			})
+			continue
 		}
 		effective := rules.MergeStemFiles(entries)
 		if effective.Structural.IsEmpty() {
@@ -227,7 +262,7 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 			relDir = ""
 		}
 		dirPath := relDir + "/"
-		results = append(results, rules.NewValidationResult(dirPath, structErrs))
+		structural = append(structural, rules.NewValidationResult(dirPath, structErrs))
 	}
 
 	// Drift detection: group records by parent directory and detect drift
@@ -240,7 +275,12 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		}
 		entries, walkErr := rules.WalkUp(dir)
 		if walkErr != nil {
-			return fmt.Errorf("resolving schema for drift detection in %s: %w", dir, walkErr)
+			notices = append(notices, rules.Notice{
+				Severity: rules.SeverityError,
+				Code:     "schema_resolution_failed",
+				Message:  fmt.Sprintf("resolving schema for drift detection in %s: %v", dir, walkErr),
+			})
+			continue
 		}
 		if len(entries) == 0 {
 			continue
@@ -252,11 +292,13 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		driftWarnings = append(driftWarnings, rules.DetectDrift(*group.parent, group.children, effective.Schema)...)
 	}
 
-	batch := rules.NewBatchValidationResultWithDrift(results, driftWarnings)
-	if outputFormat == "table" {
-		return renderValidateTable(cmd, batch)
-	}
-	return outputJSON(cmd, batch, validateHasFailure(batch))
+	return emitValidateEnvelope(cmd, rules.NewValidationEnvelope(rules.ValidationEnvelopeInput{
+		Results:       results,
+		Structural:    structural,
+		StemHealth:    health,
+		DriftWarnings: driftWarnings,
+		Notices:       notices,
+	}))
 }
 
 func runValidateStaged(cmd *cobra.Command) error {
@@ -265,11 +307,9 @@ func runValidateStaged(cmd *cobra.Command) error {
 		return err
 	}
 
-	if len(files) == 0 {
-		// No staged markdown files — nothing to validate
-		return nil
-	}
-
+	// An empty staging area is a corpus of size zero, not an absence of output.
+	// Writing nothing broke `rootline validate --staged | jq -e '.summary.invalid == 0'`
+	// in the pre-commit hook this flag exists for.
 	return runValidateFiles(cmd, files)
 }
 
@@ -292,49 +332,43 @@ func getStagedFiles() ([]string, error) {
 	return mdFiles, nil
 }
 
-// validateHasFailure returns true if the batch has errors,
-// or if --strict and has warnings.
+// validateHasFailure reports whether the run should exit non-zero.
+//
+// Errors fail on every axis — an invalid record, a directory that breaks its
+// structural rules, a `.stem` that does not parse, a run-level failure such as
+// an unscannable corpus. Splitting the populations changed where a verdict is
+// reported, never whether it counts. Warnings fail only under --strict, and
+// info never fails: a nested root marker is a supported configuration, and
+// promoting it to a warning broke CI runs that had no way to suppress it.
 func validateHasFailure(batch *rules.BatchValidationResult) bool {
-	if batch.Summary.Invalid > 0 {
+	if batch.Summary.Invalid > 0 ||
+		batch.Summary.StructuralErrorsCount > 0 ||
+		batch.Summary.StemHealthErrorsCount > 0 ||
+		batch.HasErrorNotice() {
 		return true
 	}
-	if validateStrict && batch.Summary.WarningsCount > 0 {
+	if !validateStrict {
+		return false
+	}
+	if batch.Summary.WarningsCount > 0 ||
+		batch.Summary.StructuralWarningsCount > 0 ||
+		batch.Summary.StemHealthWarningsCount > 0 {
 		return true
+	}
+	for _, n := range batch.Notices {
+		if n.Severity == rules.SeverityWarn {
+			return true
+		}
 	}
 	return false
-}
-
-// stemHealthToResults converts stem-health checks into ValidationResults.
-func stemHealthToResults(result *rules.StemHealthResult) []*rules.ValidationResult {
-	var results []*rules.ValidationResult
-	for _, c := range result.Checks {
-		if c.Status == "pass" {
-			continue
-		}
-		severity := "warn"
-		if c.Status == "fail" {
-			severity = "error"
-		}
-		path := c.Path
-		if path == "" {
-			path = ".stem"
-		}
-		errs := []rules.ValidationError{{
-			Rule:     c.Name,
-			Field:    c.Field,
-			Message:  c.Message,
-			Source:   "stem-health",
-			Severity: severity,
-		}}
-		results = append(results, rules.NewValidationResult(path, errs))
-	}
-	return results
 }
 
 func renderValidateTable(cmd *cobra.Command, batch *rules.BatchValidationResult) error {
 	headers := []string{"File", "Valid", "Errors"}
 	var rows [][]string
-	for _, r := range batch.Results {
+	// Directories render in the same table as documents — they are both
+	// verdicts a reader scans top to bottom — while staying separate in JSON.
+	for _, r := range append(append([]*rules.ValidationResult{}, batch.Results...), batch.Structural...) {
 		valid := "yes"
 		if !r.Valid {
 			valid = "no"
@@ -368,7 +402,29 @@ func renderValidateTable(cmd *cobra.Command, batch *rules.BatchValidationResult)
 		renderTable(cmd.OutOrStdout(), driftHeaders, driftRows)
 	}
 
-	if batch.Summary.Invalid > 0 {
+	// Stem health and notices get their own sections for the same reason they
+	// get their own JSON keys: a schema diagnostic is not a record verdict.
+	if len(batch.StemHealth) > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Stem Health")
+		var healthRows [][]string
+		for _, d := range batch.StemHealth {
+			healthRows = append(healthRows, []string{d.Path, d.Check, d.Severity, d.Message})
+		}
+		renderTable(cmd.OutOrStdout(), []string{"Stem", "Check", "Severity", "Message"}, healthRows)
+	}
+
+	if len(batch.Notices) > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Notices")
+		var noticeRows [][]string
+		for _, n := range batch.Notices {
+			noticeRows = append(noticeRows, []string{n.Severity, n.Code, n.Message})
+		}
+		renderTable(cmd.OutOrStdout(), []string{"Severity", "Code", "Message"}, noticeRows)
+	}
+
+	if validateHasFailure(batch) {
 		cmd.SilenceUsage = true
 		cmd.SilenceErrors = true
 		return ErrValidationFailed

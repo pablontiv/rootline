@@ -405,6 +405,7 @@ same as that one? — are not guessed: `analyze` marks those proposals
 
 | Topic | Description |
 |-------|-------------|
+| [Output Formats](docs/output.md) | The `--output` contract and which command supports which format |
 | [Init](docs/init.md) | Schema inference from existing documents |
 | [Validate](docs/validate.md) | Validation rules, batch mode, staged checks |
 | [Describe](docs/describe.md) | Describe output, field extraction, source tracking |

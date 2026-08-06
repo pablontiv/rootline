@@ -124,20 +124,19 @@ func runTree(cmd *cobra.Command, args []string) error {
 
 	root := buildTree(records, filepath.Base(absRoot))
 
-	if outputFormat == "json" {
-		result := &TreeResult{Version: 2, Kind: "rootline/tree", Root: root}
-		return outputJSON(cmd, result, false)
+	// The diagram belongs to -o table, and only to it. Testing for "json" and
+	// rendering ASCII for everything else meant `-o jsonl` and `-o csv` — both
+	// advertised by the flag — silently produced box-drawing characters.
+	if outputFormat == "table" {
+		renderCtx := buildRenderContext(absRoot)
+		for _, line := range renderASCII(root, "", renderCtx) {
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
+		}
+		return nil
 	}
 
-	// Build render context with schema information for ASCII output.
-	renderCtx := buildRenderContext(absRoot)
-
-	// ASCII output
-	lines := renderASCII(root, "", renderCtx)
-	for _, line := range lines {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
-	}
-	return nil
+	result := &TreeResult{Version: 2, Kind: "rootline/tree", Root: root}
+	return outputJSON(cmd, result, false)
 }
 
 func buildTree(records []*extract.Record, rootName string) *treeNode {

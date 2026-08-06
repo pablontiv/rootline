@@ -13,7 +13,8 @@ Use `validate` to check Markdown records against the effective `.stem` schema.
 | repository scope | `rootline validate --all -o json` |
 | staged files | `rootline validate --staged -o json` |
 
-`validate` exits non-zero when validation errors exist. If JSON was requested, parse stdout anyway.
+`validate` exits non-zero when validation errors exist. If JSON was requested, parse stdout
+anyway — every invocation emits the envelope, including the failure paths.
 
 ### Frontmatter Scope
 
@@ -46,33 +47,54 @@ workaround is obsolete.
 | `--strict` | treat warnings as errors |
 | `--where "expr"` | filter records in `--all` mode |
 
-### JSON Shapes
+### JSON Shape
 
-Single file:
-
-```json
-{
-  "version": 1,
-  "kind": "rootline/validate",
-  "path": "file.md",
-  "valid": false,
-  "errors": [],
-  "warnings": []
-}
-```
-
-Batch:
+One envelope for every invocation — single file, multiple files, `--all`, `--staged` with an
+empty index, and the scan-failure path. Never branch on the flags; the keys are always present.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "kind": "rootline/validate-batch",
-  "results": [],
-  "summary": { "total": 10, "valid": 8, "invalid": 2, "errors_count": 3, "warnings_count": 1 }
+  "results": [
+    { "version": 1, "kind": "rootline/validate", "path": "file.md",
+      "valid": false, "errors": [], "warnings": [] }
+  ],
+  "structural": [
+    { "version": 1, "kind": "rootline/validate", "path": "sub/",
+      "valid": true, "errors": [], "warnings": [] }
+  ],
+  "stem_health": [
+    { "path": "sub/.stem", "check": "scope-match", "field": "",
+      "severity": "warn", "message": "scope.match \"*.txt\" matches no files in directory" }
+  ],
+  "drift_warnings": [],
+  "notices": [ { "severity": "warn", "code": "no_records", "message": "no records found in scope" } ],
+  "summary": {
+    "total": 10, "valid": 8, "invalid": 2,
+    "errors_count": 3, "warnings_count": 1, "drift_warnings_count": 0,
+    "structural_errors_count": 0, "structural_warnings_count": 0,
+    "stem_health_errors_count": 0, "stem_health_warnings_count": 1, "stem_health_info_count": 0
+  }
 }
 ```
 
-Each issue includes `rule`, `field`, `message`, `source`, `severity`, and optional `suggestion`.
+Reading it:
+
+- A single-file verdict is `.results[0]`, not the top level. `--field valid` is now
+  `--field "results[].valid"`.
+- `results` holds documents only. `summary.total` is a record count and agrees with
+  `query --count` on the same path. Directory verdicts from `structural:` rules are in
+  `structural[]` (trailing-slash paths; the scan root is `"/"`).
+- `.stem` diagnostics are in `stem_health`, keyed by `check`, with `severity` `error`,
+  `warn` or `info`. `info` (e.g. `nested-root-marker`) never fails `--strict`.
+- `notices` carries run-level diagnostics by stable `code`: `scan_failed`,
+  `schema_resolution_failed`, `stem_health_unavailable`, `no_records`.
+- A tree with no `.stem`, or one that does not parse, still emits this envelope —
+  `stem-files-exist` / `yaml-valid` in `stem_health`, `scan_failed` in `notices`, exit 1.
+- `validate --staged` on an empty index emits the envelope with `summary.total: 0`, exit 0.
+
+Each issue in `results[]` includes `rule`, `field`, `message`, `source`, `severity`, and optional `suggestion`.
 
 Link-check rules (emitted when the effective `.stem` sets `links.checks`): `link_resolve` (target missing, case-sensitive; carries fuzzy `suggestion`; wikilinks infer `.md` so `[[b]]` matches `b.md` and `[[sub/README]]` matches `sub/README.md`, while markdown targets resolve literally; root-anchored `/x.md` resolves against the scan root, or the governance boundary for single-file `validate`; resolution is clamped to that root, so a target escaping it via `..` or via a symlink pointing outside the tree never resolves, while a symlink staying inside still does), `link_anchor` (`#anchor` matches no heading slug in the target), `link_encoding` (raw space in target; use `%20`). These are not auto-fixable by `fix` — repair the link or the target file manually. `checks.cycles: true` additionally makes `graph --check` fail on link cycles; without it cycles are printed as informational and only broken links set the exit code (override per-run with `--fail-cycles`).
 

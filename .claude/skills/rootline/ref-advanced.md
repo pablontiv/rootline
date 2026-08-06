@@ -14,7 +14,7 @@ rootline graph <dir> -o table --format mermaid
 rootline graph <dir> --where "tipo == 'feature'" -o json
 ```
 
-Default global output is JSON, so `--format dot|mermaid` only produces diagram text when paired with `-o table`. Mermaid output renders natively on GitHub and in most editors.
+Default global output is JSON, so `--format dot|mermaid` only produces diagram text when paired with `-o table` — and now *only* with `-o table`; `-o jsonl`/`-o csv` are rejected instead of falling through to a diagram. `graph --check` rejects an explicit `--output` outright. Mermaid output renders natively on GitHub and in most editors.
 
 ### Flags
 
@@ -37,11 +37,14 @@ Default global output is JSON, so `--format dot|mermaid` only produces diagram t
 }
 ```
 
-Output is deterministic: `nodes` is sorted lexically by path and `edges` by
-`(source, target, line, type)`, so JSON, DOT and Mermaid are byte-stable across runs and safe to
-commit or diff. `tree` likewise picks its status column by sorting the enum-typed schema field
-names and taking the first, so a corpus declaring more than one enum field no longer alternates
-columns between runs.
+Output is deterministic: `nodes` is sorted lexically by path, `edges` by
+`(source, target, line, type)`, and `cycles` by canonical rotation — each cycle starts at its
+lexicographically smallest member and the list is sorted element-wise — so JSON, DOT, Mermaid and
+the numbered `--check` enumeration are byte-stable across runs and safe to commit or diff. Cycle
+detection reports back edges over a canonical spanning forest, not every elementary circuit, so
+`len(cycles)` is a stable count of detected back edges rather than of distinct circuits. `tree`
+likewise picks its status column by sorting the enum-typed schema field names and taking the
+first, so a corpus declaring more than one enum field no longer alternates columns between runs.
 
 ## migrate
 
@@ -120,7 +123,7 @@ Flags:
 | `--incremental` | include only inferences not covered by the target `.stem` |
 | `--threshold <0..1>` | section pattern detection threshold |
 
-Emits JSON: version 1, kind `"rootline/analyze"`, with `categories[]` (each `id`, `name`, `inference_count`, `inferences[]`) and a `summary` (`total_inferences`, `agent_required`, `engine_resolved`). Feeds `schema apply`. Full reference: `docs/analyze.md`.
+Emits JSON: version 1, kind `"rootline/analyze"`, with `categories[]` (each `id`, `name`, `inference_count`, `inferences[]`) and a `summary` (`total_inferences`, `agent_required`, `engine_resolved`). Category order follows the command's detector sequence; each `inferences[]` array is deterministically ordered by its serialized identity fields, so identical inputs produce byte-identical JSON. Feeds `schema apply`. Full reference: `docs/analyze.md`.
 
 Use `--field summary` only after confirming the analyze JSON contains that path.
 
@@ -141,6 +144,21 @@ rootline fix --all <dir> --dry-run -o json > repairs.json
 rootline repair apply --report repairs.json --dry-run
 rootline repair apply --report repairs.json
 ```
+
+**Atomicity contract (apply commands).** Two guarantees, one deliberate non-guarantee:
+1. *Per file, atomic* — writes stage to a sibling temp file and rename over the target, so a
+   file is only ever its old self or its new self, never truncated. A failed write leaves the
+   target untouched and removes the staging file.
+2. *Per file, validated and reverted* — a written file is re-read and validated on its own; if
+   it fails, the original bytes are restored and it moves to `rolled_back[]`.
+3. *Per run, NOT all-or-nothing* — best-effort with honest reporting. A run that fails partway
+   leaves earlier writes in place. Buffering the whole run was rejected: it would discard 99
+   good repairs because of 1 unreadable path, and would still not survive a kill.
+
+Read the envelope to know where a run got to: `complete` (true iff it carried through everything
+it accepted — same condition as exit 0), `changed[]` (on disk), `rolled_back[]` (restored),
+`rejected[]`/`skipped[]` (never attempted), `errors[]` (attempted and failed). Recover from a
+partial run by re-running the report; it is declarative and skips what is already correct.
 
 **Report root (both apply commands).** The paths in a report resolve against the directory
 that was SCANNED, not the directory the report file sits in. `fix --all` and `schema propose`
