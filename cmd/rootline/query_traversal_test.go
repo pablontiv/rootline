@@ -24,6 +24,9 @@ func setupTraversalDir(t *testing.T) string {
 		"wiki/sources/witness-b.md": "---\nverification: unverified\n---\n# Witness B\n\n[[supports:tool-b.md]]\n",
 		"wiki/sources/witness-c.md": "---\nverification: corroborated\n---\n# Witness C\n\n[[mentions:tool-b.md]]\n",
 		"raw/decoy.md":              "---\nverification: corroborated\n---\n# Decoy\n\n[[supports:tool-b.md]]\n",
+		// This fixture models a wiki whose sources link entities by bare
+		// filename across directories, so it opts into basename fallback.
+		".stem": "version: 2\nroot: true\nlinks:\n  basename_fallback: true\n",
 	}
 	for rel, content := range files {
 		path := filepath.Join(dir, rel)

@@ -48,11 +48,11 @@ func TestPrepareLinks_ResolvesPathQualifiedWikilink(t *testing.T) {
 	}
 }
 
-// Basename fallback still applies: a bare target matches a uniquely-named
-// record anywhere in the tree, and an ambiguous one resolves to nothing rather
-// than guessing. Gating this behind a schema knob is a separate change.
+// With the knob on, a bare target matches a uniquely-named record anywhere in
+// the tree, and an ambiguous one resolves to nothing rather than guessing.
 func TestPrepareLinks_BasenameFallback(t *testing.T) {
 	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".stem"), "version: 2\nroot: true\nlinks:\n  basename_fallback: true\n")
 	writeFile(t, filepath.Join(root, "t.md"), "body")
 	link := func(target string) extract.Link {
 		return extract.Link{Target: target, Type: "reference", Style: extract.StyleWikilink, Line: 1}
@@ -128,5 +128,36 @@ func TestPrepareLinks_UnrelatableTargetStaysUnresolved(t *testing.T) {
 
 	if rec.Links[0].Resolution == extract.LinkResolved && rec.Links[0].Target == filepath.Join(other, "elsewhere.md") {
 		t.Errorf("target outside root marked resolved without a usable key: %+v", rec.Links[0])
+	}
+}
+
+// Basename fallback is opt-in. Off by default, a bare cross-directory target
+// does not resolve, so graph reports exactly what validate reports — neither
+// can match it without a global index, and validate never has one.
+func TestPrepareLinks_BasenameFallbackIsOptIn(t *testing.T) {
+	setup := func(t *testing.T, stem string) []*extract.Record {
+		root := t.TempDir()
+		writeFile(t, filepath.Join(root, ".stem"), stem)
+		writeFile(t, filepath.Join(root, "t.md"), "body")
+		writeFile(t, filepath.Join(root, "deep", "far.md"), "# Far\n")
+		recs := []*extract.Record{
+			recWithLinks("t.md", extract.Link{Target: "far", Type: "reference", Style: extract.StyleWikilink, Line: 1}),
+			recWithLinks(filepath.Join("deep", "far.md")),
+		}
+		PrepareLinks(recs, root)
+		return recs
+	}
+
+	off := setup(t, "version: 2\nroot: true\n")
+	if got := off[0].Links[0].Resolution; got != extract.LinkUnresolved {
+		t.Errorf("default: Resolution = %q, want unresolved (fallback is opt-in)", got)
+	}
+
+	on := setup(t, "version: 2\nroot: true\nlinks:\n  basename_fallback: true\n")
+	if got := on[0].Links[0].Resolution; got != extract.LinkResolved {
+		t.Errorf("opted in: Resolution = %q, want resolved", got)
+	}
+	if got := on[0].Links[0].Target; got != filepath.Join("deep", "far.md") {
+		t.Errorf("opted in: Target = %q, want deep/far.md", got)
 	}
 }

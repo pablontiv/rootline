@@ -59,6 +59,16 @@ type LinkSchema struct {
 	Checks  *LinkChecks         `json:"checks,omitempty"`
 	Rules   map[string]LinkRule `json:"rules,omitempty"`
 
+	// BasenameFallback opts into matching a target that names no path
+	// against a uniquely-named record anywhere in the tree, the wiki
+	// convention where sources link entities by bare filename.
+	//
+	// It is off by default because it needs a global index of every record,
+	// and single-file `validate <file>` has none. With it on, that one
+	// command cannot check such links and says so; with it off, every
+	// command answers identically.
+	BasenameFallback bool `json:"basename_fallback,omitempty"`
+
 	// UnknownCheckKeys lists keys found under links.checks that no check
 	// consumes. Diagnostic only — surfaced by stem health, never serialized.
 	UnknownCheckKeys []string `json:"-"`
@@ -113,6 +123,15 @@ func (ls *LinkSchema) UnmarshalYAML(value *yaml.Node) error {
 			continue
 		}
 
+		if key == "basename_fallback" {
+			var enabled bool
+			if err := val.Decode(&enabled); err != nil {
+				return fmt.Errorf("links.basename_fallback: %w", err)
+			}
+			ls.BasenameFallback = enabled
+			continue
+		}
+
 		if key == "styles" {
 			var styles []string
 			if err := val.Decode(&styles); err != nil {
@@ -152,7 +171,7 @@ func (ls *LinkSchema) UnmarshalYAML(value *yaml.Node) error {
 
 // IsEmpty reports whether the LinkSchema has no constraints.
 func (ls LinkSchema) IsEmpty() bool {
-	return len(ls.Allowed) == 0 && len(ls.Rules) == 0 && len(ls.Styles) == 0 && ls.Checks == nil
+	return len(ls.Allowed) == 0 && len(ls.Rules) == 0 && len(ls.Styles) == 0 && ls.Checks == nil && !ls.BasenameFallback
 }
 
 // Scope defines which files a .stem applies to.

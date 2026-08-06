@@ -243,3 +243,37 @@ func TestCheckLinks_AnchorCacheReuse(t *testing.T) {
 		t.Errorf("cache.slugs = %d entries, want 1 (shared target)", len(cache.slugs))
 	}
 }
+
+// With basename fallback on, validate cannot decide a bare cross-directory
+// target: CheckLinks sees one record and has no index to match against, while
+// graph does. Reporting it broken would be wrong (it may well resolve) and
+// skipping it silently would recreate the disagreement issue #62 is about, so
+// validate says explicitly that it could not verify this one.
+func TestCheckLinks_BasenameFallbackTargetIsUnverifiable(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "t.md"), "body")
+	schema := wikiChecksSchema(LinkChecks{Resolve: true})
+	schema.BasenameFallback = true
+
+	errs := CheckLinks([]extract.Link{wikiLink("far")}, schema, filepath.Join(dir, "t.md"), dir, nil)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 diagnostic, got %+v", errs)
+	}
+	if errs[0].Rule != "link_unverifiable" {
+		t.Errorf("Rule = %q, want link_unverifiable", errs[0].Rule)
+	}
+	if errs[0].Severity != "warning" {
+		t.Errorf("Severity = %q, want warning — the link may well resolve", errs[0].Severity)
+	}
+}
+
+// Without the knob, the same target is an ordinary broken link.
+func TestCheckLinks_WithoutFallbackBareTargetIsBroken(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "t.md"), "body")
+	errs := CheckLinks([]extract.Link{wikiLink("far")}, wikiChecksSchema(LinkChecks{Resolve: true}),
+		filepath.Join(dir, "t.md"), dir, nil)
+	if len(errs) != 1 || errs[0].Rule != "link_resolve" || errs[0].Severity != "error" {
+		t.Fatalf("expected a link_resolve error, got %+v", errs)
+	}
+}
