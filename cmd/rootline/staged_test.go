@@ -1,41 +1,81 @@
 package main
 
 import (
-	"strings"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
+
+	"github.com/pablontiv/rootline/internal/gitenv"
 )
 
 func TestGetStagedFiles(t *testing.T) {
-	// This runs in a git repo, so getStagedFiles should not error
+	dir := makeStagedRepo(t, nil)
+	mustChdir(t, dir)
+
 	files, err := getStagedFiles()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Result may be empty (no staged files) — that's OK
-	_ = files
+	if len(files) != 0 {
+		t.Fatalf("expected no staged files, got: %v", files)
+	}
 }
 
 func TestGetStagedFiltersMarkdown(t *testing.T) {
-	// getStagedFiles should only return .md files
-	// We can't easily stage files in tests, but we can verify
-	// the function doesn't crash
+	dir := makeStagedRepo(t, map[string]string{
+		"document.md": "# Document\n",
+		"notes.txt":   "not markdown\n",
+	})
+	mustChdir(t, dir)
+
 	files, err := getStagedFiles()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	for _, f := range files {
-		if !strings.HasSuffix(f, ".md") {
-			t.Errorf("expected only .md files, got: %s", f)
-		}
+	if len(files) != 1 || files[0] != "document.md" {
+		t.Fatalf("expected only document.md, got: %v", files)
 	}
 }
 
 func TestValidateStagedNoFiles(t *testing.T) {
-	// With nothing staged, --staged should return exit code 0
+	dir := makeStagedRepo(t, nil)
+	mustChdir(t, dir)
+
 	out, err := runCmd(t, "validate", "--staged", "--all")
 	if err != nil {
 		t.Fatalf("expected no error with empty staging area, got: %v", err)
 	}
-	// Output should be empty (nothing to validate)
-	_ = out
+	if out != "" {
+		t.Fatalf("expected empty output, got: %s", out)
+	}
+}
+
+func makeStagedRepo(t *testing.T, stagedFiles map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	runFixtureGit(t, dir, "init", "--quiet")
+
+	for path, content := range stagedFiles {
+		fullPath := filepath.Join(dir, path)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			t.Fatalf("create fixture directory: %v", err)
+		}
+		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+			t.Fatalf("write fixture file: %v", err)
+		}
+		runFixtureGit(t, dir, "add", "--", path)
+	}
+
+	return dir
+}
+
+func runFixtureGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...) //nolint:gosec
+	cmd.Dir = dir
+	cmd.Env = gitenv.ClearedEnv()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
+	}
 }
