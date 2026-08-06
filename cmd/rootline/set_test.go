@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -177,8 +178,7 @@ func TestSetClearField(t *testing.T) {
 }
 
 // TestSetNonexistentFile verifies that set fails with a clear error when the
-// target file does not exist, both with and without --create.
-// --create creates missing sections, not missing files.
+// target file does not exist.
 func TestSetNonexistentFile(t *testing.T) {
 	dir := setupSetTestDir(t)
 	missing := filepath.Join(dir, "does-not-exist.md")
@@ -192,17 +192,32 @@ func TestSetNonexistentFile(t *testing.T) {
 	}
 }
 
-func TestSetCreateOnNonexistentFile(t *testing.T) {
+func TestSetRejectsCreateFlag(t *testing.T) {
 	dir := setupSetTestDir(t)
-	missing := filepath.Join(dir, "does-not-exist.md")
+	target := filepath.Join(dir, "doc.md")
 
-	// --create does NOT create files; the same file-not-found error must occur.
-	_, err := runCmd(t, "set", "--create", missing, "estado=Completed")
+	_, err := runCmd(t, "set", "--create", target, "estado=Completed")
 	if err == nil {
-		t.Fatal("expected error for nonexistent file even with --create")
+		t.Fatal("expected --create to be rejected")
 	}
-	if !strings.Contains(err.Error(), "file not found") {
-		t.Errorf("expected 'file not found' error, got: %v", err)
+	if !strings.Contains(err.Error(), "unknown flag: --create") {
+		t.Errorf("expected unknown --create flag error, got: %v", err)
+	}
+}
+
+func TestSetHelpDoesNotAdvertiseUnsupportedSyntax(t *testing.T) {
+	buf := new(bytes.Buffer)
+	setCmd.SetOut(buf)
+	t.Cleanup(func() { setCmd.SetOut(nil) })
+	if err := setCmd.Help(); err != nil {
+		t.Fatalf("unexpected help error: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "--create") {
+		t.Errorf("set help advertises removed --create flag: %s", out)
+	}
+	if strings.Contains(out, "+=") {
+		t.Errorf("set help advertises unsupported append syntax: %s", out)
 	}
 }
 
