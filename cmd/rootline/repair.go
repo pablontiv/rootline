@@ -22,7 +22,10 @@ var repairCmd = &cobra.Command{
 	Short: "Apply data-only repair fixes to document frontmatter",
 	Long: `Apply repair proposals from a fix report (produced by 'rootline fix --all <dir> --dry-run -o json') to document frontmatter.
 
-Only repair-surface proposals (correct_value, add_field, migrate_value, etc.)
+Only version 1 rootline/proposals reports are accepted; analyze reports contain
+schema and diagnostic inferences rather than document repair proposals.
+
+Repair-surface proposals (correct_value, add_field, migrate_value, etc.)
 are applied. Schema proposals (extend_enum, add_aggregate, etc.) are rejected
 and appear in the output under Rejected.
 
@@ -35,7 +38,8 @@ var repairApplyCmd = &cobra.Command{
 	Short: "Apply repair proposals to document frontmatter",
 	Long: `Apply repair proposals from a fix report (produced by 'rootline fix --all <dir> --dry-run -o json') to document frontmatter.
 
-Only repair-surface proposals are applied. Schema proposals are rejected.
+Only version 1 rootline/proposals reports are accepted. Repair-surface proposals
+are applied and schema proposals are rejected. Analyze reports are not accepted.
 Use --dry-run to preview changes without modifying files.`,
 	Args: cobra.NoArgs,
 	RunE: runRepairApply,

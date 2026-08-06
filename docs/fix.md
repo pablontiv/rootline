@@ -75,7 +75,9 @@ rootline fix --all             # Apply data-only repairs
 
 ### 2. `rootline repair apply` — Data-Only Bulk Repair (Current)
 
-Use this for fixing frontmatter data issues found by `rootline validate` or `rootline analyze`.
+Use this for applying the versioned `rootline/proposals` report produced by
+`rootline fix --all --dry-run`. Analyze reports are schema/diagnostic inference
+reports and are accepted by `schema apply`, not `repair apply`.
 
 **Workflow:**
 

@@ -409,6 +409,9 @@ func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTar
 		}
 
 		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
+		if p.Type == proposal.MigrateValue && len(p.WikiLinks) > 0 {
+			newContent = InsertWikiLinksBeforeHeading(newContent, p.WikiLinks)
+		}
 		if err := WriteFileAtomic(tgt.abs, []byte(newContent), 0o644); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}

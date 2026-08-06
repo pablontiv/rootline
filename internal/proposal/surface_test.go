@@ -56,8 +56,8 @@ func TestProposalSurface_MigrateValue(t *testing.T) {
 		Paths: []string{"a.md"},
 	}
 	got := p.Surface()
-	if got != SurfaceMigration {
-		t.Errorf("MigrateValue.Surface() = %q, want migration", got)
+	if got != SurfaceRepair {
+		t.Errorf("MigrateValue.Surface() = %q, want repair", got)
 	}
 }
 
@@ -326,6 +326,7 @@ func TestSurfaceClassificationMatrixRepair(t *testing.T) {
 	// Test matrix of repair proposals (data surface only)
 	repairTypes := []Type{
 		CorrectValue,
+		MigrateValue,
 		AddField,
 		ExtractBody,
 		InferFromChildren,
@@ -358,20 +359,6 @@ func TestSurfaceClassificationMatrixSchema(t *testing.T) {
 		if surface := p.Surface(); surface != SurfaceSchema {
 			t.Errorf("type %q should be schema, got %q", typ, surface)
 		}
-	}
-}
-
-func TestSurfaceClassificationMigration(t *testing.T) {
-	// Only MigrateValue triggers migration surface
-	p := &Proposal{
-		Type:  MigrateValue,
-		Field: "estado",
-		From:  "old",
-		To:    "new",
-		Paths: []string{"a.md"},
-	}
-	if surface := p.Surface(); surface != SurfaceMigration {
-		t.Errorf("MigrateValue should be migration, got %q", surface)
 	}
 }
 
