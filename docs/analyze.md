@@ -4,8 +4,8 @@ estado: Completed
 # Analyze
 
 Run all inference detectors over a directory and produce a structured report
-of schema and content patterns. The report feeds `schema apply` (schema
-proposals) and `repair apply` (data-only repairs).
+of schema and content patterns. The report feeds `schema apply`; it is not a
+document-repair proposal report.
 
 ## Usage
 
@@ -154,10 +154,9 @@ understatement).
 
 ## Consuming the Report
 
-Analyze generates two kinds of inferences:
-
-- **Schema proposals** — field types, enums, required flags, structural rules. Feed these to `schema apply` to update `.stem` files.
-- **Data repairs** — enum corrections, field additions, value migrations. Feed these to `repair apply` to update document frontmatter.
+Analyze generates schema and diagnostic inferences. Feed supported schema
+inference types to `schema apply` to update `.stem` files. Document repairs use
+the versioned `rootline/proposals` report produced by `fix --all --dry-run`.
 
 ### Workflow
 
@@ -170,15 +169,11 @@ rootline schema apply --report analyze.json --dry-run
 
 # Apply schema changes (--incremental to skip already-covered inferences)
 rootline schema apply --report analyze.json
-
-# Preview data repairs
-rootline repair apply --report analyze.json --dry-run
-
-# Apply data repairs
-rootline repair apply --report analyze.json
 ```
 
-Inferences with `requires_agent: true` are logged in the report but skipped by both `schema apply` and `repair apply`. Human or agent review is needed to resolve them; they remain actionable for future tooling.
+Inferences with `requires_agent: true` are logged in the report but skipped by
+`schema apply`. Human or agent review is needed to resolve them; they remain
+actionable for future tooling.
 
 ## Filtering with --incremental
 

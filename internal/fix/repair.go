@@ -386,6 +386,9 @@ func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTar
 		}
 
 		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
+		if p.Type == proposal.MigrateValue && len(p.WikiLinks) > 0 {
+			newContent = InsertWikiLinksBeforeHeading(newContent, p.WikiLinks)
+		}
 		if err := os.WriteFile(tgt.abs, []byte(newContent), 0644); err != nil { //nolint:gosec // tgt.abs is the path ContainPath validated and confined to root
 			return fmt.Errorf("writing %s: %w", path, err)
 		}

@@ -33,12 +33,12 @@ func (p *Proposal) Surface() ProposalSurface {
 	case ExtendEnum, AddAggregate, RemoveStemField:
 		return SurfaceSchema
 
-	// Repair proposals: correct value, add field, extract from body, infer from children/siblings
-	case CorrectValue, AddField, ExtractBody, InferFromChildren, InferFromSiblings, CorrectOutlier, CorrectLink:
+	// Repair proposals mutate document frontmatter without changing schema shape.
+	case CorrectValue, MigrateValue, AddField, ExtractBody, InferFromChildren, InferFromSiblings, CorrectOutlier, CorrectLink:
 		return SurfaceRepair
 
-	// Migration proposals: migrate value to different field or type, and schema evolution operations
-	case MigrateValue, SchemaEvolution, RemoveField, LooseRequired, ChangeType, ReplaceEnumValues, LoosenSeverity:
+	// Migration proposals change schema shape or compatibility.
+	case SchemaEvolution, RemoveField, LooseRequired, ChangeType, ReplaceEnumValues, LoosenSeverity:
 		return SurfaceMigration
 
 	// Aggregate propagation is a repair operation (updates frontmatter)

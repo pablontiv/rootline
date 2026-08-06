@@ -457,8 +457,8 @@ func TestApplyRepair_ReadError(t *testing.T) {
 	}
 }
 
-// TestApplyRepair_MigrateValue_Rejected tests that MigrateValue (SurfaceMigration) is rejected
-func TestApplyRepair_MigrateValue_Rejected(t *testing.T) {
+// TestApplyRepair_MigrateValue_Applied tests that document value normalization is repair-owned.
+func TestApplyRepair_MigrateValue_Applied(t *testing.T) {
 	tmpDir := t.TempDir()
 	testPath := filepath.Join(tmpDir, "test.md")
 
@@ -488,14 +488,16 @@ estado: "Pending"
 		t.Fatalf("ApplyRepair: %v", err)
 	}
 
-	// MigrateValue is SurfaceMigration, not SurfaceRepair, so it should be rejected
-	if len(result.Rejected) != 1 {
-		t.Errorf("expected 1 rejected proposal, got %d", len(result.Rejected))
+	if len(result.Rejected) != 0 || len(result.Changed) != 1 {
+		t.Errorf("expected migrate_value to be applied: changed=%v rejected=%v", result.Changed, result.Rejected)
 	}
 
 	updated, _ := os.ReadFile(testPath)
-	if !contains(string(updated), "estado: \"Pending\"") {
-		t.Errorf("expected file unchanged, got:\n%s", string(updated))
+	if !contains(string(updated), "estado: Completed") {
+		t.Errorf("expected migrated value, got:\n%s", string(updated))
+	}
+	if !contains(string(updated), "[[blocks:T001]]") {
+		t.Errorf("expected extracted blocker link to be preserved, got:\n%s", string(updated))
 	}
 }
 
