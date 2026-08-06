@@ -217,3 +217,31 @@ func TestScan_ScopeExcludesBeforeExtraction(t *testing.T) {
 		t.Errorf("title = %v, want Good", records[0].Frontmatter["title"])
 	}
 }
+
+func TestIsIgnored_AppliesRootAndNestedPatterns(t *testing.T) {
+	root := setupScanTree(t, map[string]string{
+		".stemignore":        "*.tmp\n",
+		"root.tmp":           "",
+		"nested/.stemignore": "draft.md\n",
+		"nested/draft.md":    "",
+		"nested/keep.md":     "",
+	})
+
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{path: "root.tmp", want: true},
+		{path: "nested/draft.md", want: true},
+		{path: "nested/keep.md", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			got := IsIgnored(root, filepath.Join(root, tt.path))
+			if got != tt.want {
+				t.Fatalf("IsIgnored(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
