@@ -122,18 +122,14 @@ func TestValidateCmd_SingleFileValid(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
-		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	env := decodeEnvelope(t, stdout)
+	if env["version"].(float64) != 2 {
+		t.Errorf("version = %v", env["version"])
 	}
-
-	if result["version"].(float64) != 1 {
-		t.Errorf("version = %v", result["version"])
+	if env["kind"] != "rootline/validate-batch" {
+		t.Errorf("kind = %v", env["kind"])
 	}
-	if result["kind"] != "rootline/validate" {
-		t.Errorf("kind = %v", result["kind"])
-	}
-	if result["valid"] != true {
+	if result := firstResult(t, stdout); result["valid"] != true {
 		t.Errorf("valid = %v, want true", result["valid"])
 	}
 }
@@ -149,11 +145,7 @@ func TestValidateCmd_SingleFileInvalid(t *testing.T) {
 		t.Fatalf("expected ErrValidationFailed, got: %v", err)
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
-		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
-	}
-
+	result := firstResult(t, stdout)
 	if result["valid"] != false {
 		t.Errorf("valid = %v, want false", result["valid"])
 	}
@@ -204,18 +196,18 @@ func TestValidateCmd_FieldExtraction(t *testing.T) {
 		"doc.md": "---\nstatus: draft\n---\n# No title",
 	})
 
-	stdout, err := executeValidate(t, "--field", "errors", filepath.Join(root, "doc.md"))
+	stdout, err := executeValidate(t, "--field", "results[].errors", filepath.Join(root, "doc.md"))
 	if err != ErrValidationFailed {
 		t.Fatalf("expected ErrValidationFailed, got: %v", err)
 	}
 
-	// Should be a JSON array of errors
-	var errors []any
-	if err := json.Unmarshal([]byte(stdout), &errors); err != nil {
+	// Should be one error array per record
+	var perRecord [][]any
+	if err := json.Unmarshal([]byte(stdout), &perRecord); err != nil {
 		t.Fatalf("invalid JSON array: %v\noutput: %s", err, stdout)
 	}
-	if len(errors) == 0 {
-		t.Error("expected errors in extracted field")
+	if len(perRecord) != 1 || len(perRecord[0]) == 0 {
+		t.Errorf("expected errors in extracted field, got %v", perRecord)
 	}
 }
 
@@ -225,13 +217,13 @@ func TestValidateCmd_FieldExtractionValid(t *testing.T) {
 		"doc.md": "---\ntitle: Hello\n---\n",
 	})
 
-	stdout, err := executeValidate(t, "--field", "valid", filepath.Join(root, "doc.md"))
+	stdout, err := executeValidate(t, "--field", "results[].valid", filepath.Join(root, "doc.md"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if stdout != "true\n" {
-		t.Errorf("output = %q, want true", stdout)
+	if stdout != "[true]\n" {
+		t.Errorf("output = %q, want [true]", stdout)
 	}
 }
 
@@ -296,8 +288,8 @@ func TestValidateCmd_FieldExtractionNested(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if stdout != "\"rootline/validate\"\n" {
-		t.Errorf("output = %q, want \"rootline/validate\"", stdout)
+	if stdout != "\"rootline/validate-batch\"\n" {
+		t.Errorf("output = %q, want \"rootline/validate-batch\"", stdout)
 	}
 }
 
@@ -389,12 +381,7 @@ func TestValidateCmd_EnumError(t *testing.T) {
 		t.Fatalf("expected ErrValidationFailed, got: %v", err)
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
-		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
-	}
-
-	errors := result["errors"].([]any)
+	errors := firstResult(t, stdout)["errors"].([]any)
 	foundEnum := false
 	for _, e := range errors {
 		errMap := e.(map[string]any)
@@ -422,29 +409,21 @@ func TestValidateAll_StemHealthChecks(t *testing.T) {
 		t.Fatalf("expected ErrValidationFailed, got: %v\noutput: %s", err, stdout)
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
-		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
-	}
-
-	// Check that stem health errors appear in results
-	results := result["results"].([]any)
+	// Stem health travels on its own axis: a schema defect is not a record
+	// verdict, and folding it into results made summary.total a count of
+	// documents plus schema findings.
+	env := decodeEnvelope(t, stdout)
 	foundStemHealth := false
-	for _, r := range results {
-		rm := r.(map[string]any)
-		errs, ok := rm["errors"].([]any)
-		if !ok {
-			continue
-		}
-		for _, e := range errs {
-			em := e.(map[string]any)
-			if em["source"] == "stem-health" && em["rule"] == "type-consistency" {
-				foundStemHealth = true
-			}
+	for _, h := range stemHealthChecks(t, env) {
+		if h["check"] == "type-consistency" && h["severity"] == "error" {
+			foundStemHealth = true
 		}
 	}
 	if !foundStemHealth {
-		t.Errorf("expected stem-health type-consistency error in results, got: %s", stdout)
+		t.Errorf("expected type-consistency error in stem_health, got: %s", stdout)
+	}
+	if got := env["summary"].(map[string]any)["stem_health_errors_count"].(float64); got != 1 {
+		t.Errorf("stem_health_errors_count = %v, want 1", got)
 	}
 }
 
@@ -461,36 +440,22 @@ func TestValidateAll_StemHealthWarnings(t *testing.T) {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, stdout)
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
-		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
-	}
-
-	// Check that warnings appear
-	results := result["results"].([]any)
+	env := decodeEnvelope(t, stdout)
 	foundScopeWarn := false
 	foundEnumWarn := false
-	for _, r := range results {
-		rm := r.(map[string]any)
-		warns, ok := rm["warnings"].([]any)
-		if !ok {
-			continue
+	for _, h := range stemHealthChecks(t, env) {
+		if h["check"] == "scope-match" && h["severity"] == "warn" {
+			foundScopeWarn = true
 		}
-		for _, w := range warns {
-			wm := w.(map[string]any)
-			if wm["rule"] == "scope-match" {
-				foundScopeWarn = true
-			}
-			if wm["rule"] == "enum-values" {
-				foundEnumWarn = true
-			}
+		if h["check"] == "enum-values" && h["severity"] == "warn" {
+			foundEnumWarn = true
 		}
 	}
 	if !foundScopeWarn {
-		t.Errorf("expected scope-match warning in results, got: %s", stdout)
+		t.Errorf("expected scope-match warning in stem_health, got: %s", stdout)
 	}
 	if !foundEnumWarn {
-		t.Errorf("expected enum-values warning in results, got: %s", stdout)
+		t.Errorf("expected enum-values warning in stem_health, got: %s", stdout)
 	}
 }
 

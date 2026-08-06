@@ -54,7 +54,8 @@ Derivation evaluates per-record expressions from `.stem` `derive:` fields. Aggre
 ### Key Design Decisions
 
 - CLI commands call the Core Engine directly and emit stable versioned contracts.
-- Each JSON payload carries its own `version` for contract stability. Most commands use version 1; `tree` uses version 2.
+- Each JSON payload carries its own `version` for contract stability. Most commands use version 1; `tree` and `validate` use version 2.
+- `validate` emits exactly one envelope shape — `rootline/validate-batch` version 2 — for every invocation: one file, several files, `--all`, `--staged` with an empty index, and the corpus-scan failure path. Its six keys (`results`, `structural`, `stem_health`, `drift_warnings`, `notices`, `summary`) are always present, empty collections as `[]`. `results` holds documents only — directory verdicts from `structural:` rules moved to `structural[]` — so `summary.total` agrees with `query --count` on the same path; `.stem` diagnostics live in `stem_health` with severity `error`/`warn`/`info` and their own `stem_health_*_count` summary fields; run-level diagnostics (`scan_failed`, `schema_resolution_failed`, `stem_health_unavailable`, `no_records`) live in `notices`, keyed by a stable `code`. Stem health runs before the corpus scan and survives its failure, so a missing or unparseable `.stem` still emits JSON (with `stem-files-exist` or `yaml-valid`) instead of a raw Go error. Exit is non-zero on an invalid record, a structural error, a stem-health error, or an error notice; `--strict` adds warnings on all three axes; `info` never fails. See `docs/validate.md` for the version 1 → 2 upgrade table.
 - `.stem` merge behavior is determined by YAML data type, not field names.
 - Version is injected via ldflags at build time (`cmd/rootline/root.go`).
 

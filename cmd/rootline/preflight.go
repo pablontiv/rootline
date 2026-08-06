@@ -51,6 +51,24 @@ func isExemptFromBoundaryPreflight(cmd *cobra.Command) bool {
 	return false
 }
 
+// commandsReportingSchemaFailure lists commands that surface an unreadable
+// `.stem` as structured output instead of a raw error. They stay governed —
+// only the shape of the failure changes, not whether it fails.
+var commandsReportingSchemaFailure = map[string]bool{
+	"validate": true,
+}
+
+// reportsSchemaFailureItself reports whether cmd, or any command it hangs
+// under, renders schema failures in its own contract.
+func reportsSchemaFailureItself(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if commandsReportingSchemaFailure[c.Name()] {
+			return true
+		}
+	}
+	return false
+}
+
 // boundaryPreflight runs once before any schema-governed command.
 //
 // It is wired at the root rather than at each of the sixteen WalkUp call sites:
@@ -74,6 +92,13 @@ func boundaryPreflight(cmd *cobra.Command, args []string) error {
 
 	entries, err := rules.WalkUp(target)
 	if err != nil {
+		if !errors.Is(err, rules.ErrNoSchemaFound) && reportsSchemaFailureItself(cmd) {
+			// `validate` is the command whose job is to report a broken schema.
+			// Failing here handed the user a raw Go parser error on stderr and
+			// no JSON at all, which is precisely the diagnostic the yaml-valid
+			// stem-health check exists to produce. Let it run and report.
+			return nil
+		}
 		if !errors.Is(err, rules.ErrNoSchemaFound) {
 			// A real IO or parse failure, and this is the only place that sees
 			// every governed command. `query` and `stats` never resolve a

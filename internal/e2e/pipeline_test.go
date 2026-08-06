@@ -615,11 +615,16 @@ schema:
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("JSON unmarshal error: %v", err)
 	}
-	if parsed["version"].(float64) != 1 {
-		t.Errorf("version = %v", parsed["version"])
+	if parsed["version"].(float64) != float64(rules.ValidationEnvelopeVersion) {
+		t.Errorf("version = %v, want %d", parsed["version"], rules.ValidationEnvelopeVersion)
 	}
 	if parsed["kind"] != "rootline/validate-batch" {
 		t.Errorf("kind = %v", parsed["kind"])
+	}
+	for _, key := range []string{"results", "stem_health", "drift_warnings", "notices", "summary"} {
+		if _, ok := parsed[key]; !ok {
+			t.Errorf("envelope key %q missing", key)
+		}
 	}
 }
 
