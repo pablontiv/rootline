@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/migrate"
@@ -466,7 +467,7 @@ func runMigrateSplit(cmd *cobra.Command, args []string) error {
 
 	// Write all .stem files.
 	for _, sf := range result.Stems {
-		if writeErr := os.WriteFile(sf.Path, []byte(sf.Content), 0644); writeErr != nil {
+		if writeErr := fsx.WriteFileAtomic(sf.Path, []byte(sf.Content), 0o644); writeErr != nil {
 			return fmt.Errorf("writing %s: %w", sf.Path, writeErr)
 		}
 	}

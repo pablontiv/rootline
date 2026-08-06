@@ -3,13 +3,13 @@ package templates
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/gitenv"
 	"gopkg.in/yaml.v3"
 )
@@ -168,30 +168,7 @@ func FetchTemplate(ref, dest string, force, dryRun bool) ([]string, error) {
 	return FetchFromURL(url, tag, dest, force, dryRun)
 }
 
-// copyFile copies src to dst, creating or truncating dst.
-func copyFile(src, dst string) (retErr error) {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := in.Close(); err != nil && retErr == nil {
-			retErr = err
-		}
-	}()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := out.Close(); err != nil && retErr == nil {
-			retErr = err
-		}
-	}()
-
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return nil
+// copyFile atomically copies src to dst without exposing partial content.
+func copyFile(src, dst string) error {
+	return fsx.CopyFileAtomic(src, dst)
 }

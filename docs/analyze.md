@@ -30,6 +30,11 @@ Global flags `--output json|table` and `--field <path>` also apply.
 Fourteen detectors run per invocation — twelve data detectors and two
 governance detectors.
 
+Markdown is parsed into an AST for every record before the detectors run. This
+is required by the section-pattern, invariant, and formal-dependency detectors;
+their output is therefore part of the normal command contract rather than an
+optional parsing mode.
+
 **Data:** field types, required fields, enum values, constant fields, link
 types, back references, cross references, section patterns, invariants,
 formal dependencies, traceability links, structural rules.
@@ -134,6 +139,8 @@ understatement).
 }
 ```
 
+For identical inputs and flags, `analyze -o json` emits each category's `inferences[]` in a deterministic order. Repeated runs are byte-stable, while the category sequence, inference membership, and summary counts remain unchanged.
+
 ### Output Fields
 
 - `version` — contract version.
@@ -193,3 +200,7 @@ Section-pattern detection sensitivity is controlled by `--threshold` (default `0
 rootline analyze docs/ --threshold 0.80   # Conservative
 rootline analyze docs/ --threshold 0.40   # Aggressive
 ```
+
+Structural naming analysis scores directory names and Markdown record-file
+stems as separate populations. An unrelated directory therefore cannot become
+an outlier merely because the files beside it follow a record naming pattern.

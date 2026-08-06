@@ -13,6 +13,11 @@ rootline init --dry-run docs/                     # Preview without writing
 rootline init --force docs/api/                   # Overwrite existing .stem
 ```
 
+Writes are atomic per file: Rootline stages each generated or template `.stem`
+beside its destination and replaces the destination only after the complete
+content is flushed. A multi-file template or hierarchical initialization is not
+a transaction; files completed before a later error remain installed.
+
 ### Flags
 
 | Flag | Description |
