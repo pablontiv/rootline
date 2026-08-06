@@ -174,13 +174,7 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	}
 
 	reg := extract.NewRegistry()
-	resolver := func(dir string) (*rules.StemFile, error) {
-		entries, err := rules.WalkUp(dir)
-		if err != nil || len(entries) == 0 {
-			return nil, err
-		}
-		return rules.MergeStemFiles(entries), nil
-	}
+	resolver := stemScopeResolver()
 
 	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver))
 	if err != nil {

@@ -8,7 +8,6 @@ import (
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/graph"
-	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
 )
@@ -62,7 +61,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	}
 
 	reg := extract.NewRegistry()
-	records, err := index.Scan(ctx, absRoot, reg)
+	records, err := scanGoverned(ctx, absRoot, reg)
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}

@@ -80,6 +80,21 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 			return fmt.Errorf("%s is a directory; use 'rootline validate --all %s'", file, file)
 		}
 
+		// Honor the same exclusions `--all` applies. Naming a file explicitly
+		// must not smuggle it back into governance, or the pre-commit hook
+		// and CI enforce different rules on the same file. The skip is
+		// reported rather than silent so the user can tell why.
+		if reason := excludedFromGovernance(absPath); reason != "" {
+			results = append(results, rules.NewValidationResult(file, []rules.ValidationError{{
+				Rule:     "skipped",
+				Field:    "",
+				Message:  reason,
+				Source:   "scope",
+				Severity: "warn",
+			}}))
+			continue
+		}
+
 		// Check extractor exists
 		ext := reg.ForFile(absPath, "")
 		if ext == nil {
@@ -153,13 +168,7 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 
 	// Phase 2: Document validation.
 	reg := extract.NewASTRegistry()
-	resolver := func(dir string) (*rules.StemFile, error) {
-		entries, err := rules.WalkUp(dir)
-		if err != nil || len(entries) == 0 {
-			return nil, err
-		}
-		return rules.MergeStemFiles(entries), nil
-	}
+	resolver := stemScopeResolver()
 
 	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver))
 	if err != nil {

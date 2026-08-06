@@ -86,6 +86,21 @@ symlink that stays inside the root still resolves normally. Link targets are doc
 text, and resolution would otherwise report on — and with `anchors` enabled, read — files
 outside the tree being governed.
 
+### Naming a file does not bypass its exclusions
+
+`validate <file>` and `--staged` apply the same `scope.match` and `.stemignore` filters
+`validate --all` applies. Naming a file explicitly cannot smuggle it back into governance —
+otherwise the pre-commit hook and CI enforce different rules on the same file, and a record the
+schema declares out of scope blocks the commit while passing CI.
+
+The skip is reported rather than silent, as a warning, so a run that checks nothing says why:
+
+```console
+$ rootline validate scope/other.md -o json
+{"valid":true,"errors":[],"warnings":[{"rule":"skipped",
+ "message":"skipped: out of scope for this .stem (scope.match)","severity":"warn"}]}
+```
+
 ### Broken-target detection is always on
 
 `links.checks.resolve` needs no opt-in. `graph --check` has always failed on a broken link with

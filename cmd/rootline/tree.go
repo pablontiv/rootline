@@ -95,13 +95,7 @@ func runTree(cmd *cobra.Command, args []string) error {
 	}
 
 	reg := extract.NewRegistry()
-	resolver := func(dir string) (*rules.StemFile, error) {
-		entries, err := rules.WalkUp(dir)
-		if err != nil || len(entries) == 0 {
-			return nil, err
-		}
-		return rules.MergeStemFiles(entries), nil
-	}
+	resolver := stemScopeResolver()
 	records, err := index.Scan(ctx, absRoot, reg, index.WithScopeResolver(resolver))
 	if errors.Is(err, rules.ErrNoSchemaFound) {
 		// Nothing under absRoot resolved a schema. There is no scope to filter
