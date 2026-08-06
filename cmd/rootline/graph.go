@@ -87,28 +87,22 @@ func runGraph(cmd *cobra.Command, args []string) error {
 
 	rules.PrepareLinks(records, absRoot)
 
-	// Load .stem schema: filter links and read the cycle-failure opt-in.
+	// Typed-rule filtering and the cycle-failure opt-in both resolve per
+	// record. Reading them from the chain above the scan root meant hardening
+	// declared in a subdirectory evaporated the moment CI ran the command from
+	// the repository root — the most likely invocation.
 	//
-	// A missing .stem is not a missing graph. The schema only decides which
-	// link styles are governed and whether cycles fail a check, so without one
-	// the links stay unfiltered and cycles stay informational — the nil stem
-	// below already expresses exactly that.
-	failCycles := false
-	entries, err := rules.WalkUp(absRoot)
-	if rules.IsRealSchemaError(err) {
-		return fmt.Errorf("discovering schema for link filtering: %w", err)
-	}
-	stem := rules.MergeStemFiles(entries)
-	if stem != nil {
-		filterLinksBySchema(records, stem.Links)
-		failCycles = stem.Links.Checks != nil && stem.Links.Checks.Cycles
-	}
-	if cmd.Flags().Changed("fail-cycles") {
-		failCycles = graphFailCycles
-	}
+	// A missing .stem is still not a missing graph: an ungoverned record
+	// filters nothing and opts into nothing.
+	rules.FilterLinksByTypedRules(records, absRoot)
+	cycleScope := rules.CycleFailureScope(records, absRoot)
 
 	g := graph.Build(ctx, records)
 	cycles := g.DetectCycles()
+	failCycles := anyCycleOptsIn(cycles, cycleScope)
+	if cmd.Flags().Changed("fail-cycles") {
+		failCycles = graphFailCycles
+	}
 	broken := g.BrokenLinks()
 
 	// --check mode: report issues and exit.
@@ -238,23 +232,21 @@ func renderDOT(cmd *cobra.Command, g *graph.Graph) {
 	_, _ = fmt.Fprintln(w, "}")
 }
 
-// filterLinksBySchema removes links from records whose type has no rule in the schema.
-// Typed-rule filtering applies only when typed rules are declared; a schema
-// carrying only styles/checks/allowed must not suppress links (the graph
-// showed zero edges on styles-only repos otherwise).
-func filterLinksBySchema(records []*extract.Record, schema rules.LinkSchema) {
-	if len(schema.Rules) == 0 {
-		return
-	}
-	for _, rec := range records {
-		filtered := rec.Links[:0]
-		for _, link := range rec.Links {
-			if _, ok := schema.Rules[link.Type]; ok {
-				filtered = append(filtered, link)
+// anyCycleOptsIn reports whether any detected cycle passes through a record
+// whose schema asked for cycles to fail.
+//
+// Deciding per cycle rather than per run means hardening declared in one
+// subtree fails the cycles that actually run through it, without failing
+// unrelated cycles in a tree that never opted in.
+func anyCycleOptsIn(cycles [][]string, scope map[string]bool) bool {
+	for _, cycle := range cycles {
+		for _, node := range cycle {
+			if scope[node] {
+				return true
 			}
 		}
-		rec.Links = filtered
 	}
+	return false
 }
 
 func renderMermaid(cmd *cobra.Command, g *graph.Graph) {

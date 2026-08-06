@@ -112,6 +112,11 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("scanning %s: %w", scanRoot, err)
 		}
+		// Style filtering belongs to the projection too. Without it the same
+		// --select links returned different link sets depending on whether an
+		// unrelated traversal flag was present, leaking styles the schema
+		// declared ungoverned.
+		rules.FilterLinksByStyles(records, absRoot)
 		derive.DeriveAllSimple(ctx, records, absRoot)
 		derive.EnrichBuiltinsSimple(ctx, records, absRoot)
 		derive.AggregateAllSimple(ctx, records, absRoot)
@@ -232,6 +237,7 @@ func scanForTraversal(ctx context.Context, absQueryRoot string) ([]*extract.Reco
 	// Mirror the `graph` command's link preparation so both commands see
 	// the same edge universe for the same root.
 	rules.FilterLinksByStyles(all, absGraphRoot)
+	rules.FilterLinksByTypedRules(all, absGraphRoot)
 	rules.PrepareLinks(all, absGraphRoot)
 
 	derive.DeriveAllSimple(ctx, all, absGraphRoot)
