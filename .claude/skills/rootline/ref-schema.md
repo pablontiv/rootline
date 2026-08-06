@@ -254,7 +254,14 @@ rootline graph dir --field "edges[].source"              # source of each graph 
 
 Syntax: append `[]` to a key to project over an array: `key[].subpath`. Returns a JSON array of extracted values. Errors on missing keys or non-array traversal.
 
-Engine: `cmd/rootline/validate.go` → `extractField` → `extractFieldPath` (recursive).
+`--field` requires `--output json` and is repeatable — one path returns the bare value, several return a JSON array in flag order:
+
+```bash
+rootline query dir --count --field kind --field meta.count   # ["rootline/count",6]
+rootline stats dir -o table --field kind                     # rc=1: --field requires --output json
+```
+
+Engine: `cmd/rootline/validate.go` → `extractFields` → `extractFieldPath` (recursive).
 
 ## Apply Schema Proposals (internal)
 

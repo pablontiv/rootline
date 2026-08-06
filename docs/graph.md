@@ -142,6 +142,8 @@ The `--field` flag applies to graph JSON output and supports:
 - Simple paths: `nodes`, `edges`, `cycles`, `broken_links`
 - Array projection: `edges[].source`, `edges[].target`, `broken_links[].target`
 
+`--field` requires `-o json`; combining it with `-o table` (the diagram) is an error rather than a silent no-op. It is repeatable — several paths yield a JSON array in flag order. See [Output Formats](output.md).
+
 ## Target Resolution
 
 Links resolve targets by:

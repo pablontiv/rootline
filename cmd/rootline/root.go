@@ -38,12 +38,15 @@ func rootPreflight(cmd *cobra.Command, args []string) error {
 	if err := validateOutputFormat(cmd); err != nil {
 		return err
 	}
+	if err := validateFieldFlag(cmd); err != nil {
+		return err
+	}
 	return boundaryPreflight(cmd, args)
 }
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "json", "output format (json|jsonl|csv|table; not every command supports all four)")
-	rootCmd.PersistentFlags().StringSliceVar(&fieldPath, "field", nil, "dot-path field extraction (repeatable)")
+	rootCmd.PersistentFlags().StringSliceVar(&fieldPath, "field", nil, "dot-path field extraction (repeatable; requires --output json, several paths yield a JSON array)")
 }
 
 // Execute runs the root command.

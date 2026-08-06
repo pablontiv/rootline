@@ -56,7 +56,14 @@ now bound to `-o table` and to nothing else.
 
 ## `--field`
 
-`--field` extracts a dot-path from the JSON envelope, so it applies to `-o json` only.
+`--field` extracts a dot-path from the JSON envelope, so it applies to `-o json` only. Combining it with any other format — or with a command that emits no envelope — is an error, not a silent no-op:
+
+```console
+$ rootline stats docs/ -o table --field kind
+Error: --field requires --output json: extraction reads the JSON envelope, and "table" has none
+```
+
+The flag is repeatable, as its help has always claimed. One path emits the bare value; several emit a JSON array in flag order. Full syntax in [Describe](describe.md#field-extraction).
 
 ## `graph --check`
 
