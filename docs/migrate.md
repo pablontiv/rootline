@@ -107,13 +107,18 @@ the shape you get from `rootline migrate docs --dry-run -o json`:
 
 ## Rename Mode
 
-`--rename` updates a field name across all documents and `.stem` files atomically:
+`--rename` updates a field name across all documents and `.stem` files:
 
 ```bash
 rootline migrate --rename status=estado
 ```
 
 Updates frontmatter in all affected markdown files and schema definitions in `.stem` files. Operations are logged to `.migration-log.json` (JSON Lines, append-only).
+
+Each generated document or `.stem` is replaced atomically from a sibling staging
+file, so a failed write cannot leave that destination truncated. Migration runs
+are still best-effort rather than transactional: files completed before a later
+error are not rolled back.
 
 ## Split Mode
 

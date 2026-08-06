@@ -28,6 +28,9 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 - Governed commands (`validate`, `fix`, `query`, `tree`, `graph`, `describe`, `explain`, `set`, `stats`) fail on a tree with no `.stem` or an unparseable one. Without a terminal they exit non-zero; the error names the exact one-line fix.
 - If a governed command reports "Schema discovery reached the filesystem root without finding a declared boundary", the fix is to add `root: true` to the project's top-level `.stem` (one line). Then retry. Do **not** use `init --force` to migrate an existing project — it re-infers and overwrites the schema.
 - `rootline init` writes `root: true` for new projects, so they never hit this.
+- `init`, template installation, and write-producing `migrate` modes replace each
+  generated file atomically. This is a per-file guarantee, not rollback for an
+  entire multi-file run.
 - Bootstrap commands (`schema propose`, `analyze`) work without any `.stem` — they derive one. `init` and `migrate` also run without a marker.
 
 ## Deterministic Execution Rules
@@ -37,7 +40,7 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 3. **Validation exit code**: `validate` returns non-zero when errors exist. If JSON was requested, parse stdout and continue the workflow.
 4. **Mutations**: run the command-specific preview first. Apply changes only when the user explicitly requested a write (`arregla`, `aplica`, `cambia`, `set`, `crea`, `corrige`, `fix`, `apply`) or approves the preview.
 5. **Verify writes**: after any mutation, run the smallest matching `rootline validate` command and show `git diff -- <target>` when files changed.
-6. **Schema vs. data mutations are separate**: Use `schema apply --report <file>` for schema proposals and `repair apply --report <file>` for data-only repairs. There is no generic `apply` command. Always inspect proposals before applying.
+6. **Schema vs. data mutations are separate**: Use `schema apply --report <file>` for `rootline/analyze` or schema-proposal reports and `repair apply --report <file>` only for version 1 `rootline/proposals` data-repair reports produced by `fix --all --dry-run`. There is no generic `apply` command. Always inspect proposals before applying.
 7. **Expressions**: `--where` uses expr syntax: `==`, `!=`, `in`, `contains`, `&&`, `||`, booleans, and `field != nil` for existence.
 8. **Field extraction**: `--field a.b.c` extracts a JSON dot path and requires `--output json`. It is repeatable: one path returns the bare value, several return a JSON array in flag order.
 
@@ -153,7 +156,7 @@ rootline validate <dir>/<ID>-<slug>.md -o json
 
 > **Multi-pattern schemas:** `schema.id.next` retorna el próximo valor del primer patrón alfabético que tiene entries existentes en el directorio. En schemas con múltiples patrones de secuencia (ej: `O*` y `T*`), usar `--field schema.id.next_by_pattern` para obtener el próximo valor de **todos** los patrones simultáneamente: `{"O*": "O14", "T*": "T014"}`.
 
-### Mutate a Field or Section
+### Mutate a Field
 
 ```bash
 rootline set --dry-run <file.md> <field>=<value>
@@ -162,7 +165,7 @@ rootline validate <file.md> -o json
 git diff -- <file.md>
 ```
 
-Use `--create` only when the user wants a missing field created with a value. `--create` does not create files — use `rootline new` to scaffold new documents. `--no-validate` skips post-mutation validation only; pre-validation of enum constraints always runs. Note: `type: section` and section append (`+=`) are removed; use `source: body.section[...]` + `type: string` in the `.stem` instead.
+`set` accepts `field=value`, `field=@file`, and `field=""`; it does not support `--create` or section append (`+=`). Use `rootline new` to scaffold documents. `--no-validate` skips post-mutation validation only; pre-validation of enum constraints always runs. `type: section` remains available for schema-driven document scaffolding.
 
 ### Analyze Existing Documents
 
@@ -170,6 +173,8 @@ Use `--create` only when the user wants a missing field created with a value. `-
 rootline analyze <dir> -o json
 rootline analyze <dir> --incremental -o json
 ```
+
+Analyze always parses Markdown ASTs: section-pattern, invariant, and formal-dependency categories are expected to run. `--threshold` controls section-pattern sensitivity, and structural naming checks score directory names separately from record-file stems.
 
 Do not apply results automatically. For `apply`, inspect the report first and treat the command as a write to `.stem` and documents.
 

@@ -96,7 +96,6 @@ func resetFlags() {
 	analyzeIncremental = false
 	analyzeThreshold = 0.60
 	setDryRun = false
-	setCreate = false
 	setNoValidate = false
 	schemaProposeIncremental = false
 	schemaApplyReport = ""
@@ -384,14 +383,59 @@ func TestStatsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	var result StatsResult
+
+	var result map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if result.Total != 2 {
-		t.Errorf("expected 2 total, got %d", result.Total)
+	if len(result) != 3 {
+		t.Fatalf("stats JSON has %d keys, want exactly 3: %s", len(result), out)
 	}
-	// ByEstado and ByTipo are now empty (field-agnostic) — only total matters
+	for _, key := range []string{"version", "kind", "total"} {
+		if _, ok := result[key]; !ok {
+			t.Errorf("stats JSON is missing %q: %s", key, out)
+		}
+	}
+
+	var version int
+	if err := json.Unmarshal(result["version"], &version); err != nil {
+		t.Fatalf("invalid version: %v", err)
+	}
+	if version != 2 {
+		t.Errorf("version = %d, want 2", version)
+	}
+
+	var kind string
+	if err := json.Unmarshal(result["kind"], &kind); err != nil {
+		t.Fatalf("invalid kind: %v", err)
+	}
+	if kind != "rootline/stats" {
+		t.Errorf("kind = %q, want rootline/stats", kind)
+	}
+
+	var total int
+	if err := json.Unmarshal(result["total"], &total); err != nil {
+		t.Fatalf("invalid total: %v", err)
+	}
+	if total != 2 {
+		t.Errorf("total = %d, want 2", total)
+	}
+}
+
+func TestStatsHelpDescribesTotalAndFilters(t *testing.T) {
+	buf := new(bytes.Buffer)
+	statsCmd.SetOut(buf)
+	t.Cleanup(func() { statsCmd.SetOut(nil) })
+	if err := statsCmd.Help(); err != nil {
+		t.Fatalf("unexpected help error: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Count records") {
+		t.Errorf("stats help should describe total record counts, got: %s", out)
+	}
+	if !strings.Contains(out, "filter") {
+		t.Errorf("stats help should describe filters, got: %s", out)
+	}
 }
 
 func TestStatsWhere(t *testing.T) {

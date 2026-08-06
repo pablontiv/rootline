@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/rules"
 )
@@ -198,5 +199,5 @@ func appendSections(absPath string, candidates []sectionCandidate) error {
 		sb.WriteString("\n")
 	}
 
-	return os.WriteFile(absPath, []byte(sb.String()), 0644)
+	return fsx.WriteFileAtomic(absPath, []byte(sb.String()), 0o644)
 }

@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -498,4 +499,141 @@ func TestBuild_PreparedResolutionIsAuthoritative(t *testing.T) {
 	if len(broken) != 1 || broken[0].Target != "missing.md" {
 		t.Fatalf("broken = %+v, want only the unresolved target, left verbatim", broken)
 	}
+}
+
+// --- Deterministic cycle enumeration (issue #114) ---
+
+// twoDisjointCycles is the fixture from issue #114: a↔b and c↔d, two cycles
+// that share no node, so the outer ordering is decided purely by which node the
+// DFS happens to root at first.
+func twoDisjointCycles() []*extract.Record {
+	return []*extract.Record{
+		makeRecord("a.md", []extract.Link{{Target: "b.md", Type: "reference", Line: 1}}),
+		makeRecord("b.md", []extract.Link{{Target: "a.md", Type: "reference", Line: 1}}),
+		makeRecord("c.md", []extract.Link{{Target: "d.md", Type: "reference", Line: 1}}),
+		makeRecord("d.md", []extract.Link{{Target: "c.md", Type: "reference", Line: 1}}),
+	}
+}
+
+// TestDetectCycles_RepeatedRunsAreIdentical is the regression test for issue
+// #114. Go randomizes map iteration per range statement, so a handful of runs
+// can agree by luck; the issue's own repro needed ~100 CLI invocations to show
+// all four variants. 200 in-process runs make a false green vanishingly
+// unlikely while staying fast.
+func TestDetectCycles_RepeatedRunsAreIdentical(t *testing.T) {
+	var first [][]string
+	for run := 1; run <= 200; run++ {
+		got := Build(context.Background(), twoDisjointCycles()).DetectCycles()
+		if run == 1 {
+			first = got
+			continue
+		}
+		if !cyclesEqual(got, first) {
+			t.Fatalf("run %d differs from run 1:\n run 1: %v\n run %d: %v", run, first, run, got)
+		}
+	}
+}
+
+// TestDetectCycles_IndependentOfRecordOrder pins the stronger half of the
+// contract: the answer is a function of the graph, not of the order records
+// were scanned. Sorted DFS roots alone would not give this — the adjacency
+// lists have to be canonical too.
+func TestDetectCycles_IndependentOfRecordOrder(t *testing.T) {
+	forward := twoDisjointCycles()
+	reversed := twoDisjointCycles()
+	for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
+		reversed[i], reversed[j] = reversed[j], reversed[i]
+	}
+
+	a := Build(context.Background(), forward).DetectCycles()
+	b := Build(context.Background(), reversed).DetectCycles()
+	if !cyclesEqual(a, b) {
+		t.Fatalf("record order changed the result:\n forward: %v\n reversed: %v", a, b)
+	}
+}
+
+// TestDetectCycles_CanonicalOuterOrder asserts the exact documented answer for
+// the issue fixture, not merely that two runs agree.
+func TestDetectCycles_CanonicalOuterOrder(t *testing.T) {
+	want := [][]string{
+		{"a.md", "b.md", "a.md"},
+		{"c.md", "d.md", "c.md"},
+	}
+	for run := 1; run <= 50; run++ {
+		got := Build(context.Background(), twoDisjointCycles()).DetectCycles()
+		if !cyclesEqual(got, want) {
+			t.Fatalf("run %d: DetectCycles() = %v, want %v", run, got, want)
+		}
+	}
+}
+
+// TestDetectCycles_CanonicalRotation covers the rotation half of the defect.
+// Every node of a 3-cycle is a legal DFS entry point, so without canonical
+// rotation the same cycle prints three different ways. The documented answer
+// starts at the lexicographically smallest member.
+func TestDetectCycles_CanonicalRotation(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("b.md", []extract.Link{{Target: "c.md", Type: "reference", Line: 1}}),
+		makeRecord("c.md", []extract.Link{{Target: "a.md", Type: "reference", Line: 1}}),
+		makeRecord("a.md", []extract.Link{{Target: "b.md", Type: "reference", Line: 1}}),
+	}
+	want := [][]string{{"a.md", "b.md", "c.md", "a.md"}}
+	for run := 1; run <= 50; run++ {
+		got := Build(context.Background(), records).DetectCycles()
+		if !cyclesEqual(got, want) {
+			t.Fatalf("run %d: DetectCycles() = %v, want %v", run, got, want)
+		}
+	}
+}
+
+// TestDetectCycles_DuplicateParallelLinksReportOneCycle: b.md links to a.md
+// twice, so the same back edge fires twice and the identical path is emitted
+// twice. Two byte-identical entries carry no information a consumer can act on.
+func TestDetectCycles_DuplicateParallelLinksReportOneCycle(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("a.md", []extract.Link{{Target: "b.md", Type: "reference", Line: 1}}),
+		makeRecord("b.md", []extract.Link{
+			{Target: "a.md", Type: "reference", Line: 1},
+			{Target: "a.md", Type: "reference", Line: 2},
+		}),
+	}
+	want := [][]string{{"a.md", "b.md", "a.md"}}
+	got := Build(context.Background(), records).DetectCycles()
+	if !cyclesEqual(got, want) {
+		t.Fatalf("DetectCycles() = %v, want %v", got, want)
+	}
+}
+
+// TestDetectCycles_OverlappingCyclesAreStable exercises the case the issue
+// flagged as unproven at scale: cycles sharing nodes, where the reported set is
+// a function of the DFS forest. Pinning the forest must pin the set.
+func TestDetectCycles_OverlappingCyclesAreStable(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("a.md", []extract.Link{{Target: "b.md", Type: "reference", Line: 1}}),
+		makeRecord("b.md", []extract.Link{
+			{Target: "c.md", Type: "reference", Line: 1},
+			{Target: "a.md", Type: "reference", Line: 2},
+		}),
+		makeRecord("c.md", []extract.Link{{Target: "a.md", Type: "reference", Line: 1}}),
+	}
+
+	var first [][]string
+	for run := 1; run <= 200; run++ {
+		got := Build(context.Background(), records).DetectCycles()
+		if run == 1 {
+			first = got
+			continue
+		}
+		if !cyclesEqual(got, first) {
+			t.Fatalf("run %d differs from run 1:\n run 1: %v\n run %d: %v", run, first, run, got)
+		}
+	}
+	if len(first) != 2 {
+		t.Fatalf("got %d cycles, want 2: %v", len(first), first)
+	}
+}
+
+// cyclesEqual compares two cycle lists element by element.
+func cyclesEqual(a, b [][]string) bool {
+	return slices.EqualFunc(a, b, slices.Equal[[]string])
 }

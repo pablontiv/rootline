@@ -16,22 +16,19 @@ import (
 
 var (
 	setDryRun     bool
-	setCreate     bool
 	setNoValidate bool
 )
 
 var setCmd = &cobra.Command{
 	Use:   "set <file> <field=value>...",
-	Short: "Set frontmatter fields or document sections",
-	Long: `Set one or more frontmatter fields or document sections.
+	Short: "Set frontmatter fields",
+	Long: `Set one or more frontmatter fields.
 
 Syntax:
-  field=value        Set frontmatter field (or replace section content)
-  field+=@file       Append file content to a section
-  field=@file        Set value from file content
+  field=value        Set a frontmatter field
+  field=@file        Set a value from file content
   field=""           Clear a field
 
-Use --create to add sections that don't yet exist in the document.
 Use --dry-run to preview changes without modifying files.`,
 	Args: cobra.MinimumNArgs(2),
 	RunE: runSet,
@@ -39,7 +36,6 @@ Use --dry-run to preview changes without modifying files.`,
 
 func init() {
 	setCmd.Flags().BoolVar(&setDryRun, "dry-run", false, "show what would change without modifying files")
-	setCmd.Flags().BoolVar(&setCreate, "create", false, "allow creating new sections")
 	setCmd.Flags().BoolVar(&setNoValidate, "no-validate", false, "skip post-mutation validation (emergency only)")
 	rootCmd.AddCommand(setCmd)
 }

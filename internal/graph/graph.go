@@ -142,8 +142,29 @@ func compareEdges(a, b Edge) int {
 	return strings.Compare(a.Type, b.Type)
 }
 
-// DetectCycles finds all cycles in the graph using DFS.
-// Each cycle is returned as a path slice ending with the repeated node.
+// DetectCycles finds cycles in the graph using DFS over a canonical spanning
+// forest. Each cycle is returned as a path slice ending with the repeated node.
+//
+// The result is a function of the graph alone: it does not depend on Go map
+// iteration order, nor on the order records were passed to Build. Three things
+// are pinned to make that true (issue #114):
+//
+//   - DFS roots come from SortedNodes(), the same lexical order the renderers
+//     use, so root order and rendered node order cannot drift apart.
+//   - Adjacency is de-duplicated and sorted by sortedAdjacency, so traversal
+//     follows the graph rather than the scan order that filled g.Edges.
+//   - Every cycle is rotated to start at its lexicographically smallest member
+//     by canonicalCycle, then the whole list is de-duplicated and sorted under
+//     compareCycles.
+//
+// Rotation and outer ordering are representation, not semantics: [b a b] and
+// [a b a] describe the same directed cycle, and picking one of them is what
+// stops two runs printing the same graph two ways.
+//
+// LIMITATION: this detects back edges over one spanning forest, not every
+// elementary circuit in the graph. Cycles that overlap are represented, not
+// exhaustively enumerated, so len(cycles) is a stable count of detected back
+// edges — not the number of distinct circuits.
 func (g *Graph) DetectCycles() [][]string {
 	const (
 		white = 0 // unvisited
@@ -151,6 +172,7 @@ func (g *Graph) DetectCycles() [][]string {
 		black = 2 // fully processed
 	)
 
+	adjacency := g.sortedAdjacency()
 	color := make(map[string]int, len(g.Nodes))
 	parent := make(map[string]string)
 	var cycles [][]string
@@ -158,11 +180,7 @@ func (g *Graph) DetectCycles() [][]string {
 	var dfs func(node string)
 	dfs = func(node string) {
 		color[node] = gray
-		for _, edge := range g.Edges[node] {
-			target := edge.Target
-			if _, exists := g.Nodes[target]; !exists {
-				continue // skip broken links
-			}
+		for _, target := range adjacency[node] {
 			switch color[target] {
 			case white:
 				parent[target] = node
@@ -181,21 +199,105 @@ func (g *Graph) DetectCycles() [][]string {
 				for i, j := 0, len(cycle)-1; i < j; i, j = i+1, j-1 {
 					cycle[i], cycle[j] = cycle[j], cycle[i]
 				}
-				// Close the cycle.
-				cycle = append(cycle, cycle[0])
-				cycles = append(cycles, cycle)
+				cycles = append(cycles, canonicalCycle(cycle))
 			}
 		}
 		color[node] = black
 	}
 
-	for node := range g.Nodes {
+	for _, node := range g.SortedNodes() {
 		if color[node] == white {
 			dfs(node)
 		}
 	}
 
-	return cycles
+	sort.Slice(cycles, func(i, j int) bool {
+		return compareCycles(cycles[i], cycles[j]) < 0
+	})
+	return dedupeCycles(cycles)
+}
+
+// sortedAdjacency returns, for each node, the distinct in-graph targets it
+// links to, in lexical order. Broken links are skipped, exactly as the raw edge
+// walk skipped them.
+//
+// Both operations matter for determinism. Sorting removes the dependency on the
+// order records were scanned, which is the leak SortedNodes alone does not
+// close: two scans that produce the same graph in a different order would
+// otherwise explore it differently. De-duplication removes parallel links — a
+// document linking twice to the same target fires the same back edge twice and
+// yields two byte-identical cycles, which carry no information a consumer can
+// act on.
+func (g *Graph) sortedAdjacency() map[string][]string {
+	adjacency := make(map[string][]string, len(g.Edges))
+	for source, edges := range g.Edges {
+		seen := make(map[string]bool, len(edges))
+		targets := make([]string, 0, len(edges))
+		for _, edge := range edges {
+			if _, exists := g.Nodes[edge.Target]; !exists {
+				continue // skip broken links
+			}
+			if seen[edge.Target] {
+				continue
+			}
+			seen[edge.Target] = true
+			targets = append(targets, edge.Target)
+		}
+		sort.Strings(targets)
+		adjacency[source] = targets
+	}
+	return adjacency
+}
+
+// canonicalCycle rotates an open cycle so it starts at its lexicographically
+// smallest member, then closes it by repeating that member.
+//
+// Rotating a directed cycle preserves its edge set, so every rotation describes
+// the same cycle and only one of them can be the printed answer. The members
+// are distinct — the parent chain walks strictly upward until it reaches the
+// back-edge target — so the minimum is unique and the rotation unambiguous.
+func canonicalCycle(open []string) []string {
+	if len(open) == 0 {
+		return nil
+	}
+	smallest := 0
+	for i, node := range open {
+		if node < open[smallest] {
+			smallest = i
+		}
+	}
+	rotated := make([]string, 0, len(open)+1)
+	rotated = append(rotated, open[smallest:]...)
+	rotated = append(rotated, open[:smallest]...)
+	return append(rotated, rotated[0])
+}
+
+// compareCycles orders two cycles element by element, shorter first when one is
+// a prefix of the other. Cycles are already canonically rotated, so this is a
+// total order over the printed representations.
+func compareCycles(a, b []string) int {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		if c := strings.Compare(a[i], b[i]); c != 0 {
+			return c
+		}
+	}
+	return len(a) - len(b)
+}
+
+// dedupeCycles drops adjacent duplicates from a sorted cycle list. Two
+// canonically rotated cycles that compare equal are indistinguishable in every
+// rendered surface, so keeping both would only inflate the count.
+func dedupeCycles(sorted [][]string) [][]string {
+	if len(sorted) == 0 {
+		return sorted
+	}
+	unique := sorted[:1]
+	for _, cycle := range sorted[1:] {
+		if compareCycles(unique[len(unique)-1], cycle) != 0 {
+			unique = append(unique, cycle)
+		}
+	}
+	return unique
 }
 
 // BrokenLinks returns links whose targets do not resolve.
