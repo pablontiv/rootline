@@ -28,6 +28,9 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 - Governed commands (`validate`, `fix`, `query`, `tree`, `graph`, `describe`, `explain`, `set`, `stats`) fail on a tree with no `.stem` or an unparseable one. Without a terminal they exit non-zero; the error names the exact one-line fix.
 - If a governed command reports "Schema discovery reached the filesystem root without finding a declared boundary", the fix is to add `root: true` to the project's top-level `.stem` (one line). Then retry. Do **not** use `init --force` to migrate an existing project — it re-infers and overwrites the schema.
 - `rootline init` writes `root: true` for new projects, so they never hit this.
+- `init`, template installation, and write-producing `migrate` modes replace each
+  generated file atomically. This is a per-file guarantee, not rollback for an
+  entire multi-file run.
 - Bootstrap commands (`schema propose`, `analyze`) work without any `.stem` — they derive one. `init` and `migrate` also run without a marker.
 
 ## Deterministic Execution Rules

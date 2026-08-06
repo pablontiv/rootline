@@ -19,6 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Changed
 
+- CI now runs for feature-based and stacked pull requests, while preserving the existing push and release safeguards
 - License changed from PolyForm Noncommercial 1.0.0 to Apache License 2.0 — commercial use is now permitted
 - picokit dependency bumped to its Apache-2.0-relicensed release, so distributed binaries no longer embed noncommercially licensed code
 - **BREAKING**: Schema discovery no longer uses `.git` directory as a boundary. Projects must now declare a root marker by adding `root: true` to the project's top-level `.stem` file. Existing projects without a root marker will receive a clear error message with the fix.
@@ -31,9 +32,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Fixed
 
+- `analyze -o json` now emits each category's inference array in a stable lexical total order instead of exposing randomized Go map traversal. Identical inputs are byte-identical while the version 1 schema, category order, inference membership, and summary counts remain unchanged.
 - `migrate --split` emitted child `.stem` files without a version key, so every child parsed as version 0 and the loader rejected it with `stem version 0 is no longer supported`. Child stems now carry `version: 2`.
 - `migrate --split` dropped `root: true` from the regenerated root `.stem`, leaving the project with no declared boundary: walk-up escaped into ancestor `.stem` files and `validate --all` failed with `Schema discovery reached the filesystem root without finding a declared boundary`. The marker is now preserved when present (and not invented when absent).
 - Graph and tree output is now deterministic. `graph` derived its node and edge arrays from map iteration, which Go randomizes per run, so JSON, DOT and Mermaid emitted a different order on every invocation. Nodes are now sorted lexically by path, edges by `(source, target, line, type)`. `tree` picked its status column by taking whichever enum-typed schema field the map happened to yield first; it now sorts the enum field names and takes the first, at both decision sites. JSON stays at `"version": 1` — same keys, same types, same elements, only the order is now fixed. Multi-enum corpora see a stabilized status column: this repository's `docs/roadmap` reliably shows `estado` instead of alternating with `tipo`.
+- `graph` cycle enumeration is now deterministic. The determinism fix above sorted nodes and edges but left cycle detection rooting its DFS in map iteration order, so identical input still produced a different cycle rotation and a different outer ordering on every run — in both the JSON `cycles` array and the numbered `--check` enumeration — and on graphs with overlapping cycles a different cycle *count*. DFS roots now come from the same sorted node order the renderers use, adjacency is de-duplicated and sorted so the result no longer depends on scan order, each cycle is rotated to start at its lexicographically smallest member, and the list is de-duplicated and sorted. JSON stays at `"version": 1` — same keys, same types, only the order is now fixed. A document linking twice to the same target used to emit the same cycle twice; it is now reported once. Detection semantics are unchanged: this is back-edge detection over a canonical spanning forest, so `len(cycles)` counts detected back edges, not distinct elementary circuits.
 - False-green validation: `validate --all` on a directory outside any schema now correctly exits with an error instead of succeeding with zero validated records.
 - Schema discovery boundary violations: walking up the filesystem no longer accidentally collects `.stem` files from outside the project (e.g., from home directory).
 - Working directory dependence: schema resolution is now stable regardless of where commands are invoked from.
