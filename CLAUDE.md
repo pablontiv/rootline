@@ -125,7 +125,7 @@ The Justfile contains only development recipes (`check`, `test`, `fmt`, `validat
 
 ## Auto-update
 
-`rootline` uses `picokit/autoupdate` to check for and apply new releases automatically. On each run, it fetches the latest release in the background (goroutine + WaitGroup) and applies any staged update on the next invocation. Local builds (`version == "dev"`) skip all network and cache operations. No opt-out env var — controlled only by build-time version injection.
+`rootline` uses `picokit/autoupdate` to check for and apply new releases automatically within the running version's compatibility boundary. Stable releases update only within the same major; pre-1.0 releases update only within the same minor. A cross-boundary release is retained rather than applied, and Rootline prints a short stderr notice with the current and available versions plus deliberate reinstall guidance. On each run, Rootline fetches the latest release in the background (goroutine + WaitGroup) and applies any eligible staged update on the next invocation. Local builds (`version == "dev"`) skip all network and cache operations. There is no opt-out environment variable; the version policy is configured by Rootline.
 
 ## CI Workflows
 

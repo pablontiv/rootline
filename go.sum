@@ -3,8 +3,8 @@ github.com/expr-lang/expr v1.17.8 h1:W1loDTT+0PQf5YteHSTpju2qfUfNoBt4yw9+wOEU9VM
 github.com/expr-lang/expr v1.17.8/go.mod h1:8/vRC7+7HBzESEqt5kKpYXxrxkr31SaO8r40VO/1IT4=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
-github.com/pablontiv/picokit v0.5.4 h1:8K/V6oFNvtWsQoRacMFj0QeixG5rKkUDwioSXs+IVdI=
-github.com/pablontiv/picokit v0.5.4/go.mod h1:p1hQXyqtGxMz0c2FXmkd7k2bvpdkq7p0LScW1y6guYk=
+github.com/pablontiv/picokit v1.0.0 h1:phGcVk2t8JsxJyBSmxlvnPOmcuSGKsikQR2Vm393RcY=
+github.com/pablontiv/picokit v1.0.0/go.mod h1:p1hQXyqtGxMz0c2FXmkd7k2bvpdkq7p0LScW1y6guYk=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
 github.com/spf13/cobra v1.10.2/go.mod h1:7C1pvHqHw5A4vrJfjNwvOdzYu0Gml16OCs2GRiTUUS4=
