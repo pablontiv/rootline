@@ -806,3 +806,59 @@ func TestGraph_CheckOnSchemalessReportsIntegrity(t *testing.T) {
 		}
 	})
 }
+
+// --- Deterministic cycle enumeration at the CLI surface (issue #114) ---
+
+// setupTwoDisjointCyclesProject reproduces the fixture from issue #114: a↔b and
+// c↔d, two cycles sharing no node.
+func setupTwoDisjointCyclesProject(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
+	mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[a.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "c.md"), []byte("---\n---\n# C\n[[d.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "d.md"), []byte("---\n---\n# D\n[[c.md]]\n"), 0644)
+	return dir
+}
+
+// TestGraphJSON_CyclesAreDeterministic asserts the exact documented cycles
+// array. The issue's repro saw four variants of it across 100 invocations, so
+// the assertion is repeated: a single pass could match by luck.
+func TestGraphJSON_CyclesAreDeterministic(t *testing.T) {
+	dir := setupTwoDisjointCyclesProject(t)
+	want := `"cycles":[["a.md","b.md","a.md"],["c.md","d.md","c.md"]]`
+
+	for run := 1; run <= 20; run++ {
+		out, err := runCmd(t, "graph", dir)
+		if err != nil {
+			t.Fatalf("run %d: unexpected error: %v\noutput: %s", run, err, out)
+		}
+		compact := strings.Join(strings.Fields(out), "")
+		if !strings.Contains(compact, want) {
+			t.Fatalf("run %d: want %s in output, got:\n%s", run, want, out)
+		}
+	}
+}
+
+// TestGraphCheck_CycleEnumerationIsDeterministic covers the text surface, where
+// the numbering made both the rotation and the outer order visible.
+//
+// --quiet-cycles is passed explicitly because resetFlags does not clear
+// graphQuietCycles, so a preceding --quiet-cycles test would otherwise suppress
+// the enumeration this test exists to inspect.
+func TestGraphCheck_CycleEnumerationIsDeterministic(t *testing.T) {
+	dir := setupTwoDisjointCyclesProject(t)
+	want := "Cycles found (informational): 2\n  1: a.md → b.md → a.md\n  2: c.md → d.md → c.md\n"
+
+	for run := 1; run <= 20; run++ {
+		out, err := runCmd(t, "graph", "--check", "--quiet-cycles=false", dir)
+		if err != nil {
+			t.Fatalf("run %d: unexpected error: %v\noutput: %s", run, err, out)
+		}
+		if out != want {
+			t.Fatalf("run %d: output = %q, want %q", run, out, want)
+		}
+	}
+}
