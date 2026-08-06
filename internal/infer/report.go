@@ -4,9 +4,13 @@ import "encoding/json"
 
 // AnalyzeReport is the top-level output of the analyze command.
 type AnalyzeReport struct {
-	Version     int              `json:"version"`
-	Kind        string           `json:"kind"`
-	Path        string           `json:"path"`
+	Version int    `json:"version"`
+	Kind    string `json:"kind"`
+	Path    string `json:"path"`
+	// Root is the absolute scan root. Path alone is whatever the caller typed,
+	// so a consumer reading the report from a different working directory has
+	// no way to turn a relative Path back into the directory that was scanned.
+	Root        string           `json:"root,omitempty"`
 	Incremental bool             `json:"incremental,omitempty"`
 	Categories  []CategoryResult `json:"categories"`
 	Summary     ReportSummary    `json:"summary"`

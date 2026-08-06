@@ -90,6 +90,7 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 
 	// Build report.
 	report := infer.NewAnalyzeReport(scanRoot)
+	report.Root = root
 
 	if analyzeIncremental {
 		report.Incremental = true

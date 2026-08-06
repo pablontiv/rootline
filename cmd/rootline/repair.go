@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/pablontiv/rootline/internal/fix"
 	"github.com/pablontiv/rootline/internal/proposal"
@@ -15,6 +14,7 @@ var (
 	repairDryRun      bool
 	repairFillMissing bool
 	reportPath        string
+	repairRoot        string
 )
 
 var repairCmd = &cobra.Command{
@@ -46,6 +46,7 @@ func init() {
 	_ = repairApplyCmd.MarkFlagRequired("report")
 	repairApplyCmd.Flags().BoolVar(&repairDryRun, "dry-run", false, "preview changes without modifying files")
 	repairApplyCmd.Flags().BoolVar(&repairFillMissing, "fill-missing", false, "also apply add_field proposals whose value the engine chose rather than the schema declaring it")
+	repairApplyCmd.Flags().StringVar(&repairRoot, "root", "", "absolute path to scan root (overrides report root)")
 
 	repairCmd.AddCommand(repairApplyCmd)
 	rootCmd.AddCommand(repairCmd)
@@ -75,10 +76,10 @@ func runRepairApply(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("wrong report kind: %s (expected rootline/proposals)", report.Kind)
 	}
 
-	// Determine the root directory (directory containing the report).
-	root, err := filepath.Abs(filepath.Dir(reportPath))
+	// Determine the root directory using the four-level precedence chain.
+	root, err := resolveReportRoot(repairRoot, report.Root, report.Path, reportPath)
 	if err != nil {
-		return fmt.Errorf("resolving report directory: %w", err)
+		return fmt.Errorf("resolving report root: %w", err)
 	}
 
 	// Apply repair.
