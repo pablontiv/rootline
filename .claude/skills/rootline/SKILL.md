@@ -171,6 +171,8 @@ rootline analyze <dir> -o json
 rootline analyze <dir> --incremental -o json
 ```
 
+Analyze always parses Markdown ASTs: section-pattern, invariant, and formal-dependency categories are expected to run. `--threshold` controls section-pattern sensitivity, and structural naming checks score directory names separately from record-file stems.
+
 Do not apply results automatically. For `apply`, inspect the report first and treat the command as a write to `.stem` and documents.
 
 ## Reference Files

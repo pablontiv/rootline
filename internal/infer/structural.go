@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 const (
@@ -22,7 +23,29 @@ var namingPatterns = []*regexp.Regexp{
 }
 
 func detectNamingInconsistencies(dir string, children []os.DirEntry) []Inference {
-	if len(children) < 3 {
+	var directories, fileStems []string
+	for _, child := range children {
+		name := child.Name()
+		if name == "" || name[0] == '.' {
+			continue
+		}
+		if child.IsDir() {
+			directories = append(directories, name)
+			continue
+		}
+		if child.Type().IsRegular() {
+			fileStems = append(fileStems, strings.TrimSuffix(name, filepath.Ext(name)))
+		}
+	}
+
+	var result []Inference
+	result = append(result, detectNamingPopulation(dir, "directories", directories)...)
+	result = append(result, detectNamingPopulation(dir, "file stems", fileStems)...)
+	return result
+}
+
+func detectNamingPopulation(dir, population string, names []string) []Inference {
+	if len(names) < structuralMinSampleSize {
 		return nil
 	}
 
@@ -35,14 +58,11 @@ func detectNamingInconsistencies(dir string, children []os.DirEntry) []Inference
 	var best *patternResult
 	for _, pat := range namingPatterns {
 		pr := &patternResult{pattern: pat}
-		for _, c := range children {
-			if !c.IsDir() || (len(c.Name()) > 0 && c.Name()[0] == '.') {
-				continue
-			}
-			if pat.MatchString(c.Name()) {
-				pr.matches = append(pr.matches, c.Name())
+		for _, name := range names {
+			if pat.MatchString(name) {
+				pr.matches = append(pr.matches, name)
 			} else {
-				pr.outliers = append(pr.outliers, c.Name())
+				pr.outliers = append(pr.outliers, name)
 			}
 		}
 		total := len(pr.matches) + len(pr.outliers)
@@ -66,7 +86,7 @@ func detectNamingInconsistencies(dir string, children []os.DirEntry) []Inference
 		Type:    "naming_inconsistency",
 		Source:  dir,
 		Value:   best.pattern.String(),
-		Message: fmt.Sprintf("%d/%d children match pattern; outliers: %v", len(best.matches), total, best.outliers),
+		Message: fmt.Sprintf("%d/%d %s match pattern; outliers: %v", len(best.matches), total, population, best.outliers),
 	}}
 }
 

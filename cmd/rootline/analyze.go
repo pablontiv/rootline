@@ -60,7 +60,7 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
 	// Index and extract records.
-	reg := extract.NewRegistry()
+	reg := extract.NewASTRegistry()
 	resolver := stemScopeResolver()
 
 	// Bootstrap scan: this command derives a schema from documents that may
