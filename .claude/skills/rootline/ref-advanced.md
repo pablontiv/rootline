@@ -142,6 +142,21 @@ rootline repair apply --report repairs.json --dry-run
 rootline repair apply --report repairs.json
 ```
 
+**Atomicity contract (apply commands).** Two guarantees, one deliberate non-guarantee:
+1. *Per file, atomic* — writes stage to a sibling temp file and rename over the target, so a
+   file is only ever its old self or its new self, never truncated. A failed write leaves the
+   target untouched and removes the staging file.
+2. *Per file, validated and reverted* — a written file is re-read and validated on its own; if
+   it fails, the original bytes are restored and it moves to `rolled_back[]`.
+3. *Per run, NOT all-or-nothing* — best-effort with honest reporting. A run that fails partway
+   leaves earlier writes in place. Buffering the whole run was rejected: it would discard 99
+   good repairs because of 1 unreadable path, and would still not survive a kill.
+
+Read the envelope to know where a run got to: `complete` (true iff it carried through everything
+it accepted — same condition as exit 0), `changed[]` (on disk), `rolled_back[]` (restored),
+`rejected[]`/`skipped[]` (never attempted), `errors[]` (attempted and failed). Recover from a
+partial run by re-running the report; it is declarative and skips what is already correct.
+
 **Report root (both apply commands).** The paths in a report resolve against the directory
 that was SCANNED, not the directory the report file sits in. `fix --all` and `schema propose`
 both record it (`path` + absolute `root`). One shared precedence chain: `--root <dir>` >
