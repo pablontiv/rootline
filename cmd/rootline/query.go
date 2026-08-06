@@ -127,8 +127,17 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		Limit: queryLimit,
 	}
 
+	// The legal field names come from the scanned corpus, before --where
+	// narrows it: a filter that matches nothing must not make every field name
+	// look invented.
+	known := knownWhereFields(records, absRoot)
+
+	if err := query.ValidateSortKeys(sortKeys, known); err != nil {
+		return err
+	}
+
 	// Filter records using shared helper.
-	filtered, err := filterRecords(ctx, records, queryWhere, nil)
+	filtered, err := filterRecords(ctx, records, queryWhere, known, cmd.ErrOrStderr())
 	if err != nil {
 		return fmt.Errorf("filtering records: %w", err)
 	}

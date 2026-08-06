@@ -14,7 +14,7 @@ func TestFilterRecords_MatchSubset(t *testing.T) {
 		{Path: "c.md", Frontmatter: map[string]any{"estado": "Pending"}},
 	}
 
-	filtered, err := filterRecords(context.Background(), records, []string{"estado == 'Pending'"}, nil)
+	filtered, err := filterRecords(context.Background(), records, []string{"estado == 'Pending'"}, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestFilterRecords_NoMatch(t *testing.T) {
 		{Path: "a.md", Frontmatter: map[string]any{"estado": "Pending"}},
 	}
 
-	filtered, err := filterRecords(context.Background(), records, []string{"estado == 'Completed'"}, nil)
+	filtered, err := filterRecords(context.Background(), records, []string{"estado == 'Completed'"}, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestFilterRecords_InvalidExpr(t *testing.T) {
 		{Path: "a.md", Frontmatter: map[string]any{"estado": "Pending"}},
 	}
 
-	_, err := filterRecords(context.Background(), records, []string{"== bad syntax"}, nil)
+	_, err := filterRecords(context.Background(), records, []string{"== bad syntax"}, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid expression")
 	}
@@ -59,7 +59,7 @@ func TestFilterRecords_EmptyWheres(t *testing.T) {
 		{Path: "b.md", Frontmatter: map[string]any{"estado": "Completed"}},
 	}
 
-	filtered, err := filterRecords(context.Background(), records, nil, nil)
+	filtered, err := filterRecords(context.Background(), records, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestFilterRecords_EmptyWheres(t *testing.T) {
 	}
 
 	// Also test with empty slice.
-	filtered, err = filterRecords(context.Background(), records, []string{}, nil)
+	filtered, err = filterRecords(context.Background(), records, []string{}, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestFilterRecords_EmptyWheres(t *testing.T) {
 	}
 
 	// Also test with empty string entries.
-	filtered, err = filterRecords(context.Background(), records, []string{"", ""}, nil)
+	filtered, err = filterRecords(context.Background(), records, []string{"", ""}, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestFilterRecords_MultipleWheres(t *testing.T) {
 		{Path: "c.md", Frontmatter: map[string]any{"estado": "Completed", "tipo": "test"}},
 	}
 
-	filtered, err := filterRecords(context.Background(), records, []string{"estado == 'Pending'", "tipo == 'test'"}, nil)
+	filtered, err := filterRecords(context.Background(), records, []string{"estado == 'Pending'", "tipo == 'test'"}, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

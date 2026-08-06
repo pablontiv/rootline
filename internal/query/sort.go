@@ -2,10 +2,12 @@ package query
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/pablontiv/picokit/fuzzy"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/rules"
 )
@@ -60,6 +62,34 @@ func ParseSortKeys(spec string) ([]SortKey, error) {
 	}
 
 	return keys, nil
+}
+
+// ValidateSortKeys rejects a sort key naming a field nothing in scope can
+// provide.
+//
+// SortRecords treats "absent on both records" as "equal", so an unknown key
+// left every comparison falling through and sort.SliceStable preserved scan
+// order: a typo produced plausible, unsorted output at exit 0, while a bad
+// direction already exited 1. The command validated half its input.
+//
+// knownFields is the same set the where-expression check uses — builtins,
+// every key the corpus carries, and every field the effective schema declares.
+// An empty set means there was nothing to validate against (no records, no
+// schema), and every key passes rather than every key failing.
+func ValidateSortKeys(keys []SortKey, knownFields []string) error {
+	if len(keys) == 0 || len(knownFields) == 0 {
+		return nil
+	}
+	for _, key := range keys {
+		if slices.Contains(knownFields, key.Field) {
+			continue
+		}
+		if suggestion := fuzzy.Match(key.Field, knownFields); suggestion != "" {
+			return fmt.Errorf("unknown sort field %q: no record carries it and no .stem in scope declares it (did you mean %q?)", key.Field, suggestion)
+		}
+		return fmt.Errorf("unknown sort field %q: no record carries it and no .stem in scope declares it", key.Field)
+	}
+	return nil
 }
 
 // SortRecords sorts records in-place by the given sort keys.
