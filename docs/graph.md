@@ -44,7 +44,7 @@ rootline graph docs/epics/ --check                     # Validate only: cycles +
 
 | Flag | Description |
 |------|-------------|
-| `--format dot\|mermaid` | Diagram format when `-o` is not `json` (default: `dot`) |
+| `--format dot\|mermaid` | Diagram format when `-o table` (default: `dot`) |
 | `--check` | Validate only — reports cycles and broken links, no diagram |
 | `--fail-cycles` | Treat cycles as check failures; exit with code 1 if any found (default: cycles are informational) |
 | `--quiet-cycles` | Suppress per-cycle enumeration when informational (only affects output when cycles are detected and not failing) |
@@ -111,6 +111,8 @@ Broken links: 1
 ```
 
 When nothing is wrong it prints `No cycles or broken links found.` and exits 0. `--check` is a text-plus-exit-code validator; it does not emit JSON — use the default JSON mode below to extract link data.
+
+Passing `--output` explicitly alongside `--check` is an error, not a no-op: the flag could never have been honoured, and being told so beats a pipeline discovering it downstream. The default `-o json` is not an explicit request, so `rootline graph docs/ --check` is unaffected. See [Output Formats](output.md).
 
 ### With --field (Field Projection)
 

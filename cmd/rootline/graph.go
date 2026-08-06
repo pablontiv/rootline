@@ -29,7 +29,7 @@ var graphCmd = &cobra.Command{
 }
 
 func init() {
-	graphCmd.Flags().StringVar(&graphFormat, "format", "dot", "diagram format when -o is not json: dot or mermaid")
+	graphCmd.Flags().StringVar(&graphFormat, "format", "dot", "diagram format when -o table: dot or mermaid")
 	graphCmd.Flags().BoolVar(&graphCheck, "check", false, "validate only (cycles + broken links), no diagram")
 	graphCmd.Flags().StringArrayVar(&graphWhere, "where", nil, "filter expression (e.g. \"tipo != 'feature'\")")
 	graphCmd.Flags().BoolVar(&graphFailCycles, "fail-cycles", false, "treat cycles as check failures (overrides .stem links.checks.cycles)")
@@ -49,6 +49,17 @@ type GraphResult struct {
 
 func runGraph(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
+
+	// --check is a text-plus-exit-code validator (docs/graph.md); it returns
+	// before any format dispatch. Accepting --output there and discarding it is
+	// the silent-drop this command is being fixed for, so an explicit --output
+	// is rejected. The test is on Changed, not on the value: the default
+	// `-o json` is not a request, and `rootline graph <path> --check` — what CI
+	// runs today — must keep working untouched.
+	if graphCheck && cmd.Flags().Changed("output") {
+		return fmt.Errorf("--check does not support --output: it emits a text report and an exit code; " +
+			"drop --output, or drop --check to get the rootline/graph envelope, which carries the same cycles and broken_links")
+	}
 
 	scanRoot := "."
 	if len(args) > 0 {
@@ -151,39 +162,39 @@ func runGraph(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// JSON output.
-	if outputFormat == "json" {
-		nodes := g.SortedNodes()
-		allEdges := g.SortedEdges()
-		if broken == nil {
-			broken = []graph.BrokenLink{}
+	// The diagram belongs to -o table, and only to it — the command's own help
+	// has said so all along. Testing for "json" and rendering DOT for
+	// everything else handed `-o jsonl` a Graphviz document at exit 0.
+	if outputFormat == "table" {
+		switch graphFormat {
+		case "dot":
+			renderDOT(cmd, g)
+		case "mermaid":
+			renderMermaid(cmd, g)
+		default:
+			return fmt.Errorf("unknown format %q (use dot or mermaid)", graphFormat)
 		}
-		if cycles == nil {
-			cycles = [][]string{}
-		}
-
-		result := GraphResult{
-			Version:     1,
-			Kind:        "rootline/graph",
-			Nodes:       nodes,
-			Edges:       allEdges,
-			Cycles:      cycles,
-			BrokenLinks: broken,
-		}
-		return outputJSON(cmd, result, false)
+		return nil
 	}
 
-	// Diagram output.
-	switch graphFormat {
-	case "dot":
-		renderDOT(cmd, g)
-	case "mermaid":
-		renderMermaid(cmd, g)
-	default:
-		return fmt.Errorf("unknown format %q (use dot or mermaid)", graphFormat)
+	nodes := g.SortedNodes()
+	allEdges := g.SortedEdges()
+	if broken == nil {
+		broken = []graph.BrokenLink{}
+	}
+	if cycles == nil {
+		cycles = [][]string{}
 	}
 
-	return nil
+	result := GraphResult{
+		Version:     1,
+		Kind:        "rootline/graph",
+		Nodes:       nodes,
+		Edges:       allEdges,
+		Cycles:      cycles,
+		BrokenLinks: broken,
+	}
+	return outputJSON(cmd, result, false)
 }
 
 // linkCheckIssue is one links.checks failure attributed to its record.

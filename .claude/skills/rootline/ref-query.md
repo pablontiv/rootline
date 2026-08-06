@@ -47,7 +47,7 @@ rootline query <dir> --sort "prioridad:asc,impact_score:desc" -o json
 
 ### Output Formats
 
-Default (`--output json`) returns structured JSON. With `--select`, use `--output jsonl` or `--output csv` for streaming or processing convenience.
+Default (`--output json`) returns structured JSON. With `--select`, use `--output jsonl` or `--output csv` for streaming or processing convenience. `query` is the only command that implements all four formats; elsewhere `jsonl`/`csv` are rejected rather than downgraded to JSON.
 
 #### JSON (default)
 
