@@ -12,7 +12,8 @@ rootline stats                                    # Current directory
 rootline stats docs/epics/                        # Specific path
 rootline stats --from docs/epics/                 # Explicit root
 rootline stats --where 'estado != "Completed"'    # Filtered
-rootline stats -o json                            # JSON output
+rootline stats -o json                            # JSON output (default)
+rootline stats -o table                           # Summary line
 ```
 
 ### Flags
@@ -50,3 +51,5 @@ rootline stats docs/roadmap/ --where "tipo == 'software'"
 ```
 
 The `by_lifecycle_state` and `by_record_type` maps are reserved in the output contract but are currently always empty; use `--where` for field-specific slices.
+
+`stats` supports `-o json` and `-o table` only. `-o jsonl` and `-o csv` are rejected — see [Output Formats](output.md).

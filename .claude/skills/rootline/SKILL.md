@@ -36,7 +36,7 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
 ## Deterministic Execution Rules
 
 1. **Resolve target**: if a command reads or mutates an existing path, verify the path exists. If absent, stop and report the missing path; do not choose a substitute.
-2. **Parse with JSON only when supported**: use `--output json` for `validate`, `describe`, `query`, `tree`, `stats`, `explain`, `analyze`, `migrate` diff/rename outputs, and `fix --all --dry-run`. Do not assume JSON for `new`, `set`, single-file `fix`, `graph --check`, or `init`.
+2. **Parse with JSON only when supported**: use `--output json` for `validate`, `describe`, `query`, `tree`, `stats`, `explain`, `analyze`, `migrate` diff/rename outputs, and `fix --all --dry-run`. Do not assume JSON for `new`, `set`, single-file `fix`, `graph --check`, or `init`. `--output` now rejects anything outside `json|jsonl|csv|table`, and rejects a format the specific command does not implement — `jsonl` and `csv` are `query --select` only. `graph --check` rejects an explicit `--output` outright. The full matrix is `docs/output.md`.
 3. **Validation exit code**: `validate` returns non-zero when errors exist. If JSON was requested, parse stdout and continue the workflow.
 4. **Mutations**: run the command-specific preview first. Apply changes only when the user explicitly requested a write (`arregla`, `aplica`, `cambia`, `set`, `crea`, `corrige`, `fix`, `apply`) or approves the preview.
 5. **Verify writes**: after any mutation, run the smallest matching `rootline validate` command and show `git diff -- <target>` when files changed.

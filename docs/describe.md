@@ -130,3 +130,5 @@ and extract specific fields without Python postprocessing.
 rootline describe docs/roadmap/ --field schema.id.next_by_pattern
 # → {"O*": "O14", "T*": "T014"}
 ```
+
+`describe` supports `-o json` and `-o table` only — see [Output Formats](output.md).

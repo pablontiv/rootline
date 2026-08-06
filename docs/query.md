@@ -96,6 +96,8 @@ The `--output` flag supports multiple formats:
 
 > **Constraint**: `jsonl` and `csv` formats **require** `--select` to specify which columns to output. Without `--select`, they produce an error.
 
+`query` is the only command that implements all four formats; every other command declares `json` and `table` and rejects the rest. An unknown value such as `-o sdlkfj` is rejected everywhere. See [Output Formats](output.md).
+
 Examples:
 
 ```bash

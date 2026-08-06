@@ -14,7 +14,7 @@ rootline graph <dir> -o table --format mermaid
 rootline graph <dir> --where "tipo == 'feature'" -o json
 ```
 
-Default global output is JSON, so `--format dot|mermaid` only produces diagram text when paired with `-o table`. Mermaid output renders natively on GitHub and in most editors.
+Default global output is JSON, so `--format dot|mermaid` only produces diagram text when paired with `-o table` — and now *only* with `-o table`; `-o jsonl`/`-o csv` are rejected instead of falling through to a diagram. `graph --check` rejects an explicit `--output` outright. Mermaid output renders natively on GitHub and in most editors.
 
 ### Flags
 

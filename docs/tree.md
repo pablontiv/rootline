@@ -11,7 +11,8 @@ estado: Completed
 rootline tree                                     # Current directory
 rootline tree docs/epics/                         # Specific path
 rootline tree --where 'estado != "Completed"'     # Filtered
-rootline tree -o json                             # JSON output
+rootline tree -o json                             # JSON output (default)
+rootline tree -o table                            # ASCII tree
 ```
 
 ### Flags
@@ -71,3 +72,5 @@ Records without `estado` show `[—]`. Directories show `[completed/total]`.
 ```
 
 The `total` count includes all children recursively; leaf nodes have `total: 1`. Field values appear in the `frontmatter` object.
+
+`tree` supports `-o json` and `-o table` only. `-o jsonl` and `-o csv` are rejected — see [Output Formats](output.md).
