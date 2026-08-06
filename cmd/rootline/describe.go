@@ -11,8 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var byDomainFlag string
-
 var describeCmd = &cobra.Command{
 	Use:   "describe <path>",
 	Short: "Show effective schema for a directory",
@@ -22,7 +20,6 @@ var describeCmd = &cobra.Command{
 }
 
 func init() {
-	describeCmd.Flags().StringVar(&byDomainFlag, "by-domain", "", "filter output to fields matching a domain")
 	rootCmd.AddCommand(describeCmd)
 }
 
@@ -86,9 +83,6 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 	relPath := args[0]
 
 	result := rules.NewDescribeResult(relPath, entries, effective)
-
-	// Note: domain: filtering was removed in O14 refactor
-	// byDomainFlag is no longer supported
 
 	// Add hint when no schema is found
 	if effective == nil || len(effective.Schema) == 0 {

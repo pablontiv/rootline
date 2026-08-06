@@ -3,7 +3,7 @@ estado: Completed
 ---
 # Statistics
 
-`rootline stats` reports aggregate record statistics for a directory tree. It is field-agnostic: it counts records and reserves `by_lifecycle_state` / `by_record_type` in the output contract, which are currently always empty. Use `--where` for field-specific slices.
+`rootline stats` counts records in a directory tree. Use `--where` to filter which records are included in the total.
 
 ## CLI Usage
 
@@ -42,14 +42,11 @@ rootline stats docs/roadmap/ --where "tipo == 'software'"
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "kind": "rootline/stats",
-  "by_lifecycle_state": {},
-  "by_record_type": {},
   "total": 21
 }
 ```
 
-The `by_lifecycle_state` and `by_record_type` maps are reserved in the output contract but are currently always empty; use `--where` for field-specific slices.
-
+The JSON result contains only the versioned command kind and the filtered total. Use `--where` for field-specific slices.
 `stats` supports `-o json` and `-o table` only. `-o jsonl` and `-o csv` are rejected — see [Output Formats](output.md).
