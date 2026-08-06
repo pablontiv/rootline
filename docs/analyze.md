@@ -134,6 +134,8 @@ understatement).
 }
 ```
 
+For identical inputs and flags, `analyze -o json` emits each category's `inferences[]` in a deterministic order. Repeated runs are byte-stable, while the category sequence, inference membership, and summary counts remain unchanged.
+
 ### Output Fields
 
 - `version` — contract version.
