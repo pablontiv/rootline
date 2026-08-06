@@ -121,8 +121,8 @@ func TestBatchValidationResult_Mixed(t *testing.T) {
 
 	batch := NewBatchValidationResult(results)
 
-	if batch.Version != 1 {
-		t.Errorf("version = %d", batch.Version)
+	if batch.Version != ValidationEnvelopeVersion {
+		t.Errorf("version = %d, want %d", batch.Version, ValidationEnvelopeVersion)
 	}
 	if batch.Kind != "rootline/validate-batch" {
 		t.Errorf("kind = %q", batch.Kind)
@@ -281,8 +281,8 @@ func TestBatchValidationResult_ToJSON(t *testing.T) {
 		t.Fatalf("JSON parse error: %v", err)
 	}
 
-	if parsed["version"].(float64) != 1 {
-		t.Errorf("version = %v", parsed["version"])
+	if parsed["version"].(float64) != float64(ValidationEnvelopeVersion) {
+		t.Errorf("version = %v, want %d", parsed["version"], ValidationEnvelopeVersion)
 	}
 	if parsed["kind"] != "rootline/validate-batch" {
 		t.Errorf("kind = %v", parsed["kind"])

@@ -32,7 +32,10 @@ rootline validate --all --where 'estado != "Completed"'  # Filtered
 
 Batch validation runs four phases in order:
 
-1. **Stem Health** — 12 diagnostics on `.stem` files themselves:
+1. **Stem Health** — 12 diagnostics on `.stem` files themselves, reported under
+   `stem_health` (never as records). This phase runs before the corpus scan and its
+   findings survive a scan failure, so a missing or unparseable `.stem` still produces
+   the envelope:
    - `stem-files-exist` — the scanned tree contains at least one `.stem` file
    - `yaml-valid` — valid YAML syntax
    - `scope-match` — scope patterns match at least one file
@@ -42,7 +45,7 @@ Batch validation runs four phases in order:
    - `field-override` — child field overrides warn about partial override
    - `aggregated-required` — warns when a field is both `required` and aggregated (`required` is auto-skipped on index files, so the combination rarely does what it looks like)
    - `aggregate-formula-coverage` — an aggregate formula references every enum value of the field it aggregates
-   - `monotonic-violations` — child constraints do not widen parent constraints (type, required, enum, severity, structural)
+   - `monotonic-violations` — child constraints do not widen parent constraints. Each of the five categories names itself (`widens type`, `loosens required`, `loosens severity`, `enum extended with disallowed value(s)`, and structural bounds reported under their full path such as `structural.subdirs.min_children`)
    - `unknown-check-keys` — keys under `links.checks` are recognized (fuzzy "did you mean?" on typos)
    - `nested-root-marker` — reports (info) a `.stem` that declares `root: true` below another one that already does, since records under it stop inheriting the ancestor
 
@@ -96,9 +99,9 @@ schema declares out of scope blocks the commit while passing CI.
 The skip is reported rather than silent, as a warning, so a run that checks nothing says why:
 
 ```console
-$ rootline validate scope/other.md -o json
-{"valid":true,"errors":[],"warnings":[{"rule":"skipped",
- "message":"skipped: out of scope for this .stem (scope.match)","severity":"warn"}]}
+$ rootline validate scope/other.md --field "results[].warnings"
+[[{"rule":"skipped","field":"",
+   "message":"skipped: out of scope for this .stem (scope.match)","severity":"warn"}]]
 ```
 
 ### Broken-target detection is always on
@@ -148,20 +151,42 @@ Resolution asks the filesystem, not the record set. A target that exists on disk
 when `scope.match` or `.stemignore` excludes it from governance: the schema declares what is
 *governed*, not what *exists*.
 
-## Single File Result
+## Output Envelope
+
+Every `validate` invocation emits one shape — one file, several files, `--all`,
+`--staged` with an empty index, and the corpus-scan failure path alike. Nothing about
+the envelope varies with the flags you passed, so a consumer never branches on how the
+command was called.
 
 ```json
 {
-  "version": 1,
-  "kind": "rootline/validate",
-  "path": "docs/query.md",
-  "valid": true,
-  "errors": [],
-  "warnings": []
+  "version": 2,
+  "kind": "rootline/validate-batch",
+  "results": [ ... ],
+  "structural": [ ... ],
+  "stem_health": [ ... ],
+  "drift_warnings": [ ... ],
+  "notices": [ ... ],
+  "summary": { ... }
 }
 ```
 
-When validation fails, errors include the rule, field, message, source `.stem`, severity, and an optional `suggestion` (fuzzy "did you mean?" hint):
+All six keys are always present; empty collections are `[]`, never absent and never
+`null`.
+
+| Key | Population |
+|-----|------------|
+| `results` | Documents. One entry per validated record — never a `.stem` file, never a directory. |
+| `structural` | Directories checked against `structural:` rules. Same entry shape as `results`, with a trailing-slash path. |
+| `stem_health` | Schema diagnostics about `.stem` files. |
+| `drift_warnings` | Parent/child divergence between an index file and its children. |
+| `notices` | Run-level diagnostics that belong to no single record. |
+| `summary` | Counts, derived from the collections above. |
+
+Each population is disjoint, and each is counted on its own axis. Splitting them changed
+where a verdict is *reported*, never whether it counts: an error anywhere still exits 1.
+
+### `results[]`
 
 ```json
 {
@@ -183,32 +208,94 @@ When validation fails, errors include the rule, field, message, source `.stem`, 
 }
 ```
 
-## Batch Result
+Each error carries the rule, field, message, source `.stem`, severity, and an optional
+`suggestion` (fuzzy "did you mean?" hint).
+
+### `structural[]`
+
+```json
+{ "version": 1, "kind": "rootline/validate", "path": "sub/",
+  "valid": false,
+  "errors": [ { "rule": "max_children", "field": "directory", "message": "..." } ],
+  "warnings": [] }
+```
+
+A directory is not a record, so it no longer occupies a `results` slot. The root of the
+scan is reported as `"/"`.
+
+### `stem_health[]`
+
+A `.stem` file is not a record, so a schema defect never occupies a `results` slot and
+never reaches `summary.total`. Before this separation, `validate --all` reported 5 on a
+three-document corpus with two health findings, while `query --count`, `tree --field
+root.total` and `stats --field total` all reported 3 on the same path.
 
 ```json
 {
-  "version": 1,
-  "kind": "rootline/validate-batch",
-  "results": [ ... ],
-  "drift_warnings": [
-    {
-      "field": "estado",
-      "parent_value": "Completed",
-      "children_value": "Pending",
-      "parent_path": "docs/epics/E03/README.md",
-      "child_paths": ["docs/epics/E03/F05/README.md"]
-    }
-  ],
-  "summary": {
-    "total": 42,
-    "valid": 40,
-    "invalid": 2,
-    "errors_count": 3,
-    "warnings_count": 0,
-    "drift_warnings_count": 1
-  }
+  "path": "docs/sub/.stem",
+  "check": "scope-match",
+  "field": "",
+  "severity": "warn",
+  "message": "scope.match \"*.txt\" matches no files in directory"
 }
 ```
+
+`severity` is `error`, `warn` or `info`. `info` is a real level, not a demoted warning:
+`nested-root-marker` describes a supported configuration and must not fail `--strict`.
+
+Health runs before the corpus scan and survives it. A tree with no `.stem` anywhere, or
+one whose `.stem` does not parse, still emits the envelope — carrying `stem-files-exist`
+or `yaml-valid` — instead of a raw Go error on stderr and no JSON at all.
+
+### `notices[]`
+
+```json
+{ "severity": "error", "code": "scan_failed", "message": "scanning: ..." }
+```
+
+| Code | Severity | Meaning |
+|------|----------|---------|
+| `scan_failed` | error | The corpus could not be scanned. `stem_health` explains why. |
+| `schema_resolution_failed` | error | A `.stem` chain failed to resolve during structural or drift checks. |
+| `stem_health_unavailable` | warn | Stem health itself could not run. |
+| `no_records` | warn | `--all` scanned the path and found no records. |
+
+`no_records` exists because an emptied or renamed path used to report `total: 1,
+valid: 1` — the `stem-files-exist` pseudo-record — and a CI gate read that as green.
+
+Switch on `code`; it is stable. `message` is for humans.
+
+### `summary`
+
+```json
+{
+  "total": 42,
+  "valid": 40,
+  "invalid": 2,
+  "errors_count": 3,
+  "warnings_count": 0,
+  "drift_warnings_count": 1,
+  "structural_errors_count": 0,
+  "structural_warnings_count": 0,
+  "stem_health_errors_count": 0,
+  "stem_health_warnings_count": 2,
+  "stem_health_info_count": 1
+}
+```
+
+`total`, `valid` and `invalid` count documents only, so `summary.total` agrees with
+`query --count` on the same path. Schema hygiene is counted on its own axis.
+
+### Upgrading from version 1
+
+| Version 1 | Version 2 |
+|-----------|-----------|
+| `validate <file>` emitted a bare `rootline/validate` object | Read `.results[0]`; `--field valid` becomes `--field "results[].valid"` |
+| `.stem` findings appeared in `results[]` with `source: "stem-health"` | Read `.stem_health[]`, keyed by `check` |
+| Directory structural verdicts appeared in `results[]` with a trailing-slash path | Read `.structural[]` |
+| `summary.total` counted records plus health findings | `summary.total` counts records |
+| `validate --staged` wrote nothing on an empty index | Emits the envelope with `summary.total: 0` |
+| A missing or unparseable `.stem` wrote a Go error to stderr | Emits the envelope with a `scan_failed` notice, still exit 1 |
 
 ## Section Validation
 
@@ -232,5 +319,7 @@ Section validation works in both single-file (`validate <file>`) and batch (`val
 
 | Code | Meaning |
 |------|---------|
-| `0` | All documents valid |
-| `1` | Errors found (or warnings when `--strict`) |
+| `0` | No errors on any axis |
+| `1` | An invalid record, a structural **error**, a `.stem` health **error**, or an **error** notice — plus, under `--strict`, any warning on any of those axes |
+
+`info`-level stem health never affects the exit code.
