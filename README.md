@@ -177,7 +177,6 @@ Check documents against inherited schemas and trace field origins.
 
 - **`describe`** — Show effective schema for a directory
   - `rootline describe <path>` — Merged schema with all inherited rules
-  - `rootline describe <path> --by-domain <name>` — Filter output by domain
 
 - **`explain`** — Trace field origins, derivations, and errors
   - `rootline explain <file>` — See where every value came from
@@ -217,11 +216,9 @@ Create and update documents.
   - `rootline new <filepath> --force` — Overwrite an existing file
   - `rootline new <filepath> --dry-run` — Preview generated content
 
-- **`set`** — Mutate frontmatter and sections with validation
+- **`set`** — Mutate frontmatter fields with validation
   - `rootline set <file> field=value [field2=value2 ...]` — Set fields
   - `rootline set <file> field=@file` — Load content from file
-  - `rootline set <file> field+=@file` — Append to section
-  - `rootline set <file> ... --create` — Create new sections
   - `rootline set <file> ... --dry-run` — Preview changes
 
 - **`fix`** — Auto-repair validation errors
@@ -327,7 +324,7 @@ aggregate:
   completed: 'len(filter(descendants, .estado == "Completed"))'
 ```
 
-Derived and aggregated fields appear alongside frontmatter in query results, stats, and tree output.
+Derived and aggregated fields appear alongside frontmatter in query results and tree output.
 
 ### Dependency Graph
 
@@ -418,7 +415,7 @@ same as that one? — are not guessed: `analyze` marks those proposals
 | [Analyze](docs/analyze.md) | Infer schemas and patterns from documents |
 | [Explain](docs/explain.md) | Field origin tracing, derivation chain, error diagnosis |
 | [Tree](docs/tree.md) | Hierarchical view with completion counts |
-| [Stats](docs/stats.md) | Summary counts by type and state |
+| [Stats](docs/stats.md) | Total record counts, optionally filtered |
 | [Dependency Graph](docs/graph.md) | Wiki-links, link schema, cycle detection, DOT/Mermaid |
 | [Derivation Engine](docs/derivation.md) | Derive and aggregate expressions, builtins, linked fields |
 | [Schema Migration](docs/migrate.md) | Breaking change detection, field rename, v2 upgrade |

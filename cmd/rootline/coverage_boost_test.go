@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -295,16 +296,27 @@ schema:
 	}
 }
 
-// TestDescribeWithByDomain tests describe with --by-domain flag
-func TestDescribeWithByDomain(t *testing.T) {
+func TestDescribeRejectsByDomainFlag(t *testing.T) {
 	dir := setupTestDir(t)
 
-	resetFlags()
-	out, err := runCmd(t, "describe", dir, "--by-domain", "")
-	if err != nil {
-		t.Logf("describe --by-domain error: %v", err)
+	_, err := runCmd(t, "describe", dir, "--by-domain", "legacy")
+	if err == nil {
+		t.Fatal("expected --by-domain to be rejected")
 	}
+	if !strings.Contains(err.Error(), "unknown flag: --by-domain") {
+		t.Errorf("expected unknown --by-domain flag error, got: %v", err)
+	}
+}
 
-	// Should handle flag without error
-	_ = out
+func TestDescribeHelpDoesNotAdvertiseByDomain(t *testing.T) {
+	buf := new(bytes.Buffer)
+	describeCmd.SetOut(buf)
+	t.Cleanup(func() { describeCmd.SetOut(nil) })
+	if err := describeCmd.Help(); err != nil {
+		t.Fatalf("unexpected help error: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "--by-domain") {
+		t.Errorf("describe help advertises removed --by-domain flag: %s", out)
+	}
 }

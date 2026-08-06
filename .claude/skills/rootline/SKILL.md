@@ -153,7 +153,7 @@ rootline validate <dir>/<ID>-<slug>.md -o json
 
 > **Multi-pattern schemas:** `schema.id.next` retorna el próximo valor del primer patrón alfabético que tiene entries existentes en el directorio. En schemas con múltiples patrones de secuencia (ej: `O*` y `T*`), usar `--field schema.id.next_by_pattern` para obtener el próximo valor de **todos** los patrones simultáneamente: `{"O*": "O14", "T*": "T014"}`.
 
-### Mutate a Field or Section
+### Mutate a Field
 
 ```bash
 rootline set --dry-run <file.md> <field>=<value>
@@ -162,7 +162,7 @@ rootline validate <file.md> -o json
 git diff -- <file.md>
 ```
 
-Use `--create` only when the user wants a missing field created with a value. `--create` does not create files — use `rootline new` to scaffold new documents. `--no-validate` skips post-mutation validation only; pre-validation of enum constraints always runs. Note: `type: section` and section append (`+=`) are removed; use `source: body.section[...]` + `type: string` in the `.stem` instead.
+`set` accepts `field=value`, `field=@file`, and `field=""`; it does not support `--create` or section append (`+=`). Use `rootline new` to scaffold documents. `--no-validate` skips post-mutation validation only; pre-validation of enum constraints always runs. `type: section` remains available for schema-driven document scaffolding.
 
 ### Analyze Existing Documents
 

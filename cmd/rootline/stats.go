@@ -17,8 +17,8 @@ var (
 
 var statsCmd = &cobra.Command{
 	Use:   "stats [path]",
-	Short: "Summary counts by type and state",
-	Long:  "Show aggregate statistics for documents: counts by type,\nstate, and other frontmatter fields.",
+	Short: "Count records, optionally filtered by --where",
+	Long:  "Count records in a directory. Use --where to filter the records included in the total.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  runStats,
 }
@@ -31,11 +31,9 @@ func init() {
 
 // StatsResult is the versioned JSON output for stats.
 type StatsResult struct {
-	Version      int            `json:"version"`
-	Kind         string         `json:"kind"`
-	ByLifecycle  map[string]int `json:"by_lifecycle_state"`
-	ByRecordType map[string]int `json:"by_record_type"`
-	Total        int            `json:"total"`
+	Version int    `json:"version"`
+	Kind    string `json:"kind"`
+	Total   int    `json:"total"`
 }
 
 func runStats(cmd *cobra.Command, args []string) error {
@@ -67,19 +65,10 @@ func runStats(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("filtering records: %w", err)
 	}
 
-	// Field-agnostic statistics: no hardcoded field assumptions
-	byLifecycle := make(map[string]int)
-	byRecordType := make(map[string]int)
-
-	// Without hardcoded field names, these maps remain empty but available
-	// Users can filter via --where if they need field-specific stats
-
 	result := &StatsResult{
-		Version:      1,
-		Kind:         "rootline/stats",
-		ByLifecycle:  byLifecycle,
-		ByRecordType: byRecordType,
-		Total:        len(records),
+		Version: 2,
+		Kind:    "rootline/stats",
+		Total:   len(records),
 	}
 
 	if outputFormat == "table" {
