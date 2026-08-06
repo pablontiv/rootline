@@ -78,14 +78,3 @@ skill="rootline"
 rm -rf "${SKILLS_DEST:?}/$skill"
 cp -r "$REPO_ROOT/.claude/skills/$skill" "$SKILLS_DEST/$skill"
 echo "rootline: installed $skill skill → $SKILLS_DEST/$skill"
-
-# Rebuild the rootline binary so the installed version matches the pushed code.
-# Delegate to `just install` — the single source of truth for install destination
-# (~/.local/bin) and version scheme (<tag>+local.<sha>). Non-fatal: a failed
-# rebuild must never block the push.
-echo "Rebuilding rootline binary..."
-if command -v just >/dev/null 2>&1; then
-  ( cd "$REPO_ROOT" && just install ) || echo "Warning: just install failed (push continues)"
-else
-  echo "Warning: just not found; skipping rootline reinstall"
-fi

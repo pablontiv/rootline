@@ -36,8 +36,8 @@ coverage-check: coverage
 # Build and install a local development binary to ~/.local/bin
 #
 # The single canonical install destination. install.sh (the public installer)
-# defaults here too, and the post-merge / pre-push hooks delegate to this
-# recipe, so all three agree on one location and one version scheme.
+# defaults here too, and the post-merge hook delegates to this recipe. The
+# pre-push hook intentionally does not install unmerged branch builds.
 install: && doctor-install
     #!/usr/bin/env bash
     set -euo pipefail
