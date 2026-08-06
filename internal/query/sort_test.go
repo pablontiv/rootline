@@ -1,6 +1,7 @@
 package query
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -387,5 +388,47 @@ func TestSortRecords_NumericStringValues(t *testing.T) {
 		if records[i].Path != want {
 			t.Errorf("position %d: got %s, want %s", i, records[i].Path, want)
 		}
+	}
+}
+
+func TestValidateSortKeys_AcceptsKnownFields(t *testing.T) {
+	known := []string{"estado", "path", "titulo"}
+	keys := []SortKey{{Field: "estado"}, {Field: "path", Desc: true}}
+
+	if err := ValidateSortKeys(keys, known); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateSortKeys_RejectsUnknownFieldWithSuggestion(t *testing.T) {
+	err := ValidateSortKeys([]SortKey{{Field: "estadoo"}}, []string{"estado", "path"})
+	if err == nil {
+		t.Fatal("expected an error for an unknown sort field")
+	}
+	if !strings.Contains(err.Error(), `"estadoo"`) {
+		t.Errorf("error = %v, want it to name the offending field", err)
+	}
+	if !strings.Contains(err.Error(), `did you mean "estado"`) {
+		t.Errorf("error = %v, want a fuzzy suggestion", err)
+	}
+}
+
+func TestValidateSortKeys_RejectsUnknownFieldWithoutSuggestion(t *testing.T) {
+	err := ValidateSortKeys([]SortKey{{Field: "zzzzzzzz"}}, []string{"estado", "path"})
+	if err == nil {
+		t.Fatal("expected an error for an unknown sort field")
+	}
+	if strings.Contains(err.Error(), "did you mean") {
+		t.Errorf("error = %v, want no suggestion when nothing is close", err)
+	}
+}
+
+// Nothing to validate against is not the same as everything being wrong.
+func TestValidateSortKeys_EmptyKnownSetPasses(t *testing.T) {
+	if err := ValidateSortKeys([]SortKey{{Field: "anything"}}, nil); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if err := ValidateSortKeys(nil, []string{"estado"}); err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
 }

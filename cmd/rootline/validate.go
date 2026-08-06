@@ -208,7 +208,7 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 	derive.AggregateAllSimple(ctx, records, root)
 
 	// Apply --where filter.
-	records, err = filterRecords(ctx, records, validateWhere, nil)
+	records, err = filterRecords(ctx, records, validateWhere, knownWhereFields(records, root), cmd.ErrOrStderr())
 	if err != nil {
 		return fmt.Errorf("filtering records: %w", err)
 	}

@@ -117,7 +117,7 @@ func runTree(cmd *cobra.Command, args []string) error {
 	derive.AggregateAllSimple(ctx, records, absRoot)
 
 	// Apply --where filter.
-	records, err = filterRecords(ctx, records, treeWhere, nil)
+	records, err = filterRecords(ctx, records, treeWhere, knownWhereFields(records, absRoot), cmd.ErrOrStderr())
 	if err != nil {
 		return fmt.Errorf("filtering records: %w", err)
 	}

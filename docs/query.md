@@ -32,6 +32,15 @@ Sort type detection per field:
 
 Missing/nil values always sort last, regardless of direction. Sort applies after filtering and before limit.
 
+Unlike `--where`, an unknown `--sort` field is an **error**, matching the treatment a bad direction already got:
+
+```console
+$ rootline query docs/ --sort "estadoo:asc"
+Error: unknown sort field "estadoo": no record carries it and no .stem in scope declares it (did you mean "estado"?)
+```
+
+An unsortable key cannot produce a defensible result — every comparison falls through, the output is silently in scan order, and it is indistinguishable from a correct sort. The legal names are the same set `--where` checks against, taken from the corpus **before** `--where` narrows it, so a filter that matches nothing does not invalidate a valid sort key.
+
 ### Link Traversal Predicates
 
 Query documents based on their link relationships using `--has-inbound` and `--has-outbound`:
@@ -149,6 +158,12 @@ The heading key must match the heading text exactly, including the `#` prefix an
 > **Universal Filtering**: The `--where` flag is not limited to `query`. It is also available on **`tree`**, **`stats`**, **`graph`**, and **`validate --all`**. All transversal commands share the same expr-lang syntax.
 
 > **Field Warnings**: Unknown field names in `--where` expressions emit warnings to stderr with fuzzy suggestions (e.g., `warning: unknown field "estdo" in where expression (did you mean "estado"?)`). Queries still execute — warnings are informational only.
+
+The warning fires on every command that accepts `--where`: `query`, `stats`, `tree`, `graph` and `validate --all`. Without it a misspelled field is indistinguishable from "no records match" — zero results, empty stderr, exit 0 — which reads as a green check in CI.
+
+A field name is considered known when it is a query builtin (`path`, `body`, `type`, `sections`), a key any record in the scanned corpus carries, or a field the effective `.stem` chain declares — including `derive:` and `aggregate:` names. The union is deliberately generous: a false warning on a name that does work would teach callers to ignore the warning. On a corpus with neither records nor schema there is nothing to check against, and nothing is reported.
+
+It stays a warning, not an error. A field absent from every record is a legal filter that yields zero matches, and pipelines depend on that exit code.
 
 ## Operators
 

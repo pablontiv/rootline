@@ -49,6 +49,8 @@ rootline query <dir> --sort "prioridad:asc,impact_score:desc" -o json
 
 Default (`--output json`) returns structured JSON. With `--select`, use `--output jsonl` or `--output csv` for streaming or processing convenience. `query` is the only command that implements all four formats; elsewhere `jsonl`/`csv` are rejected rather than downgraded to JSON.
 
+**Field-name validation**: an unknown field in `--where` prints `warning: unknown field "estdo" in where expression (did you mean "estado"?)` on stderr and leaves the exit code alone — on `query`, `stats`, `tree`, `graph` and `validate --all`. An unknown field in `--sort` is an **error** (rc=1), like a bad sort direction. Legal names are the query builtins, every key the corpus carries, and every `schema:`/`derive:`/`aggregate:` name the `.stem` chain declares. Treat a zero-result query with no warning as a genuine empty set.
+
 #### JSON (default)
 
 Without `--select` (full records):

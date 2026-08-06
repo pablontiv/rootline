@@ -82,7 +82,7 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	derive.EnrichBuiltinsSimple(ctx, records, absRoot)
 
 	// Apply --where filter.
-	records, err = filterRecords(ctx, records, graphWhere, nil)
+	records, err = filterRecords(ctx, records, graphWhere, knownWhereFields(records, absRoot), cmd.ErrOrStderr())
 	if err != nil {
 		return fmt.Errorf("filtering records: %w", err)
 	}
