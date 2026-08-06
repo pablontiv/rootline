@@ -74,9 +74,35 @@ rootline repair apply --report fix-proposals.json --dry-run
 rootline repair apply --report fix-proposals.json
 ```
 
-Keep the report file in the directory you scanned. `repair apply` resolves the paths in the
-report against the **report file's own directory**, so a report written elsewhere (a `reports/`
-or CI artifacts directory) resolves to paths that do not exist and the run becomes a no-op.
+**Where the paths in a report resolve.** `fix --all` records the directory it scanned in the
+report (`path` as you spelled it, `root` as an absolute path), and both `repair apply` and
+`schema apply` resolve against that — not against wherever the report file happens to sit. So the
+normal CI shape works:
+
+```bash
+rootline fix --all docs/ --dry-run -o json > artifacts/repairs.json
+rootline repair apply --report artifacts/repairs.json    # resolves to docs/, not artifacts/
+```
+
+The rule is one shared precedence chain, identical in both commands:
+
+1. `--root <dir>` — an explicit override, the last word
+2. `root` recorded in the report — the absolute scan root
+3. `path` recorded in the report — the scan root as it was spelled
+4. the directory holding the report file — the pre-`root` behaviour
+
+Rung 4 keeps reports written before rungs 2 and 3 existed working exactly as they did, so an old
+report stored beside its documents still applies. It was also the whole problem: on its own it
+made a report in a `reports/` directory resolve to paths that do not exist, and the run silently
+changed nothing.
+
+Both commands report the root they settled on in their output envelope as `root`, so a run that
+touched nothing tells you where it looked:
+
+```bash
+rootline repair apply --report artifacts/repairs.json -o json | jq .root
+# "/abs/path/to/docs"
+```
 
 **Report envelope.** `repair apply` validates the report envelope before touching any file
 and rejects anything that is not `version: 1` and `kind: rootline/proposals`:

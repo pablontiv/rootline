@@ -51,8 +51,12 @@ type ProposalsSummary struct {
 
 // SchemaApplyResult represents the result of applying schema proposals.
 type SchemaApplyResult struct {
-	Version           int                `json:"version"`
-	Kind              string             `json:"kind"`
+	Version int    `json:"version"`
+	Kind    string `json:"kind"`
+	// Root is the directory the report's targets were resolved against, named
+	// for the same reason repair apply names it: a root resolved from the wrong
+	// rung produces a run that touches nothing and explains nothing.
+	Root              string             `json:"root,omitempty"`
 	Applied           []string           `json:"applied"`
 	Skipped           []string           `json:"skipped"`
 	Rejected          []string           `json:"rejected,omitempty"`
@@ -92,6 +96,7 @@ var (
 	schemaApplyReport string
 	schemaApplyDryRun bool
 	schemaApplyForce  bool
+	schemaApplyRoot   string
 )
 
 var schemaApplyCmd = &cobra.Command{
@@ -112,6 +117,7 @@ func init() {
 	_ = schemaApplyCmd.MarkFlagRequired("report")
 	schemaApplyCmd.Flags().BoolVar(&schemaApplyDryRun, "dry-run", false, "show changes without applying them")
 	schemaApplyCmd.Flags().BoolVar(&schemaApplyForce, "force", false, "overwrite existing .stem files")
+	schemaApplyCmd.Flags().StringVar(&schemaApplyRoot, "root", "", "absolute path to scan root (overrides report root)")
 	schemaCmd.AddCommand(schemaApplyCmd)
 
 	rootCmd.AddCommand(schemaCmd)
@@ -250,28 +256,21 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("wrong report kind: %s (expected rootline/schema-proposals)", report.Kind)
 	}
 
+	// Determine the root directory using the four-level precedence chain.
+	scanRoot, err := resolveReportRoot(schemaApplyRoot, report.Root, report.Path, schemaApplyReport)
+	if err != nil {
+		return fmt.Errorf("resolving report root: %w", err)
+	}
+
 	result := &SchemaApplyResult{
 		Version:  1,
 		Kind:     "rootline/schema-apply",
+		Root:     scanRoot,
 		DryRun:   schemaApplyDryRun,
 		Applied:  []string{},
 		Skipped:  []string{},
 		Rejected: []string{},
 		Errors:   []string{},
-	}
-
-	// Resolve absolute path from report.
-	// Prefer report.Root if set (absolute path); otherwise fall back to report.Path (CWD-relative)
-	scanRoot := report.Root
-	if scanRoot == "" {
-		scanRoot = report.Path
-		if !filepath.IsAbs(scanRoot) {
-			absRoot, err := filepath.Abs(scanRoot)
-			if err != nil {
-				return fmt.Errorf("resolving path: %w", err)
-			}
-			scanRoot = absRoot
-		}
 	}
 
 	resolved := &fix.ResolvedTargetsBreakdown{
@@ -394,10 +393,12 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 		return fmt.Errorf("wrong report kind: %s (expected analyze or rootline/analyze)", report.Kind)
 	}
 
-	// Resolve root path from report path.
-	root, err := filepath.Abs(report.Path)
+	// Same precedence chain as the proposals path and as repair apply, so all
+	// three report-consuming paths answer "which directory?" identically and
+	// --root reaches every one of them.
+	root, err := resolveReportRoot(schemaApplyRoot, report.Root, report.Path, schemaApplyReport)
 	if err != nil {
-		return fmt.Errorf("resolving path: %w", err)
+		return fmt.Errorf("resolving report root: %w", err)
 	}
 
 	// Resolve closest .stem for the report path.
@@ -441,6 +442,7 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	result := &SchemaApplyResult{
 		Version:  1,
 		Kind:     "rootline/schema-apply",
+		Root:     root,
 		DryRun:   schemaApplyDryRun,
 		Applied:  schemaResult.Applied,
 		Skipped:  schemaResult.Skipped,

@@ -72,6 +72,8 @@ type Proposal struct {
 type Report struct {
 	Version           int        `json:"version"`
 	Kind              string     `json:"kind"`
+	Path              string     `json:"path,omitempty"` // scan root as spelled on command line
+	Root              string     `json:"root,omitempty"` // absolute scan root
 	Proposals         []Proposal `json:"proposals"`
 	SchemaSuggestions []Proposal `json:"schema_suggestions,omitempty"`
 	Summary           Summary    `json:"summary"`

@@ -22,8 +22,13 @@ type RolledBackFile struct {
 
 // RepairResult represents the outcome of a repair operation.
 type RepairResult struct {
-	Version int      `json:"version"`
-	Kind    string   `json:"kind"`
+	Version int    `json:"version"`
+	Kind    string `json:"kind"`
+	// Root is the directory the report's document paths were resolved against.
+	// It is reported because the failure this field exists to expose is silent:
+	// a report resolved against the wrong root produces a run that touches
+	// nothing and, before this was surfaced, said nothing about why.
+	Root    string   `json:"root,omitempty"`
 	DryRun  bool     `json:"dry_run"`
 	Changed []string `json:"changed"`
 	// RolledBack lists files whose write was reverted after post-validation
@@ -95,6 +100,7 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string, fillMi
 	result := &RepairResult{
 		Version: 1,
 		Kind:    "rootline/repair",
+		Root:    root,
 		DryRun:  dryRun,
 	}
 
