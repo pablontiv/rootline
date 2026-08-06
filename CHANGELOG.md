@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Added
 
+- `validate` envelope gained `structural[]` (directory verdicts, previously trailing-slash pseudo-records inside `results[]`) with `summary.structural_errors_count` / `structural_warnings_count`
+- `validate` envelope gained `stem_health[]` (`.stem` diagnostics with `error`/`warn`/`info` severity), `notices[]` (run-level diagnostics keyed by a stable `code`: `scan_failed`, `schema_resolution_failed`, `stem_health_unavailable`, `no_records`), and three `summary.stem_health_*_count` fields
 - Pull request template now has a dedicated **Related issue** section with a `Closes #<N>` field and a checklist item, so issue linkage stops depending on the author remembering the keyword
 - `CHANGELOG.md` (this file) — ecosystem documentation baseline
 - GitHub Issues enabled on the repository
@@ -19,6 +21,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Changed
 
+- **BREAKING**: `validate` emits one envelope shape for every invocation — `rootline/validate-batch` **version 2** — including single-file runs, which previously emitted a bare `rootline/validate` object. Read a single verdict as `.results[0]`; `--field valid` becomes `--field "results[].valid"`. See the upgrade table in `docs/validate.md`.
+- **BREAKING**: `.stem` health findings no longer appear in `results[]` (they carried `source: "stem-health"` and a `.stem` path) and no longer count toward `summary.total`, `summary.valid` or `summary.warnings_count`. They move to `stem_health[]` with their own summary counts. `summary.total` is now a record count and agrees with `query --count`, `tree --field root.total` and `stats --field total` on the same path — previously it varied with schema hygiene, and `.stem` entries survived a `--where` filter they could not match.
+- **BREAKING**: directory structural verdicts (trailing-slash paths such as `sub/`) moved out of `results[]` into `structural[]` and no longer count toward `summary.total`, for the same reason `.stem` findings did. An error there still exits 1.
+- **BREAKING**: `validate --staged` with an empty index now emits the envelope with `summary.total: 0` instead of writing zero bytes, so `rootline validate --staged | jq -e '.summary.invalid == 0'` no longer fails in a pre-commit hook.
+- `validate --all` on a tree with no `.stem`, or one that does not parse, now emits the envelope — carrying `stem-files-exist` or `yaml-valid` in `stem_health` and `scan_failed` in `notices`, still exit 1 — instead of a raw Go error on stderr and no JSON. Both checks were computed and then discarded, making them unreachable through the command.
+- `validate --all` on an emptied or renamed path now reports `total: 0` plus a `no_records` notice. It previously reported `total: 1, valid: 1` — the `stem-files-exist` pseudo-record — which a CI gate read as green.
+- `nested-root-marker` is now delivered at `info` severity as authored, and no longer fails `--strict`. The severity mapper handled only `pass` and `fail`, silently promoting `info` to a warning that CI could not suppress.
+- `monotonic-violations` messages now name the category that was violated. Type widening, required loosening, severity loosening and structural loosening all rendered as `(type change: ...)`; structural bounds were truncated to the field `structural`, making `min_children` and `max_children` indistinguishable. They now report their full constraint path.
 - License changed from PolyForm Noncommercial 1.0.0 to Apache License 2.0 — commercial use is now permitted
 - picokit dependency bumped to its Apache-2.0-relicensed release, so distributed binaries no longer embed noncommercially licensed code
 - **BREAKING**: Schema discovery no longer uses `.git` directory as a boundary. Projects must now declare a root marker by adding `root: true` to the project's top-level `.stem` file. Existing projects without a root marker will receive a clear error message with the fix.

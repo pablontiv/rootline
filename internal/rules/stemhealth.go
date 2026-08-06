@@ -6,15 +6,24 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/pablontiv/picokit/fuzzy"
 )
 
+// Severity levels shared by validation errors, stem-health diagnostics and
+// run-level notices, so one vocabulary describes all three.
+const (
+	SeverityError = "error"
+	SeverityWarn  = "warn"
+	SeverityInfo  = "info"
+)
+
 // StemHealthCheck represents a single stem-health diagnostic result.
 type StemHealthCheck struct {
 	Name    string `json:"name"`
-	Status  string `json:"status"` // "pass", "fail", "warn"
+	Status  string `json:"status"` // "pass", "fail", "warn", "info"
 	Message string `json:"message,omitempty"`
 	Path    string `json:"path,omitempty"` // relative to absRoot
 	Field   string `json:"field,omitempty"`
@@ -23,6 +32,56 @@ type StemHealthCheck struct {
 // StemHealthResult holds all stem-health diagnostic checks.
 type StemHealthResult struct {
 	Checks []StemHealthCheck
+}
+
+// StemHealthDiagnostic is a stem-health finding as it appears in the validate
+// envelope: a `.stem` file, not a record, so it is reported on its own axis.
+type StemHealthDiagnostic struct {
+	Path     string `json:"path"`
+	Check    string `json:"check"`
+	Field    string `json:"field,omitempty"`
+	Severity string `json:"severity"` // "error", "warn" or "info"
+	Message  string `json:"message,omitempty"`
+}
+
+// StemHealthDiagnostics converts raw checks into reportable diagnostics,
+// dropping the passing ones.
+//
+// The status→severity mapping is total: "fail" is an error, "info" stays info
+// (a nested root marker is a supported configuration, so it must not fail
+// --strict), and anything else is a warning. An earlier mapper handled only
+// "pass" and "fail", which silently promoted "info" to a warning.
+func StemHealthDiagnostics(result *StemHealthResult) []StemHealthDiagnostic {
+	if result == nil {
+		return nil
+	}
+	var diags []StemHealthDiagnostic
+	for _, c := range result.Checks {
+		if c.Status == "pass" {
+			continue
+		}
+		severity := SeverityWarn
+		switch c.Status {
+		case "fail":
+			severity = SeverityError
+		case SeverityInfo:
+			severity = SeverityInfo
+		}
+		path := c.Path
+		if path == "" {
+			// stem-files-exist fires when no .stem exists anywhere, so it has
+			// no path of its own to report.
+			path = stemFileName
+		}
+		diags = append(diags, StemHealthDiagnostic{
+			Path:     path,
+			Check:    c.Name,
+			Field:    c.Field,
+			Severity: severity,
+			Message:  c.Message,
+		})
+	}
+	return diags
 }
 
 // ValidateStemHealth runs all stem-health diagnostic checks against .stem files
@@ -334,22 +393,7 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 
 		// For each conflict, emit a diagnostic error
 		for _, conflict := range lr.Conflicts {
-			// Extract field name from conflict.Field (e.g., "fieldname.type" → "fieldname")
-			fieldName := conflict.Field
-			if dotIdx := strings.Index(fieldName, "."); dotIdx > 0 {
-				fieldName = fieldName[:dotIdx]
-			}
-
-			// Build a descriptive message based on the operation type
-			var msg string
-			switch conflict.Operation {
-			case "conflict":
-				msg = fmt.Sprintf("field %q violates monotonic constraint (type change: %v)", fieldName, conflict.Value)
-			case "extension":
-				msg = fmt.Sprintf("field %q: enum extended with disallowed value(s): %v", fieldName, conflict.Value)
-			default:
-				msg = fmt.Sprintf("field %q: %s violation at %s", fieldName, conflict.Operation, conflict.Field)
-			}
+			fieldName, msg := monotonicViolation(conflict)
 
 			checks = append(checks, StemHealthCheck{
 				Name:    "monotonic-violations",
@@ -429,4 +473,60 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 	}
 
 	return &StemHealthResult{Checks: checks}, nil
+}
+
+// monotonicConstraintSuffixes are the schema-level constraints the resolver
+// appends to a field name when it records a conflict. Anything else — a
+// structural path like "structural.subdirs.min_children" — is reported whole.
+var monotonicConstraintSuffixes = []string{"type", "required", "severity", "values"}
+
+// monotonicField splits a conflict path into the name a reader recognises and
+// the constraint that was loosened.
+//
+// "estado.required" answers ("estado", "required"): the reader looks for the
+// field they wrote. "structural.subdirs.min_children" answers itself with an
+// empty constraint, because truncating it at the first dot rendered both
+// subdir bounds as the single field "structural" and made them
+// indistinguishable in the report.
+func monotonicField(path string) (field, constraint string) {
+	dotIdx := strings.LastIndex(path, ".")
+	if dotIdx <= 0 {
+		return path, ""
+	}
+	suffix := path[dotIdx+1:]
+	if slices.Contains(monotonicConstraintSuffixes, suffix) {
+		return path[:dotIdx], suffix
+	}
+	return path, ""
+}
+
+// monotonicViolation renders a resolver conflict as a field name and a message
+// that names the category it belongs to.
+//
+// The resolver reports five distinct loosenings — type widening, required
+// loosening, severity loosening, enum extension and structural loosening — but
+// four of them share Operation "conflict". Discriminating on Operation alone
+// labelled all four "type change"; the constraint suffix is what tells them
+// apart.
+func monotonicViolation(conflict LayerConstraint) (field, message string) {
+	field, constraint := monotonicField(conflict.Field)
+
+	if conflict.Operation == "extension" {
+		return field, fmt.Sprintf("field %q: enum extended with disallowed value(s): %v", field, conflict.Value)
+	}
+	if conflict.Operation != "conflict" {
+		return field, fmt.Sprintf("field %q: %s violation at %s", field, conflict.Operation, conflict.Field)
+	}
+
+	switch constraint {
+	case "type":
+		return field, fmt.Sprintf("field %q widens type: %v", field, conflict.Value)
+	case "required":
+		return field, fmt.Sprintf("field %q loosens required: %v", field, conflict.Value)
+	case "severity":
+		return field, fmt.Sprintf("field %q loosens severity: %v", field, conflict.Value)
+	case "values":
+		return field, fmt.Sprintf("field %q narrows enum incompatibly: %v", field, conflict.Value)
+	}
+	return field, fmt.Sprintf("constraint %q loosens the parent constraint: %v", field, conflict.Value)
 }

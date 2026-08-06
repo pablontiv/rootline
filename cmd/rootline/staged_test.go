@@ -46,8 +46,20 @@ func TestValidateStagedNoFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error with empty staging area, got: %v", err)
 	}
-	if out != "" {
-		t.Fatalf("expected empty output, got: %s", out)
+
+	// An empty index is still a validated corpus of size zero. Writing nothing
+	// breaks `rootline validate --staged | jq -e '.summary.invalid == 0'`,
+	// which is exactly the pre-commit hook this flag exists for.
+	env := decodeEnvelope(t, out)
+	if env["kind"] != "rootline/validate-batch" {
+		t.Errorf("kind = %v, want rootline/validate-batch", env["kind"])
+	}
+	summary := env["summary"].(map[string]any)
+	if summary["total"].(float64) != 0 {
+		t.Errorf("summary.total = %v, want 0", summary["total"])
+	}
+	if summary["invalid"].(float64) != 0 {
+		t.Errorf("summary.invalid = %v, want 0", summary["invalid"])
 	}
 }
 
