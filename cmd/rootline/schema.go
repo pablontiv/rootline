@@ -56,7 +56,13 @@ type SchemaApplyResult struct {
 	// Root is the directory the report's targets were resolved against, named
 	// for the same reason repair apply names it: a root resolved from the wrong
 	// rung produces a run that touches nothing and explains nothing.
-	Root              string             `json:"root,omitempty"`
+	Root string `json:"root,omitempty"`
+	// Complete is the run's own verdict on whether it carried through everything
+	// it accepted: true exactly when Errors is empty, which is also exactly when
+	// the command exits 0. It exists so a stored report artifact, read long after
+	// the exit status is gone, does not require its consumer to re-implement the
+	// rule. Rejections and skips do not make a run incomplete.
+	Complete          bool               `json:"complete"`
 	Applied           []string           `json:"applied"`
 	Skipped           []string           `json:"skipped"`
 	Rejected          []string           `json:"rejected,omitempty"`
@@ -67,6 +73,13 @@ type SchemaApplyResult struct {
 	// ResolvedTargets is populated in dry-run only, where the caller cannot
 	// inspect the outcome on disk and needs to see where each .stem would land.
 	ResolvedTargets *fix.ResolvedTargetsBreakdown `json:"resolved_targets,omitempty"`
+}
+
+// seal records the run's completeness verdict once every phase has had its say,
+// so Complete can never disagree with the fields it summarizes. schema apply
+// performs no post-validation rollback, so Errors is the whole story here.
+func (r *SchemaApplyResult) seal() {
+	r.Complete = len(r.Errors) == 0
 }
 
 // ValidationSummary contains validation results after schema apply.
@@ -361,6 +374,8 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	result.seal()
+
 	// Emit the payload first, then let the run's own outcome decide the exit
 	// status. schema apply performs no post-validation rollback, so it has no
 	// rolled_back[] to count.
@@ -463,6 +478,8 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	// Emit the payload first, then let the run's own outcome decide the exit
 	// status. The analyze path writes through ApplySchemaInferences, which has
 	// no rollback of its own, so there is no rolled_back[] to count.
+	result.seal()
+
 	if outputFormat == "table" {
 		if err := renderSchemaApplyTable(cmd, result); err != nil {
 			return err

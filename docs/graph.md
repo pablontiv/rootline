@@ -114,6 +114,30 @@ When nothing is wrong it prints `No cycles or broken links found.` and exits 0. 
 
 Passing `--output` explicitly alongside `--check` is an error, not a no-op: the flag could never have been honoured, and being told so beats a pipeline discovering it downstream. The default `-o json` is not an explicit request, so `rootline graph docs/ --check` is unaffected. See [Output Formats](output.md).
 
+### Output Ordering
+
+Every ordered array `graph` emits is a function of the graph alone — never of Go map iteration
+or of the order files were scanned — so output is byte-stable across runs and safe to commit,
+diff, or assert on in CI:
+
+| Array | Order |
+|-------|-------|
+| `nodes` | lexical by path |
+| `edges` | `(source, target, line, type)` |
+| `cycles` | each cycle rotated to start at its lexicographically smallest member and closed by repeating it; the list sorted element-wise, shorter first on a tie |
+
+The `--check` numbered enumeration prints the same `cycles` order, so `1:` is always the same
+cycle for the same input.
+
+A cycle through `b.md → c.md → a.md → b.md` therefore always prints as
+`a.md → b.md → c.md → a.md`: rotating a directed cycle does not change which links it contains,
+so one rotation is picked as the printed representation.
+
+**Cycle counting caveat.** Cycle detection reports back edges found over a canonical spanning
+forest, not an exhaustive enumeration of every elementary circuit. Cycles that overlap are
+represented, not individually listed. `cycles` is stable and reproducible, but read its length as
+a count of detected back edges, not as the number of distinct circuits in the graph.
+
 ### With --field (Field Projection)
 
 Extract specific fields from graph results with array-aware dot-path syntax:

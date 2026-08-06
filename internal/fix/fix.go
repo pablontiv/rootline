@@ -284,7 +284,7 @@ func applyExtendEnum(p proposal.Proposal, root string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(stemPath, out, 0644)
+	return WriteFileAtomic(stemPath, out, 0o644)
 }
 
 func addEnumValueToNode(node *yaml.Node, field, value string) error {
@@ -350,7 +350,7 @@ func applyMigrateValue(p proposal.Proposal, root string, recordMap map[string]*e
 			newContent = InsertWikiLinksBeforeHeading(newContent, p.WikiLinks)
 		}
 
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // path comes from a filesystem scan of root, never from a report
+		if err := WriteFileAtomic(absPath, []byte(newContent), 0o644); err != nil {
 			return err
 		}
 	}
@@ -396,7 +396,7 @@ func rewriteRecordFile(root, path string, fm map[string]any) error {
 		return err
 	}
 	newContent := RewriteFrontmatter(string(content), fm)
-	return os.WriteFile(absPath, []byte(newContent), 0644) //nolint:gosec // path comes from a filesystem scan of root, never from a report
+	return WriteFileAtomic(absPath, []byte(newContent), 0o644)
 }
 
 // applySetSection rewrites a named section of each target document. Both the
@@ -441,7 +441,7 @@ func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Rec
 					content += "\n"
 				}
 				content += "\n" + heading + "\n\n" + newValue + "\n"
-				if err := os.WriteFile(absPath, []byte(content), 0644); err != nil { //nolint:gosec // absPath is the path ContainPath validated and confined to root
+				if err := WriteFileAtomic(absPath, []byte(content), 0o644); err != nil {
 					return err
 				}
 				continue
@@ -510,7 +510,7 @@ func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Rec
 			return fmt.Errorf("unknown mode %q for set_section", p.Mode)
 		}
 
-		if err := os.WriteFile(absPath, []byte(content), 0644); err != nil { //nolint:gosec // absPath is the path ContainPath validated and confined to root
+		if err := WriteFileAtomic(absPath, []byte(content), 0o644); err != nil {
 			return err
 		}
 	}
@@ -525,7 +525,7 @@ func applyCorrectLink(p proposal.Proposal, root string) error {
 			return err
 		}
 		newContent := strings.Replace(string(content), p.From, p.To, 1)
-		if err := os.WriteFile(absPath, []byte(newContent), 0644); err != nil { //nolint:gosec // path comes from a filesystem scan of root, never from a report
+		if err := WriteFileAtomic(absPath, []byte(newContent), 0o644); err != nil {
 			return err
 		}
 	}
@@ -579,7 +579,7 @@ func removeStemSchemaField(stemPath, fieldName string) error {
 				if marshalErr != nil {
 					return marshalErr
 				}
-				return os.WriteFile(stemPath, out, 0644)
+				return WriteFileAtomic(stemPath, out, 0o644)
 			}
 		}
 
@@ -635,5 +635,5 @@ func addAggregateToStem(stemPath, fieldName, expr string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(stemPath, out, 0644)
+	return WriteFileAtomic(stemPath, out, 0o644)
 }
