@@ -231,6 +231,20 @@ func TestInsertWikiLinksNoHeading(t *testing.T) {
 	}
 }
 
+func TestInsertWikiLinksBeforeHeading_InsertsOnlyMissingLinks(t *testing.T) {
+	content := "# Title\n\n[[blocks:T001]]\nSee [[blocks:T003]] inline.\n\n## Context\n\nBody\n"
+	links := []string{"[[blocks:T001]]", "[[blocks:T002]]", "[[blocks:T002]]", "[[blocks:T003]]"}
+	want := "# Title\n\n[[blocks:T001]]\nSee [[blocks:T003]] inline.\n\n[[blocks:T002]]\n[[blocks:T003]]\n\n## Context\n\nBody\n"
+
+	got := InsertWikiLinksBeforeHeading(content, links)
+	if got != want {
+		t.Fatalf("InsertWikiLinksBeforeHeading() = %q, want %q", got, want)
+	}
+	if again := InsertWikiLinksBeforeHeading(got, links); again != got {
+		t.Fatalf("replay changed bytes:\nfirst: %q\nagain: %q", got, again)
+	}
+}
+
 // --- ApplyFixes ---
 
 func TestApplyFixes_MissingRequired(t *testing.T) {

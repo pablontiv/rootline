@@ -229,16 +229,45 @@ func ClosestMatch(s string, candidates []string) string {
 	return fuzzy.Match(s, candidates)
 }
 
-// InsertWikiLinksBeforeHeading inserts wiki-links before the first ## heading.
+// InsertWikiLinksBeforeHeading inserts missing standalone wiki-link lines before the first ## heading.
 func InsertWikiLinksBeforeHeading(content string, links []string) string {
-	linkBlock := strings.Join(links, "\n") + "\n\n"
-	// Find the first ## heading.
+	missing := missingStandaloneLinks(content, links)
+	if len(missing) == 0 {
+		return content
+	}
+
+	linkBlock := strings.Join(missing, "\n") + "\n\n"
 	idx := strings.Index(content, "\n## ")
 	if idx >= 0 {
 		return content[:idx+1] + linkBlock + content[idx+1:]
 	}
-	// If no ## heading, append at end.
 	return content + "\n" + linkBlock
+}
+
+func missingStandaloneLinks(content string, links []string) []string {
+	requested := make([]string, 0, len(links))
+	seenRequest := make(map[string]bool, len(links))
+	for _, link := range links {
+		if seenRequest[link] {
+			continue
+		}
+		seenRequest[link] = true
+		requested = append(requested, link)
+	}
+
+	existing := make(map[string]bool)
+	for _, line := range strings.Split(content, "\n") {
+		existing[strings.TrimSpace(line)] = true
+	}
+
+	missing := make([]string, 0, len(requested))
+	for _, link := range requested {
+		if existing[link] {
+			continue
+		}
+		missing = append(missing, link)
+	}
+	return missing
 }
 
 // ApplySchemaProposals applies schema-surface proposals (extend_enum, remove_stem_field)
@@ -418,6 +447,10 @@ func rewriteRecordFile(root, path string, fm map[string]any) error {
 // itself rather than trusting the caller to have done so; policy carries the
 // caller's trust model for absolute paths.
 func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Record, policy ContainmentPolicy) error {
+	return applySetSectionWithWrite(p, root, policy, true)
+}
+
+func applySetSectionWithWrite(p proposal.Proposal, root string, policy ContainmentPolicy, write bool) error {
 	for _, relPath := range p.Paths {
 		absPath, err := ContainPath(root, relPath, policy)
 		if err != nil {
@@ -428,107 +461,95 @@ func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Rec
 		if err != nil {
 			return err
 		}
-		content := string(data)
-
-		heading := p.Heading
-		newValue := strings.TrimRight(p.Value, "\n")
-
-		// Find the heading. We look for "\n<heading>\n" to anchor to a line boundary.
-		// Also handle heading at the very start of file (no leading newline).
-		headingEnd := -1   // byte offset just after the heading line's trailing newline
-		var sectionEnd int // byte offset where the section content ends
-
-		searchFor := "\n" + heading + "\n"
-		idx := strings.Index(content, searchFor)
-		if idx >= 0 {
-			// headingEnd = position right after the heading line's newline
-			headingEnd = idx + len(searchFor)
-		} else if strings.HasPrefix(content, heading+"\n") {
-			// Heading is the very first line of the file
-			headingEnd = len(heading) + 1
+		content, err := transformSetSection(string(data), p, relPath)
+		if err != nil {
+			return err
 		}
-
-		if headingEnd == -1 {
-			if p.Mode == "create" {
-				// Append new section at EOF
-				if !strings.HasSuffix(content, "\n") {
-					content += "\n"
-				}
-				content += "\n" + heading + "\n\n" + newValue + "\n"
-				if err := fsx.WriteFileAtomic(absPath, []byte(content), newFileMode); err != nil {
-					return err
-				}
-				continue
-			}
-			return fmt.Errorf("section %q not found in %s", heading, relPath)
+		if !write {
+			continue
 		}
-
-		// Determine heading level (count leading '#' chars)
-		headingLevel := 0
-		for _, ch := range heading {
-			if ch == '#' {
-				headingLevel++
-			} else {
-				break
-			}
-		}
-
-		// Find section end: next heading of same or higher level (fewer or equal '#')
-		sectionEnd = len(content)
-		remaining := content[headingEnd:]
-		offset := headingEnd
-		for len(remaining) > 0 {
-			lineEnd := strings.Index(remaining, "\n")
-			var line string
-			var advance int
-			if lineEnd == -1 {
-				line = remaining
-				advance = len(remaining)
-				remaining = ""
-			} else {
-				line = remaining[:lineEnd]
-				advance = lineEnd + 1
-				remaining = remaining[lineEnd+1:]
-			}
-
-			if len(line) > 0 && line[0] == '#' {
-				level := 0
-				for _, ch := range line {
-					if ch == '#' {
-						level++
-					} else {
-						break
-					}
-				}
-				if level > 0 && level <= headingLevel {
-					sectionEnd = offset
-					break
-				}
-			}
-			offset += advance
-		}
-
-		switch p.Mode {
-		case "replace", "":
-			// Keep heading line, replace section body (headingEnd..sectionEnd)
-			content = content[:headingEnd] + "\n" + newValue + "\n" + content[sectionEnd:]
-		case "append":
-			// Keep existing body, append new value
-			existingBody := strings.TrimRight(content[headingEnd:sectionEnd], "\n\r ")
-			content = content[:headingEnd] + existingBody + "\n\n" + newValue + "\n" + content[sectionEnd:]
-		case "create":
-			// Heading found — treat like append (section already exists)
-			existingBody := strings.TrimRight(content[headingEnd:sectionEnd], "\n\r ")
-			content = content[:headingEnd] + existingBody + "\n\n" + newValue + "\n" + content[sectionEnd:]
-		default:
-			return fmt.Errorf("unknown mode %q for set_section", p.Mode)
-		}
-
 		if err := fsx.WriteFileAtomic(absPath, []byte(content), newFileMode); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func transformSetSection(content string, p proposal.Proposal, relPath string) (string, error) {
+	heading := p.Heading
+	newValue := strings.TrimRight(p.Value, "\n")
+
+	headingEnd := -1
+	searchFor := "\n" + heading + "\n"
+	idx := strings.Index(content, searchFor)
+	if idx >= 0 {
+		headingEnd = idx + len(searchFor)
+	} else if strings.HasPrefix(content, heading+"\n") {
+		headingEnd = len(heading) + 1
+	}
+
+	if headingEnd == -1 {
+		if p.Mode == "create" {
+			if !strings.HasSuffix(content, "\n") {
+				content += "\n"
+			}
+			return content + "\n" + heading + "\n\n" + newValue + "\n", nil
+		}
+		return "", fmt.Errorf("section %q not found in %s", heading, relPath)
+	}
+
+	headingLevel := 0
+	for _, ch := range heading {
+		if ch == '#' {
+			headingLevel++
+		} else {
+			break
+		}
+	}
+
+	sectionEnd := len(content)
+	remaining := content[headingEnd:]
+	offset := headingEnd
+	for len(remaining) > 0 {
+		lineEnd := strings.Index(remaining, "\n")
+		var line string
+		var advance int
+		if lineEnd == -1 {
+			line = remaining
+			advance = len(remaining)
+			remaining = ""
+		} else {
+			line = remaining[:lineEnd]
+			advance = lineEnd + 1
+			remaining = remaining[lineEnd+1:]
+		}
+
+		if len(line) > 0 && line[0] == '#' {
+			level := 0
+			for _, ch := range line {
+				if ch == '#' {
+					level++
+				} else {
+					break
+				}
+			}
+			if level > 0 && level <= headingLevel {
+				sectionEnd = offset
+				break
+			}
+		}
+		offset += advance
+	}
+
+	switch p.Mode {
+	case "replace", "":
+		return content[:headingEnd] + "\n" + newValue + "\n" + content[sectionEnd:], nil
+	case "append", "create":
+		existingBody := strings.TrimRight(content[headingEnd:sectionEnd], "\n\r ")
+		return content[:headingEnd] + existingBody + "\n\n" + newValue + "\n" + content[sectionEnd:], nil
+	default:
+		return "", fmt.Errorf("unknown mode %q for set_section", p.Mode)
+	}
 }
 
 func applyCorrectLink(p proposal.Proposal, root string) error {

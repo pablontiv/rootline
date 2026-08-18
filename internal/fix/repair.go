@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -162,11 +163,6 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string, fillMi
 
 	// Third pass: classify and apply proposals.
 	for _, p := range proposals {
-		// A proposal is applied whole or not at all, so one bad path discards it.
-		if hasRejectedPath(p, rejected) {
-			continue
-		}
-
 		// A value the engine picked because the schema declared none stays out
 		// of the document unless the caller explicitly asked for it.
 		if p.Type == proposal.AddField && proposal.IsEngineChosen(p.ValueSource) && !fillMissing {
@@ -179,6 +175,11 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string, fillMi
 		surf := p.Surface()
 		if surf != proposal.SurfaceRepair {
 			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: %s (surface=%s)", p.Field, p.Description, surf))
+			continue
+		}
+
+		p.Paths = acceptedProposalPaths(p, accepted)
+		if len(p.Paths) == 0 {
 			continue
 		}
 
@@ -377,14 +378,26 @@ func containProposalPaths(proposals []proposal.Proposal, root string, result *Re
 	return accepted, rejected
 }
 
-// hasRejectedPath reports whether any path of the proposal failed containment.
-func hasRejectedPath(p proposal.Proposal, rejected map[string]string) bool {
+func acceptedProposalPaths(p proposal.Proposal, accepted map[string]string) []string {
+	paths := make([]string, 0, len(p.Paths))
 	for _, path := range p.Paths {
-		if _, bad := rejected[path]; bad {
-			return true
+		if _, ok := accepted[path]; ok {
+			paths = append(paths, path)
 		}
 	}
-	return false
+	return paths
+}
+
+func cloneFrontmatter(fm map[string]any) map[string]any {
+	clone := make(map[string]any, len(fm))
+	for k, v := range fm {
+		clone[k] = v
+	}
+	return clone
+}
+
+func proposalValueMatches(current any, expected string) bool {
+	return reflect.DeepEqual(current, expected)
 }
 
 // applyRepairCorrectValue updates a field value in a record's frontmatter.
@@ -395,27 +408,41 @@ func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTar
 			continue
 		}
 
-		tgt.record.Frontmatter[p.Field] = p.To
+		current, exists := tgt.record.Frontmatter[p.Field]
+		switch {
+		case exists && proposalValueMatches(current, p.To):
+			result.Skipped = append(result.Skipped,
+				fmt.Sprintf("%s already %q in %s", p.Field, p.To, path))
+			continue
+		case !exists || !proposalValueMatches(current, p.From):
+			result.Rejected = append(result.Rejected,
+				fmt.Sprintf("%s in %s is not expected value %q", p.Field, path, p.From))
+			continue
+		}
+
+		candidate := cloneFrontmatter(tgt.record.Frontmatter)
+		candidate[p.Field] = p.To
 
 		if dryRun {
 			result.Changed = append(result.Changed,
 				fmt.Sprintf("correct %s: %q->%q in %s", p.Field, p.From, p.To, path))
+			tgt.record.Frontmatter = candidate
 			continue
 		}
 
-		// Read file, update frontmatter, write back.
 		content, err := os.ReadFile(tgt.abs)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
 
-		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
+		newContent := RewriteFrontmatter(string(content), candidate)
 		if p.Type == proposal.MigrateValue && len(p.WikiLinks) > 0 {
 			newContent = InsertWikiLinksBeforeHeading(newContent, p.WikiLinks)
 		}
 		if err := fsx.WriteFileAtomic(tgt.abs, []byte(newContent), newFileMode); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
+		tgt.record.Frontmatter = candidate
 		tgt.written = true
 
 		result.recordChange(path,
@@ -437,24 +464,38 @@ func applyRepairAddField(p *proposal.Proposal, targets map[string]*repairTarget,
 			continue
 		}
 
-		tgt.record.Frontmatter[p.Field] = value
+		current, exists := tgt.record.Frontmatter[p.Field]
+		switch {
+		case exists && proposalValueMatches(current, value):
+			result.Skipped = append(result.Skipped,
+				fmt.Sprintf("%s already %q in %s", p.Field, value, path))
+			continue
+		case exists:
+			result.Rejected = append(result.Rejected,
+				fmt.Sprintf("%s in %s already has a conflicting value", p.Field, path))
+			continue
+		}
+
+		candidate := cloneFrontmatter(tgt.record.Frontmatter)
+		candidate[p.Field] = value
 
 		if dryRun {
 			result.Changed = append(result.Changed,
 				fmt.Sprintf("add %s=%q in %s", p.Field, value, path))
+			tgt.record.Frontmatter = candidate
 			continue
 		}
 
-		// Read file, update frontmatter, write back.
 		content, err := os.ReadFile(tgt.abs)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
 
-		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
+		newContent := RewriteFrontmatter(string(content), candidate)
 		if err := fsx.WriteFileAtomic(tgt.abs, []byte(newContent), newFileMode); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
+		tgt.record.Frontmatter = candidate
 		tgt.written = true
 
 		result.recordChange(path,
@@ -506,10 +547,8 @@ func applyRepairSetSection(p *proposal.Proposal, root string, result *RepairResu
 		mode = "replace"
 	}
 
-	if !dryRun {
-		if err := applySetSection(*p, root, nil, PolicyRejectAbsolute); err != nil {
-			return err
-		}
+	if err := applySetSectionWithWrite(*p, root, PolicyRejectAbsolute, !dryRun); err != nil {
+		return err
 	}
 
 	// Recorded in both modes: an applied section write used to be invisible in
