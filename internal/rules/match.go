@@ -52,6 +52,20 @@ func FilterSchemaByMatch(schema map[string]*SchemaField, recordPath string) map[
 	return result
 }
 
+func filterValueSchemaByMatch(schema map[string]SchemaField, recordPath string) map[string]SchemaField {
+	ptrSchema := make(map[string]*SchemaField, len(schema))
+	for name, field := range schema {
+		field := field
+		ptrSchema[name] = &field
+	}
+	filtered := FilterSchemaByMatch(ptrSchema, recordPath)
+	result := make(map[string]SchemaField, len(filtered))
+	for name, field := range filtered {
+		result[name] = *field
+	}
+	return result
+}
+
 // pathComponents splits a path into its directory/file name components.
 func pathComponents(recordPath string) []string {
 	cleaned := filepath.Clean(recordPath)

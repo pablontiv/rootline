@@ -98,15 +98,8 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 
 		// required: true → field must exist
 		if field.Required && !exists {
-			// Layer 1: Skip for aggregate-computed fields on index files.
-			if _, hasAggregate := effective.Aggregate[name]; hasAggregate && IsIndexFile(record.Path, effective) {
+			if !requiredCheckApplies(record, effective, name, field) {
 				continue
-			}
-			// Layer 2: Skip if excludes.match pattern matches the record path.
-			if field.Excludes != nil && field.Excludes.Match != "" {
-				if matched, _ := filepath.Match(field.Excludes.Match, record.Path); matched {
-					continue
-				}
 			}
 			msg := fmt.Sprintf("required field %q is missing", name)
 			suggestion := ""
