@@ -180,8 +180,9 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		return nil, ctx.Err()
 	}
 
-	// Check 3: Inheritance consistency (child doesn't change type of inherited field)
-	for sf, stem := range parsedStems {
+	// Check 3: Inheritance type consistency through the shared compatibility algebra.
+	for _, sf := range sortedStemPaths(parsedStems) {
+		stem := parsedStems[sf]
 		relPath, _ := filepath.Rel(absRoot, sf)
 		dir := filepath.Dir(sf)
 		parentEntries, walkErr := WalkUp(dir)
@@ -192,17 +193,23 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		if parentMerged == nil {
 			continue
 		}
-		for fieldName, childField := range stem.Schema {
-			if parentField, exists := parentMerged.Schema[fieldName]; exists {
-				if childField.Type != "" && parentField.Type != "" && childField.Type != parentField.Type {
-					checks = append(checks, StemHealthCheck{
-						Name:    "type-consistency",
-						Status:  "fail",
-						Message: fmt.Sprintf("field %q changes type from %q to %q (inherited from parent)", fieldName, parentField.Type, childField.Type),
-						Path:    relPath,
-						Field:   fieldName,
-					})
+		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
+			childField := stem.Schema[fieldName]
+			parentField, exists := parentMerged.Schema[fieldName]
+			if !exists {
+				continue
+			}
+			for _, issue := range CheckFieldCompatibility(parentField, childField) {
+				if issue.Constraint != "type" {
+					continue
 				}
+				checks = append(checks, StemHealthCheck{
+					Name:    "type-consistency",
+					Status:  "fail",
+					Message: issue.Message,
+					Path:    relPath,
+					Field:   fieldName,
+				})
 			}
 		}
 	}
@@ -249,8 +256,10 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		return nil, ctx.Err()
 	}
 
-	// Check 6: Child redefines parent field (informative warning)
-	for sf, stem := range parsedStems {
+	// Check 6: Child redefines parent field (informative warning). Valid
+	// type/value narrowings are accepted without generic override noise.
+	for _, sf := range sortedStemPaths(parsedStems) {
+		stem := parsedStems[sf]
 		relPath, _ := filepath.Rel(absRoot, sf)
 		dir := filepath.Dir(sf)
 		parentEntries, walkErr := WalkUp(dir)
@@ -261,16 +270,19 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		if parentMerged == nil {
 			continue
 		}
-		for fieldName := range stem.Schema {
-			if _, exists := parentMerged.Schema[fieldName]; exists {
-				checks = append(checks, StemHealthCheck{
-					Name:    "field-override",
-					Status:  "warn",
-					Message: fmt.Sprintf("field %q overrides parent definition", fieldName),
-					Path:    relPath,
-					Field:   fieldName,
-				})
+		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
+			childField := stem.Schema[fieldName]
+			parentField, exists := parentMerged.Schema[fieldName]
+			if !exists || validNarrowingOverride(parentField, childField) || len(CheckFieldCompatibility(parentField, childField)) > 0 {
+				continue
 			}
+			checks = append(checks, StemHealthCheck{
+				Name:    "field-override",
+				Status:  "warn",
+				Message: fmt.Sprintf("field %q overrides parent definition", fieldName),
+				Path:    relPath,
+				Field:   fieldName,
+			})
 		}
 	}
 
@@ -368,19 +380,31 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 	}
 
 	// Check 11: Monotonic constraint violations
-	for sf := range parsedStems {
-		relPath, _ := filepath.Rel(absRoot, sf)
+	emittedMonotonic := make(map[layerConflictIdentity]struct{})
+	for _, sf := range sortedStemPaths(parsedStems) {
 		dir := filepath.Dir(sf)
 
-		// Resolve layered constraints with monotonic=true for this directory
-		lr, resolveErr := ResolveLayered(dir, absRoot, true)
+		// Resolve layered constraints for this directory.
+		lr, resolveErr := ResolveLayered(dir, absRoot)
 		if resolveErr != nil {
 			continue
 		}
 
-		// For each conflict, emit a diagnostic error
+		// For each conflict, emit a diagnostic error only from the .stem that
+		// owns the violation. Descendant resolutions include ancestor conflicts
+		// in their chain, but those must not be re-reported at descendant paths.
 		for _, conflict := range lr.Conflicts {
+			if conflict.StemPath != sf || monotonicConflictIsType(conflict) {
+				continue
+			}
+			identity := layerConflictIdentity{StemPath: conflict.StemPath, Field: conflict.Field, Operation: conflict.Operation}
+			if _, exists := emittedMonotonic[identity]; exists {
+				continue
+			}
+			emittedMonotonic[identity] = struct{}{}
+
 			fieldName, msg := monotonicViolation(conflict)
+			relPath, _ := filepath.Rel(absRoot, conflict.StemPath)
 
 			checks = append(checks, StemHealthCheck{
 				Name:    "monotonic-violations",
@@ -463,22 +487,13 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 }
 
 func fieldDeclarationChecks(absRoot string, parsedStems map[string]*StemFile) []StemHealthCheck {
-	stemPaths := make([]string, 0, len(parsedStems))
-	for stemPath := range parsedStems {
-		stemPaths = append(stemPaths, stemPath)
-	}
-	slices.Sort(stemPaths)
+	stemPaths := sortedStemPaths(parsedStems)
 
 	var checks []StemHealthCheck
 	for _, stemPath := range stemPaths {
 		stem := parsedStems[stemPath]
 		relPath, _ := filepath.Rel(absRoot, stemPath)
-		fieldNames := make([]string, 0, len(stem.Schema))
-		for fieldName := range stem.Schema {
-			fieldNames = append(fieldNames, fieldName)
-		}
-		slices.Sort(fieldNames)
-		for _, fieldName := range fieldNames {
+		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
 			field := stem.Schema[fieldName]
 			for _, contractIssue := range ValidateFieldDeclaration(fieldName, field) {
 				checks = append(checks, StemHealthCheck{
@@ -494,10 +509,40 @@ func fieldDeclarationChecks(absRoot string, parsedStems map[string]*StemFile) []
 	return checks
 }
 
+func sortedStemPaths(parsedStems map[string]*StemFile) []string {
+	stemPaths := make([]string, 0, len(parsedStems))
+	for stemPath := range parsedStems {
+		stemPaths = append(stemPaths, stemPath)
+	}
+	slices.Sort(stemPaths)
+	return stemPaths
+}
+
+func validNarrowingOverride(parentField, childField SchemaField) bool {
+	if len(CheckFieldCompatibility(parentField, childField)) != 0 {
+		return false
+	}
+	if parentField.Type == "string" && childField.Type == "enum" {
+		return true
+	}
+	return parentField.Type == "enum" && childField.Type == "enum" && len(childField.Values) > 0 && len(parentField.Values) > 0
+}
+
+type layerConflictIdentity struct {
+	StemPath  string
+	Field     string
+	Operation string
+}
+
+func monotonicConflictIsType(conflict LayerConstraint) bool {
+	_, constraint := monotonicField(conflict.Field)
+	return constraint == "type"
+}
+
 // monotonicConstraintSuffixes are the schema-level constraints the resolver
 // appends to a field name when it records a conflict. Anything else — a
 // structural path like "structural.subdirs.min_children" — is reported whole.
-var monotonicConstraintSuffixes = []string{"type", "required", "severity", "values"}
+var monotonicConstraintSuffixes = []string{"type", "source", "required", "severity", "values"}
 
 // monotonicField splits a conflict path into the name a reader recognises and
 // the constraint that was loosened.
@@ -540,6 +585,8 @@ func monotonicViolation(conflict LayerConstraint) (field, message string) {
 	switch constraint {
 	case "type":
 		return field, fmt.Sprintf("field %q widens type: %v", field, conflict.Value)
+	case "source":
+		return field, fmt.Sprintf("field %q changes source: %v", field, conflict.Value)
 	case "required":
 		return field, fmt.Sprintf("field %q loosens required: %v", field, conflict.Value)
 	case "severity":
