@@ -434,36 +434,48 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	stemPath := closestStem.Path
 
 	// Separate schema-modifying inferences from data-correction inferences.
-	// Schema-modifying: enum_values, required_field, constant_field, field_type, untyped_field, sequence_incomplete
+	// Schema-modifying: enum_values, required_field, constant_field, field_type, untyped_field, sequence_incomplete,
+	// required_section, optional_section.
 	// Data-correction: migrate_value, correct_value, add_field (these go to repair apply, not here)
 	// Routing filter: emits only schema-modifying types. Drift guard in apply.go:default catches divergence.
 	var schemaInferences []infer.ReportInference
 	for _, cat := range report.Categories {
 		for _, inf := range cat.Inferences {
 			switch inf.Type {
-			case "enum_values", "required_field", "constant_field", "field_type", "untyped_field", "sequence_incomplete":
+			case "enum_values", "required_field", "constant_field", "field_type", "untyped_field", "sequence_incomplete", "required_section", "optional_section":
 				schemaInferences = append(schemaInferences, inf)
 			}
 		}
 	}
 
-	// Apply schema modifications to .stem
-	schemaResult, err := infer.ApplySchemaInferences(stemPath, schemaInferences, schemaApplyDryRun)
-	if err != nil {
-		return fmt.Errorf("applying schema: %w", err)
-	}
-
-	// Format result as SchemaApplyResult
 	result := &SchemaApplyResult{
 		Version:  1,
 		Kind:     "rootline/schema-apply",
 		Root:     root,
 		DryRun:   schemaApplyDryRun,
-		Applied:  schemaResult.Applied,
-		Skipped:  schemaResult.Skipped,
-		Rejected: schemaResult.Rejected,
+		Applied:  []string{},
+		Skipped:  []string{},
+		Rejected: []string{},
 		Errors:   []string{},
 	}
+
+	// Apply schema modifications to .stem
+	schemaResult, err := infer.ApplySchemaInferences(stemPath, schemaInferences, schemaApplyDryRun)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("applying schema: %v", err))
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
+	}
+	result.Applied = schemaResult.Applied
+	result.Skipped = schemaResult.Skipped
+	result.Rejected = schemaResult.Rejected
 
 	// If not dry-run, run validation.
 	if !schemaApplyDryRun {
@@ -629,6 +641,22 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 func schemaToInferences(stem *rules.StemFile) []infer.Inference {
 	var inferences []infer.Inference
 	for fieldName, sf := range stem.Schema {
+		if sf.Extract != "" && sf.Type == "string" {
+			if source, err := extract.ParseBodySource(sf.Extract); err == nil && source.Kind == extract.BodySourceSection {
+				if canonical, err := extract.CanonicalSectionSource(source.Heading); err == nil && canonical == sf.Extract {
+					infType := "optional_section"
+					if sf.Required {
+						infType = "required_section"
+					}
+					inferences = append(inferences, infer.Inference{
+						Type:            infType,
+						Field:           fieldName,
+						SourceDirective: sf.Extract,
+					})
+					continue
+				}
+			}
+		}
 		// Create inferences based on field properties
 		if sf.Required {
 			inferences = append(inferences, infer.Inference{

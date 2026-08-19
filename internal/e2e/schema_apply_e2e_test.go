@@ -85,6 +85,46 @@ func TestApply_SchemaApply_DryRun(t *testing.T) {
 	}
 }
 
+func TestApply_SchemaApply_SectionSourceRoundTrip(t *testing.T) {
+	root := setupProject(t, map[string]string{
+		".stem":   "version: 2\nschema: {}\n",
+		"doc1.md": "---\ntitle: A\n---\n# A\n\n## Notes\n\nAlpha\n",
+		"doc2.md": "---\ntitle: B\n---\n# B\n\n## Notes\n\nBeta\n",
+	})
+
+	report := runAnalyze(t, root)
+	var allInferences []infer.ReportInference
+	for _, cat := range report.Categories {
+		for _, inf := range cat.Inferences {
+			if inf.Type == "required_section" || inf.Type == "optional_section" {
+				allInferences = append(allInferences, inf)
+			}
+		}
+	}
+
+	entries, err := rules.WalkUp(root)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no stem found: %v", err)
+	}
+	result, err := infer.ApplySchemaInferences(entries[0].Path, allInferences, false)
+	if err != nil {
+		t.Fatalf("apply schema inferences: %v", err)
+	}
+	if len(result.Applied) == 0 {
+		t.Fatalf("expected section schema application from report, got %+v", result)
+	}
+
+	stem, err := rules.ParseStem(entries[0].Path, mustReadE2EFile(t, entries[0].Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	field := stem.Schema["notes"]
+	if field.Type != "string" || field.Extract != `body.section["## Notes"]` || !field.Required {
+		t.Fatalf("section field did not round-trip from analyze to apply: %+v", field)
+	}
+	validateAllRecords(t, root)
+}
+
 func TestApply_RequiresAgent_Skipped(t *testing.T) {
 	root := setupProject(t, map[string]string{
 		".stem":   "version: 2\nschema:\n  estado:\n    type: string\n",
@@ -117,6 +157,15 @@ func TestApply_RequiresAgent_Skipped(t *testing.T) {
 }
 
 // validateAllRecords runs validation against all records in the root directory.
+func mustReadE2EFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
 func validateAllRecords(t *testing.T, root string) {
 	t.Helper()
 	entries, err := rules.WalkUp(root)

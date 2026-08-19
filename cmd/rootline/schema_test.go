@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/infer"
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 func executeSchemaPropose(t *testing.T, args ...string) (string, error) {
@@ -85,7 +86,7 @@ func TestSchemaProposeIncremental(t *testing.T) {
 		"a.md":  "---\ntitulo: Recipe A\ntipo: task\n---\n# Doc\n",
 		"b.md":  "---\ntitulo: Recipe B\ntipo: epic\n---\n# Doc\n",
 		"c.md":  "---\ntitulo: Recipe C\ntipo: task\n---\n# Doc\n",
-		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  titulo:\n    type: enum\n    required: true\n    values: [Recipe A, Recipe B, Recipe C]\n  tipo:\n    type: enum\n    required: true\n    values: [task, epic]\n  doc:\n    type: string\n    required: true\n",
+		".stem": "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  titulo:\n    type: enum\n    required: true\n    values: [Recipe A, Recipe B, Recipe C]\n  tipo:\n    type: enum\n    required: true\n    values: [task, epic]\n  doc:\n    type: string\n    source: 'body.section[\"# Doc\"]'\n    required: true\n",
 	})
 
 	// Get initial stem content and mtime
@@ -1281,6 +1282,138 @@ func TestSchemaApplyWritesProposedPatchVerbatim(t *testing.T) {
 	// The regression this guards: the old path emitted untyped shells.
 	if strings.Contains(written, "type: string") && !strings.Contains(proposed, "type: string") {
 		t.Error("written schema was re-derived rather than taken from the proposal")
+	}
+}
+
+func TestSchemaProposeIncrementalSectionConversionPreservesSource(t *testing.T) {
+	source := `body.section["## Notes"]`
+	got := schemaToInferences(&rules.StemFile{Schema: map[string]rules.SchemaField{
+		"notes":   {Type: "string", Required: true, Extract: source},
+		"summary": {Type: "string", Extract: `body.section["## Summary"]`},
+	}})
+
+	seen := map[string]infer.Inference{}
+	for _, inf := range got {
+		seen[inf.Field] = inf
+	}
+	if inf := seen["notes"]; inf.Type != "required_section" || inf.SourceDirective != source {
+		t.Fatalf("required section conversion dropped source: %+v (all %+v)", inf, got)
+	}
+	if inf := seen["summary"]; inf.Type != "optional_section" || inf.SourceDirective != `body.section["## Summary"]` {
+		t.Fatalf("optional section conversion dropped source: %+v (all %+v)", inf, got)
+	}
+}
+
+func TestSchemaProposeIncrementalSectionConversionFallsThroughNoncanonicalSources(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		source string
+	}{
+		{name: "h1", source: "body.h1"},
+		{name: "unknown", source: "body.title"},
+		{name: "malformed", source: `body.section["## Notes"`},
+		{name: "noncanonical", source: "body.section[`## Notes`]"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := schemaToInferences(&rules.StemFile{Schema: map[string]rules.SchemaField{
+				"title": {Type: "string", Required: true, Extract: tt.source},
+			}})
+			seen := map[string]bool{}
+			for _, inf := range got {
+				seen[inf.Type] = true
+				if inf.Type == "required_section" || inf.Type == "optional_section" {
+					t.Fatalf("%s source was misclassified as section: %+v", tt.source, got)
+				}
+			}
+			if !seen["required_field"] || !seen["field_type"] {
+				t.Fatalf("%s source did not preserve established required/type inference: %+v", tt.source, got)
+			}
+		})
+	}
+}
+
+func TestSchemaProposeApplyValidateSectionCorpus(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		"a.md": "---\ntitle: A\n---\n# A\n\n## Notes\n\nAlpha\n",
+		"b.md": "---\ntitle: B\n---\n# B\n\n## Notes\n\nBeta\n",
+	})
+
+	stdout, err := executeSchemaPropose(t, root)
+	if err != nil {
+		t.Fatalf("schema propose: %v\n%s", err, stdout)
+	}
+	var report SchemaProposalsReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("invalid proposal JSON: %v\n%s", err, stdout)
+	}
+	if len(report.Proposals) != 1 {
+		t.Fatalf("proposals = %+v, want one bootstrap proposal", report.Proposals)
+	}
+	reportPath := filepath.Join(root, "proposals.json")
+	data, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, reportPath, data, 0o644)
+
+	out, err := executeSchemaApply(t, "--report", reportPath)
+	if err != nil {
+		t.Fatalf("schema apply: %v\n%s", err, out)
+	}
+	result := decodeSchemaApplyResult(t, out)
+	if result.ValidationSummary == nil || result.ValidationSummary.TotalFiles != 2 || result.ValidationSummary.ValidFiles != 2 || result.ValidationSummary.InvalidFiles != 0 {
+		t.Fatalf("apply validation summary = %+v, errors=%v", result.ValidationSummary, result.Errors)
+	}
+	stem := string(mustReadFile(t, filepath.Join(root, ".stem")))
+	if !strings.Contains(stem, `source: body.section["## Notes"]`) && !strings.Contains(stem, `source: 'body.section["## Notes"]'`) && !strings.Contains(stem, `source: "body.section[\"## Notes\"]"`) {
+		t.Fatalf("applied stem did not preserve section source:\n%s", stem)
+	}
+}
+
+func TestSchemaProposeApplySectionCollisionLeavesStemUnchanged(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem": "version: 2\nschema:\n  notes:\n    type: string\n    source: 'body.section[\"## Notes\"]'\n",
+		"a.md":  "---\ntitle: A\n---\n# A\n\n### Notes\n\nAlpha\n",
+		"b.md":  "---\ntitle: B\n---\n# B\n\n### Notes\n\nBeta\n",
+	})
+	stemPath := filepath.Join(root, ".stem")
+	before := string(mustReadFile(t, stemPath))
+
+	analyzeOut, err := runCmd(t, "analyze", root)
+	if err != nil {
+		t.Fatalf("analyze: %v\n%s", err, analyzeOut)
+	}
+	reportPath := filepath.Join(root, "analyze.json")
+	mustWriteFile(t, reportPath, []byte(analyzeOut), 0o644)
+
+	out, err := executeSchemaApply(t, "--report", reportPath)
+	if err == nil {
+		t.Fatalf("expected schema apply collision error, got output %s", out)
+	}
+	result := decodeSchemaApplyResult(t, out)
+	if len(result.Errors) != 1 || !strings.Contains(result.Errors[0], "section inference for \"notes\" conflicts") {
+		t.Fatalf("errors = %v, want stable section conflict", result.Errors)
+	}
+	if after := string(mustReadFile(t, stemPath)); after != before {
+		t.Fatalf("collision mutated .stem:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+func TestSchemaProposeSectionCollisionLeavesStemAbsent(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		"a.md": "---\nnotes: frontmatter\n---\n# A\n\n## Notes\n\nAlpha\n",
+		"b.md": "---\nnotes: other\n---\n# B\n\n## Notes\n\nBeta\n",
+	})
+
+	out, err := executeSchemaPropose(t, root)
+	if err == nil {
+		t.Fatalf("expected section/frontmatter collision error, got output %s", out)
+	}
+	if !strings.Contains(err.Error(), "collides with body section source") {
+		t.Fatalf("unexpected collision error: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, ".stem")); !os.IsNotExist(statErr) {
+		t.Fatalf("schema propose created .stem despite collision: %v", statErr)
 	}
 }
 
