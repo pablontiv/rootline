@@ -251,9 +251,18 @@ type SchemaField struct {
 	Excludes      *ExcludeRule      `yaml:"excludes" json:"excludes,omitempty"`
 	Match         *FieldMatch       `yaml:"match" json:"match,omitempty"`
 	RequiredMatch *FieldMatch       `yaml:"-" json:"required_match,omitempty"`
-	// Section fields (type: section)
-	Heading string `yaml:"heading" json:"heading,omitempty"`
-	Ordered *int   `yaml:"ordered" json:"ordered,omitempty"`
+	Heading       string            `yaml:"-" json:"heading,omitempty"`
+	Ordered       *int              `yaml:"-" json:"ordered,omitempty"`
+	declaration   schemaFieldDeclarationMetadata
+}
+
+type schemaFieldDeclarationMetadata struct {
+	TypePresent    bool
+	TypeNull       bool
+	SourcePresent  bool
+	SourceNull     bool
+	HeadingPresent bool
+	OrderedPresent bool
 }
 
 // schemaFieldRaw is the intermediate type for YAML unmarshaling.
@@ -273,6 +282,17 @@ type schemaFieldRaw struct {
 	Ordered  *int         `yaml:"ordered"`
 }
 
+func schemaFieldNodeMap(value *yaml.Node) map[string]*yaml.Node {
+	nodes := make(map[string]*yaml.Node)
+	if value == nil || value.Kind != yaml.MappingNode {
+		return nodes
+	}
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		nodes[value.Content[i].Value] = value.Content[i+1]
+	}
+	return nodes
+}
+
 // UnmarshalYAML implements custom unmarshaling for SchemaField.
 // The "required" field accepts either a bool (required: true) or an object
 // with a match key (required: {match: ["T*"]}).
@@ -282,7 +302,18 @@ func (sf *SchemaField) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 
-	sf.Type = raw.Type
+	nodes := schemaFieldNodeMap(value)
+	sf.declaration = schemaFieldDeclarationMetadata{
+		TypePresent:    nodes["type"] != nil,
+		TypeNull:       nodes["type"] != nil && nodes["type"].Tag == "!!null",
+		SourcePresent:  nodes["source"] != nil,
+		SourceNull:     nodes["source"] != nil && nodes["source"].Tag == "!!null",
+		HeadingPresent: nodes["heading"] != nil,
+		OrderedPresent: nodes["ordered"] != nil,
+	}
+	if node := nodes["type"]; node != nil && node.Tag != "!!null" {
+		sf.Type = raw.Type
+	}
 	sf.Values = raw.Values
 	sf.Default = raw.Default
 	sf.Severity = raw.Severity
