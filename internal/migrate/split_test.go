@@ -22,6 +22,15 @@ func makeHierarchy(rootSchema map[string]rules.SchemaField, levels []infer.Level
 	}
 }
 
+func mustBuildSplitStems(t *testing.T, absTarget string, existing *rules.StemFile, hierarchy *infer.HierarchyResult) SplitResult {
+	t.Helper()
+	result, err := BuildSplitStems(absTarget, existing, hierarchy)
+	if err != nil {
+		t.Fatalf("BuildSplitStems returned error: %v", err)
+	}
+	return result
+}
+
 func TestBuildSplitStems_BasicTwoLevels(t *testing.T) {
 	existing := &rules.StemFile{
 		Version: 2,
@@ -60,7 +69,7 @@ func TestBuildSplitStems_BasicTwoLevels(t *testing.T) {
 		},
 	)
 
-	result := BuildSplitStems("/tmp/test", existing, hierarchy)
+	result := mustBuildSplitStems(t, "/tmp/test", existing, hierarchy)
 
 	if len(result.Stems) == 0 {
 		t.Fatal("expected at least one stem file")
@@ -105,6 +114,74 @@ func TestBuildSplitStems_BasicTwoLevels(t *testing.T) {
 	}
 }
 
+func TestBuildSplitStems_PreservesFieldSource(t *testing.T) {
+	existing := &rules.StemFile{
+		Version: 2,
+		Scope:   rules.Scope{Match: "*.md"},
+		Schema: map[string]rules.SchemaField{
+			"id":    {Type: "sequence", Prefix: "E", Digits: 2},
+			"notes": {Type: "string", Extract: `body.section["## Notes: risks #1"]`, Required: true, Default: "TODO", Severity: "warn"},
+			"title": {Type: "string", Extract: `body.h1`, Match: &rules.FieldMatch{Patterns: []string{"E*"}}},
+		},
+	}
+
+	hierarchy := makeHierarchy(
+		map[string]rules.SchemaField{
+			"notes": {Type: "string"},
+		},
+		[]infer.LevelSchema{
+			{
+				Level:    infer.Level{Prefix: "E", Digits: 2, DirPaths: []string{"E01"}},
+				OnlyHere: map[string]rules.SchemaField{"id": {Type: "sequence", Prefix: "E", Digits: 2}},
+			},
+			{
+				Level:    infer.Level{Prefix: "F", Digits: 2, DirPaths: []string{"E01/F01"}},
+				OnlyHere: map[string]rules.SchemaField{"id": {Type: "sequence", Prefix: "F", Digits: 2}, "title": {Type: "string"}},
+			},
+		},
+	)
+
+	result := mustBuildSplitStems(t, "/tmp/test", existing, hierarchy)
+	if len(result.Stems) < 2 {
+		t.Fatalf("expected root and child stems, got %d", len(result.Stems))
+	}
+
+	root := result.Stems[0]
+	if !strings.Contains(root.Content, `source: 'body.section["## Notes: risks #1"]'`) {
+		t.Fatalf("source lost from root stem:\n%s", root.Content)
+	}
+	if !strings.Contains(root.Content, "required: true") || !strings.Contains(root.Content, "default: TODO") || !strings.Contains(root.Content, "severity: warn") {
+		t.Fatalf("root field attrs were not preserved:\n%s", root.Content)
+	}
+	parsedRoot, err := rules.ParseStem(root.Path, []byte(root.Content))
+	if err != nil {
+		t.Fatalf("root stem did not parse: %v\n%s", err, root.Content)
+	}
+	if got := parsedRoot.Schema["notes"].Extract; got != `body.section["## Notes: risks #1"]` {
+		t.Fatalf("root source = %q", got)
+	}
+
+	var child StemOutput
+	for _, sf := range result.Stems[1:] {
+		if strings.HasSuffix(sf.Path, "E01/.stem") {
+			child = sf
+		}
+	}
+	if child.Content == "" {
+		t.Fatalf("missing child stem in %+v", result.Stems)
+	}
+	if !strings.Contains(child.Content, "source: body.h1") || !strings.Contains(child.Content, `match: "E*"`) {
+		t.Fatalf("child source/match attrs were not preserved:\n%s", child.Content)
+	}
+	parsedChild, err := rules.ParseStem(child.Path, []byte(child.Content))
+	if err != nil {
+		t.Fatalf("child stem did not parse: %v\n%s", err, child.Content)
+	}
+	if got := parsedChild.Schema["title"].Extract; got != `body.h1` {
+		t.Fatalf("child source = %q", got)
+	}
+}
+
 func TestBuildSplitStems_PreservesStructural(t *testing.T) {
 	existing := &rules.StemFile{
 		Version: 2,
@@ -133,7 +210,7 @@ func TestBuildSplitStems_PreservesStructural(t *testing.T) {
 		},
 	)
 
-	result := BuildSplitStems("/tmp/test", existing, hierarchy)
+	result := mustBuildSplitStems(t, "/tmp/test", existing, hierarchy)
 	root := result.Stems[0].Content
 
 	if !strings.Contains(root, "structural:") {
@@ -175,7 +252,7 @@ func TestBuildSplitStems_PreservesLinks(t *testing.T) {
 		},
 	)
 
-	result := BuildSplitStems("/tmp/test", existing, hierarchy)
+	result := mustBuildSplitStems(t, "/tmp/test", existing, hierarchy)
 	root := result.Stems[0].Content
 
 	if !strings.Contains(root, "links:") {
@@ -211,7 +288,7 @@ func TestBuildSplitStems_PreservesDeriveAndAggregate(t *testing.T) {
 		},
 	)
 
-	result := BuildSplitStems("/tmp/test", existing, hierarchy)
+	result := mustBuildSplitStems(t, "/tmp/test", existing, hierarchy)
 	root := result.Stems[0].Content
 
 	if !strings.Contains(root, "derive:") {
@@ -245,7 +322,7 @@ func TestBuildSplitStems_PreservesValidate(t *testing.T) {
 		},
 	)
 
-	result := BuildSplitStems("/tmp/test", existing, hierarchy)
+	result := mustBuildSplitStems(t, "/tmp/test", existing, hierarchy)
 	root := result.Stems[0].Content
 
 	if !strings.Contains(root, "validate:") {
@@ -283,7 +360,7 @@ func TestBuildSplitStems_ChildYAMLHasOnlyLevelFields(t *testing.T) {
 		},
 	)
 
-	result := BuildSplitStems("/tmp/test", existing, hierarchy)
+	result := mustBuildSplitStems(t, "/tmp/test", existing, hierarchy)
 
 	// Find child stem.
 	var childContent string
@@ -334,7 +411,7 @@ func TestBuildSplitStems_NoScopeOmitted(t *testing.T) {
 		},
 	)
 
-	result := BuildSplitStems("/tmp/test", existing, hierarchy)
+	result := mustBuildSplitStems(t, "/tmp/test", existing, hierarchy)
 	root := result.Stems[0].Content
 
 	if strings.Contains(root, "scope:") {
@@ -380,7 +457,7 @@ func TestBuildSplitStems_ChildVersionEmitted(t *testing.T) {
 		},
 	)
 
-	result := BuildSplitStems("/proj", existing, hierarchy)
+	result := mustBuildSplitStems(t, "/proj", existing, hierarchy)
 	if len(result.Stems) < 2 {
 		t.Fatalf("expected root plus at least one child stem, got %d", len(result.Stems))
 	}
@@ -447,7 +524,7 @@ func TestBuildSplitStems_RootPreservation(t *testing.T) {
 				},
 			)
 
-			result := BuildSplitStems("/proj", existing, hierarchy)
+			result := mustBuildSplitStems(t, "/proj", existing, hierarchy)
 			rootStem := result.Stems[0]
 
 			parsed, err := rules.ParseStem(rootStem.Path, []byte(rootStem.Content))
@@ -533,7 +610,7 @@ func TestBuildSplitStems_NestedAncestorBoundary(t *testing.T) {
 		},
 	)
 
-	result := BuildSplitStems(project, existing, hierarchy)
+	result := mustBuildSplitStems(t, project, existing, hierarchy)
 	for _, sf := range result.Stems {
 		if err := os.MkdirAll(filepath.Dir(sf.Path), 0o755); err != nil {
 			t.Fatalf("creating %s: %v", filepath.Dir(sf.Path), err)

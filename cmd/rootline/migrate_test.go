@@ -787,6 +787,44 @@ func TestRunMigrateSplit_PreFlightGuardForceBypass(t *testing.T) {
 	}
 }
 
+func TestRunMigrateSplit_SerializationErrorLeavesNoPartialOutput(t *testing.T) {
+	stem := `version: 2
+schema:
+  code:
+    type: sequence
+    match:
+      E*: bad-config
+`
+	files := map[string]string{
+		"E01-infra/README.md":             "---\nid: E01\ncode: E01\n---\n# E01\n",
+		"E02-platform/README.md":          "---\nid: E02\ncode: E02\n---\n# E02\n",
+		"E01-infra/F01-net/README.md":     "---\nid: F01\ncode: F01\n---\n# F01\n",
+		"E01-infra/F02-store/README.md":   "---\nid: F02\ncode: F02\n---\n# F02\n",
+		"E02-platform/F01-auth/README.md": "---\nid: F01\ncode: F01\n---\n# F01\n",
+		"E02-platform/F02-api/README.md":  "---\nid: F02\ncode: F02\n---\n# F02\n",
+	}
+	dir := setupMigrateDir(t, stem, files)
+	before, err := os.ReadFile(filepath.Join(dir, ".stem"))
+	if err != nil {
+		t.Fatalf("reading input stem: %v", err)
+	}
+
+	out, err := runCmd(t, "migrate", dir, "--split")
+	if err == nil || !strings.Contains(err.Error(), "serializing split stems") || !strings.Contains(err.Error(), "config must be a map") {
+		t.Fatalf("expected serialization error, got out=%q err=%v", out, err)
+	}
+	after, readErr := os.ReadFile(filepath.Join(dir, ".stem"))
+	if readErr != nil {
+		t.Fatalf("reading root after error: %v", readErr)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("root .stem changed despite serialization error:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "E01-infra", ".stem")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no child .stem after serialization error, stat err=%v", statErr)
+	}
+}
+
 func TestRunMigrateSplit_DryRunAnnotatesCollisions(t *testing.T) {
 	dir := setupSplitDir(t)
 	sentinel := writeSentinelChildStem(t, dir)

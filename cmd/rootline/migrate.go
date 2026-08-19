@@ -432,8 +432,11 @@ func runMigrateSplit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no hierarchy detected in %s; nothing to split", targetPath)
 	}
 
-	// Build split stems using field distribution from existing .stem.
-	result := migrate.BuildSplitStems(absTarget, existing, hierarchy)
+	// Build and parse-check split stems before entering any write path.
+	result, err := migrate.BuildSplitStems(absTarget, existing, hierarchy)
+	if err != nil {
+		return fmt.Errorf("serializing split stems: %w", err)
+	}
 
 	// Emit notes for auto-generated aggregates.
 	for _, name := range result.GeneratedAggs {
