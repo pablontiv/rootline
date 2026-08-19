@@ -52,13 +52,16 @@ func TestIntegration_BodySectionPatterns(t *testing.T) {
 		t.Fatalf("expected 5 section fixtures, got %d", len(records))
 	}
 
-	inferences := DetectSectionPatterns(records, 0.80)
+	inferences, err := DetectSectionPatterns(records, 0.80)
+	if err != nil {
+		t.Fatalf("DetectSectionPatterns: %v", err)
+	}
 
 	// Contexto, Alcance, Criterios de Aceptacion appear in 5/5 → required
 	requiredSections := map[string]bool{
-		"Contexto":                false,
-		"Alcance":                 false,
-		"Criterios de Aceptacion": false,
+		"contexto":                false,
+		"alcance":                 false,
+		"criterios_de_aceptacion": false,
 	}
 
 	for _, inf := range inferences {
@@ -75,10 +78,10 @@ func TestIntegration_BodySectionPatterns(t *testing.T) {
 		}
 	}
 
-	// "Notas" appears in 1/5 = 20% → NOT optional (threshold is <20%)
+	// "Notas" appears in 1/5 = 20%, below the section threshold.
 	for _, inf := range inferences {
-		if inf.Type == "optional_section" && inf.Field == "Notas" {
-			t.Error("Notas at 1/5=20% should not be optional_section")
+		if inf.Field == "notas" {
+			t.Error("Notas at 1/5=20% should not be inferred")
 		}
 	}
 }
@@ -127,7 +130,10 @@ func TestIntegration_BodyNoHeadings(t *testing.T) {
 	}
 
 	// Should not panic
-	inferences := DetectSectionPatterns(records, 0.80)
+	inferences, err := DetectSectionPatterns(records, 0.80)
+	if err != nil {
+		t.Fatalf("DetectSectionPatterns: %v", err)
+	}
 
 	for _, inf := range inferences {
 		if inf.Type == "required_section" || inf.Type == "optional_section" {

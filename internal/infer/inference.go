@@ -2,9 +2,10 @@ package infer
 
 // Inference represents a single inference produced by an inference detector.
 type Inference struct {
-	Type    string `json:"type"`
-	Source  string `json:"source"`
-	Field   string `json:"field,omitempty"`
-	Value   string `json:"value,omitempty"`
-	Message string `json:"message"`
+	Type            string `json:"type"`
+	Source          string `json:"source"`
+	Field           string `json:"field,omitempty"`
+	Value           string `json:"value,omitempty"`
+	Message         string `json:"message"`
+	SourceDirective string `json:"source_directive,omitempty"`
 }
