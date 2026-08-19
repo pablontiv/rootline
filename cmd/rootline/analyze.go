@@ -93,50 +93,50 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	type category struct {
 		id   string
 		name string
-		run  func() []infer.Inference
+		run  func() ([]infer.Inference, error)
 	}
 
 	categories := []category{
-		{"field_types", "Field Type Inference", func() []infer.Inference {
-			return fieldStatsToInferences(infer.Analyze(records))
+		{"field_types", "Field Type Inference", func() ([]infer.Inference, error) {
+			return fieldStatsToInferences(infer.Analyze(records)), nil
 		}},
-		{"required_fields", "Required Field Detection", func() []infer.Inference {
-			return requiredFieldInferences(infer.Analyze(records))
+		{"required_fields", "Required Field Detection", func() ([]infer.Inference, error) {
+			return requiredFieldInferences(infer.Analyze(records)), nil
 		}},
-		{"enum_values", "Enum Value Detection", func() []infer.Inference {
-			return enumInferences(infer.Analyze(records))
+		{"enum_values", "Enum Value Detection", func() ([]infer.Inference, error) {
+			return enumInferences(infer.Analyze(records)), nil
 		}},
-		{"constant_fields", "Constant Field Detection", func() []infer.Inference {
-			return infer.DetectConstantFields(records)
+		{"constant_fields", "Constant Field Detection", func() ([]infer.Inference, error) {
+			return infer.DetectConstantFields(records), nil
 		}},
-		{"link_types", "Link Type Validation", func() []infer.Inference {
-			return infer.DetectLinkTypes(records, linkSchema)
+		{"link_types", "Link Type Validation", func() ([]infer.Inference, error) {
+			return infer.DetectLinkTypes(records, linkSchema), nil
 		}},
-		{"back_references", "Back Reference Detection", func() []infer.Inference {
-			return infer.DetectMissingBackReferences(g)
+		{"back_references", "Back Reference Detection", func() ([]infer.Inference, error) {
+			return infer.DetectMissingBackReferences(g), nil
 		}},
-		{"cross_references", "Cross Reference Detection", func() []infer.Inference {
-			return infer.DetectCrossReferences(records, root)
+		{"cross_references", "Cross Reference Detection", func() ([]infer.Inference, error) {
+			return infer.DetectCrossReferences(records, root), nil
 		}},
-		{"section_patterns", "Body Section Patterns", func() []infer.Inference {
+		{"section_patterns", "Body Section Patterns", func() ([]infer.Inference, error) {
 			return infer.DetectSectionPatterns(records, analyzeThreshold)
 		}},
-		{"invariants", "Invariant Extraction", func() []infer.Inference {
-			return infer.DetectInvariants(records)
+		{"invariants", "Invariant Extraction", func() ([]infer.Inference, error) {
+			return infer.DetectInvariants(records), nil
 		}},
-		{"formal_dependencies", "Formal Dependency Extraction", func() []infer.Inference {
-			return infer.DetectFormalDependencies(records)
+		{"formal_dependencies", "Formal Dependency Extraction", func() ([]infer.Inference, error) {
+			return infer.DetectFormalDependencies(records), nil
 		}},
-		{"traceability", "Traceability Link Extraction", func() []infer.Inference {
-			return infer.DetectTraceabilityLinks(records)
+		{"traceability", "Traceability Link Extraction", func() ([]infer.Inference, error) {
+			return infer.DetectTraceabilityLinks(records), nil
 		}},
-		{"structural", "Structural Rule Detection", func() []infer.Inference {
-			return infer.DetectStructural(root)
+		{"structural", "Structural Rule Detection", func() ([]infer.Inference, error) {
+			return infer.DetectStructural(root), nil
 		}},
-		{"schema_coverage", "Schema Coverage", func() []infer.Inference {
-			return infer.DetectMissingSchemata(root)
+		{"schema_coverage", "Schema Coverage", func() ([]infer.Inference, error) {
+			return infer.DetectMissingSchemata(root), nil
 		}},
-		{"validation_gaps", "Validation Gaps", func() []infer.Inference {
+		{"validation_gaps", "Validation Gaps", func() ([]infer.Inference, error) {
 			var prior []infer.Inference
 			for _, cat := range report.Categories {
 				for _, inf := range cat.Inferences {
@@ -145,12 +145,15 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 					})
 				}
 			}
-			return infer.DetectValidationGaps(records, prior, root, gapsResolver)
+			return infer.DetectValidationGaps(records, prior, root, gapsResolver), nil
 		}},
 	}
 
 	for _, cat := range categories {
-		inferences := safeRunDetector(ctx, cat.id, cat.run)
+		inferences, err := safeRunDetector(ctx, cat.id, cat.run)
+		if err != nil {
+			return fmt.Errorf("detector %s: %w", cat.id, err)
+		}
 		if analyzeIncremental {
 			inferences = infer.FilterCoveredInferences(inferences, records, root, gapsResolver)
 		}
@@ -166,7 +169,7 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 }
 
 // safeRunDetector runs a detector function, recovering from panics.
-func safeRunDetector(_ context.Context, id string, fn func() []infer.Inference) (result []infer.Inference) {
+func safeRunDetector(_ context.Context, id string, fn func() ([]infer.Inference, error)) (result []infer.Inference, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			result = []infer.Inference{{
@@ -174,6 +177,7 @@ func safeRunDetector(_ context.Context, id string, fn func() []infer.Inference) 
 				Source:  id,
 				Message: fmt.Sprintf("detector %s panicked: %v", id, r),
 			}}
+			err = nil
 		}
 	}()
 	return fn()

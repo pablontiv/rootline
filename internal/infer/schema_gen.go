@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -40,10 +41,20 @@ func GenerateFlatSchema(ctx context.Context, dir string, records []*extract.Reco
 	schema := Analyze(records)
 
 	// Detect section patterns
-	sectionInferences := DetectSectionPatterns(records, opts.SectionThreshold)
+	sectionInferences, err := DetectSectionPatterns(records, opts.SectionThreshold)
+	if err != nil {
+		return nil, err
+	}
 	for _, inf := range sectionInferences {
 		fieldName := sectionFieldName(inf.Field)
 		heading := "## " + inf.Field
+		if inf.SourceDirective != "" {
+			source, err := extract.ParseBodySource(inf.SourceDirective)
+			if err != nil {
+				return nil, err
+			}
+			heading = source.Heading
+		}
 		sf := rules.SchemaField{
 			Type:    "string",
 			Heading: heading,
@@ -192,8 +203,25 @@ func generateAggregateExpr(fieldName string, sf rules.SchemaField) string {
 	return fmt.Sprintf("%q", defaultVal)
 }
 
-// sectionFieldName converts a heading text to a .stem field name:
-// lowercase with spaces replaced by underscores.
+// sectionFieldName converts heading text to a deterministic .stem field name.
 func sectionFieldName(heading string) string {
-	return strings.ToLower(strings.ReplaceAll(heading, " ", "_"))
+	var b strings.Builder
+	lastUnderscore := false
+	for _, r := range strings.TrimSpace(heading) {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(unicode.ToLower(r))
+			lastUnderscore = false
+		default:
+			if b.Len() > 0 && !lastUnderscore {
+				b.WriteByte('_')
+				lastUnderscore = true
+			}
+		}
+	}
+	field := strings.Trim(b.String(), "_")
+	if field == "" {
+		return "section"
+	}
+	return field
 }

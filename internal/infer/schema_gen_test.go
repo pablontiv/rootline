@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -62,6 +63,28 @@ func TestGenerateFlatSchema_EmptyRecords(t *testing.T) {
 	_, err := GenerateFlatSchema(context.Background(), ".", records, DefaultInferOptions())
 	if err == nil {
 		t.Fatal("expected error for empty records")
+	}
+}
+
+func TestGenerateFlatSchema_PropagatesSectionThresholdError(t *testing.T) {
+	opts := DefaultInferOptions()
+	opts.IncludeStructural = false
+	opts.SectionThreshold = -0.1
+	_, err := GenerateFlatSchema(context.Background(), ".", []*extract.Record{makeRecord("## Notes\n")}, opts)
+	if err == nil || !strings.Contains(err.Error(), "threshold") {
+		t.Fatalf("expected section threshold error, got %v", err)
+	}
+}
+
+func TestGenerateFlatSchema_PropagatesSectionCollisionError(t *testing.T) {
+	opts := DefaultInferOptions()
+	opts.IncludeStructural = false
+	_, err := GenerateFlatSchema(context.Background(), ".", []*extract.Record{makeSectionRecord(
+		extract.Section{Level: 2, Heading: "Notes"},
+		extract.Section{Level: 3, Heading: "Notes"},
+	)}, opts)
+	if err == nil || !strings.Contains(err.Error(), "section field name collision") || !strings.Contains(err.Error(), "## Notes") || !strings.Contains(err.Error(), "### Notes") {
+		t.Fatalf("expected section collision error, got %v", err)
 	}
 }
 
@@ -346,7 +369,7 @@ func TestSectionFieldName(t *testing.T) {
 		{"Overview", "overview"},
 		{"Implementation Details", "implementation_details"},
 		{"API Reference", "api_reference"},
-		{"## Test", "##_test"},
+		{"## Test", "test"},
 	}
 
 	for _, tt := range tests {

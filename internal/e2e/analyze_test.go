@@ -51,7 +51,11 @@ func runAnalyze(t *testing.T, root string) *infer.AnalyzeReport {
 	schema := infer.Analyze(records)
 	report.AddCategory("field_types", "Field Type Inference", fieldStatsInferences(schema), agentTypes)
 	report.AddCategory("constant_fields", "Constant Field Detection", infer.DetectConstantFields(records), agentTypes)
-	report.AddCategory("section_patterns", "Body Section Patterns", infer.DetectSectionPatterns(records, 0.80), agentTypes)
+	sectionInferences, err := infer.DetectSectionPatterns(records, 0.80)
+	if err != nil {
+		t.Fatalf("section patterns: %v", err)
+	}
+	report.AddCategory("section_patterns", "Body Section Patterns", sectionInferences, agentTypes)
 	report.AddCategory("invariants", "Invariant Extraction", infer.DetectInvariants(records), agentTypes)
 	report.AddCategory("formal_deps", "Formal Dependencies", infer.DetectFormalDependencies(records), agentTypes)
 	report.AddCategory("traceability", "Traceability Links", infer.DetectTraceabilityLinks(records), agentTypes)
