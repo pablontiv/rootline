@@ -394,36 +394,114 @@ func TestValidateCmd_EnumError(t *testing.T) {
 	}
 }
 
-func TestValidateAll_StemHealthChecks(t *testing.T) {
-	root := setupValidateProject(t, map[string]string{
-		".stem":      "version: 2\nschema:\n  estado:\n    type: string\n",
-		"sub/.stem":  "version: 2\nschema:\n  estado:\n    type: enum\n    values: [A, B]\n",
-		"sub/doc.md": "---\nestado: A\n---\n",
-	})
-
-	mustChdir(t, root)
-
-	stdout, err := executeValidate(t, "--all")
-	// type-consistency failure should cause validation failed
-	if err != ErrValidationFailed {
-		t.Fatalf("expected ErrValidationFailed, got: %v\noutput: %s", err, stdout)
+func TestValidateAll_StemHealthAcceptsValidNarrowing(t *testing.T) {
+	tests := []struct {
+		name      string
+		rootStem  string
+		childStem string
+	}{
+		{
+			name:      "string to enum",
+			rootStem:  "version: 2\nschema:\n  estado:\n    type: string\n",
+			childStem: "version: 2\nschema:\n  estado:\n    type: enum\n    values: [A, B]\n",
+		},
+		{
+			name:      "enum subset",
+			rootStem:  "version: 2\nschema:\n  estado:\n    type: enum\n    values: [A, B, C]\n",
+			childStem: "version: 2\nschema:\n  estado:\n    type: enum\n    values: [A, B]\n",
+		},
 	}
 
-	// Stem health travels on its own axis: a schema defect is not a record
-	// verdict, and folding it into results made summary.total a count of
-	// documents plus schema findings.
-	env := decodeEnvelope(t, stdout)
-	foundStemHealth := false
-	for _, h := range stemHealthChecks(t, env) {
-		if h["check"] == "type-consistency" && h["severity"] == "error" {
-			foundStemHealth = true
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := setupValidateProject(t, map[string]string{
+				".stem":      tt.rootStem,
+				"sub/.stem":  tt.childStem,
+				"sub/doc.md": "---\nestado: A\n---\n",
+			})
+
+			mustChdir(t, root)
+
+			stdout, err := executeValidate(t, "--all")
+			if err != nil {
+				t.Fatalf("unexpected error: %v\noutput: %s", err, stdout)
+			}
+
+			env := decodeEnvelope(t, stdout)
+			for _, h := range stemHealthChecks(t, env) {
+				if h["field"] == "estado" && (h["check"] == "type-consistency" || h["check"] == "field-override" || h["check"] == "monotonic-violations") {
+					t.Fatalf("unexpected stem_health compatibility noise: %#v", h)
+				}
+			}
+			if got := env["summary"].(map[string]any)["stem_health_errors_count"].(float64); got != 0 {
+				t.Errorf("stem_health_errors_count = %v, want 0", got)
+			}
+		})
 	}
-	if !foundStemHealth {
-		t.Errorf("expected type-consistency error in stem_health, got: %s", stdout)
+}
+
+func TestValidateAll_StemHealthCompatibilityRejections(t *testing.T) {
+	tests := []struct {
+		name      string
+		rootStem  string
+		childStem string
+		check     string
+		path      string
+	}{
+		{
+			name:      "enum to string",
+			rootStem:  "version: 2\nschema:\n  estado:\n    type: enum\n    values: [A, B]\n",
+			childStem: "version: 2\nschema:\n  estado:\n    type: string\n",
+			check:     "type-consistency",
+			path:      "sub/.stem",
+		},
+		{
+			name:      "required loosening",
+			rootStem:  "version: 2\nschema:\n  estado:\n    type: string\n    required: true\n",
+			childStem: "version: 2\nschema:\n  estado:\n    type: string\n    required: false\n",
+			check:     "monotonic-violations",
+			path:      "sub/.stem",
+		},
+		{
+			name:      "severity loosening",
+			rootStem:  "version: 2\nschema:\n  estado:\n    type: string\n",
+			childStem: "version: 2\nschema:\n  estado:\n    type: string\n    severity: warn\n",
+			check:     "monotonic-violations",
+			path:      "sub/.stem",
+		},
 	}
-	if got := env["summary"].(map[string]any)["stem_health_errors_count"].(float64); got != 1 {
-		t.Errorf("stem_health_errors_count = %v, want 1", got)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := setupValidateProject(t, map[string]string{
+				".stem":      tt.rootStem,
+				"sub/.stem":  tt.childStem,
+				"sub/doc.md": "---\nestado: A\n---\n",
+			})
+			mustChdir(t, root)
+
+			stdout, err := executeValidate(t, "--all")
+			if err != ErrValidationFailed {
+				t.Fatalf("err = %v, want ErrValidationFailed\noutput: %s", err, stdout)
+			}
+
+			env := decodeEnvelope(t, stdout)
+			var matches []map[string]any
+			for _, h := range stemHealthChecks(t, env) {
+				if h["field"] == "estado" {
+					matches = append(matches, h)
+				}
+			}
+			if len(matches) != 1 {
+				t.Fatalf("stem_health diagnostics for estado = %d, want 1: %#v", len(matches), matches)
+			}
+			if matches[0]["check"] != tt.check || matches[0]["severity"] != "error" || matches[0]["path"] != tt.path {
+				t.Fatalf("stem_health diagnostic = %#v, want check=%q severity=error path=%q", matches[0], tt.check, tt.path)
+			}
+			if got := env["summary"].(map[string]any)["stem_health_errors_count"].(float64); got != 1 {
+				t.Fatalf("stem_health_errors_count = %v, want 1", got)
+			}
+		})
 	}
 }
 
@@ -442,20 +520,16 @@ func TestValidateAll_StemHealthWarnings(t *testing.T) {
 
 	env := decodeEnvelope(t, stdout)
 	foundScopeWarn := false
-	foundEnumWarn := false
 	for _, h := range stemHealthChecks(t, env) {
 		if h["check"] == "scope-match" && h["severity"] == "warn" {
 			foundScopeWarn = true
 		}
-		if h["check"] == "enum-values" && h["severity"] == "warn" {
-			foundEnumWarn = true
+		if h["check"] == "enum-values" {
+			t.Fatalf("unexpected enum-values warning in stem_health: %#v", h)
 		}
 	}
 	if !foundScopeWarn {
 		t.Errorf("expected scope-match warning in stem_health, got: %s", stdout)
-	}
-	if !foundEnumWarn {
-		t.Errorf("expected enum-values warning in stem_health, got: %s", stdout)
 	}
 }
 
