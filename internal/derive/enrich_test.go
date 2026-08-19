@@ -154,6 +154,50 @@ func TestEnrichBuiltins_SourceExtraction_BodySection(t *testing.T) {
 	}
 }
 
+func TestEnrichBuiltins_SourceExtraction_FrontmatterPresenceOverridesBody(t *testing.T) {
+	records := []*extract.Record{
+		{
+			Path:        "docs/T001.md",
+			Type:        "markdown",
+			Body:        "# Body Title\n",
+			Frontmatter: map[string]any{"titulo": ""},
+			Derived:     map[string]any{"titulo": "stale-derived"},
+		},
+	}
+	stem := &rules.StemFile{Schema: map[string]rules.SchemaField{
+		"titulo": {Type: "string", Extract: "body.h1"},
+	}}
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+
+	EnrichBuiltins(context.Background(), records, "/root", resolver)
+
+	if got, ok := records[0].Derived["titulo"]; !ok || got != "" {
+		t.Fatalf("derived titulo = %#v, %v; want present empty frontmatter value", got, ok)
+	}
+}
+
+func TestEnrichBuiltins_SourceExtraction_AbsentSourcePreservesExistingDerivedValue(t *testing.T) {
+	records := []*extract.Record{
+		{
+			Path:        "docs/T001.md",
+			Type:        "markdown",
+			Body:        "## Not a Title\n\nNo h1 body source here",
+			Frontmatter: map[string]any{},
+			Derived:     map[string]any{"titulo": "derived-default"},
+		},
+	}
+	stem := &rules.StemFile{Schema: map[string]rules.SchemaField{
+		"titulo": {Type: "string", Extract: "body.h1"},
+	}}
+	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+
+	EnrichBuiltins(context.Background(), records, "/root", resolver)
+
+	if got, ok := records[0].Derived["titulo"]; !ok || got != "derived-default" {
+		t.Fatalf("derived titulo = %#v, %v; want existing derived value preserved", got, ok)
+	}
+}
+
 func TestEnrichBuiltins_SourceExtraction_NoExtract(t *testing.T) {
 	records := []*extract.Record{
 		{

@@ -1157,11 +1157,10 @@ func TestValidatePhase1_BodySourcedFields(t *testing.T) {
 			wantRule: "required",
 		},
 		{
-			name:     "section present but empty fails required",
-			field:    "notes",
-			stem:     bodySourceStem("notes", sectionField),
-			body:     "# Title\n\n## Notes\n\n## End\n\nOther content\n",
-			wantRule: "required",
+			name:  "section present but empty satisfies required presence",
+			field: "notes",
+			stem:  bodySourceStem("notes", sectionField),
+			body:  "# Title\n\n## Notes\n\n## End\n\nOther content\n",
 		},
 		{
 			name:  "h1 present satisfies required",
@@ -1250,6 +1249,35 @@ func TestValidatePhase1_BodySourcedFields(t *testing.T) {
 // resolution path (ResolveForRecord -> FilterSchemaByMatch) rather than a
 // hand-built schema, so that match: scoping is actually exercised: the field
 // must fire on a matching record and be absent entirely on a non-matching one.
+func TestValidate_SourceResolutionErrorEmittedOnceForSchemaAndExplicitRule(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"notes": {
+				Type:     "string",
+				Required: true,
+				Extract:  `body.section["## Notes"]`,
+				Source:   "root/.stem",
+			},
+		},
+		Validate: []ValidationRule{{Rule: "non_empty", Field: "notes", Source: "root/.stem", Severity: "error"}},
+	}
+	record := &extract.Record{
+		Path:        "test.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+		Body:        "# Title\n\n## Notes\n\nfirst\n\n## Notes\n\nsecond\n",
+	}
+
+	errs := Validate(context.Background(), record, stem)
+
+	if len(errs) != 1 {
+		t.Fatalf("got %d errors, want exactly one source error: %+v", len(errs), errs)
+	}
+	if errs[0].Rule != "source" || errs[0].Field != "notes" {
+		t.Fatalf("got error %+v, want ValidationError{Rule: source, Field: notes}", errs[0])
+	}
+}
+
 func TestValidatePhase1_BodySourcedFieldRespectsMatchScope(t *testing.T) {
 	dir := t.TempDir()
 	stemYAML := `version: 2

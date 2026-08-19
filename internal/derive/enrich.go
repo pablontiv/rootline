@@ -36,16 +36,22 @@ func EnrichBuiltins(ctx context.Context, records []*extract.Record, root string,
 		}
 		rec.Derived["isIndex"] = rules.IsIndexFile(rec.Path, eff)
 
-		// Extract source-derived fields from schema
+		// Extract source-derived fields from schema.
 		if eff != nil && eff.Schema != nil {
 			for name, field := range eff.Schema {
 				if field.Extract == "" {
 					continue
 				}
 
-				if value, ok, err := extract.ResolveBodyValue(rec, field.Extract); err == nil && ok && value != "" {
-					rec.Derived[name] = value
+				value, ok, err := rules.ResolveFieldValue(rec, name, field)
+				if err != nil {
+					rec.Errors = append(rec.Errors, extract.ExtractionError{Message: err.Error()})
+					continue
 				}
+				if !ok {
+					continue
+				}
+				rec.Derived[name] = value
 			}
 		}
 	}
