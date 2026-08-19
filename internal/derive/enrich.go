@@ -43,7 +43,7 @@ func EnrichBuiltins(ctx context.Context, records []*extract.Record, root string,
 					continue
 				}
 
-				if value, ok := extract.ResolveBodyValue(rec, field.Extract); ok {
+				if value, ok, err := extract.ResolveBodyValue(rec, field.Extract); err == nil && ok && value != "" {
 					rec.Derived[name] = value
 				}
 			}

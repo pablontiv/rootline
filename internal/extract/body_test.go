@@ -416,13 +416,12 @@ func TestResolveBodyValue(t *testing.T) {
 			wantOK:    false,
 		},
 		{
-			name:      "section present but empty does not resolve",
+			name:      "section present but empty resolves",
 			directive: `body.section["## Notes"]`,
 			record: &Record{
-				Body:     "# Title\n\n## Notes\n\n## End\n\nContent",
-				Sections: map[string]string{"## Notes": "", "## End": "Content"},
+				Body: "# Title\n\n## Notes\n\n## End\n\nContent",
 			},
-			wantOK: false,
+			wantOK: true,
 		},
 		{
 			name:      "unknown directive",
@@ -440,10 +439,10 @@ func TestResolveBodyValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			val, ok := ResolveBodyValue(tt.record, tt.directive)
-			if ok != tt.wantOK || val != tt.wantValue {
-				t.Errorf("ResolveBodyValue(%q) = %q, %v; want %q, %v",
-					tt.directive, val, ok, tt.wantValue, tt.wantOK)
+			val, ok, err := ResolveBodyValue(tt.record, tt.directive)
+			if (tt.wantOK && err != nil) || ok != tt.wantOK || val != tt.wantValue {
+				t.Errorf("ResolveBodyValue(%q) = %q, %v, %v; want %q, %v, nil",
+					tt.directive, val, ok, err, tt.wantValue, tt.wantOK)
 			}
 		})
 	}
@@ -462,15 +461,15 @@ func TestResolveBodyValue_H1IsDeterministic(t *testing.T) {
 		},
 	}
 	for i := range 50 {
-		val, ok := ResolveBodyValue(record, "body.h1")
-		if !ok || val != "First Title" {
-			t.Fatalf("iteration %d: got %q, %v; want 'First Title', true", i, val, ok)
+		val, ok, err := ResolveBodyValue(record, "body.h1")
+		if err != nil || !ok || val != "First Title" {
+			t.Fatalf("iteration %d: got %q, %v, %v; want 'First Title', true, nil", i, val, ok, err)
 		}
 	}
 }
 
 func TestResolveBodyValue_NilRecord(t *testing.T) {
-	if val, ok := ResolveBodyValue(nil, "body.h1"); ok || val != "" {
-		t.Errorf("ResolveBodyValue(nil) = %q, %v; want '', false", val, ok)
+	if val, ok, err := ResolveBodyValue(nil, "body.h1"); err != nil || ok || val != "" {
+		t.Errorf("ResolveBodyValue(nil) = %q, %v, %v; want '', false, nil", val, ok, err)
 	}
 }

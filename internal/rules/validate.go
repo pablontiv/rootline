@@ -38,8 +38,8 @@ func resolveFieldValue(record *extract.Record, name string, field SchemaField) (
 
 	// If no frontmatter value and field has an Extract directive, try body extraction.
 	if field.Extract != "" {
-		bodyVal, exists := extract.ResolveBodyValue(record, field.Extract)
-		if exists && bodyVal != "" {
+		bodyVal, exists, err := extract.ResolveBodyValue(record, field.Extract)
+		if err == nil && exists && bodyVal != "" {
 			return bodyVal, true
 		}
 	}

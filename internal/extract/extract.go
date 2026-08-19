@@ -27,15 +27,16 @@ type Extractor interface {
 // Record is the universal output of all extractors and the universal input
 // to validation, derivation, and query.
 type Record struct {
-	Path        string            `json:"path"`
-	Type        string            `json:"type"`
-	Frontmatter map[string]any    `json:"frontmatter"`
-	Body        string            `json:"body"`
-	Sections    map[string]string `json:"sections,omitempty"`
-	AST         ast.Node          `json:"-"`
-	Links       []Link            `json:"links,omitempty"`
-	Derived     map[string]any    `json:"derived,omitempty"`
-	Errors      []ExtractionError `json:"errors,omitempty"`
+	Path         string            `json:"path"`
+	Type         string            `json:"type"`
+	Frontmatter  map[string]any    `json:"frontmatter"`
+	Body         string            `json:"body"`
+	Sections     map[string]string `json:"sections,omitempty"`
+	BodySections []Section         `json:"body_sections,omitempty"`
+	AST          ast.Node          `json:"-"`
+	Links        []Link            `json:"links,omitempty"`
+	Derived      map[string]any    `json:"derived,omitempty"`
+	Errors       []ExtractionError `json:"errors,omitempty"`
 }
 
 // EffectiveField returns the effective value for a field name.
@@ -83,22 +84,7 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 	if !strings.HasPrefix(text, "---\n") && !strings.HasPrefix(text, "---\r\n") {
 		record.Body = text
 		record.Links = ParseLinks(record.Body)
-		if record.Body != "" && m.shouldParseAST() {
-			source := []byte(record.Body)
-			reader := gmtext.NewReader(source)
-			parser := goldmark.DefaultParser()
-			record.AST = parser.Parse(reader)
-			sections := ExtractSections(record.AST, source)
-			if len(sections) > 0 {
-				record.Sections = make(map[string]string, len(sections))
-				for _, sec := range sections {
-					if sec.Level > 0 {
-						key := strings.Repeat("#", sec.Level) + " " + sec.Heading
-						record.Sections[key] = strings.TrimSpace(sec.Content)
-					}
-				}
-			}
-		}
+		m.populateBodySections(record)
 		return record, nil
 	}
 
@@ -136,25 +122,34 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 		record.Links = append(fmLinks, record.Links...)
 	}
 
-	// Parse body into AST if non-empty and enabled.
-	if record.Body != "" && m.shouldParseAST() {
+	// Parse body structure after links/frontmatter are finalized.
+	m.populateBodySections(record)
+
+	return record, nil
+}
+
+func (m *MarkdownExtractor) populateBodySections(record *Record) {
+	if record.Body == "" {
+		return
+	}
+	if m.shouldParseAST() {
 		source := []byte(record.Body)
 		reader := gmtext.NewReader(source)
 		parser := goldmark.DefaultParser()
 		record.AST = parser.Parse(reader)
-		sections := ExtractSections(record.AST, source)
-		if len(sections) > 0 {
-			record.Sections = make(map[string]string, len(sections))
-			for _, sec := range sections {
-				if sec.Level > 0 {
-					key := strings.Repeat("#", sec.Level) + " " + sec.Heading
-					record.Sections[key] = strings.TrimSpace(sec.Content)
-				}
-			}
+		record.BodySections = ExtractSections(record.AST, source)
+	} else {
+		record.BodySections = ExtractSectionsFromText(record.Body)
+	}
+	if len(record.BodySections) == 0 {
+		return
+	}
+	record.Sections = make(map[string]string, len(record.BodySections))
+	for _, sec := range record.BodySections {
+		if sec.Level > 0 {
+			record.Sections[sectionExactHeading(sec)] = strings.TrimSpace(sec.Content)
 		}
 	}
-
-	return record, nil
 }
 
 // stripBOM removes a UTF-8 BOM from the start of text.
