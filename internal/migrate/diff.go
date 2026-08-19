@@ -23,6 +23,7 @@ const (
 	RequiredRemoved  ChangeKind = "required_removed"
 	DefaultChanged   ChangeKind = "default_changed"
 	SeverityChanged  ChangeKind = "severity_changed"
+	SourceChanged    ChangeKind = "source_changed"
 	RuleAdded        ChangeKind = "rule_added"
 	RuleRemoved      ChangeKind = "rule_removed"
 )
@@ -149,6 +150,18 @@ func diffSchemaField(result *DiffResult, name string, before, after rules.Schema
 			Before:   "true",
 			After:    "false",
 			Message:  "field " + name + " is no longer required",
+		})
+	}
+
+	// Source identity changes alter the logical field binding.
+	if before.Extract != after.Extract {
+		result.addChange(Change{
+			Kind:     SourceChanged,
+			Field:    name,
+			Breaking: true,
+			Before:   before.Extract,
+			After:    after.Extract,
+			Message:  "field " + name + " source changed",
 		})
 	}
 

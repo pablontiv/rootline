@@ -32,6 +32,103 @@ func TestDiff_NoChanges(t *testing.T) {
 	}
 }
 
+func TestDiff_SourceChangedSemantics(t *testing.T) {
+	tests := []struct {
+		name          string
+		before        rules.SchemaField
+		after         rules.SchemaField
+		wantChanges   int
+		wantBreaking  int
+		wantSourceHit bool
+	}{
+		{
+			name:          "unchanged source",
+			before:        rules.SchemaField{Type: "string", Extract: `body.section["## Notes"]`},
+			after:         rules.SchemaField{Type: "string", Extract: `body.section["## Notes"]`},
+			wantChanges:   0,
+			wantBreaking:  0,
+			wantSourceHit: false,
+		},
+		{
+			name:          "changed source",
+			before:        rules.SchemaField{Type: "string", Extract: `body.section["## Notes"]`},
+			after:         rules.SchemaField{Type: "string", Extract: `body.section["## Context"]`},
+			wantChanges:   1,
+			wantBreaking:  1,
+			wantSourceHit: true,
+		},
+		{
+			name:          "removed source",
+			before:        rules.SchemaField{Type: "string", Extract: `body.section["## Notes"]`},
+			after:         rules.SchemaField{Type: "string"},
+			wantChanges:   1,
+			wantBreaking:  1,
+			wantSourceHit: true,
+		},
+		{
+			name:          "added source",
+			before:        rules.SchemaField{Type: "string"},
+			after:         rules.SchemaField{Type: "string", Extract: `body.h1`},
+			wantChanges:   1,
+			wantBreaking:  1,
+			wantSourceHit: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			before := &rules.StemFile{Schema: map[string]rules.SchemaField{"notes": tt.before}}
+			after := &rules.StemFile{Schema: map[string]rules.SchemaField{"notes": tt.after}}
+			got := Diff(".stem", before, after)
+
+			if got.TotalCount != tt.wantChanges || got.BreakingCount != tt.wantBreaking {
+				t.Fatalf("unexpected counts: %+v", got)
+			}
+			found := false
+			for _, change := range got.Changes {
+				if change.Kind == SourceChanged {
+					found = true
+					if change.Field != "notes" || !change.Breaking || change.Before != tt.before.Extract || change.After != tt.after.Extract {
+						t.Fatalf("unexpected source change: %+v", change)
+					}
+				}
+			}
+			if found != tt.wantSourceHit {
+				t.Fatalf("SourceChanged found=%v want %v in %+v", found, tt.wantSourceHit, got.Changes)
+			}
+		})
+	}
+}
+
+func TestDiff_SourceChangedOrderingAndNoDuplicates(t *testing.T) {
+	before := &rules.StemFile{Schema: map[string]rules.SchemaField{
+		"notes": {Type: "string", Extract: `body.section["## Notes"]`, Required: false, Severity: "warn"},
+	}}
+	after := &rules.StemFile{Schema: map[string]rules.SchemaField{
+		"notes": {Type: "enum", Extract: `body.section["## Context"]`, Required: true, Severity: "error", Values: []string{"a"}},
+	}}
+
+	got := Diff(".stem", before, after)
+	wantKinds := []ChangeKind{RequiredAdded, SeverityChanged, SourceChanged, TypeChanged}
+	if len(got.Changes) != len(wantKinds) {
+		t.Fatalf("changes=%+v, want %v", got.Changes, wantKinds)
+	}
+	for i, want := range wantKinds {
+		if got.Changes[i].Kind != want {
+			t.Fatalf("change[%d]=%s, want %s; all=%+v", i, got.Changes[i].Kind, want, got.Changes)
+		}
+	}
+	seenSource := 0
+	for _, change := range got.Changes {
+		if change.Kind == SourceChanged {
+			seenSource++
+		}
+	}
+	if seenSource != 1 {
+		t.Fatalf("SourceChanged count=%d in %+v", seenSource, got.Changes)
+	}
+}
+
 func TestDiff_FieldAdded(t *testing.T) {
 	before := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
