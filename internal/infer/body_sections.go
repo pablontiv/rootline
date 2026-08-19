@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -129,7 +130,7 @@ func rejectSectionFieldCollisions(candidates []sectionCandidate) error {
 		if j-i > 1 {
 			headings := make([]string, 0, j-i)
 			for _, candidate := range candidates[i:j] {
-				headings = append(headings, candidate.exact)
+				headings = append(headings, strconv.Quote(candidate.exact))
 			}
 			collisions = append(collisions, fmt.Sprintf("%s: %s", candidates[i].field, strings.Join(headings, ", ")))
 		}

@@ -208,7 +208,7 @@ func TestDetectSectionPatterns_CollisionOrderingIncludesCaseSpacingAndLevelMembe
 		extract.Section{Level: 3, Heading: "road   map"},
 	)}
 	_, err := DetectSectionPatterns(records, 0.8)
-	want := "section field name collision: road_map: ## Road Map, ### road   map, #### ROAD-map"
+	want := `section field name collision: road_map: "## Road Map", "### road   map", "#### ROAD-map"`
 	if err == nil || err.Error() != want {
 		t.Fatalf("collision error = %v, want %q", err, want)
 	}

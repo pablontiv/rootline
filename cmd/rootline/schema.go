@@ -568,7 +568,10 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 
 		for _, rootStem := range stemMap {
 			generatedStem = rootStem
-			yaml := stemFileToYAML(rootStem, root)
+			yaml, err := stemFileToYAML(rootStem, root)
+			if err != nil {
+				return nil, fmt.Errorf("serializing hierarchical schema: %w", err)
+			}
 			proposal := SchemaProposal{
 				ID:            "bootstrap-hierarchical",
 				Operation:     "create_stem",
@@ -589,7 +592,10 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 		}
 
 		generatedStem = stemFile
-		yaml := stemFileToYAML(stemFile, root)
+		yaml, err := stemFileToYAML(stemFile, root)
+		if err != nil {
+			return nil, fmt.Errorf("serializing flat schema: %w", err)
+		}
 		proposal := SchemaProposal{
 			ID:            "bootstrap-flat",
 			Operation:     "create_stem",

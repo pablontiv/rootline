@@ -14,6 +14,7 @@ import (
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/pablontiv/rootline/internal/templates"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -121,7 +122,10 @@ func runInitFlat(cmd *cobra.Command, absTarget, target string, records []*extrac
 	}
 
 	// Generate YAML from StemFile
-	yaml := stemFileToYAML(stemFile, absTarget)
+	yaml, err := stemFileToYAML(stemFile, absTarget)
+	if err != nil {
+		return fmt.Errorf("serializing flat schema: %w", err)
+	}
 
 	if initDryRun {
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), yaml)
@@ -156,7 +160,10 @@ func runInitHierarchical(cmd *cobra.Command, absTarget, target string, hierarchy
 	// Convert StemFiles to file content for writing
 	stemFiles := make([]stemFile, 0, len(stemMap))
 	for _, rootStem := range stemMap {
-		yaml := stemFileToYAML(rootStem, absTarget)
+		yaml, err := stemFileToYAML(rootStem, absTarget)
+		if err != nil {
+			return fmt.Errorf("serializing hierarchical schema: %w", err)
+		}
 		stemFiles = append(stemFiles, stemFile{
 			path:    filepath.Join(absTarget, ".stem"),
 			content: yaml,
@@ -215,7 +222,7 @@ type stemFile struct {
 }
 
 // stemFileToYAML converts a StemFile to YAML string representation.
-func stemFileToYAML(stem *rules.StemFile, scanRoot string) string {
+func stemFileToYAML(stem *rules.StemFile, scanRoot string) (string, error) {
 	var b strings.Builder
 	b.WriteString("version: 2\n")
 	if stem.Root {
@@ -239,7 +246,13 @@ func stemFileToYAML(stem *rules.StemFile, scanRoot string) string {
 		if len(field.Values) > 0 {
 			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(field.Values, ", "))
 		}
-		if field.Heading != "" {
+		if field.Extract != "" {
+			source, err := yamlScalar(field.Extract)
+			if err != nil {
+				return "", fmt.Errorf("encoding source for field %q: %w", name, err)
+			}
+			fmt.Fprintf(&b, "    source: %s\n", source)
+		} else if field.Heading != "" {
 			fmt.Fprintf(&b, "    heading: %q\n", field.Heading)
 		}
 		if field.Prefix != "" {
@@ -315,5 +328,21 @@ func stemFileToYAML(stem *rules.StemFile, scanRoot string) string {
 		}
 	}
 
-	return b.String()
+	out := b.String()
+	if _, err := rules.ParseStem(filepath.Join(scanRoot, ".stem"), []byte(out)); err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+func yamlScalar(value string) (string, error) {
+	b, err := yaml.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	out := strings.TrimSuffix(string(b), "\n")
+	if strings.Contains(out, "\n") {
+		return "", fmt.Errorf("value requires multiline YAML scalar")
+	}
+	return out, nil
 }

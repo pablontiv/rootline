@@ -3,8 +3,9 @@ package infer
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -45,24 +46,8 @@ func GenerateFlatSchema(ctx context.Context, dir string, records []*extract.Reco
 	if err != nil {
 		return nil, err
 	}
-	for _, inf := range sectionInferences {
-		fieldName := sectionFieldName(inf.Field)
-		heading := "## " + inf.Field
-		if inf.SourceDirective != "" {
-			source, err := extract.ParseBodySource(inf.SourceDirective)
-			if err != nil {
-				return nil, err
-			}
-			heading = source.Heading
-		}
-		sf := rules.SchemaField{
-			Type:    "string",
-			Heading: heading,
-		}
-		if inf.Type == "required_section" {
-			sf.Required = true
-		}
-		schema.Schema[fieldName] = sf
+	if err := addSectionInferenceFields(schema.Schema, sectionInferences, "frontmatter"); err != nil {
+		return nil, err
 	}
 
 	// Detect structural rules if enabled
@@ -103,6 +88,13 @@ func GenerateHierarchicalSchema(ctx context.Context, dir string, records []*extr
 
 	// Build root StemFile
 	rootStem := buildRootStemFile(hierarchy, aggregates, dir, opts)
+	sectionInferences, err := DetectSectionPatterns(records, opts.SectionThreshold)
+	if err != nil {
+		return nil, err
+	}
+	if err := addSectionInferenceFields(rootStem.Schema, sectionInferences, "hierarchy"); err != nil {
+		return nil, err
+	}
 
 	// Return root .stem keyed by "."
 	result := make(map[string]*rules.StemFile)
@@ -203,25 +195,39 @@ func generateAggregateExpr(fieldName string, sf rules.SchemaField) string {
 	return fmt.Sprintf("%q", defaultVal)
 }
 
-// sectionFieldName converts heading text to a deterministic .stem field name.
-func sectionFieldName(heading string) string {
-	var b strings.Builder
-	lastUnderscore := false
-	for _, r := range strings.TrimSpace(heading) {
-		switch {
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
-			b.WriteRune(unicode.ToLower(r))
-			lastUnderscore = false
-		default:
-			if b.Len() > 0 && !lastUnderscore {
-				b.WriteByte('_')
-				lastUnderscore = true
-			}
+func addSectionInferenceFields(schema map[string]rules.SchemaField, inferences []Inference, existingOrigin string) error {
+	if strings.TrimSpace(existingOrigin) == "" {
+		existingOrigin = "schema"
+	}
+	var collisions []string
+	for _, inf := range inferences {
+		if inf.Type != "required_section" && inf.Type != "optional_section" {
+			continue
+		}
+		if inf.Field == "" {
+			return fmt.Errorf("section inference missing field")
+		}
+		if inf.SourceDirective == "" {
+			return fmt.Errorf("section inference for %q missing source directive", inf.Field)
+		}
+		if _, exists := schema[inf.Field]; exists {
+			collisions = append(collisions, fmt.Sprintf("field %q from %s collides with body section source %s", inf.Field, existingOrigin, strconv.Quote(inf.SourceDirective)))
 		}
 	}
-	field := strings.Trim(b.String(), "_")
-	if field == "" {
-		return "section"
+	if len(collisions) > 0 {
+		sort.Strings(collisions)
+		return fmt.Errorf("section field composition collision: %s", strings.Join(collisions, "; "))
 	}
-	return field
+
+	for _, inf := range inferences {
+		if inf.Type != "required_section" && inf.Type != "optional_section" {
+			continue
+		}
+		schema[inf.Field] = rules.SchemaField{
+			Type:     "string",
+			Required: inf.Type == "required_section",
+			Extract:  inf.SourceDirective,
+		}
+	}
+	return nil
 }

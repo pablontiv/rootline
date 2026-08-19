@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/yuin/goldmark"
 	gmast "github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
@@ -85,6 +86,142 @@ func TestGenerateFlatSchema_PropagatesSectionCollisionError(t *testing.T) {
 	)}, opts)
 	if err == nil || !strings.Contains(err.Error(), "section field name collision") || !strings.Contains(err.Error(), "## Notes") || !strings.Contains(err.Error(), "### Notes") {
 		t.Fatalf("expected section collision error, got %v", err)
+	}
+}
+
+func TestGenerateFlatSchema_SectionSourceUsesCanonicalDirective(t *testing.T) {
+	records := []*extract.Record{
+		makeSectionRecord(
+			extract.Section{Level: 1, Heading: "Overview"},
+			extract.Section{Level: 2, Heading: `Need "quotes" \ and [brackets]`},
+			extract.Section{Level: 3, Heading: "Deep Dive"},
+		),
+		makeSectionRecord(
+			extract.Section{Level: 1, Heading: "Overview"},
+			extract.Section{Level: 2, Heading: `Need "quotes" \ and [brackets]`},
+			extract.Section{Level: 3, Heading: "Deep Dive"},
+		),
+	}
+	opts := DefaultInferOptions()
+	opts.IncludeStructural = false
+	stem, err := GenerateFlatSchema(context.Background(), ".", records, opts)
+	if err != nil {
+		t.Fatalf("GenerateFlatSchema: %v", err)
+	}
+	want := map[string]string{
+		"overview":                 `body.section["# Overview"]`,
+		"need_quotes_and_brackets": `body.section["## Need \"quotes\" \\ and [brackets]"]`,
+		"deep_dive":                `body.section["### Deep Dive"]`,
+	}
+	for field, source := range want {
+		sf, ok := stem.Schema[field]
+		if !ok {
+			t.Fatalf("missing section field %q in %#v", field, stem.Schema)
+		}
+		if sf.Type != "string" || sf.Extract != source || sf.Heading != "" || !sf.Required {
+			t.Fatalf("schema[%s] = %+v, want required string source %q without heading", field, sf, source)
+		}
+	}
+}
+
+func TestGenerateFlatSchema_RejectsSectionCollisionWithFrontmatter(t *testing.T) {
+	records := []*extract.Record{
+		makeSectionRecord(extract.Section{Level: 2, Heading: "Notes"}),
+		makeSectionRecord(extract.Section{Level: 2, Heading: "Notes"}),
+	}
+	for _, rec := range records {
+		rec.Frontmatter = map[string]any{"notes": []string{"keep", "frontmatter"}}
+	}
+	opts := DefaultInferOptions()
+	opts.IncludeStructural = false
+	_, err := GenerateFlatSchema(context.Background(), ".", records, opts)
+	if err == nil || !strings.Contains(err.Error(), `field "notes"`) || !strings.Contains(err.Error(), "frontmatter") || !strings.Contains(err.Error(), "body section") || !strings.Contains(err.Error(), "body.section[") || !strings.Contains(err.Error(), "## Notes") {
+		t.Fatalf("expected frontmatter/body section collision error, got %v", err)
+	}
+
+	schema := Analyze(records).Schema
+	before := schema["notes"]
+	if err := addSectionInferenceFields(schema, []Inference{{Type: "required_section", Field: "notes", SourceDirective: `body.section["## Notes"]`}}, "frontmatter"); err == nil {
+		t.Fatal("expected helper collision error")
+	}
+	if after := schema["notes"]; after.Type != before.Type || strings.Join(after.Values, ",") != strings.Join(before.Values, ",") || after.Extract != before.Extract {
+		t.Fatalf("existing frontmatter field mutated: before=%+v after=%+v", before, after)
+	}
+}
+
+func TestGenerateHierarchicalSchema_RejectsSectionCollisionWithHierarchyField(t *testing.T) {
+	tmpDir := t.TempDir()
+	var records []*extract.Record
+	for _, path := range []string{
+		"E01-epic/F01-feature/T001-one.md", "E01-epic/F01-feature/T002-two.md",
+		"E02-epic/F02-feature/T001-three.md", "E02-epic/F02-feature/T002-four.md",
+	} {
+		rec := makeSectionRecord(extract.Section{Level: 2, Heading: "ID"})
+		rec.Path = filepath.Join(tmpDir, path)
+		records = append(records, rec)
+	}
+	opts := DefaultInferOptions()
+	opts.IncludeStructural = false
+	_, err := GenerateHierarchicalSchema(context.Background(), tmpDir, records, opts)
+	if err == nil || !strings.Contains(err.Error(), `field "id"`) || !strings.Contains(err.Error(), "hierarchy") || !strings.Contains(err.Error(), "body section") || !strings.Contains(err.Error(), "body.section[") || !strings.Contains(err.Error(), "## ID") {
+		t.Fatalf("expected hierarchy/body section collision error, got %v", err)
+	}
+
+	rootStem := buildRootStemFile(AnalyzeHierarchy(records, tmpDir), nil, tmpDir, opts)
+	before := rootStem.Schema["id"]
+	if err := addSectionInferenceFields(rootStem.Schema, []Inference{{Type: "required_section", Field: "id", SourceDirective: `body.section["## ID"]`}}, "hierarchy"); err == nil {
+		t.Fatal("expected helper collision error")
+	}
+	if after := rootStem.Schema["id"]; after.Type != before.Type || after.Prefix != before.Prefix || after.Digits != before.Digits || after.Extract != before.Extract || after.Match == nil {
+		t.Fatalf("existing hierarchy field mutated: before=%+v after=%+v", before, after)
+	}
+}
+
+func TestGenerateFlatSchema_SectionSourceOptionalValidatesCorpus(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("## Notes\nA\n"), makeRecord("## Notes\nB\n"),
+		makeRecord("## Notes\nC\n"), makeRecord("## Notes\nD\n"),
+		makeRecord("# No notes\n"),
+	}
+	opts := DefaultInferOptions()
+	opts.IncludeStructural = false
+	stem, err := GenerateFlatSchema(context.Background(), ".", records, opts)
+	if err != nil {
+		t.Fatalf("GenerateFlatSchema: %v", err)
+	}
+	notes, ok := stem.Schema["notes"]
+	if !ok {
+		t.Fatalf("missing notes field in %#v", stem.Schema)
+	}
+	if notes.Required || notes.Type != "string" || notes.Extract != `body.section["## Notes"]` {
+		t.Fatalf("notes field = %+v, want optional string source-backed field", notes)
+	}
+	for _, rec := range records {
+		if errs := rules.Validate(context.Background(), rec, stem); len(errs) != 0 {
+			t.Fatalf("generated schema rejected %s: %+v", rec.Path, errs)
+		}
+	}
+}
+
+func TestGenerateHierarchicalSchema_SectionSourceUsesCanonicalDirective(t *testing.T) {
+	tmpDir := t.TempDir()
+	var records []*extract.Record
+	for _, path := range []string{
+		"E01-epic/F01-feature/T001-one.md", "E01-epic/F01-feature/T002-two.md",
+		"E02-epic/F02-feature/T001-three.md", "E02-epic/F02-feature/T002-four.md",
+	} {
+		records = append(records, makeSectionRecord(extract.Section{Level: 3, Heading: "Findings"}))
+		records[len(records)-1].Path = filepath.Join(tmpDir, path)
+	}
+	opts := DefaultInferOptions()
+	opts.IncludeStructural = false
+	stemMap, err := GenerateHierarchicalSchema(context.Background(), tmpDir, records, opts)
+	if err != nil {
+		t.Fatalf("GenerateHierarchicalSchema: %v", err)
+	}
+	findings := stemMap["."].Schema["findings"]
+	if findings.Type != "string" || findings.Extract != `body.section["### Findings"]` || !findings.Required {
+		t.Fatalf("findings field = %+v, want required canonical section source", findings)
 	}
 }
 
