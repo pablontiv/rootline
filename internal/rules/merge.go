@@ -98,14 +98,16 @@ func mergeFieldSource(parent, child SchemaField) SchemaField {
 // An unspecified severity ("") defaults to "error" — the absence of
 // an explicit severity is not a loosening intent.
 func mergeFieldSeverity(parent, child SchemaField) SchemaField {
-	if child.Severity == "" {
-		child.Severity = "error"
+	parentSeverity, parentOK := normalizedSeverity(parent.Severity)
+	childSeverity, childOK := normalizedSeverity(child.Severity)
+	if !parentOK || !childOK {
+		return child
 	}
-	parentSev := severityOrder[parent.Severity]
-	childSev := severityOrder[child.Severity]
-	if childSev < parentSev {
-		// Child is trying to loosen — keep parent's stricter severity
-		child.Severity = parent.Severity
+	if severityOrder[childSeverity] < severityOrder[parentSeverity] {
+		// Child is trying to loosen — keep parent's stricter severity.
+		child.Severity = parentSeverity
+	} else {
+		child.Severity = childSeverity
 	}
 	return child
 }

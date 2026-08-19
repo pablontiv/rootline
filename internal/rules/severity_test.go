@@ -118,6 +118,27 @@ func TestMergeSeverityNoLoosen(t *testing.T) {
 	}
 }
 
+func TestMergeSeverityOmittedParentDefaultsToErrorBeforeNoLoosen(t *testing.T) {
+	entries := []StemEntry{
+		{Path: "parent/.stem", Stem: &StemFile{
+			Schema: map[string]SchemaField{
+				"estado": {Type: "string"},
+			},
+		}},
+		{Path: "child/.stem", Stem: &StemFile{
+			Schema: map[string]SchemaField{
+				"estado": {Type: "string", Severity: "warn"},
+			},
+		}},
+	}
+
+	result := MergeStemFiles(entries)
+	field := result.Schema["estado"]
+	if field.Severity != "error" {
+		t.Errorf("expected omitted parent severity to default to 'error' before no-loosen merge, got %q", field.Severity)
+	}
+}
+
 func TestMergeSeverityEmptyDefaultsToError(t *testing.T) {
 	// Parent: warn, Child: "" (unspecified) → result: error
 	// Empty severity defaults to "error", which is stricter than "warn".
