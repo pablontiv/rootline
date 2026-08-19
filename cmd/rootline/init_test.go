@@ -125,6 +125,47 @@ func TestInitCleanContentNoWarning(t *testing.T) {
 	}
 }
 
+func TestStemSerializer_PreservesSource(t *testing.T) {
+	ordered := 1
+	stem := &rules.StemFile{
+		Version: 2,
+		Root:    true,
+		Schema: map[string]rules.SchemaField{
+			"h1":     {Type: "string", Extract: `body.h1`},
+			"notes":  {Type: "string", Extract: `body.section["## Notes: risks #1"]`, Required: true},
+			"legacy": {Type: "string", Heading: "## Legacy", Ordered: &ordered},
+		},
+	}
+
+	out, err := stemFileToYAML(stem, t.TempDir())
+	if err != nil {
+		t.Fatalf("stemFileToYAML: %v", err)
+	}
+	if !strings.Contains(out, "source: body.h1") {
+		t.Fatalf("body.h1 source not serialized:\n%s", out)
+	}
+	if !strings.Contains(out, `source: 'body.section["## Notes: risks #1"]'`) {
+		t.Fatalf("hazardous section source not safely serialized:\n%s", out)
+	}
+	if strings.Contains(out, "heading:") || strings.Contains(out, "ordered:") {
+		t.Fatalf("canonical serializer emitted legacy keys:\n%s", out)
+	}
+
+	parsed, err := rules.ParseStem(".stem", []byte(out))
+	if err != nil {
+		t.Fatalf("serialized stem did not parse: %v\n%s", err, out)
+	}
+	if got := parsed.Schema["h1"].Extract; got != `body.h1` {
+		t.Fatalf("h1 source=%q", got)
+	}
+	if got := parsed.Schema["notes"].Extract; got != `body.section["## Notes: risks #1"]` {
+		t.Fatalf("notes source=%q", got)
+	}
+	if got := parsed.Schema["legacy"].Extract; got != "" {
+		t.Fatalf("legacy source invented as %q", got)
+	}
+}
+
 func TestInitSectionSourceCanonicalDryRunRoundTrips(t *testing.T) {
 	tests := []struct {
 		name     string

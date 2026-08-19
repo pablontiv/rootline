@@ -12,9 +12,9 @@ import (
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/internal/stemyaml"
 	"github.com/pablontiv/rootline/internal/templates"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -237,62 +237,8 @@ func stemFileToYAML(stem *rules.StemFile, scanRoot string) (string, error) {
 	sort.Strings(keys)
 
 	for _, name := range keys {
-		field := stem.Schema[name]
-		fmt.Fprintf(&b, "  %s:\n", name)
-		fmt.Fprintf(&b, "    type: %s\n", field.Type)
-		if field.Required {
-			b.WriteString("    required: true\n")
-		}
-		if len(field.Values) > 0 {
-			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(field.Values, ", "))
-		}
-		if field.Extract != "" {
-			source, err := yamlScalar(field.Extract)
-			if err != nil {
-				return "", fmt.Errorf("encoding source for field %q: %w", name, err)
-			}
-			fmt.Fprintf(&b, "    source: %s\n", source)
-		} else if field.Heading != "" {
-			fmt.Fprintf(&b, "    heading: %q\n", field.Heading)
-		}
-		if field.Prefix != "" {
-			fmt.Fprintf(&b, "    prefix: %s\n", field.Prefix)
-		}
-		if field.Digits > 0 {
-			fmt.Fprintf(&b, "    digits: %d\n", field.Digits)
-		}
-		if field.Match != nil {
-			switch {
-			case len(field.Match.Configs) > 0:
-				b.WriteString("    match:\n")
-				matchKeys := make([]string, 0, len(field.Match.Configs))
-				for k := range field.Match.Configs {
-					matchKeys = append(matchKeys, k)
-				}
-				sort.Strings(matchKeys)
-				for _, mk := range matchKeys {
-					cfg := field.Match.Configs[mk]
-					if cfgMap, ok := cfg.(map[string]any); ok {
-						fmt.Fprintf(&b, "      \"%s\": {", mk)
-						first := true
-						if p, ok := cfgMap["prefix"]; ok {
-							fmt.Fprintf(&b, "prefix: %s", p)
-							first = false
-						}
-						if d, ok := cfgMap["digits"]; ok {
-							if !first {
-								b.WriteString(", ")
-							}
-							fmt.Fprintf(&b, "digits: %v", d)
-						}
-						b.WriteString("}\n")
-					}
-				}
-			case len(field.Match.Patterns) == 1:
-				fmt.Fprintf(&b, "    match: \"%s\"\n", field.Match.Patterns[0])
-			case len(field.Match.Patterns) > 1:
-				fmt.Fprintf(&b, "    match: [%s]\n", strings.Join(field.Match.Patterns, ", "))
-			}
+		if err := stemyaml.AppendSchemaField(&b, name, stem.Schema[name]); err != nil {
+			return "", fmt.Errorf("serializing field %q: %w", name, err)
 		}
 	}
 
@@ -331,18 +277,6 @@ func stemFileToYAML(stem *rules.StemFile, scanRoot string) (string, error) {
 	out := b.String()
 	if _, err := rules.ParseStem(filepath.Join(scanRoot, ".stem"), []byte(out)); err != nil {
 		return "", err
-	}
-	return out, nil
-}
-
-func yamlScalar(value string) (string, error) {
-	b, err := yaml.Marshal(value)
-	if err != nil {
-		return "", err
-	}
-	out := strings.TrimSuffix(string(b), "\n")
-	if strings.Contains(out, "\n") {
-		return "", fmt.Errorf("value requires multiline YAML scalar")
 	}
 	return out, nil
 }
