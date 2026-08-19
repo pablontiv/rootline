@@ -90,6 +90,11 @@ func isCovered(inf Inference, stem *rules.StemFile) bool {
 			return true
 		}
 
+	case "required_section", "optional_section":
+		if sf, ok := stem.Schema[inf.Field]; ok && sectionInferenceCovered(inf, sf) {
+			return true
+		}
+
 	case "required_understatement":
 		if sf, ok := stem.Schema[inf.Field]; ok && sf.Required {
 			return true
@@ -97,4 +102,14 @@ func isCovered(inf Inference, stem *rules.StemFile) bool {
 	}
 
 	return false
+}
+
+func sectionInferenceCovered(inf Inference, sf rules.SchemaField) bool {
+	if sf.Type != "string" || inf.SourceDirective == "" || sf.Extract != inf.SourceDirective {
+		return false
+	}
+	if inf.Type == "required_section" {
+		return sf.Required
+	}
+	return true
 }

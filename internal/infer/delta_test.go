@@ -180,6 +180,82 @@ func TestFilterCoveredInferences_MultiScope(t *testing.T) {
 	}
 }
 
+func TestIsCovered_SectionSourceAndRequiredness(t *testing.T) {
+	tests := []struct {
+		name  string
+		inf   Inference
+		field rules.SchemaField
+		want  bool
+	}{
+		{
+			name:  "required section covered by same required source",
+			inf:   Inference{Type: "required_section", Field: "notes", SourceDirective: `body.section["## Notes"]`},
+			field: rules.SchemaField{Type: "string", Required: true, Extract: `body.section["## Notes"]`},
+			want:  true,
+		},
+		{
+			name:  "optional section covered by same optional source",
+			inf:   Inference{Type: "optional_section", Field: "notes", SourceDirective: `body.section["## Notes"]`},
+			field: rules.SchemaField{Type: "string", Extract: `body.section["## Notes"]`},
+			want:  true,
+		},
+		{
+			name:  "optional section covered by stronger required source",
+			inf:   Inference{Type: "optional_section", Field: "notes", SourceDirective: `body.section["## Notes"]`},
+			field: rules.SchemaField{Type: "string", Required: true, Extract: `body.section["## Notes"]`},
+			want:  true,
+		},
+		{
+			name:  "required section not covered by optional source",
+			inf:   Inference{Type: "required_section", Field: "notes", SourceDirective: `body.section["## Notes"]`},
+			field: rules.SchemaField{Type: "string", Extract: `body.section["## Notes"]`},
+			want:  false,
+		},
+		{
+			name:  "different source is not covered",
+			inf:   Inference{Type: "optional_section", Field: "notes", SourceDirective: `body.section["## Context"]`},
+			field: rules.SchemaField{Type: "string", Extract: `body.section["## Notes"]`},
+			want:  false,
+		},
+		{
+			name:  "missing existing source is not covered",
+			inf:   Inference{Type: "optional_section", Field: "notes", SourceDirective: `body.section["## Notes"]`},
+			field: rules.SchemaField{Type: "string"},
+			want:  false,
+		},
+		{
+			name:  "missing inferred source is not covered",
+			inf:   Inference{Type: "optional_section", Field: "notes"},
+			field: rules.SchemaField{Type: "string", Extract: `body.section["## Notes"]`},
+			want:  false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stem := &rules.StemFile{Schema: map[string]rules.SchemaField{"notes": tt.field}}
+			if got := isCovered(tt.inf, stem); got != tt.want {
+				t.Fatalf("isCovered() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilterCoveredInferences_SectionSourceDelta(t *testing.T) {
+	stem := &rules.StemFile{Schema: map[string]rules.SchemaField{
+		"notes": {Type: "string", Required: true, Extract: `body.section["## Notes"]`},
+	}}
+	records := []*extract.Record{{Path: "a.md", Frontmatter: map[string]any{"notes": "present"}}}
+	inferences := []Inference{
+		{Type: "required_section", Field: "notes", SourceDirective: `body.section["## Notes"]`},
+		{Type: "required_section", Field: "notes", SourceDirective: `body.section["## Context"]`},
+	}
+
+	got := FilterCoveredInferences(inferences, records, ".", singleScope(stem))
+	if len(got) != 1 || got[0].SourceDirective != `body.section["## Context"]` {
+		t.Fatalf("expected only changed-source section delta, got %+v", got)
+	}
+}
+
 func TestIsCovered_EnumWithoutValues(t *testing.T) {
 	stem := &rules.StemFile{
 		Schema: map[string]rules.SchemaField{
