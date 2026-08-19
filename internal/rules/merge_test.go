@@ -84,6 +84,38 @@ func TestMergeStemFiles_MapMerge(t *testing.T) {
 	}
 }
 
+func TestMergeSchemaFields_InheritsOmittedSource(t *testing.T) {
+	entries := []StemEntry{
+		stemEntry("root/.stem", &StemFile{
+			Version: 1,
+			Schema: map[string]SchemaField{
+				"summary": {Type: "string", Extract: `body.section["## Summary"]`},
+			},
+		}),
+		stemEntry("middle/.stem", &StemFile{
+			Schema: map[string]SchemaField{
+				"summary": {Type: "string", Required: true},
+			},
+		}),
+		stemEntry("leaf/.stem", &StemFile{
+			Schema: map[string]SchemaField{
+				"summary": {Type: "enum", Values: []string{"short"}},
+			},
+		}),
+	}
+
+	got := MergeStemFiles(entries).Schema["summary"]
+	if got.Extract != `body.section["## Summary"]` {
+		t.Fatalf("summary.extract = %q, want inherited root source", got.Extract)
+	}
+	if got.Source != "leaf/.stem" {
+		t.Fatalf("summary.source = %q, want leaf provenance", got.Source)
+	}
+	if got.Type != "enum" {
+		t.Fatalf("summary.type = %q, want leaf override", got.Type)
+	}
+}
+
 func TestMergeStemFiles_ValidateAccumulates(t *testing.T) {
 	// Validate rules accumulate from parent to child.
 	parent := &StemFile{

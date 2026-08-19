@@ -75,11 +75,22 @@ func mergeSchemaFields(parent, child map[string]SchemaField, source string) map[
 	for k, v := range child {
 		v.Source = source
 		if parentField, exists := out[k]; exists {
+			v = mergeFieldSource(parentField, v)
 			v = mergeFieldSeverity(parentField, v)
 		}
 		out[k] = v
 	}
 	return out
+}
+
+// mergeFieldSource carries an inherited extraction source through child fields
+// that omit source. Explicit empty or null source declarations are preserved as
+// removals so compatibility checks can reject them when inherited.
+func mergeFieldSource(parent, child SchemaField) SchemaField {
+	if child.Extract == "" && !child.declaration.SourcePresent {
+		child.Extract = parent.Extract
+	}
+	return child
 }
 
 // mergeFieldSeverity applies the tighten-only rule for severity:
