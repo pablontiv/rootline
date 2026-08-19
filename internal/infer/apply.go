@@ -1,11 +1,14 @@
 package infer
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/rules"
 	"gopkg.in/yaml.v3"
 )
@@ -38,6 +41,11 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("parsing yaml node: %w", err)
+	}
+
+	sectionPlan, err := buildSectionApplyPlan(stem, inferences)
+	if err != nil {
+		return nil, err
 	}
 
 	result := &ApplyResult{}
@@ -96,9 +104,23 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 				modified = true
 			}
 
+		case "required_section", "optional_section":
+			continue
+
 		default:
 			// Drift guard: this fires only if schema.go's routing filter admits a type this switch doesn't handle (wiring bug).
 			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: unknown inference type", inf.Type))
+		}
+	}
+
+	for _, field := range sortedSectionPlanFields(sectionPlan) {
+		if applied, created := applySectionFieldNode(&doc, sectionPlan[field]); applied {
+			if created {
+				result.Applied = append(result.Applied, fmt.Sprintf("add_field: %s (section)", field))
+			} else {
+				result.Applied = append(result.Applied, fmt.Sprintf("merge_section: %s", field))
+			}
+			modified = true
 		}
 	}
 
@@ -370,6 +392,145 @@ func parseValueList(s string) []string {
 		return nil
 	}
 	return strings.Fields(s)
+}
+
+type sectionApplyIntent struct {
+	Field    string
+	Source   string
+	Required bool
+}
+
+func buildSectionApplyPlan(stem *rules.StemFile, inferences []ReportInference) (map[string]sectionApplyIntent, error) {
+	plan := map[string]sectionApplyIntent{}
+	sections := map[string]map[string]bool{}
+	nonsection := map[string]map[string]bool{}
+	var conflicts []string
+	for _, inf := range inferences {
+		if inf.RequiresAgent {
+			continue
+		}
+		if inf.Type != "required_section" && inf.Type != "optional_section" {
+			if isSectionConflictingSchemaIntent(inf.Type) {
+				if nonsection[inf.Field] == nil {
+					nonsection[inf.Field] = map[string]bool{}
+				}
+				nonsection[inf.Field][inf.Type] = true
+			}
+			continue
+		}
+		source, err := canonicalSectionDirective(inf.SourceDirective)
+		if err != nil {
+			conflicts = append(conflicts, fmt.Sprintf("section inference for %q has invalid source_directive %q: %v", inf.Field, inf.SourceDirective, err))
+			continue
+		}
+		if sections[inf.Field] == nil {
+			sections[inf.Field] = map[string]bool{}
+		}
+		sections[inf.Field][source] = sections[inf.Field][source] || inf.Type == "required_section"
+	}
+	for _, field := range sortedSectionIntentFields(sections) {
+		if types := sortedIntentTypes(nonsection[field]); len(types) > 0 {
+			conflicts = append(conflicts, fmt.Sprintf("section inference for %q conflicts with same-field schema intents: %s", field, strings.Join(types, ", ")))
+		}
+		sources := sortedIntentTypes(sections[field])
+		if len(sources) > 1 {
+			conflicts = append(conflicts, fmt.Sprintf("section inference for %q has conflicting sources: %s", field, strings.Join(sources, ", ")))
+			continue
+		}
+		intent := sectionApplyIntent{Field: field, Source: sources[0], Required: sections[field][sources[0]]}
+		if sf, exists := stem.Schema[field]; exists && !existingFieldMatchesSectionIntent(sf, intent.Source) {
+			conflicts = append(conflicts, fmt.Sprintf("section inference for %q conflicts with existing schema field source/type", field))
+		}
+		plan[field] = intent
+	}
+	if len(conflicts) > 0 {
+		sort.Strings(conflicts)
+		return nil, errors.New(strings.Join(conflicts, "; "))
+	}
+	return plan, nil
+}
+
+func canonicalSectionDirective(directive string) (string, error) {
+	if directive == "" {
+		return "", fmt.Errorf("missing source_directive")
+	}
+	source, err := extract.ParseBodySource(directive)
+	if err != nil {
+		return "", err
+	}
+	if source.Kind != extract.BodySourceSection {
+		return "", fmt.Errorf("source_directive must be a body section")
+	}
+	return extract.CanonicalSectionSource(source.Heading)
+}
+
+func existingFieldMatchesSectionIntent(sf rules.SchemaField, source string) bool {
+	if sf.Type != "string" || sf.Heading != "" || sf.Extract == "" {
+		return false
+	}
+	canonical, err := canonicalSectionDirective(sf.Extract)
+	return err == nil && canonical == source
+}
+
+func isSectionConflictingSchemaIntent(infType string) bool {
+	switch infType {
+	case "enum_values", "required_field", "constant_field", "field_type", "untyped_field", "sequence_incomplete":
+		return true
+	default:
+		return false
+	}
+}
+
+func sortedIntentTypes(types map[string]bool) []string {
+	out := make([]string, 0, len(types))
+	for typ := range types {
+		out = append(out, typ)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func sortedSectionIntentFields(sections map[string]map[string]bool) []string {
+	fields := make([]string, 0, len(sections))
+	for field := range sections {
+		fields = append(fields, field)
+	}
+	sort.Strings(fields)
+	return fields
+}
+
+func sortedSectionPlanFields(plan map[string]sectionApplyIntent) []string {
+	fields := make([]string, 0, len(plan))
+	for field := range plan {
+		fields = append(fields, field)
+	}
+	sort.Strings(fields)
+	return fields
+}
+
+func applySectionFieldNode(doc *yaml.Node, intent sectionApplyIntent) (bool, bool) {
+	fieldNode, created := ensureSchemaFieldNode(doc, intent.Field)
+	if fieldNode == nil {
+		return false, false
+	}
+	if created {
+		setFieldProperty(fieldNode, "type", "string")
+		setFieldProperty(fieldNode, "source", intent.Source)
+		setFieldProperty(fieldNode, "required", strconv.FormatBool(intent.Required))
+		return true, true
+	}
+	changed := false
+	if source, has := nodeProperty(fieldNode, "source"); !has || source != intent.Source {
+		setFieldProperty(fieldNode, "source", intent.Source)
+		changed = true
+	}
+	if intent.Required {
+		if required, has := nodeProperty(fieldNode, "required"); !has || required != "true" {
+			setFieldProperty(fieldNode, "required", "true")
+			changed = true
+		}
+	}
+	return changed, false
 }
 
 func applySequenceCompleteNode(doc *yaml.Node, inf ReportInference) bool {

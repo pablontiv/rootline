@@ -229,6 +229,18 @@ func TestIsCovered_SectionSourceAndRequiredness(t *testing.T) {
 			field: rules.SchemaField{Type: "string", Extract: `body.section["## Notes"]`},
 			want:  false,
 		},
+		{
+			name:  "matching source non-string field is not covered",
+			inf:   Inference{Type: "optional_section", Field: "notes", SourceDirective: `body.section["## Notes"]`},
+			field: rules.SchemaField{Type: "section", Extract: `body.section["## Notes"]`},
+			want:  false,
+		},
+		{
+			name:  "legacy heading-only field is not covered",
+			inf:   Inference{Type: "optional_section", Field: "notes", SourceDirective: `body.section["## Notes"]`},
+			field: rules.SchemaField{Heading: "Notes"},
+			want:  false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
