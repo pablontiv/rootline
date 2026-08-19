@@ -35,6 +35,40 @@ func sourceResolutionError(fieldName, source, severity string, err error) Valida
 	}
 }
 
+func validationErrorFromContract(fieldName string, field SchemaField, issue *FieldContractIssue) ValidationError {
+	severity := field.Severity
+	if severity == "" {
+		severity = "error"
+	}
+	err := ValidationError{
+		Rule:     "type",
+		Field:    fieldName,
+		Message:  fmt.Sprintf("field %q expected %s, got %s", fieldName, issue.Expected, issue.Actual),
+		Source:   field.Source,
+		Severity: severity,
+	}
+	switch issue.Code {
+	case "invalid-enum":
+		valStr := issue.Actual
+		err.Rule = "enum"
+		err.Message = fmt.Sprintf("value %v is not in allowed values: [%s]", issue.Actual, strings.Join(field.Values, ", "))
+		err.Suggestion = fuzzy.Match(valStr, field.Values)
+		if err.Suggestion != "" && err.Suggestion != valStr {
+			err.Message += fmt.Sprintf(" (did you mean %q?)", err.Suggestion)
+		}
+	case "invalid-link":
+		err.Rule = "link-format"
+		err.Message = fmt.Sprintf("field %q should contain wiki-link syntax [[target]]", fieldName)
+		if field.Severity == "" {
+			err.Severity = "warn"
+		}
+	case "invalid-sequence":
+		err.Rule = "sequence-format"
+		err.Message = issue.Message
+	}
+	return err
+}
+
 // Validate checks a Record's frontmatter against the effective StemFile.
 // It runs schema-level auto-checks (required, enum) and explicit
 // validation rules (non_empty, enum, requires, exists).
@@ -46,6 +80,7 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 
 	var errs []ValidationError
 	sourceResolutionFailed := make(map[string]bool)
+	fieldContractFailed := make(map[string]bool)
 
 	// Phase 1: Schema auto-checks.
 	for name, field := range effective.Schema {
@@ -94,55 +129,13 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 			continue
 		}
 
-		// enum: if values defined and field exists, value must be in list
-		if exists && len(field.Values) > 0 {
-			if !enumContains(field.Values, val) {
-				valStr := fmt.Sprintf("%v", val)
-				msg := fmt.Sprintf("value %v is not in allowed values: [%s]", val, strings.Join(field.Values, ", "))
-				suggestion := fuzzy.Match(valStr, field.Values)
-				if suggestion != "" && suggestion != valStr {
-					msg += fmt.Sprintf(" (did you mean %q?)", suggestion)
-				}
-				errs = append(errs, ValidationError{
-					Rule:       "enum",
-					Field:      name,
-					Message:    msg,
-					Source:     field.Source,
-					Severity:   field.Severity,
-					Suggestion: suggestion,
-				})
-			}
+		if !exists {
+			continue
 		}
-
-		// link: if type is "link" and field exists, value must contain [[target]] syntax
-		if exists && field.Type == "link" {
-			valid := false
-			switch v := val.(type) {
-			case string:
-				valid = extract.ContainsWikilink(v)
-			case []any:
-				valid = true
-				for _, item := range v {
-					s, ok := item.(string)
-					if !ok || !extract.ContainsWikilink(s) {
-						valid = false
-						break
-					}
-				}
-			}
-			if !valid {
-				sev := field.Severity
-				if sev == "" {
-					sev = "warn"
-				}
-				errs = append(errs, ValidationError{
-					Rule:     "link-format",
-					Field:    name,
-					Message:  fmt.Sprintf("field %q should contain wiki-link syntax [[target]]", name),
-					Source:   "schema",
-					Severity: sev,
-				})
-			}
+		if issue := ValidateFieldValue(field, val); issue != nil {
+			errs = append(errs, validationErrorFromContract(name, field, issue))
+			fieldContractFailed[name] = true
+			continue
 		}
 	}
 
@@ -182,7 +175,7 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 		if rule.Severity == "off" {
 			continue
 		}
-		if sourceResolutionFailed[rule.Field] {
+		if sourceResolutionFailed[rule.Field] || fieldContractFailed[rule.Field] {
 			continue
 		}
 		var ruleErrs []ValidationError
