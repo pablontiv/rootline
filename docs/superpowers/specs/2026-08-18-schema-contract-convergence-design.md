@@ -5,8 +5,9 @@ estado: Specified
 # Schema and Body-Source Contract Convergence Design
 
 **Date:** 2026-08-18
-**Status:** Draft for owner review
+**Status:** Approved design
 **Issues:** #142, #144, #148, #151, #152
+**Related follow-up:** #190
 
 ## Purpose
 
@@ -34,8 +35,11 @@ A governed system cannot accept values that contradict declared types, assign tw
 12. Duplicate matching headings are ambiguous and produce an actionable error; Rootline never silently selects the first or last occurrence.
 13. Path-like `results[].errors[].source` values are relative to the governance root. Symbolic sources remain symbolic.
 14. Multiple sections materialized in one operation are ordered lexically by their exact source heading.
-15. One shared field contract owns value conformance, source resolution, and parent-to-child compatibility.
-16. No schema mode, envelope version, migration verb, or automatic value coercion will be added.
+15. `boolean` and `integer` are enforceable value types; legacy `type: bool` migrates to canonical `type: boolean`.
+16. Enums accept one or more declared values; only an empty domain is invalid.
+17. Section inference rejects logical-name collisions and requires explicit field names; it never invents suffixes.
+18. One shared field contract owns value conformance, source resolution, and parent-to-child compatibility.
+19. No schema mode, envelope version, migration verb, or automatic value coercion will be added.
 
 ## Scope
 
@@ -61,6 +65,7 @@ A governed system cannot accept values that contradict declared types, assign tw
 - A new `.stem` or validation-envelope version.
 - New meanings for whitespace-only strings or empty lists under `non_empty`.
 - Guessing a heading when a legacy declaration does not identify one.
+- Ancestor-qualified section selectors; hierarchical source paths are tracked separately in #190.
 - Treating `set` as a Markdown body editor; it remains a frontmatter override operation.
 - Replacing the independent repair-surface `set_section` operation.
 - Rewriting completed roadmap records or historical designs.
@@ -87,9 +92,11 @@ The implementation may use focused internal files such as `type_contract.go` and
 |---|---|---|
 | `string` | YAML or extracted string | None |
 | `list` | YAML sequence | None on item values |
-| `enum` | YAML or extracted string | Value MUST occur in `values`; the existing enum-health minimum of two declared entries remains enforced |
+| `enum` | YAML or extracted string | Value MUST occur in `values`; one or more declared values are valid and an empty domain is invalid |
 | `sequence` | YAML or extracted string | Value MUST conform to the declared `prefix` plus exactly `digits` decimal digits; both settings are required |
 | `link` | String, or list of strings | Every accepted string MUST contain the currently supported wiki-link syntax |
+| `boolean` | YAML boolean | No string coercion; legacy `type: bool` is rejected with migration guidance |
+| `integer` | YAML integer | Floating-point and quoted numeric values are not integers |
 
 `section` is absent from this table because it identifies a storage location, not a value representation.
 
@@ -190,9 +197,10 @@ Section-pattern detection MUST:
 2. count every record in the denominator, including documents without a body and headings with empty bodies;
 3. infer a candidate field when the configured threshold is met;
 4. mark it `required` only when the heading is present in 100% of the analyzed records;
-5. emit `type: string` plus the exact `source: body.section[...]` directive.
+5. emit `type: string` plus the exact `source: body.section[...]` directive;
+6. detect when distinct exact headings normalize to the same logical field name and fail with all colliding headings listed.
 
-Threshold-level evidence justifies discovering an optional field. It does not justify converting observed absence into a required constraint.
+Threshold-level evidence justifies discovering an optional field. It does not justify converting observed absence into a required constraint. A collision requires explicit field names and sources; inference never invents heading-level or numeric suffixes.
 
 `init`, `schema propose`, and analyze/schema-apply paths MUST use the same inference result and MUST serialize the source directive. No path may claim a section inference was handled while silently discarding it.
 
@@ -262,6 +270,9 @@ This is an observable contract correction:
 - Records whose values contradict declared types will begin failing validation.
 - Unknown and incomplete type declarations will begin failing stem health.
 - Legacy `type: section`, `heading`, and `ordered` declarations will require the printed source-backed migration.
+- Legacy `type: bool` declarations will require `type: boolean`; existing YAML booleans remain unchanged.
+- Existing `type: integer` declarations and YAML integers remain canonical and become enforceable.
+- Single-value enum domains remain strict constraints; legacy `enum:` keys migrate to canonical `values:` without inventing another value.
 - Automatically materialized sections will use lexical heading order instead of legacy `ordered` metadata or map iteration.
 - Empty headings will satisfy `required` but fail `non_empty` when that explicit rule applies.
 - Duplicate headings targeted by one source will become validation errors.
@@ -411,6 +422,37 @@ Source normalization MUST NOT reinterpret non-path identifiers.
 **WHEN** the envelope is emitted
 **THEN** the source remains unchanged.
 
+### R16 — Enforce active scalar types without coercion
+
+Boolean and integer declarations MUST validate their native YAML representations.
+
+**GIVEN** a field declares `type: boolean`
+**WHEN** a record contains the string `"true"`
+**THEN** Rootline emits a type error rather than coercing it.
+
+**GIVEN** a field declares `type: integer`
+**WHEN** a record contains the YAML integer `3`
+**THEN** it passes type conformance.
+
+### R17 — Reject inferred logical-name collisions
+
+Inference MUST NOT silently overwrite or rename distinct headings that normalize to one logical field.
+
+**GIVEN** `## Notes` and `### Notes` both normalize to `notes`
+**WHEN** section inference generates a schema candidate
+**THEN** it fails with both exact headings and requests explicit field names.
+
+### R18 — Preserve single-value enum constraints
+
+An enum MUST declare at least one value and MAY declare exactly one.
+
+**GIVEN** a field declares `values: [theory]`
+**WHEN** a record contains `theory`
+**THEN** it passes enum validation.
+
+**WHEN** another record contains `hypothesis`
+**THEN** it fails enum validation.
+
 ## Error Handling
 
 - Schema declaration and inheritance failures appear in `stem_health` and follow existing strict/error exit rules.
@@ -423,7 +465,7 @@ Source normalization MUST NOT reinterpret non-path identifiers.
 
 ### Unit field-contract matrix
 
-Table-driven tests cover every supported type with valid and invalid values, incomplete declarations, unknown types, canonical sources, and legacy section declarations.
+Table-driven tests cover every supported type, including native YAML booleans and integers, with valid and invalid values, empty and single-value enum domains, incomplete declarations, unknown types, canonical sources, legacy `bool`, and legacy section declarations.
 
 ### Monotonic algebra
 
@@ -456,6 +498,7 @@ Tests prove:
 
 - inferred headings preserve their exact source;
 - threshold matches are optional unless present in every record;
+- logical-name collisions fail without invented suffixes;
 - init-generated schema validates its source corpus;
 - schema propose/apply does not discard section inferences;
 - serializers and `migrate --split` preserve source declarations;
@@ -509,7 +552,7 @@ Expected implementation surfaces include:
 - `.claude/skills/rootline/` — synchronized agent-facing field semantics.
 - `CHANGELOG.md` or the repository's release-note surface for compatibility guidance.
 
-Exact files may narrow during implementation, but scope MUST NOT expand beyond contract convergence for #142, #144, #148, #151, and #152 without a new design decision.
+Exact files may narrow during implementation, but scope MUST NOT expand beyond contract convergence for #142, #144, #148, #151, and #152 without a new design decision. Hierarchical section selectors remain outside this scope under #190.
 
 ## Delivery Slices
 
