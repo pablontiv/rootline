@@ -112,7 +112,7 @@ scope:
 	}
 }
 
-func TestValidateStemHealth_EnumValues(t *testing.T) {
+func TestValidateStemHealth_SingleValueEnumHasNoWarning(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
@@ -125,15 +125,10 @@ schema:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	found := false
 	for _, c := range result.Checks {
-		if c.Name == "enum-values" && c.Status == "warn" {
-			found = true
-			break
+		if c.Name == "enum-values" || c.Name == "field-declaration" {
+			t.Errorf("unexpected enum declaration warning for one-value enum: %+v", c)
 		}
-	}
-	if !found {
-		t.Error("expected enum-values warning")
 	}
 }
 
@@ -391,13 +386,13 @@ schema:
 	}
 	found := false
 	for _, c := range result.Checks {
-		if c.Name == "enum-values" && c.Status == "warn" {
+		if c.Name == "field-declaration" && c.Status == "fail" && c.Field == "estado" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("expected enum-values warning for 0-value enum")
+		t.Error("expected field-declaration failure for 0-value enum")
 	}
 }
 

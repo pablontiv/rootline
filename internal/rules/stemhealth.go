@@ -211,21 +211,8 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		return nil, ctx.Err()
 	}
 
-	// Check 4: Enum fields have at least 2 values
-	for sf, stem := range parsedStems {
-		relPath, _ := filepath.Rel(absRoot, sf)
-		for fieldName, field := range stem.Schema {
-			if field.Type == "enum" && len(field.Values) < 2 {
-				checks = append(checks, StemHealthCheck{
-					Name:    "enum-values",
-					Status:  "warn",
-					Message: fmt.Sprintf("enum field %q has %d value(s), expected at least 2", fieldName, len(field.Values)),
-					Path:    relPath,
-					Field:   fieldName,
-				})
-			}
-		}
-	}
+	// Check 4: Schema field declarations use the canonical type/source contract.
+	checks = append(checks, fieldDeclarationChecks(absRoot, parsedStems)...)
 
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -473,6 +460,38 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 	}
 
 	return &StemHealthResult{Checks: checks}, nil
+}
+
+func fieldDeclarationChecks(absRoot string, parsedStems map[string]*StemFile) []StemHealthCheck {
+	stemPaths := make([]string, 0, len(parsedStems))
+	for stemPath := range parsedStems {
+		stemPaths = append(stemPaths, stemPath)
+	}
+	slices.Sort(stemPaths)
+
+	var checks []StemHealthCheck
+	for _, stemPath := range stemPaths {
+		stem := parsedStems[stemPath]
+		relPath, _ := filepath.Rel(absRoot, stemPath)
+		fieldNames := make([]string, 0, len(stem.Schema))
+		for fieldName := range stem.Schema {
+			fieldNames = append(fieldNames, fieldName)
+		}
+		slices.Sort(fieldNames)
+		for _, fieldName := range fieldNames {
+			field := stem.Schema[fieldName]
+			for _, contractIssue := range ValidateFieldDeclaration(fieldName, field) {
+				checks = append(checks, StemHealthCheck{
+					Name:    "field-declaration",
+					Status:  "fail",
+					Message: fmt.Sprintf("%s: %s", contractIssue.Code, contractIssue.Message),
+					Path:    relPath,
+					Field:   fieldName,
+				})
+			}
+		}
+	}
+	return checks
 }
 
 // monotonicConstraintSuffixes are the schema-level constraints the resolver

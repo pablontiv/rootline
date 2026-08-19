@@ -83,9 +83,6 @@ func detectGapsForScope(stem *rules.StemFile, records []*extract.Record, priorIn
 			if sf.Required || coveredByRequired[name] {
 				continue
 			}
-			if sf.Type == "section" {
-				continue
-			}
 			count := 0
 			for _, rec := range records {
 				if _, ok := rec.Frontmatter[name]; ok {

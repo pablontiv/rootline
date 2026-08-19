@@ -40,7 +40,7 @@ Batch validation runs four phases in order:
    - `yaml-valid` — valid YAML syntax
    - `scope-match` — scope patterns match at least one file
    - `type-consistency` — field types are consistent across hierarchy
-   - `enum-values` — enums have at least 2 values
+   - `field-declaration` — schema fields use supported canonical types, values, and source declarations
    - `rule-field-exists` — validation rules reference defined fields
    - `field-override` — child field overrides warn about partial override
    - `aggregated-required` — warns when a field is both `required` and aggregated (`required` is auto-skipped on index files, so the combination rarely does what it looks like)
