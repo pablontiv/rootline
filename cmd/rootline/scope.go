@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/index"
@@ -31,10 +32,13 @@ func stemScopeResolver() func(dir string) (*rules.StemFile, error) {
 // excludedFromGovernance reports why a path is outside the governed record
 // set, or "" when it is governed. It mirrors the two filters index.Scan
 // applies: .stemignore and scope.match.
-func excludedFromGovernance(absPath string) string {
+func excludedFromGovernance(absPath, commandScopeRoot string) string {
 	dir := filepath.Dir(absPath)
 	entries, err := rules.WalkUp(dir)
 	if err != nil || len(entries) == 0 {
+		if pathWithinScope(absPath, commandScopeRoot) && index.IsIgnored(commandScopeRoot, absPath) {
+			return "skipped: excluded by .stemignore"
+		}
 		return "" // no schema governs it; ordinary validation reports that
 	}
 	root := filepath.Dir(entries[0].Path)
@@ -45,6 +49,11 @@ func excludedFromGovernance(absPath string) string {
 		return "skipped: out of scope for this .stem (scope.match)"
 	}
 	return ""
+}
+
+func pathWithinScope(absPath, root string) bool {
+	rel, err := filepath.Rel(root, absPath)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // scanGoverned scans root with scope filtering, falling back to an ungoverned
