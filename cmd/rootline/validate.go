@@ -58,7 +58,6 @@ func runValidate(cmd *cobra.Command, args []string) error {
 func runValidateFiles(cmd *cobra.Command, files []string) error {
 	ctx := cmd.Context()
 
-	reg := extract.NewASTRegistry()
 	var results []*rules.ValidationResult
 	linkCache := rules.NewHeadingCache()
 
@@ -95,41 +94,25 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 			continue
 		}
 
-		// Check extractor exists
-		ext := reg.ForFile(absPath, "")
-		if ext == nil {
-			return fmt.Errorf("no extractor for %s", file)
-		}
-
-		// Read and extract
-		content, err := os.ReadFile(absPath)
+		result, err := validateProspectiveRecord(ctx, prospectiveRecordValidationInput{
+			Path:     file,
+			AbsPath:  absPath,
+			ReadFile: true,
+			ResolveEffective: func() (*rules.StemFile, error) {
+				// Resolve effective stem (with levels expansion for hierarchical schemas)
+				dir := filepath.Dir(absPath)
+				effective, err := rules.ResolveForRecord(dir, file)
+				if err != nil {
+					return nil, fmt.Errorf("resolving .stem for %s: %w", file, err)
+				}
+				return effective, nil
+			},
+			LinkCache: linkCache,
+		})
 		if err != nil {
-			return fmt.Errorf("reading %s: %w", file, err)
+			return err
 		}
-
-		record, err := ext.Extract(file, content)
-		if err != nil {
-			return fmt.Errorf("extracting %s: %w", file, err)
-		}
-
-		// Resolve effective stem (with levels expansion for hierarchical schemas)
-		dir := filepath.Dir(absPath)
-		effective, err := rules.ResolveForRecord(dir, file)
-		if err != nil {
-			return fmt.Errorf("resolving .stem for %s: %w", file, err)
-		}
-
-		// Structural integrity check: detect multiple YAML documents.
-		structErrs := rules.ValidateStructure(content, file)
-		var errs []rules.ValidationError
-
-		// Validate
-		errs = append(errs, rules.Validate(ctx, record, effective)...)
-		errs = append(errs, rules.CheckLinks(record.Links, effective.Links, absPath, rules.SchemaRoot(absPath), linkCache)...)
-		errs = append(errs, rules.ExtractionErrors(record)...)
-		errs = append(errs, structErrs...)
-
-		results = append(results, rules.NewValidationResult(file, errs))
+		results = append(results, result)
 	}
 
 	// One file, several files or none: the envelope is the same shape, so a
@@ -341,13 +324,17 @@ func getStagedFiles() ([]string, error) {
 // info never fails: a nested root marker is a supported configuration, and
 // promoting it to a warning broke CI runs that had no way to suppress it.
 func validateHasFailure(batch *rules.BatchValidationResult) bool {
+	return validationBatchHasFailure(batch, validateStrict)
+}
+
+func validationBatchHasFailure(batch *rules.BatchValidationResult, strict bool) bool {
 	if batch.Summary.Invalid > 0 ||
 		batch.Summary.StructuralErrorsCount > 0 ||
 		batch.Summary.StemHealthErrorsCount > 0 ||
 		batch.HasErrorNotice() {
 		return true
 	}
-	if !validateStrict {
+	if !strict {
 		return false
 	}
 	if batch.Summary.WarningsCount > 0 ||
