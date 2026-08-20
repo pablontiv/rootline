@@ -545,3 +545,51 @@ schema:
 		t.Errorf("expected 0 sections added, got %d", result.SectionsAdded)
 	}
 }
+
+func TestScaffoldInvalidLaterSchemaKeepsEarlierWriteButDryRunWritesNone(t *testing.T) {
+	stem := `version: 2
+root: true
+schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["## Notes"]'
+  id:
+    type: sequence
+    match:
+      "BAD*": {prefix: BAD, digits: 2.0}
+`
+	files := map[string]string{
+		"A.md":      "---\ntitle: A\n---\n# A\n",
+		"BAD001.md": "---\ntitle: Bad\n---\n# Bad\n",
+	}
+
+	writeDir := setupTestDir(t, stem, files)
+	_, writeErr := (&ScaffoldOperation{RootPath: writeDir, Validator: acceptScaffoldValidation}).Execute()
+	if writeErr == nil || !strings.Contains(writeErr.Error(), "BAD001.md") || !strings.Contains(writeErr.Error(), "digits") {
+		t.Fatalf("write error = %v, want BAD001 digits cause", writeErr)
+	}
+	writtenA, err := os.ReadFile(filepath.Join(writeDir, "A.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(writtenA), "## Notes") {
+		t.Fatalf("normal mode did not preserve earlier validated write:\n%s", writtenA)
+	}
+
+	dryDir := setupTestDir(t, stem, files)
+	_, dryErr := (&ScaffoldOperation{RootPath: dryDir, DryRun: true, Validator: acceptScaffoldValidation}).Execute()
+	if dryErr == nil || !strings.Contains(dryErr.Error(), "BAD001.md") || !strings.Contains(dryErr.Error(), "digits") {
+		t.Fatalf("dry-run error = %v, want same BAD001 digits cause", dryErr)
+	}
+	if dryErr.Error() != writeErr.Error() {
+		t.Fatalf("dry-run error = %q, want same causal error as write mode %q", dryErr, writeErr)
+	}
+	dryA, err := os.ReadFile(filepath.Join(dryDir, "A.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(dryA), "## Notes") {
+		t.Fatalf("dry-run wrote earlier candidate despite later failure:\n%s", dryA)
+	}
+}

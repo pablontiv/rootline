@@ -85,12 +85,12 @@ func (op *ScaffoldOperation) Execute() (*ScaffoldResult, error) {
 
 		absPath, err := absoluteRecordPath(absRoot, rec.Path)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("resolving path for %s: %w", rec.Path, err)
 		}
 
 		effective, resolveErr := rules.ResolveForRecord(filepath.Dir(absPath), absPath)
 		if resolveErr != nil {
-			return nil, resolveErr
+			return nil, fmt.Errorf("resolving schema for %s: %w", rec.Path, resolveErr)
 		}
 		if effective == nil {
 			return nil, fmt.Errorf("no .stem schema found for %s", absPath)
@@ -98,7 +98,7 @@ func (op *ScaffoldOperation) Execute() (*ScaffoldResult, error) {
 
 		sections, err := rules.RequiredSectionMaterializations(rec, effective)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("materializing sections for %s: %w", rec.Path, err)
 		}
 		if len(sections) == 0 {
 			continue
@@ -106,10 +106,10 @@ func (op *ScaffoldOperation) Execute() (*ScaffoldResult, error) {
 
 		prospective, err := renderScaffoldedContent(absPath, sections)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("rendering scaffold for %s: %w", rec.Path, err)
 		}
 		if err := op.validateProspective(rec.Path, absPath, prospective, effective); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("validating scaffold for %s: %w", rec.Path, err)
 		}
 
 		for _, section := range sections {
@@ -123,7 +123,7 @@ func (op *ScaffoldOperation) Execute() (*ScaffoldResult, error) {
 
 		if !op.DryRun {
 			if writeErr := fsx.WriteFileAtomic(absPath, prospective, 0o644); writeErr != nil {
-				return nil, writeErr
+				return nil, fmt.Errorf("writing scaffold for %s: %w", rec.Path, writeErr)
 			}
 		}
 
