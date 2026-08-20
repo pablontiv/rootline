@@ -315,80 +315,35 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		return applyExitError(len(result.Errors), 0)
 	}
 
-	// Process each proposal.
-	for _, proposal := range report.Proposals {
-		// Skip proposals that require agent intervention.
-		if proposal.RequiresAgent {
-			result.Skipped = append(result.Skipped, fmt.Sprintf("%s: %s (requires agent)", proposal.ID, proposal.Target))
-			continue
-		}
-
-		// Process based on operation type.
-		if proposal.Operation == "create_stem" {
-			// `schema propose` emits absolute targets under the scan root, so the
-			// propose->apply contract depends on absolute paths staying valid —
-			// they are accepted, then confined.
-			target, err := fix.ContainPath(scanRoot, proposal.Target, fix.PolicyAcceptAbsolute)
-			if err != nil {
-				// A target outside the scan root is a policy refusal, not a
-				// failed write: the command declined on purpose and named the
-				// path it declined. It belongs in rejected[], which is where
-				// repair apply already puts the identical event — and rejected[]
-				// exists here now, so the older note that it did not is stale.
-				// Classifying it as an error would make the two commands
-				// disagree about the same containment decision.
-				result.Rejected = append(result.Rejected, err.Error())
-				resolved.Rejected[proposal.Target] = fix.ContainmentReason(err)
-				continue
-			}
-			resolved.Accepted[proposal.Target] = target
-
-			// Check for empty patch before write attempt
-			if proposal.Patch == "" {
-				result.Errors = append(result.Errors, fmt.Sprintf("create_stem: %s: patch content required; re-run 'schema propose' to generate it", proposal.Target))
-				continue
-			}
-			if err := validateProspectiveSchemaPatch(target, proposal.Patch); err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("validating proposed .stem %s: %v", proposal.Target, err))
-				continue
-			}
-			// Overwrite guard: replacing a governed .stem discards root, scope,
-			// enum values, required markers, derive and aggregate in one write,
-			// so it is a policy refusal unless the caller opted in with --force.
-			_, statErr := os.Stat(target)
-			targetExists := statErr == nil
-			if targetExists && !schemaApplyForce {
-				result.Rejected = append(result.Rejected,
-					fmt.Sprintf(".stem already exists in %s (use --force to overwrite)", filepath.Dir(target)))
-				continue
-			}
-
-			// Name the action after what it actually does. A dry run is the only
-			// chance the caller has to notice that "create" means "replace".
-			action := "create_stem"
-			if targetExists {
-				action = "overwrite_stem"
-			}
-
-			// Write the patch content byte-identical to what was proposed (not regenerated)
-			if !schemaApplyDryRun {
-				if err := os.WriteFile(target, []byte(proposal.Patch), 0o644); err != nil {
-					result.Errors = append(result.Errors, fmt.Sprintf("write %s: %v", proposal.Target, err))
-				} else {
-					result.Applied = append(result.Applied, fmt.Sprintf("%s: %s", action, target))
-				}
-			} else {
-				// In dry-run, just record the action without writing
-				result.Applied = append(result.Applied, fmt.Sprintf("%s: %s", action, target))
-			}
-		} else {
-			// Unknown operation: reject with descriptive message
-			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: unknown operation \"%s\"", proposal.ID, proposal.Operation))
-		}
-	}
-
+	plan := planSchemaProposalApply(report.Proposals, scanRoot, schemaApplyForce, result, resolved)
 	if schemaApplyDryRun {
 		result.ResolvedTargets = resolved
+	}
+	if len(result.Errors) > 0 {
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
+	}
+
+	// Execute only after the whole report has been planned and prospectively
+	// validated. Actual IO failures still use the existing no-rollback run-level
+	// behavior below.
+	for _, op := range plan {
+		if !schemaApplyDryRun {
+			if err := os.WriteFile(op.target, []byte(op.patch), 0o644); err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("write %s: %v", op.reportTarget, err))
+			} else {
+				result.Applied = append(result.Applied, fmt.Sprintf("%s: %s", op.action, op.target))
+			}
+		} else {
+			result.Applied = append(result.Applied, fmt.Sprintf("%s: %s", op.action, op.target))
+		}
 	}
 
 	// If not dry-run, run validation.
@@ -415,6 +370,111 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	return applyExitError(len(result.Errors), 0)
+}
+
+type schemaProposalApplyPlan struct {
+	reportTarget string
+	target       string
+	patch        string
+	action       string
+}
+
+type schemaApplyStatFunc func(string) (os.FileInfo, error)
+
+type schemaApplyTargetObservation struct {
+	exists  bool
+	statErr error
+}
+
+func planSchemaProposalApply(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown) []schemaProposalApplyPlan {
+	return planSchemaProposalApplyWithStat(proposals, scanRoot, force, result, resolved, os.Stat)
+}
+
+func planSchemaProposalApplyWithStat(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown, stat schemaApplyStatFunc) []schemaProposalApplyPlan {
+	plan := []schemaProposalApplyPlan{}
+	virtualTargets := map[string]schemaApplyTargetObservation{}
+	for _, proposal := range proposals {
+		// Skip proposals that require agent intervention.
+		if proposal.RequiresAgent {
+			result.Skipped = append(result.Skipped, fmt.Sprintf("%s: %s (requires agent)", proposal.ID, proposal.Target))
+			continue
+		}
+
+		if proposal.Operation != "create_stem" {
+			// Unknown operation: reject with descriptive message.
+			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: unknown operation \"%s\"", proposal.ID, proposal.Operation))
+			continue
+		}
+
+		// `schema propose` emits absolute targets under the scan root, so the
+		// propose->apply contract depends on absolute paths staying valid — they
+		// are accepted, then confined.
+		target, err := fix.ContainPath(scanRoot, proposal.Target, fix.PolicyAcceptAbsolute)
+		if err != nil {
+			// A target outside the scan root is a policy refusal, not a failed write.
+			result.Rejected = append(result.Rejected, err.Error())
+			resolved.Rejected[proposal.Target] = fix.ContainmentReason(err)
+			continue
+		}
+		resolved.Accepted[proposal.Target] = target
+
+		// Check for empty patch before write attempt.
+		if proposal.Patch == "" {
+			result.Errors = append(result.Errors, fmt.Sprintf("create_stem: %s: patch content required; re-run 'schema propose' to generate it", proposal.Target))
+			continue
+		}
+		if err := validateProspectiveSchemaPatch(target, proposal.Patch); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("validating proposed .stem %s: %v", proposal.Target, err))
+			continue
+		}
+
+		// Overwrite guard: replacing a governed .stem discards root, scope, enum
+		// values, required markers, derive and aggregate in one write, so it is a
+		// policy refusal unless the caller opted in with --force. The planner has to
+		// model earlier accepted operations in this same report because execution is
+		// intentionally deferred until all validation has completed.
+		observation, ok := virtualTargets[target]
+		if !ok {
+			observation = schemaApplyTargetObservationFromStat(stat(target))
+			virtualTargets[target] = observation
+		}
+		if observation.statErr != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("stat %s: %v", proposal.Target, observation.statErr))
+			continue
+		}
+		targetExists := observation.exists
+		if targetExists && !force {
+			result.Rejected = append(result.Rejected,
+				fmt.Sprintf(".stem already exists in %s (use --force to overwrite)", filepath.Dir(target)))
+			continue
+		}
+
+		// Name the action after what it actually does. A dry run is the only chance
+		// the caller has to notice that "create" means "replace".
+		action := "create_stem"
+		if targetExists {
+			action = "overwrite_stem"
+		}
+
+		plan = append(plan, schemaProposalApplyPlan{
+			reportTarget: proposal.Target,
+			target:       target,
+			patch:        proposal.Patch,
+			action:       action,
+		})
+		virtualTargets[target] = schemaApplyTargetObservation{exists: true}
+	}
+	return plan
+}
+
+func schemaApplyTargetObservationFromStat(_ os.FileInfo, err error) schemaApplyTargetObservation {
+	if err == nil {
+		return schemaApplyTargetObservation{exists: true}
+	}
+	if os.IsNotExist(err) {
+		return schemaApplyTargetObservation{exists: false}
+	}
+	return schemaApplyTargetObservation{statErr: err}
 }
 
 // runSchemaApplyFromAnalyze processes an analyze report and applies schema-modifying inferences to .stem files.
