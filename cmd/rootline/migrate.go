@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -353,6 +354,16 @@ func runMigrateScaffold(cmd *cobra.Command, args []string) error {
 	op := &migrate.ScaffoldOperation{
 		RootPath: absPath,
 		DryRun:   migrateDryRun,
+		Validator: func(ctx context.Context, in migrate.ScaffoldValidationInput) (*rules.ValidationResult, error) {
+			return validateProspectiveRecord(ctx, prospectiveRecordValidationInput{
+				Path:                         in.Path,
+				AbsPath:                      in.AbsPath,
+				Content:                      in.Content,
+				Effective:                    in.Effective,
+				ProspectiveLinkTargetAbsPath: in.AbsPath,
+				ProspectiveLinkTargetContent: in.Content,
+			})
+		},
 	}
 
 	result, err := op.Execute()
