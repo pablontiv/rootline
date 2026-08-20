@@ -96,7 +96,7 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 }
 
 func renderDescribeTable(cmd *cobra.Command, r *rules.DescribeResult) error {
-	headers := []string{"Field", "Type", "Required", "Values", "Source"}
+	headers := []string{"Field", "Type", "Required", "Values", "Source", "Defined In"}
 	var rows [][]string
 
 	keys := make([]string, 0, len(r.Schema))
@@ -116,7 +116,7 @@ func renderDescribeTable(cmd *cobra.Command, r *rules.DescribeResult) error {
 			vals = strings.Join(f.Values, ", ")
 		}
 		typeStr := f.Type
-		rows = append(rows, []string{k, typeStr, req, vals, f.Source})
+		rows = append(rows, []string{k, typeStr, req, vals, f.Extract, f.Source})
 	}
 
 	renderTable(cmd.OutOrStdout(), headers, rows)

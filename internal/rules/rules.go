@@ -242,8 +242,8 @@ type SchemaField struct {
 	Values        []string          `yaml:"values" json:"values,omitempty"`
 	Default       string            `yaml:"default" json:"default,omitempty"`
 	Severity      string            `yaml:"severity" json:"severity,omitempty"`
-	Source        string            `yaml:"-" json:"source,omitempty"`
-	Extract       string            `yaml:"source" json:"extract,omitempty"`
+	Source        string            `yaml:"-" json:"defined_in,omitempty"`
+	Extract       string            `yaml:"source" json:"source,omitempty"`
 	Prefix        string            `yaml:"prefix" json:"prefix,omitempty"`
 	Digits        int               `yaml:"digits" json:"digits,omitempty"`
 	Next          string            `yaml:"-" json:"next,omitempty"`

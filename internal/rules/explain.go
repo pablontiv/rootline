@@ -24,6 +24,7 @@ type ExplainField struct {
 	Value      any    `json:"value"`
 	Origin     string `json:"origin"`
 	Source     string `json:"source,omitempty"`
+	DefinedIn  string `json:"defined_in,omitempty"`
 	Expression string `json:"expression,omitempty"`
 }
 
@@ -37,15 +38,16 @@ type ExplainError struct {
 	Suggestion string `json:"suggestion,omitempty"`
 }
 
-// NewExplainResult builds an ExplainResult from walk-up entries,
-// the effective StemFile, and validation errors for a given path.
+// NewExplainResult builds an ExplainResult from walk-up entries, the effective
+// StemFile, and validation errors for a given path. Source-resolution failures
+// are returned before callers render a partial inspection payload.
 func NewExplainResult(
 	path string,
 	entries []StemEntry,
 	effective *StemFile,
 	record *extract.Record,
 	valErrs []ValidationError,
-) *ExplainResult {
+) (*ExplainResult, error) {
 	chain := make([]string, len(entries))
 	for i, e := range entries {
 		chain[i] = e.Path
@@ -69,64 +71,42 @@ func NewExplainResult(
 	}
 
 	var fields []ExplainField
-
-	// Frontmatter fields.
-	fmKeys := sortedMapKeys(record.Frontmatter)
-	for _, k := range fmKeys {
-		f := ExplainField{
-			Name:   k,
-			Value:  record.Frontmatter[k],
-			Origin: "frontmatter",
+	for _, name := range explainFieldNames(record, effective) {
+		field := ExplainField{Name: name, Origin: explainOriginFromRecord(record, name)}
+		if record != nil {
+			if value, ok := record.EffectiveField(name); ok {
+				field.Value = value
+			}
 		}
-		// Check if this field is defined in schema.
 		if effective != nil {
-			if sf, ok := effective.Schema[k]; ok {
-				f.Source = sf.Source
-			}
-		}
-		fields = append(fields, f)
-	}
-
-	// Schema fields not present in frontmatter (missing required, defaults).
-	if effective != nil {
-		for name, sf := range effective.Schema {
-			if _, exists := record.Frontmatter[name]; exists {
-				continue
-			}
-			f := ExplainField{
-				Name:   name,
-				Value:  nil,
-				Origin: "schema",
-				Source: sf.Source,
-			}
-			if sf.Default != "" {
-				f.Value = sf.Default
-			}
-			fields = append(fields, f)
-		}
-	}
-
-	// Derived fields (from derive and aggregate).
-	if effective != nil {
-		derivedKeys := sortedMapKeys(record.Derived)
-		for _, k := range derivedKeys {
-			f := ExplainField{
-				Name:   k,
-				Value:  record.Derived[k],
-				Origin: "derived",
-			}
-			if exprVal, ok := effective.Derive[k]; ok {
-				if exprStr, ok := exprVal.(string); ok {
-					f.Expression = exprStr
+			if sf, ok := effective.Schema[name]; ok {
+				value, valueOK, err := ResolveEffectiveField(record, effective, name)
+				if err != nil {
+					return nil, err
 				}
-			} else if exprVal, ok := effective.Aggregate[k]; ok {
-				f.Origin = "aggregate"
+				if valueOK {
+					field.Value = value
+					if field.Origin == "schema" && sf.Extract != "" {
+						field.Origin = "derived"
+					}
+				} else if sf.Default != "" {
+					field.Value = sf.Default
+				}
+				field.Source = sf.Extract
+				field.DefinedIn = sf.Source
+			}
+			if exprVal, ok := effective.Derive[name]; ok {
 				if exprStr, ok := exprVal.(string); ok {
-					f.Expression = exprStr
+					field.Expression = exprStr
+				}
+			} else if exprVal, ok := effective.Aggregate[name]; ok {
+				field.Origin = "aggregate"
+				if exprStr, ok := exprVal.(string); ok {
+					field.Expression = exprStr
 				}
 			}
-			fields = append(fields, f)
 		}
+		fields = append(fields, field)
 	}
 
 	// Validation errors.
@@ -144,7 +124,48 @@ func NewExplainResult(
 		Provenance: provenance,
 		Fields:     fields,
 		Errors:     explainErrs,
+	}, nil
+}
+
+func explainFieldNames(record *extract.Record, effective *StemFile) []string {
+	seen := make(map[string]bool)
+	if record != nil {
+		for name := range record.Frontmatter {
+			seen[name] = true
+		}
+		for name := range record.Derived {
+			seen[name] = true
+		}
 	}
+	if effective != nil {
+		for name := range effective.Schema {
+			seen[name] = true
+		}
+		for name := range effective.Derive {
+			seen[name] = true
+		}
+		for name := range effective.Aggregate {
+			seen[name] = true
+		}
+	}
+	keys := make([]string, 0, len(seen))
+	for name := range seen {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func explainOriginFromRecord(record *extract.Record, name string) string {
+	if record != nil {
+		if _, ok := record.Frontmatter[name]; ok {
+			return "frontmatter"
+		}
+		if _, ok := record.Derived[name]; ok {
+			return "derived"
+		}
+	}
+	return "schema"
 }
 
 func sortedMapKeys(m map[string]any) []string {

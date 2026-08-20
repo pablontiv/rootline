@@ -69,7 +69,7 @@ func TestDescribeResult_ToJSON(t *testing.T) {
 	entries := []StemEntry{{Path: "root/.stem", Stem: &StemFile{}}}
 	effective := &StemFile{
 		Schema: map[string]SchemaField{
-			"title": {Type: "string", Required: true, Source: "root/.stem"},
+			"title": {Type: "string", Required: true, Source: "root/.stem", Extract: `body.section["## Title"]`},
 		},
 	}
 	result := NewDescribeResult("docs/", entries, effective)
@@ -92,8 +92,11 @@ func TestDescribeResult_ToJSON(t *testing.T) {
 	}
 	schema := parsed["schema"].(map[string]any)
 	titleField := schema["title"].(map[string]any)
-	if titleField["source"] != "root/.stem" {
+	if titleField["source"] != `body.section["## Title"]` {
 		t.Errorf("schema.title.source = %v", titleField["source"])
+	}
+	if titleField["defined_in"] != "root/.stem" {
+		t.Errorf("schema.title.defined_in = %v", titleField["defined_in"])
 	}
 }
 
