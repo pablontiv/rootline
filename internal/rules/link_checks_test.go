@@ -250,6 +250,55 @@ func TestCheckLinks_AnchorCacheReuse(t *testing.T) {
 	}
 }
 
+func TestCheckLinksProspectiveTargetResolvesAbsentSelfWikilink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "T001-task.md")
+	schema := wikiChecksSchema(LinkChecks{Resolve: boolPtr(true)})
+	overlay := ProspectiveLinkTarget{AbsPath: target, Content: []byte("# T001 Task\n[[T001-task]]\n")}
+
+	errs := CheckLinksWithProspectiveTarget([]extract.Link{wikiLink("T001-task")}, schema, target, dir, nil, overlay)
+	if len(errs) != 0 {
+		t.Fatalf("prospective self wikilink should resolve before disk exists, got %+v", errs)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("prospective link validation must not create target, stat err=%v", err)
+	}
+}
+
+func TestCheckLinksProspectiveTargetAnchorsBypassStaleCache(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.md")
+	writeFile(t, target, "# Target\n\n## Old Anchor\n")
+	schema := wikiChecksSchema(LinkChecks{Resolve: boolPtr(true), Anchors: true})
+	cache := NewHeadingCache()
+	old := extract.Link{Target: "target", Anchor: "old-anchor", Type: "reference", Style: extract.StyleWikilink, Line: 1}
+	if errs := CheckLinks([]extract.Link{old}, schema, target, dir, cache); len(errs) != 0 {
+		t.Fatalf("fixture old anchor should validate and populate cache: %+v", errs)
+	}
+
+	overlay := ProspectiveLinkTarget{AbsPath: target, Content: []byte("# Target\n\n## New Anchor\n")}
+	newAnchor := old
+	newAnchor.Anchor = "new-anchor"
+	if errs := CheckLinksWithProspectiveTarget([]extract.Link{newAnchor}, schema, target, dir, cache, overlay); len(errs) != 0 {
+		t.Fatalf("prospective anchor should come from overlay bytes, not stale cache/disk: %+v", errs)
+	}
+	if errs := CheckLinksWithProspectiveTarget([]extract.Link{old}, schema, target, dir, cache, overlay); len(errs) != 1 || errs[0].Rule != "link_anchor" {
+		t.Fatalf("removed old anchor must be rejected against overlay bytes, got %+v", errs)
+	}
+}
+
+func TestCheckLinksProspectiveTargetKeepsUnrelatedTargetsOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.md")
+	schema := wikiChecksSchema(LinkChecks{Resolve: boolPtr(true)})
+	overlay := ProspectiveLinkTarget{AbsPath: target, Content: []byte("# Target\n")}
+
+	errs := CheckLinksWithProspectiveTarget([]extract.Link{wikiLink("missing")}, schema, target, dir, nil, overlay)
+	if len(errs) != 1 || errs[0].Rule != "link_resolve" {
+		t.Fatalf("unrelated missing target should still use ordinary filesystem semantics, got %+v", errs)
+	}
+}
+
 // With basename fallback on, validate cannot decide a bare cross-directory
 // target: CheckLinks sees one record and has no index to match against, while
 // graph does. Reporting it broken would be wrong (it may well resolve) and

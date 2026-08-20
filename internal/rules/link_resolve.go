@@ -36,6 +36,37 @@ type LinkResolution struct {
 	OK         bool
 }
 
+type linkTargetInfo struct {
+	IsDir bool
+}
+
+type linkTargetProvider interface {
+	readDir(dir string) ([]string, error)
+	stat(path string) (linkTargetInfo, error)
+}
+
+type diskLinkTargetProvider struct{}
+
+func (diskLinkTargetProvider) readDir(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	return names, nil
+}
+
+func (diskLinkTargetProvider) stat(path string) (linkTargetInfo, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return linkTargetInfo{}, err
+	}
+	return linkTargetInfo{IsDir: info.IsDir()}, nil
+}
+
 // ResolveLinkTarget is the single authority for "does this link target exist?".
 //
 // Every command resolves through here so that validate, graph, query traversal
@@ -53,6 +84,17 @@ type LinkResolution struct {
 //   - a wikilink whose final component does not exist retries it with ".md"
 //   - a directory target resolves to its README.md
 func ResolveLinkTarget(req ResolveRequest) LinkResolution {
+	return resolveLinkTarget(req, diskLinkTargetProvider{})
+}
+
+func resolveLinkTargetWithProspectiveTarget(req ResolveRequest, overlay *prospectiveLinkOverlay) LinkResolution {
+	if overlay == nil {
+		return ResolveLinkTarget(req)
+	}
+	return resolveLinkTarget(req, overlay)
+}
+
+func resolveLinkTarget(req ResolveRequest, provider linkTargetProvider) LinkResolution {
 	base, target := req.BaseDir, req.Target
 	if strings.HasPrefix(target, "/") {
 		if req.Root == "" {
@@ -76,12 +118,12 @@ func ResolveLinkTarget(req ResolveRequest) LinkResolution {
 			cur = filepath.Dir(cur)
 			continue
 		}
-		entry, suggestion, ok := findEntry(cur, comp)
+		entry, suggestion, ok := findEntry(provider, cur, comp)
 		if !ok {
 			// Only the final component may gain an inferred extension:
 			// [[b]] means b.md, but a missing intermediate directory is a
 			// missing directory, not a file to guess at.
-			if inferred, ok2 := inferMarkdown(cur, comp, i == len(comps)-1, req.Style); ok2 {
+			if inferred, ok2 := inferMarkdown(provider, cur, comp, i == len(comps)-1, req.Style); ok2 {
 				cur = filepath.Join(cur, inferred)
 				continue
 			}
@@ -94,18 +136,77 @@ func ResolveLinkTarget(req ResolveRequest) LinkResolution {
 		return LinkResolution{}
 	}
 
-	info, err := os.Stat(cur)
+	info, err := provider.stat(cur)
 	if err != nil {
 		return LinkResolution{}
 	}
-	if info.IsDir() {
-		entry, suggestion, ok := findEntry(cur, "README.md")
+	if info.IsDir {
+		entry, suggestion, ok := findEntry(provider, cur, "README.md")
 		if !ok {
 			return LinkResolution{Suggestion: suggestion}
 		}
 		cur = filepath.Join(cur, entry)
 	}
 	return LinkResolution{Path: cur, OK: true}
+}
+
+// canonicalPhysicalPath returns the path identity used for containment and
+// prospective overlay matching. It resolves symlinks through the deepest
+// existing parent, then appends the still-missing suffix, so absent files are
+// compared by the physical directory they would be written into.
+func canonicalPhysicalPath(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	clean := filepath.Clean(abs)
+	if real, err := filepath.EvalSymlinks(clean); err == nil {
+		return filepath.Clean(real), nil
+	}
+
+	var missing []string
+	cur := clean
+	for {
+		if _, err := os.Lstat(cur); err == nil {
+			real, err := filepath.EvalSymlinks(cur)
+			if err != nil {
+				return "", err
+			}
+			for i := len(missing) - 1; i >= 0; i-- {
+				real = filepath.Join(real, missing[i])
+			}
+			return filepath.Clean(real), nil
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return clean, nil
+		}
+		missing = append(missing, filepath.Base(cur))
+		cur = parent
+	}
+}
+
+// PhysicalPathWithin reports whether path's physical identity is contained by
+// root's physical identity. Both sides use canonicalPhysicalPath, so symlinked
+// roots such as macOS /var -> /private/var and absent target files compare by
+// the same authority.
+func PhysicalPathWithin(root, path string) (bool, error) {
+	if root == "" {
+		return true, nil
+	}
+	realRoot, err := canonicalPhysicalPath(root)
+	if err != nil {
+		return false, err
+	}
+	realPath, err := canonicalPhysicalPath(path)
+	if err != nil {
+		return false, err
+	}
+	rel, err := filepath.Rel(realRoot, realPath)
+	if err != nil {
+		return false, err
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)), nil
 }
 
 // withinRoot reports whether a resolved path stayed inside root.
@@ -118,27 +219,8 @@ func ResolveLinkTarget(req ResolveRequest) LinkResolution {
 // An empty root means no boundary is known and nothing can be judged against
 // it; callers that need containment must pass one.
 func withinRoot(root, path string) bool {
-	if root == "" {
-		return true
-	}
-	// Compare real paths: a lexical check alone cannot see through a symlink
-	// inside the tree that points out of it. EvalSymlinks is applied to both
-	// sides so a root that is itself reached through a symlink (/tmp on macOS)
-	// still compares equal. A path that cannot be evaluated does not exist
-	// yet, so fall back to the lexical form and let the later Stat decide.
-	realRoot, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		realRoot = root
-	}
-	realPath, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		realPath = path
-	}
-	rel, err := filepath.Rel(realRoot, realPath)
-	if err != nil {
-		return false
-	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	ok, err := PhysicalPathWithin(root, path)
+	return err == nil && ok
 }
 
 // SchemaRoot returns the directory of the root-most .stem governing path — the
@@ -165,11 +247,11 @@ func SchemaRoot(path string) string {
 // wikilinks: a markdown destination carries its extension by convention and
 // ADO resolves it literally, so inferring one there would accept links the
 // published wiki rejects.
-func inferMarkdown(dir, comp string, isFinal bool, style string) (string, bool) {
+func inferMarkdown(provider linkTargetProvider, dir, comp string, isFinal bool, style string) (string, bool) {
 	if !isFinal || style != extract.StyleWikilink || strings.HasSuffix(comp, ".md") {
 		return "", false
 	}
-	entry, _, ok := findEntry(dir, comp+".md")
+	entry, _, ok := findEntry(provider, dir, comp+".md")
 	if !ok {
 		return "", false
 	}
@@ -178,17 +260,15 @@ func inferMarkdown(dir, comp string, isFinal bool, style string) (string, bool) 
 
 // findEntry looks for an exact-case directory entry, returning a fuzzy
 // suggestion from the directory's entries when absent.
-func findEntry(dir, name string) (string, string, bool) {
-	entries, err := os.ReadDir(dir)
+func findEntry(provider linkTargetProvider, dir, name string) (string, string, bool) {
+	names, err := provider.readDir(dir)
 	if err != nil {
 		return "", "", false
 	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if e.Name() == name {
+	for _, entry := range names {
+		if entry == name {
 			return name, "", true
 		}
-		names = append(names, e.Name())
 	}
 	return "", fuzzy.Match(name, names), false
 }
