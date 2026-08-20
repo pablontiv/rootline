@@ -50,6 +50,7 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 
 	result := &ApplyResult{}
 	modified := false
+	changedFields := map[string]bool{}
 
 	for _, inf := range inferences {
 		if inf.RequiresAgent {
@@ -66,6 +67,7 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 					result.Applied = append(result.Applied, fmt.Sprintf("extend_enum: %s", inf.Field))
 				}
 				modified = true
+				changedFields[inf.Field] = true
 			}
 
 		case "required_field":
@@ -76,6 +78,7 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 					result.Applied = append(result.Applied, fmt.Sprintf("add_required: %s", inf.Field))
 				}
 				modified = true
+				changedFields[inf.Field] = true
 			}
 
 		case "constant_field":
@@ -86,6 +89,7 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 					result.Applied = append(result.Applied, fmt.Sprintf("add_default: %s=%s", inf.Field, inf.Value))
 				}
 				modified = true
+				changedFields[inf.Field] = true
 			}
 
 		case "field_type", "untyped_field":
@@ -96,12 +100,14 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 					result.Applied = append(result.Applied, fmt.Sprintf("set_type: %s=%s", inf.Field, inf.Value))
 				}
 				modified = true
+				changedFields[inf.Field] = true
 			}
 
 		case "sequence_incomplete":
 			if applySequenceCompleteNode(&doc, inf) {
 				result.Applied = append(result.Applied, fmt.Sprintf("sequence: %s completed", inf.Field))
 				modified = true
+				changedFields[inf.Field] = true
 			}
 
 		case "required_section", "optional_section":
@@ -121,6 +127,7 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 				result.Applied = append(result.Applied, fmt.Sprintf("merge_section: %s", field))
 			}
 			modified = true
+			changedFields[field] = true
 		}
 	}
 
@@ -132,6 +139,9 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 	if err != nil {
 		return nil, fmt.Errorf("marshaling stem: %w", err)
 	}
+	if err := validateProspectiveChangedFields(stemPath, out, changedFields); err != nil {
+		return nil, err
+	}
 
 	// Skip write if in dry-run mode.
 	if !dryRun {
@@ -142,6 +152,28 @@ func ApplySchemaInferences(stemPath string, inferences []ReportInference, dryRun
 
 	result.DryRun = dryRun
 	return result, nil
+}
+
+func validateProspectiveChangedFields(stemPath string, content []byte, changedFields map[string]bool) error {
+	stem, err := rules.ParseStem(stemPath, content)
+	if err != nil {
+		return fmt.Errorf("validating prospective .stem %s: %w", stemPath, err)
+	}
+	fields := make([]string, 0, len(changedFields))
+	for field := range changedFields {
+		fields = append(fields, field)
+	}
+	sort.Strings(fields)
+	for _, field := range fields {
+		declaration, ok := stem.Schema[field]
+		if !ok {
+			return fmt.Errorf("validating prospective .stem %s: field %q missing after schema apply", stemPath, field)
+		}
+		if issues := rules.ValidateFieldDeclaration(field, declaration); len(issues) > 0 {
+			return fmt.Errorf("validating prospective .stem %s: field %q: %s", stemPath, field, issues[0].Message)
+		}
+	}
+	return nil
 }
 
 // findSchemaFieldNode navigates doc → schema → fieldName and returns the field's mapping node.
