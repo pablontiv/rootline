@@ -32,8 +32,12 @@ func runAnalyze(t *testing.T, root string) *infer.AnalyzeReport {
 		t.Fatalf("scan: %v", err)
 	}
 
-	derive.DeriveAllSimple(ctx, records, root)
-	derive.AggregateAllSimple(ctx, records, root)
+	if err := derive.DeriveAllSimple(ctx, records, root); err != nil {
+		t.Fatalf("DeriveAllSimple: %v", err)
+	}
+	if err := derive.AggregateAllSimple(ctx, records, root); err != nil {
+		t.Fatalf("AggregateAllSimple: %v", err)
+	}
 
 	g := graph.Build(ctx, records)
 	agentTypes := map[string]bool{

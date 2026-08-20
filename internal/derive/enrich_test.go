@@ -17,7 +17,7 @@ func TestEnrichBuiltins_IndexDetection(t *testing.T) {
 		{Path: "dir/T002.md", Type: "markdown", Frontmatter: map[string]any{}},
 	}
 
-	resolver := func(dir, recordPath string) *rules.StemFile { return &rules.StemFile{} }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return &rules.StemFile{}, nil }
 	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
 		t.Fatalf("EnrichBuiltins: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestEnrichBuiltins_CustomRequireIndex(t *testing.T) {
 			Subdirs: rules.SubdirRules{RequireIndex: "index.md"},
 		},
 	}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
 		t.Fatalf("EnrichBuiltins: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestEnrichBuiltins_SurvivesDeriveAll(t *testing.T) {
 			"slug": "lower(titulo)",
 		},
 	}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
 	// Pipeline: DeriveAll → EnrichBuiltins (real order)
 	DeriveAll(context.Background(), records, "/root", resolver)
@@ -128,7 +128,7 @@ func TestEnrichBuiltins_SourceExtraction_BodyH1(t *testing.T) {
 			},
 		},
 	}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
 	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
 		t.Fatalf("EnrichBuiltins: %v", err)
@@ -157,7 +157,7 @@ func TestEnrichBuiltins_SourceExtraction_BodySection(t *testing.T) {
 			},
 		},
 	}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
 	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
 		t.Fatalf("EnrichBuiltins: %v", err)
@@ -181,7 +181,7 @@ func TestEnrichBuiltins_SourceExtraction_FrontmatterPresenceOverridesBody(t *tes
 	stem := &rules.StemFile{Schema: map[string]rules.SchemaField{
 		"titulo": {Type: "string", Extract: "body.h1"},
 	}}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
 	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
 		t.Fatalf("EnrichBuiltins: %v", err)
@@ -205,7 +205,7 @@ func TestEnrichBuiltins_SourceExtraction_AbsentSourcePreservesExistingDerivedVal
 	stem := &rules.StemFile{Schema: map[string]rules.SchemaField{
 		"titulo": {Type: "string", Extract: "body.h1"},
 	}}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
 	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
 		t.Fatalf("EnrichBuiltins: %v", err)
@@ -233,7 +233,7 @@ func TestEnrichBuiltins_SourceExtraction_NoExtract(t *testing.T) {
 			},
 		},
 	}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
 	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
 		t.Fatalf("EnrichBuiltins: %v", err)

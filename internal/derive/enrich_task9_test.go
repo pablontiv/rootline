@@ -15,7 +15,7 @@ func TestEnrichBuiltinsTask9_SourceResolutionMatrix(t *testing.T) {
 		"notes": {Type: "string", Extract: `body.section["## Notes"]`},
 		"plain": {Type: "string"},
 	}}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 	records := []*extract.Record{
 		{Path: "body.md", Body: "# Body\n\n## Notes\n\nfrom body", Frontmatter: map[string]any{}, Derived: map[string]any{"plain": "kept"}},
 		{Path: "empty-fm.md", Body: "# Body\n\n## Notes\n\nfrom body", Frontmatter: map[string]any{"notes": ""}},
@@ -55,11 +55,11 @@ func TestEnrichBuiltinsTask9_ResolverMatchScopeControlsSourceFields(t *testing.T
 		{Path: "scoped.md", Body: "# Scoped\n\n## Notes\n\nfrom body", Frontmatter: map[string]any{}, Derived: map[string]any{"plain": "kept"}},
 		{Path: "plain.md", Body: "# Plain\n\n## Notes\n\nignored", Frontmatter: map[string]any{}, Derived: map[string]any{"plain": "kept"}},
 	}
-	resolver := func(dir, recordPath string) *rules.StemFile {
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) {
 		if recordPath == "scoped.md" {
-			return sourceStem
+			return sourceStem, nil
 		}
-		return plainStem
+		return plainStem, nil
 	}
 
 	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
@@ -88,7 +88,7 @@ func TestEnrichBuiltinsTask9_DuplicateSourceReturnsError(t *testing.T) {
 		Frontmatter: map[string]any{},
 	}
 
-	err := EnrichBuiltins(context.Background(), []*extract.Record{record}, "/root", func(dir, recordPath string) *rules.StemFile { return stem })
+	err := EnrichBuiltins(context.Background(), []*extract.Record{record}, "/root", func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil })
 	if err == nil || !strings.Contains(err.Error(), "ambiguous body section source") {
 		t.Fatalf("EnrichBuiltins duplicate error = %v, want ambiguity", err)
 	}
@@ -98,7 +98,7 @@ func TestEnrichBuiltinsTask9_LaterRecordFailureDoesNotMutateAnyRecord(t *testing
 	stem := &rules.StemFile{Schema: map[string]rules.SchemaField{
 		"notes": {Type: "string", Extract: `body.section["## Notes"]`},
 	}}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 	records := []*extract.Record{
 		{
 			Path:        "good.md",
@@ -164,9 +164,9 @@ func TestEnrichBuiltinsTask9_CancellationAtFinalPublicationGatePreservesAllRecor
 	beforeErrors := [][]extract.ExtractionError{append([]extract.ExtractionError(nil), records[0].Errors...), append([]extract.ExtractionError(nil), records[1].Errors...)}
 	ctx := &errAfterNContext{Context: context.Background(), cancelAt: 3}
 	resolverCalls := 0
-	resolver := func(dir, recordPath string) *rules.StemFile {
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) {
 		resolverCalls++
-		return stem
+		return stem, nil
 	}
 
 	err := EnrichBuiltins(ctx, records, "/root", resolver)
@@ -201,7 +201,7 @@ func TestEnrichBuiltinsTask9_MultipleAmbiguousFieldsReportSortedField(t *testing
 	}
 
 	for i := 0; i < 50; i++ {
-		err := EnrichBuiltins(context.Background(), []*extract.Record{record}, "/root", func(dir, recordPath string) *rules.StemFile { return stem })
+		err := EnrichBuiltins(context.Background(), []*extract.Record{record}, "/root", func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil })
 		if err == nil || !strings.Contains(err.Error(), `resolving source field "alpha" for dup.md`) {
 			t.Fatalf("run %d EnrichBuiltins error = %v, want deterministic alpha failure", i, err)
 		}

@@ -3,7 +3,6 @@ package derive
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"sort"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -23,6 +22,11 @@ func EnrichBuiltins(ctx context.Context, records []*extract.Record, root string,
 		return nil
 	}
 
+	resolved, err := resolveBatch(ctx, records, root, resolver)
+	if err != nil {
+		return err
+	}
+
 	type stagedRecord struct {
 		record  *extract.Record
 		derived map[string]any
@@ -34,10 +38,7 @@ func EnrichBuiltins(ctx context.Context, records []*extract.Record, root string,
 			return err
 		}
 
-		absPath := filepath.Join(root, rec.Path)
-		dir := filepath.Dir(absPath)
-
-		eff := resolver(dir, rec.Path)
+		eff := resolved[rec]
 		derived := cloneDerived(rec.Derived)
 		derived["isIndex"] = rules.IsIndexFile(rec.Path, eff)
 
