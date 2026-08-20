@@ -79,7 +79,9 @@ func runGraph(cmd *cobra.Command, args []string) error {
 
 	rules.FilterLinksByStyles(records, absRoot)
 
-	derive.EnrichBuiltinsSimple(ctx, records, absRoot)
+	if err := derive.EnrichBuiltinsSimple(ctx, records, absRoot); err != nil {
+		return fmt.Errorf("enriching records: %w", err)
+	}
 
 	// Apply --where filter.
 	records, err = filterRecords(ctx, records, graphWhere, knownWhereFields(records, absRoot), cmd.ErrOrStderr())

@@ -56,7 +56,9 @@ func runStats(cmd *cobra.Command, args []string) error {
 	}
 
 	derive.DeriveAllSimple(ctx, records, absRoot)
-	derive.EnrichBuiltinsSimple(ctx, records, absRoot)
+	if err := derive.EnrichBuiltinsSimple(ctx, records, absRoot); err != nil {
+		return fmt.Errorf("enriching records: %w", err)
+	}
 	derive.AggregateAllSimple(ctx, records, absRoot)
 
 	// Apply --where filter.

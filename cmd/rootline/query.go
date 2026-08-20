@@ -107,7 +107,7 @@ func runQuery(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	} else {
-		reg := extract.NewRegistry()
+		reg := extract.NewASTRegistry()
 		records, err = scanGoverned(ctx, absRoot, reg)
 		if err != nil {
 			return fmt.Errorf("scanning %s: %w", scanRoot, err)
@@ -118,7 +118,9 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		// declared ungoverned.
 		rules.FilterLinksByStyles(records, absRoot)
 		derive.DeriveAllSimple(ctx, records, absRoot)
-		derive.EnrichBuiltinsSimple(ctx, records, absRoot)
+		if err := derive.EnrichBuiltinsSimple(ctx, records, absRoot); err != nil {
+			return fmt.Errorf("enriching records: %w", err)
+		}
 		derive.AggregateAllSimple(ctx, records, absRoot)
 	}
 
@@ -237,7 +239,7 @@ func scanForTraversal(ctx context.Context, absQueryRoot string) ([]*extract.Reco
 		return nil, nil, "", fmt.Errorf("query path %s is outside --graph-root %s", absQueryRoot, absGraphRoot)
 	}
 
-	reg := extract.NewRegistry()
+	reg := extract.NewASTRegistry()
 	all, err := scanGoverned(ctx, absGraphRoot, reg)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("scanning graph root %s: %w", absGraphRoot, err)
@@ -250,7 +252,9 @@ func scanForTraversal(ctx context.Context, absQueryRoot string) ([]*extract.Reco
 	rules.PrepareLinks(all, absGraphRoot)
 
 	derive.DeriveAllSimple(ctx, all, absGraphRoot)
-	derive.EnrichBuiltinsSimple(ctx, all, absGraphRoot)
+	if err := derive.EnrichBuiltinsSimple(ctx, all, absGraphRoot); err != nil {
+		return nil, nil, "", fmt.Errorf("enriching graph records: %w", err)
+	}
 	derive.AggregateAllSimple(ctx, all, absGraphRoot)
 
 	g := graph.Build(ctx, all)

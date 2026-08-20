@@ -186,7 +186,9 @@ func runSchemaPropose(cmd *cobra.Command, args []string) error {
 
 	// Derive and aggregate
 	derive.DeriveAllSimple(ctx, records, root)
-	derive.EnrichBuiltinsSimple(ctx, records, root)
+	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
+		return fmt.Errorf("enriching records: %w", err)
+	}
 	derive.AggregateAllSimple(ctx, records, root)
 
 	// Check for existing stem
@@ -526,7 +528,9 @@ func runPostApplyValidation(ctx context.Context, root string) (*ValidationSummar
 	}
 
 	derive.DeriveAllSimple(ctx, records, root)
-	derive.EnrichBuiltinsSimple(ctx, records, root)
+	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
+		return nil, fmt.Errorf("enriching records: %w", err)
+	}
 	derive.AggregateAllSimple(ctx, records, root)
 
 	validCount := 0

@@ -72,7 +72,9 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	gapsResolver := infer.DefaultStemResolver()
 
 	derive.DeriveAllSimple(ctx, records, root)
-	derive.EnrichBuiltinsSimple(ctx, records, root)
+	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
+		return fmt.Errorf("enriching records: %w", err)
+	}
 	derive.AggregateAllSimple(ctx, records, root)
 
 	// Load stem for link schema.
