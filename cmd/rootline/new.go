@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
 	"golang.org/x/text/cases"
@@ -38,6 +39,11 @@ func runNew(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("resolving path: %w", err)
 	}
+	if newForce {
+		if err := rejectForcedFinalCaseCollision(absTarget); err != nil {
+			return err
+		}
+	}
 
 	// Check if file exists
 	if !newForce {
@@ -59,8 +65,25 @@ func runNew(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no .stem schema found for %s", dir)
 	}
 
-	// Generate markdown content
-	content := generateMarkdown(absTarget, effective)
+	if schemaRoot := rules.SchemaRoot(absTarget); schemaRoot != "" {
+		within, err := rules.PhysicalPathWithin(schemaRoot, absTarget)
+		if err != nil {
+			return fmt.Errorf("validating target boundary: %w", err)
+		}
+		if !within {
+			return fmt.Errorf("target escapes schema root: %s", target)
+		}
+	}
+
+	// Generate markdown content.
+	content, err := generateMarkdown(absTarget, effective)
+	if err != nil {
+		return fmt.Errorf("generating markdown: %w", err)
+	}
+
+	if err := validateProspectiveNewContent(cmd, absTarget, content, effective); err != nil {
+		return err
+	}
 
 	if newDryRun {
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), content)
@@ -80,42 +103,24 @@ func runNew(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func generateMarkdown(absPath string, effective *rules.StemFile) string {
+func generateMarkdown(absPath string, effective *rules.StemFile) (string, error) {
 	var b strings.Builder
 	b.WriteString("---\n")
 
-	// Sort fields for deterministic output
+	// Sort fields for deterministic output.
 	keys := make([]string, 0, len(effective.Schema))
 	for k := range effective.Schema {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
-	// Track section fields to generate after frontmatter
-	var sections []struct {
-		name    string
-		field   rules.SchemaField
-		heading string
-	}
-
 	for _, name := range keys {
 		field := effective.Schema[name]
-
-		// Section fields are handled after frontmatter
-		if field.Type == "section" {
-			heading := field.Heading
-			if heading == "" {
-				heading = "## " + name
-			}
-			sections = append(sections, struct {
-				name    string
-				field   rules.SchemaField
-				heading string
-			}{name, field, heading})
+		if field.Extract != "" {
 			continue
 		}
 
-		// Determine value for non-section fields.
+		// Determine value for frontmatter fields.
 		// Only use field.Default when explicitly set; never fall back to Values[0].
 		value := ""
 		if field.Default != "" {
@@ -123,7 +128,7 @@ func generateMarkdown(absPath string, effective *rules.StemFile) string {
 		}
 
 		switch {
-		case len(field.Values) > 0:
+		case len(field.Values) > 0 && (value != "" || field.Required):
 			fmt.Fprintf(&b, "%s: %s # [%s]\n", name, value, strings.Join(field.Values, ", "))
 		case value != "":
 			fmt.Fprintf(&b, "%s: %s\n", name, value)
@@ -134,30 +139,89 @@ func generateMarkdown(absPath string, effective *rules.StemFile) string {
 
 	b.WriteString("---\n")
 
-	// Title from filename
+	// Title from filename.
 	base := filepath.Base(absPath)
 	title := strings.TrimSuffix(base, filepath.Ext(base))
 	title = strings.ReplaceAll(title, "-", " ")
 	title = strings.ReplaceAll(title, "_", " ")
 	fmt.Fprintf(&b, "# %s\n", cases.Title(language.Und).String(title))
 
-	// Generate section headings (only if required or has default content)
-	for _, sec := range sections {
-		if !sec.field.Required && sec.field.Default == "" {
-			// Skip optional sections without defaults
-			continue
-		}
+	record, err := extractProspectiveNewRecord(absPath, b.String())
+	if err != nil {
+		return "", err
+	}
+	sections, err := rules.RequiredSectionMaterializations(record, effective)
+	if err != nil {
+		return "", err
+	}
+	for _, section := range sections {
 		b.WriteString("\n")
-		b.WriteString(sec.heading)
+		b.WriteString(section.Heading)
 		b.WriteString("\n\n")
-		if sec.field.Default != "" {
-			b.WriteString(sec.field.Default)
-			b.WriteString("\n")
-		} else {
-			// For required sections without defaults, add a placeholder comment
-			b.WriteString("<!-- TODO: Add content -->\n")
-		}
+		b.WriteString(section.Content)
+		b.WriteString("\n")
 	}
 
-	return b.String()
+	return b.String(), nil
+}
+
+func validateProspectiveNewContent(cmd *cobra.Command, absPath, content string, effective *rules.StemFile) error {
+	prospectiveBytes := []byte(content)
+	result, err := validateProspectiveRecord(cmd.Context(), prospectiveRecordValidationInput{
+		Path:                         absPath,
+		AbsPath:                      absPath,
+		Content:                      prospectiveBytes,
+		Effective:                    effective,
+		ProspectiveLinkTargetAbsPath: absPath,
+		ProspectiveLinkTargetContent: prospectiveBytes,
+	})
+	if err != nil {
+		return fmt.Errorf("prospective record validation failed: %w", err)
+	}
+	if !validationResultHasFailure(result, false) {
+		return nil
+	}
+
+	msgs := make([]string, 0, len(result.Errors))
+	for _, e := range result.Errors {
+		field := e.Field
+		if field == "" {
+			field = e.Rule
+		}
+		msgs = append(msgs, fmt.Sprintf("%s: %s", field, e.Message))
+	}
+	return fmt.Errorf("prospective record validation failed: %s", strings.Join(msgs, "; "))
+}
+
+func extractProspectiveNewRecord(absPath, content string) (*extract.Record, error) {
+	return extractProspectiveRecord(absPath, absPath, []byte(content))
+}
+
+func rejectForcedFinalCaseCollision(absTarget string) error {
+	if _, err := os.Stat(absTarget); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("checking existing target: %w", err)
+	}
+
+	baseName := filepath.Base(absTarget)
+	entries, err := os.ReadDir(filepath.Dir(absTarget))
+	if err != nil {
+		return fmt.Errorf("checking target directory: %w", err)
+	}
+	caseFoldMatch := ""
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == baseName {
+			return nil
+		}
+		if caseFoldMatch == "" && strings.EqualFold(name, baseName) {
+			caseFoldMatch = name
+		}
+	}
+	if caseFoldMatch != "" {
+		return fmt.Errorf("target path %q collides with existing differently-cased entry %q", absTarget, caseFoldMatch)
+	}
+	return nil
 }

@@ -25,10 +25,12 @@ schema:
   titulo:
     type: string
     required: true
+    default: Document
   estado:
     type: enum
     required: true
     values: [Pending, Completed]
+    default: Pending
 `
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stemContent), 0644)
 	declareTestBoundary(t, dir)
