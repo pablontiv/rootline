@@ -85,7 +85,9 @@ func TestEnrichBuiltins_SurvivesDeriveAll(t *testing.T) {
 	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
 	// Pipeline: DeriveAll → EnrichBuiltins (real order)
-	DeriveAll(context.Background(), records, "/root", resolver)
+	if err := DeriveAll(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
 		t.Fatalf("EnrichBuiltins: %v", err)
 	}

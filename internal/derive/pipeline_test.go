@@ -27,7 +27,9 @@ func TestDeriveAllWithResolver(t *testing.T) {
 		return stem, nil
 	}
 
-	DeriveAll(context.Background(), records, "/root", resolver)
+	if err := DeriveAll(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 
 	if records[0].Derived["slug"] != "alpha" {
 		t.Errorf("record[0].Derived[slug] = %v, want %q", records[0].Derived["slug"], "alpha")
@@ -42,7 +44,9 @@ func TestDeriveAllNilResolver(t *testing.T) {
 		{Path: "a.md", Frontmatter: map[string]any{}},
 	}
 	// Should not panic.
-	DeriveAll(context.Background(), records, "/root", nil)
+	if err := DeriveAll(context.Background(), records, "/root", nil); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 	if records[0].Derived != nil {
 		t.Error("expected nil Derived with nil resolver")
 	}
@@ -55,7 +59,9 @@ func TestDeriveAllNoDerive(t *testing.T) {
 	stem := &rules.StemFile{} // no derive
 	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
-	DeriveAll(context.Background(), records, "/root", resolver)
+	if err := DeriveAll(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 	if records[0].Derived != nil {
 		t.Error("expected nil Derived when .stem has no derive")
 	}
@@ -75,7 +81,9 @@ func TestDeriveAllWithChildren(t *testing.T) {
 	}
 	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
-	DeriveAll(context.Background(), records, "/root", resolver)
+	if err := DeriveAll(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 
 	// Each record should see 2 siblings (the other records in the same dir).
 	if records[0].Derived["sibling_count"] != 2 {
@@ -89,7 +97,9 @@ func TestDeriveAllResolverReturnsNil(t *testing.T) {
 	}
 	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return nil, nil }
 
-	DeriveAll(context.Background(), records, "/root", resolver)
+	if err := DeriveAll(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 	if records[0].Derived != nil {
 		t.Error("expected nil Derived when resolver returns nil")
 	}
