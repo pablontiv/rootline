@@ -28,7 +28,7 @@ schema:
       "T*": { prefix: T, digits: 3 }
 
   is_done:
-    type: bool
+    type: boolean
     severity: off
 
 derive:

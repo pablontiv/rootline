@@ -127,6 +127,10 @@ Emits JSON: version 1, kind `"rootline/analyze"`, with `categories[]` (each `id`
 
 Use `--field summary` only after confirming the analyze JSON contains that path.
 
+## Canonical schema transport
+
+`init`, `analyze`, `schema apply`, and `migrate --split` preserve a section as a real type plus `source: body.section["## Heading"]`. Inference preserves exact headings, makes partial-frequency candidates optional, and fails logical-name collisions. `new` and `migrate --scaffold` materialize missing required sections in lexical heading order with a non-empty default or `<!-- TODO -->`; frontmatter overrides are never written as empty shadow keys.
+
 ## apply (Removed)
 
 The legacy `apply` command was removed — it fails with `unknown command "apply"`. Use the specialized commands instead:

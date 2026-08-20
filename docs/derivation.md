@@ -86,7 +86,7 @@ Enrichment computes built-in fields (`isIndex`). Aggregation processes deepest i
 rootline explain docs/epics/E04-dx-advanced/README.md
 ```
 
-Each field shows its origin: `frontmatter`, `schema` (default), `derived`, or `aggregated`, with the source `.stem` file.
+Each field shows its origin: `frontmatter`, `schema` (default), `derived`, or `aggregate`. Physical schema provenance is reported as `defined_in`; the logical `source` field is used only for extraction directives such as `body.section[...]`. In plain-text explain output these correspond to `origin: derived` and `origin: aggregate` tokens.
 
 ## In Query Results
 

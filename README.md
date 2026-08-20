@@ -135,16 +135,16 @@ links:
   allowed: [blocks, depends]
 ```
 
-> Sections (`type: section`) are first-class schema fields — validated, defaulted, and queryable alongside frontmatter.
+> Body sections are source-backed values: use a real type with `source: body.section["## Summary"]`; frontmatter remains an explicit override.
 
 ### What Validation Means
 
 Validation enforces consistency using rules defined in `.stem`:
 
-- **required**: Field must be present and non-empty
-- **enum**: Field value must be one of allowed choices
-- **type**: Field must match declared type (string, number, section, array)
-- **exists**: Path (file or directory) must exist
+- **required**: Field presence; `""` and `[]` are present, while `non_empty` is separate
+- **enum**: Field value must be one of the declared `values:`
+- **type**: Strict string, list, enum, sequence, link, boolean, and integer conformance without coercion
+- **exists**: `exists` checks presence of an effective field, including source-backed or derived values
 - **structural**: Directory naming, required children, index files
 
 Violations are reported as errors; the command exits with code 1. Use `--strict` to treat warnings as errors.
@@ -358,7 +358,7 @@ Proposals include: correct misspelled enum values (Levenshtein matching), extend
 rootline explain docs/projects/P01/F01/README.md
 ```
 
-Shows each field's origin (frontmatter, schema default, derived, or aggregated) with the source `.stem` file and expression.
+Shows each field's origin (frontmatter, schema default, derived, or aggregate) with logical `source` directives, physical `defined_in` schema provenance, and expressions.
 
 ---
 
@@ -411,7 +411,7 @@ same as that one? — are not guessed: `analyze` marks those proposals
 | [Describe](docs/describe.md) | Describe output, field extraction, source tracking |
 | [Query Engine](docs/query.md) | Query contract, operators, result shapes |
 | [New](docs/new.md) | Document scaffolding from effective schema |
-| [Set](docs/set.md) | Mutate frontmatter and sections with schema validation |
+| [Set](docs/set.md) | Mutate frontmatter overrides with schema validation |
 | [Fix & Proposals](docs/fix.md) | Auto-repair, enum correction, field inference |
 | [Analyze](docs/analyze.md) | Infer schemas and patterns from documents |
 | [Explain](docs/explain.md) | Field origin tracing, derivation chain, error diagnosis |

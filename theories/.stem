@@ -2,11 +2,11 @@ version: 2
 schema:
     tipo:
         type: enum
-        enum: [theory]
+        values: [theory]
         required: true
     confianza:
         type: enum
-        enum: [emergent, developing, consolidated]
+        values: [emergent, developing, consolidated]
         required: true
     fecha:
         type: string

@@ -25,7 +25,21 @@ rootline explain docs/epics/E04/README.md -o json
       "name": "estado",
       "value": "Completed",
       "origin": "frontmatter",
-      "source": "docs/.stem"
+      "defined_in": "docs/.stem"
+    },
+    {
+      "name": "notes",
+      "value": "Release notes go here.",
+      "origin": "derived",
+      "source": "body.section[\"## Notes\"]",
+      "defined_in": "docs/.stem"
+    },
+    {
+      "name": "total",
+      "value": 3,
+      "origin": "aggregate",
+      "expression": "len(descendants)",
+      "defined_in": "docs/.stem"
     }
   ]
 }
@@ -44,7 +58,7 @@ For documents with derived and aggregated fields, each field shows its expressio
       "name": "estado",
       "value": "In Progress",
       "origin": "frontmatter",
-      "source": "docs/epics/.stem"
+      "defined_in": "docs/epics/.stem"
     },
     {
       "name": "slug",
@@ -73,5 +87,7 @@ For documents with derived and aggregated fields, each field shows its expressio
 ```
 
 The `stem_chain` shows the walk-up discovery order from the target up to the `root: true` marker. A chain that reaches the filesystem root without one has no declared boundary; the preflight stops governed commands there and asks for the marker. The `origin` field is one of: `frontmatter`, `schema` (default value), `derived`, or `aggregate`.
+
+For a source-backed field, `source` is the logical directive and `defined_in` is the physical `.stem` declaration. Explain resolves the same effective value as validation and query; frontmatter remains an override, empty-present sections remain present, and duplicate matching headings are reported as errors.
 
 `explain` supports `-o json` and `-o table` only — see [Output Formats](output.md).

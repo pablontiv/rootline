@@ -2,14 +2,14 @@ version: 2
 schema:
     tipo:
         type: enum
-        enum: [question, field-log, closure]
+        values: [question, field-log, closure]
         required: true
     estado:
         type: enum
-        enum: [active, paused, closed]
+        values: [active, paused, closed]
     tipo_entendimiento:
         type: enum
-        enum: [describe, understand, explore, build]
+        values: [describe, understand, explore, build]
     fecha_inicio:
         type: string
     fecha_cierre:

@@ -19,41 +19,40 @@ rules by directory, inheritance, validation, derivation, querying.
 
 ## Schema Field Types
 
-The `.stem` schema supports the following field types:
+The `.stem` schema supports the following canonical field types:
 
 | Type | Description |
 |------|-------------|
 | `string` | Free-text value |
-| `enum` | One of a fixed set of values |
-| `sequence` | Auto-incrementing identifier with prefix/digits |
-| `section` | A Markdown H2/H3 heading and its body in the document |
+| `list` | YAML sequence |
+| `enum` | One value from `values:` |
+| `sequence` | Identifier with a prefix and exact decimal digits |
+| `link` | Wiki-link string or list of wiki-link strings |
+| `boolean` | Native YAML boolean |
+| `integer` | Native YAML integer |
 
-### `type: section`
+Types are strict: Rootline does not coerce quoted booleans or numbers. The canonical spellings are `type: boolean` and `type: integer`; a one-value enum is valid, for example `values: [theory]`.
 
-`type: section` makes a Markdown heading a first-class schema field. The Markdown extractor populates `Record.Sections` — a `map[string]string` from heading text to body — when AST extraction is active.
+## Body Sources
+
+A Markdown location is declared separately from its value type:
 
 ```yaml
 schema:
-  "## Summary":
-    type: section
+  summary:
+    type: string
+    source: body.section["## Summary"]
     required: true
-  "## Changelog":
-    type: section
+  changelog:
+    type: string
+    source: body.section["## Changelog"]
     required: false
     default: "<!-- TODO -->"
-    ordered: false
 ```
 
-**Properties**:
+`source: body.h1` and exact `body.section[...]` directives are supported. Frontmatter is an explicit override. An empty section is present with value `""`; duplicate matching headings fail rather than selecting one. Extractors preserve source identity so validation, inference, schema proposal, and schema application use the same canonical directive.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `heading` | string | The heading text to match (defaults to the field key) |
-| `required` | bool | Whether the section must be present in every document |
-| `default` | string | Default body content for `migrate --scaffold` |
-| `ordered` | bool | If true, validate that the section appears in schema-defined order |
-
-Section fields participate in validation (required check), querying (`sections["## Heading"]`), and mutation (`rootline set '## Heading=content'`). They are emitted by `rootline init` at the 0.80 presence threshold.
+Source-backed fields participate in validation, querying, describe/explain output, and scaffolding. `rootline set` writes a frontmatter override for such a field; it does not edit the body section.
 
 > LSP integration has been considered but carries very high complexity.
 > It is not in scope.

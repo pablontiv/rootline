@@ -177,6 +177,18 @@ Inferences with `requires_agent: true` are logged in the report but skipped by
 `schema apply`. Human or agent review is needed to resolve them; they remain
 actionable for future tooling.
 
+## Canonical Section Inferences
+
+Section candidates preserve the exact heading and carry a real type plus a canonical source binding:
+
+```yaml
+notes:
+  type: string
+  source: body.section["## Notes"]
+```
+
+Every record contributes to the denominator. A candidate is optional unless the heading occurs in every record. Distinct exact headings that normalize to one logical name are a logical-name collision: analysis fails with each colliding heading and requires explicit names. Analyze, schema proposal, and schema application preserve the canonical source identity.
+
 ## Filtering with --incremental
 
 By default, analyze reports all inferences. Use `--incremental` to report only inferences not already covered by existing `.stem` files:

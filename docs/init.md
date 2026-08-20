@@ -3,7 +3,7 @@ estado: Completed
 ---
 # Schema Inference
 
-`rootline init` scans existing markdown files and infers a `.stem` schema from frontmatter patterns. It detects field types, enum values, and required fields automatically.
+`rootline init` scans existing Markdown files and infers a `.stem` schema from frontmatter patterns and supported Markdown body sources. It detects field types, enum values, required fields, and frequent section sources automatically.
 
 ## CLI Usage
 
@@ -43,7 +43,7 @@ schema:
     type: string
 ```
 
-Fields present in all files are marked `required`. Fields with a small set of distinct values are inferred as `enum`.
+Fields present in all files are marked `required`. Fields with a small set of distinct values are inferred as `enum` using `values:`.
 
 ## Hierarchical Mode
 
@@ -77,11 +77,11 @@ aggregate:
 
 Fields present at all levels stay global; fields present at specific levels get `match:` annotations. Aggregate expressions are auto-generated for enum fields on index files.
 
-## Section Field Inference
+## Section Source Inference
 
-When AST extraction is enabled, `rootline init` also scans document bodies and infers `type: section` fields for Markdown headings that appear frequently across files.
+When AST extraction is enabled, `rootline init` scans document bodies and infers source-backed fields for Markdown headings that appear frequently across files.
 
-Init uses a **0.80 threshold** — a heading must appear in at least 80% of files to be emitted as a section field. This is stricter than `analyze`'s default threshold of 0.60, to avoid generating spurious required sections from document-specific headings.
+Init uses a **0.80 threshold** — a heading must appear in at least 80% of files to be emitted. This is stricter than `analyze` default threshold of 0.60, to avoid generating spurious required sections from document-specific headings.
 
 ### Example
 
@@ -96,23 +96,24 @@ schema:
     type: enum
     required: true
     values: [Completed, In Progress, Pending]
-  "## Summary":
-    type: section
+  summary:
+    type: string
+    source: body.section["## Summary"]
     required: true
-  "## Changelog":
-    type: section
+  changelog:
+    type: string
+    source: body.section["## Changelog"]
     required: false
     default: "<!-- TODO -->"
 ```
 
-Headings below the 0.80 threshold are omitted from the generated `.stem`.
+Headings below the 0.80 threshold are omitted from the generated `.stem`. The source preserves exact heading level and text. Frontmatter remains an explicit override, and generated schemas validate the source corpus; distinct exact headings that normalize to one logical field fail with a collision instead of receiving an invented suffix.
 
-### Section Field Properties
+### Source-Backed Field Properties
 
 | Property | Description |
 |----------|-------------|
-| `type: section` | Marks a Markdown H2/H3 heading as a first-class schema field |
-| `heading` | The heading string (defaults to the field key) |
-| `required` | Whether the section must be present in every document |
-| `default` | Content inserted when `rootline migrate --scaffold` adds the section |
-| `ordered` | If true, validate that the section appears in schema-defined order |
+| `type` | Real value type, usually `string` for Markdown section content |
+| `source` | Exact directive such as `body.section["## Summary"]` |
+| `required` | Whether the source-backed field must be present in every applicable document |
+| `default` | Content inserted when `rootline migrate --scaffold` or `rootline new` adds the section |

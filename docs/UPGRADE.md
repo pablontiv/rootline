@@ -124,6 +124,33 @@ Resolving a record under `subproject/` stops at the closest marker and never rea
 
 rootline applies staged updates on the next run without prompting, so you may receive this change without choosing to upgrade. The next governed command will either prompt you (with a terminal) or fail with the exact fix (without one). That is why this note leads with the one-line fix and the error message carries the remedy itself.
 
+## Canonical Field Migration
+
+### Legacy section declaration → canonical source binding
+
+Replace this historical declaration:
+
+```yaml
+notes:
+  type: section
+  heading: "## Notes"
+  ordered: false
+```
+
+with its canonical type-plus-source form:
+
+```yaml
+notes:
+  type: string
+  source: body.section["## Notes"]
+```
+
+A heading without explicit legacy metadata cannot be migrated by guessing; choose the exact intended source. Required means presence, so an empty-present section is valid unless `non_empty` is also declared. Duplicate matching headings now fail explicitly. Ancestor-qualified selectors remain deferred to #190.
+
+### Legacy scalar and enum declaration keys
+
+Replace `type: bool` with `type: boolean`; native YAML booleans remain unchanged. Replace the historical schema key `enum:` with `values:`; `values: [theory]` is a valid single-value enum. Rootline does not coerce quoted booleans or integers.
+
 ## More Information
 
 - `CHANGELOG.md` — the release notes for this change

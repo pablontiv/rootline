@@ -87,7 +87,7 @@ rootline set docs/api/overview.md estado=Custom --no-validate
 | Invalid enum value | `pre-validation failed: field "estado": value "Custom" not in enum [draft, review, published]` |
 | Post-validation failure | `post-validation failed; changes rolled back: required field "tipo" is missing` |
 | File not found | `file not found: docs/api/missing.md (use 'rootline new' to scaffold a new document)` |
-| Section not found (set, not append) | Section is created if it does not exist |
+| Source-backed field | `set` writes a frontmatter override and does not edit the body section |
 | Source file not found (=@path) | `cannot read source file: @notes.txt: no such file` |
 
 ## Dry Run Output
@@ -98,6 +98,10 @@ With `--dry-run`, `rootline set` prints a diff-style preview without modifying a
 ~ docs/api/overview.md
   estado: "In Progress" → "Completed"
 ```
+
+## Source-Backed Fields
+
+For `source: body.section["## Notes"]`, `set notes=override` writes a frontmatter override. Validation, query, describe, and explain all resolve that override before body extraction; an empty-present section remains present when no override exists.
 
 ## Notes
 
