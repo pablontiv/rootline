@@ -2,7 +2,6 @@ package stemyaml
 
 import (
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 
@@ -12,6 +11,9 @@ import (
 
 // AppendSchemaField writes one canonical schema field entry.
 func AppendSchemaField(b *strings.Builder, name string, field rules.SchemaField) error {
+	if err := validateFieldDeclaration(name, field); err != nil {
+		return err
+	}
 	var local strings.Builder
 	fmt.Fprintf(&local, "  %s:\n", name)
 	if err := appendSchemaFieldAttrs(&local, field); err != nil {
@@ -23,11 +25,24 @@ func AppendSchemaField(b *strings.Builder, name string, field rules.SchemaField)
 
 // AppendSchemaFieldAttrs writes canonical schema field attributes.
 func AppendSchemaFieldAttrs(b *strings.Builder, field rules.SchemaField) error {
+	if err := validateFieldDeclaration("field", field); err != nil {
+		return err
+	}
 	var local strings.Builder
 	if err := appendSchemaFieldAttrs(&local, field); err != nil {
 		return err
 	}
 	b.WriteString(local.String())
+	return nil
+}
+
+func validateFieldDeclaration(name string, field rules.SchemaField) error {
+	if field.Type != "sequence" {
+		return nil
+	}
+	if issues := rules.ValidateFieldDeclaration(name, field); len(issues) > 0 {
+		return fmt.Errorf("invalid field declaration: %s", issues[0].Message)
+	}
 	return nil
 }
 
@@ -135,11 +150,7 @@ func appendFieldMatchAt(b *strings.Builder, indent string, match *rules.FieldMat
 				fmt.Fprintf(b, "%s    prefix: %s\n", indent, prefixScalar)
 			}
 			if digits, ok := cfgMap["digits"]; ok {
-				digitsInt, err := configDigits(digits)
-				if err != nil {
-					return fmt.Errorf("pattern %q digits: %w", key, err)
-				}
-				fmt.Fprintf(b, "%s    digits: %d\n", indent, digitsInt)
+				fmt.Fprintf(b, "%s    digits: %v\n", indent, digits)
 			}
 		}
 	case match.Patterns != nil && len(match.Patterns) == 0:
@@ -182,22 +193,6 @@ func yamlQuotedStringList(values []string) ([]string, error) {
 		out = append(out, scalar)
 	}
 	return out, nil
-}
-
-func configDigits(value any) (int, error) {
-	switch v := value.(type) {
-	case int:
-		return v, nil
-	case int64:
-		return int(v), nil
-	case float64:
-		if math.Trunc(v) != v {
-			return 0, fmt.Errorf("must be an integer")
-		}
-		return int(v), nil
-	default:
-		return 0, fmt.Errorf("must be an integer")
-	}
 }
 
 func yamlScalar(value string) (string, error) {

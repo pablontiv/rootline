@@ -1,6 +1,7 @@
 package stemyaml
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -149,6 +150,58 @@ func TestAppendSchemaField_RejectsUnsupportedMatchConfigShapes(t *testing.T) {
 				t.Fatalf("expected unsupported config error, got nil and output:\n%s", b.String())
 			}
 		})
+	}
+}
+
+func TestAppendSchemaField_RejectsNonCanonicalSequenceConfigsTransactionally(t *testing.T) {
+	maxUint64 := ^uint64(0)
+	tests := []struct {
+		name string
+		cfg  any
+	}{
+		{name: "integral float", cfg: map[string]any{"prefix": "T", "digits": 2.0}},
+		{name: "nil", cfg: nil},
+		{name: "unknown key", cfg: map[string]any{"prefix": "T", "digits": 2, "extra": true}},
+		{name: "nonpositive", cfg: map[string]any{"prefix": "T", "digits": 0}},
+		{name: "overflow", cfg: map[string]any{"prefix": "T", "digits": maxUint64}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			field := rules.SchemaField{
+				Type:   "sequence",
+				Prefix: "T",
+				Digits: 2,
+				Match:  &rules.FieldMatch{Configs: map[string]any{"T*": tt.cfg}},
+			}
+			const sentinel = "preexisting bytes\\n"
+			var b strings.Builder
+			b.WriteString(sentinel)
+
+			if err := AppendSchemaField(&b, "id", field); err == nil {
+				t.Fatalf("AppendSchemaField accepted config %#v", tt.cfg)
+			}
+			if b.String() != sentinel {
+				t.Fatalf("destination changed on rejection: got %q, want %q", b.String(), sentinel)
+			}
+		})
+	}
+}
+
+func TestAppendSchemaField_SerializesNativeIntegerConfigDigits(t *testing.T) {
+	for _, digits := range []any{int8(2), int16(3), int32(4), int64(5), uint8(6), uint16(7), uint32(8)} {
+		field := rules.SchemaField{
+			Type:   "sequence",
+			Prefix: "T",
+			Digits: 2,
+			Match:  &rules.FieldMatch{Configs: map[string]any{"T*": map[string]any{"prefix": "T", "digits": digits}}},
+		}
+		var b strings.Builder
+		if err := AppendSchemaField(&b, "id", field); err != nil {
+			t.Fatalf("AppendSchemaField digits %T(%v): %v", digits, digits, err)
+		}
+		if !strings.Contains(b.String(), "digits: "+fmt.Sprint(digits)) {
+			t.Fatalf("serialized digits %T(%v) non-canonically:\n%s", digits, digits, b.String())
+		}
 	}
 }
 

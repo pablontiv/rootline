@@ -141,6 +141,32 @@ schema:
 	}
 }
 
+func TestBuildSplitStems_RejectsIntegralFloatSequenceConfigBeforeReturningStems(t *testing.T) {
+	existing := &rules.StemFile{
+		Version: 2,
+		Schema: map[string]rules.SchemaField{
+			"code": {
+				Type:   "sequence",
+				Prefix: "T",
+				Digits: 2,
+				Match:  &rules.FieldMatch{Configs: map[string]any{"T*": map[string]any{"prefix": "T", "digits": 2.0}}},
+			},
+		},
+	}
+	hierarchy := makeHierarchy(
+		map[string]rules.SchemaField{"code": {Type: "sequence"}},
+		[]infer.LevelSchema{{Level: infer.Level{Prefix: "T", Digits: 2, DirPaths: []string{"T01"}}, OnlyHere: map[string]rules.SchemaField{"id": {Type: "sequence", Prefix: "T", Digits: 2}}}},
+	)
+
+	result, err := BuildSplitStems("/tmp/test", existing, hierarchy)
+	if err == nil {
+		t.Fatalf("expected integral float config rejection, got result %+v", result)
+	}
+	if len(result.Stems) != 0 {
+		t.Fatalf("expected no generated stems on rejection, got %+v", result.Stems)
+	}
+}
+
 func TestBuildSplitStems_RejectsUnsupportedMatchConfigBeforeReturningStems(t *testing.T) {
 	existing := &rules.StemFile{
 		Version: 2,

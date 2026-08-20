@@ -80,7 +80,7 @@ func validateSequenceDeclaration(name string, field SchemaField) *FieldContractI
 		}
 		if _, err := applySequenceConfig(field, config); err != nil {
 			if seqErr, ok := err.(sequenceConfigError); ok {
-				return incompleteSequenceIssue(name, seqErr.actual)
+				return incompleteSequenceConfigIssue(name, pattern, seqErr)
 			}
 			return incompleteSequenceIssue(name, "incomplete sequence config")
 		}
@@ -90,6 +90,16 @@ func validateSequenceDeclaration(name string, field SchemaField) *FieldContractI
 
 func incompleteSequenceIssue(name, actual string) *FieldContractIssue {
 	issue := issue("incomplete-type", "prefix and positive digits", actual, fmt.Sprintf("sequence field %q must declare prefix and positive digits", name))
+	return &issue
+}
+
+func incompleteSequenceConfigIssue(name, pattern string, configErr sequenceConfigError) *FieldContractIssue {
+	issue := issue(
+		"incomplete-type",
+		"prefix and positive digits",
+		configErr.actual,
+		fmt.Sprintf("sequence field %q must declare prefix and positive digits: match %q: %s", name, pattern, configErr.detail),
+	)
 	return &issue
 }
 

@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
@@ -300,6 +302,19 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		Rejected: map[string]string{},
 	}
 
+	if err := preflightSchemaApplyRecords(ctx, scanRoot); err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("resolving .stem: %v", err))
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
+	}
+
 	// Process each proposal.
 	for _, proposal := range report.Proposals {
 		// Skip proposals that require agent intervention.
@@ -333,7 +348,10 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 				result.Errors = append(result.Errors, fmt.Sprintf("create_stem: %s: patch content required; re-run 'schema propose' to generate it", proposal.Target))
 				continue
 			}
-
+			if err := validateProspectiveSchemaPatch(target, proposal.Patch); err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("validating proposed .stem %s: %v", proposal.Target, err))
+				continue
+			}
 			// Overwrite guard: replacing a governed .stem discards root, scope,
 			// enum values, required markers, derive and aggregate in one write,
 			// so it is a policy refusal unless the caller opted in with --force.
@@ -436,6 +454,19 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 		Errors:   []string{},
 	}
 
+	if err := preflightSchemaApplyRecords(ctx, root); err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("resolving .stem: %v", err))
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
+	}
+
 	// Resolve closest .stem for the report path. A malformed governed overlay
 	// is an apply result failure, not a bare command error: callers depend on
 	// this existing envelope to learn why no report operation was performed.
@@ -521,6 +552,46 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	}
 
 	return applyExitError(len(result.Errors), 0)
+}
+
+// preflightSchemaApplyRecords resolves the actual record population before schema
+// apply writes or publishes a dry-run result. A root-directory resolution cannot
+// exercise match overlays that only apply to record path components.
+func preflightSchemaApplyRecords(ctx context.Context, root string) error {
+	reg := extract.NewRegistry()
+	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(stemScopeResolver()), index.AllowUngoverned())
+	if err != nil {
+		if errors.Is(err, rules.ErrNoSchemaFound) {
+			return nil
+		}
+		return fmt.Errorf("post-apply validation scan of %s: %w", root, err)
+	}
+	if err := ensureRecordsResolve(ctx, records, root); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateProspectiveSchemaPatch verifies a typed create_stem operation in
+// memory. It uses the declaration owner rather than a temporary file or a
+// second resolver, so an invalid overlay cannot be written then normalized by
+// a later read path.
+func validateProspectiveSchemaPatch(path, content string) error {
+	stem, err := rules.ParseStem(path, []byte(content))
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(stem.Schema))
+	for name := range stem.Schema {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if issues := rules.ValidateFieldDeclaration(name, stem.Schema[name]); len(issues) > 0 {
+			return fmt.Errorf("field %q: %s", name, issues[0].Message)
+		}
+	}
+	return nil
 }
 
 // runPostApplyValidation runs validate --all on the root and returns a summary.

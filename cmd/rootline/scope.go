@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -80,7 +81,7 @@ func ensureRecordsResolve(ctx context.Context, records []*extract.Record, root s
 		}
 		absPath := filepath.Join(root, rec.Path)
 		if _, err := rules.ResolveForRecord(filepath.Dir(absPath), rec.Path); err != nil && !errors.Is(err, rules.ErrNoSchemaFound) {
-			return err
+			return fmt.Errorf("resolving governed record %s: %w", rec.Path, err)
 		}
 	}
 	return nil
