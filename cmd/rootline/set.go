@@ -187,9 +187,6 @@ func runSet(cmd *cobra.Command, args []string) error {
 			if !ok {
 				continue
 			}
-			if sf.Type == "section" {
-				continue
-			}
 			if sf.Type == "enum" && len(sf.Values) > 0 && op.Value != "" {
 				valid := false
 				for _, v := range sf.Values {
@@ -209,16 +206,7 @@ func runSet(cmd *cobra.Command, args []string) error {
 	// Step 7: Dry-run mode.
 	if setDryRun {
 		for _, p := range proposals {
-			switch p.Type {
-			case proposal.SetField:
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would set %s = %q\n", p.Field, p.Value)
-			case proposal.SetSection:
-				mode := p.Mode
-				if mode == "" {
-					mode = "replace"
-				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would %s section %s (%s)\n", mode, p.Heading, p.Field)
-			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would set %s = %q\n", p.Field, p.Value)
 		}
 		return nil
 	}
@@ -248,16 +236,7 @@ func runSet(cmd *cobra.Command, args []string) error {
 
 	// Print summary.
 	for _, p := range report.Proposals {
-		switch p.Type {
-		case proposal.SetField:
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "set %s = %q\n", p.Field, p.Value)
-		case proposal.SetSection:
-			mode := p.Mode
-			if mode == "" {
-				mode = "replace"
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s section %s\n", mode, p.Heading)
-		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "set %s = %q\n", p.Field, p.Value)
 	}
 
 	return nil
