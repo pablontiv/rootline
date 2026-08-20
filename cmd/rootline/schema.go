@@ -165,6 +165,9 @@ func runSchemaPropose(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
 	}
+	if err := ensureRecordsResolve(ctx, records, root); err != nil {
+		return fmt.Errorf("resolving .stem: %w", err)
+	}
 
 	if len(records) == 0 {
 		// No records found, emit empty report
@@ -185,11 +188,15 @@ func runSchemaPropose(cmd *cobra.Command, args []string) error {
 	}
 
 	// Derive and aggregate
-	derive.DeriveAllSimple(ctx, records, root)
+	if err := derive.DeriveAllSimple(ctx, records, root); err != nil {
+		return fmt.Errorf("deriving records: %w", err)
+	}
 	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
 		return fmt.Errorf("enriching records: %w", err)
 	}
-	derive.AggregateAllSimple(ctx, records, root)
+	if err := derive.AggregateAllSimple(ctx, records, root); err != nil {
+		return fmt.Errorf("aggregating records: %w", err)
+	}
 
 	// Check for existing stem
 	var existingStem *rules.StemFile
@@ -418,10 +425,32 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 		return fmt.Errorf("resolving report root: %w", err)
 	}
 
-	// Resolve closest .stem for the report path.
+	result := &SchemaApplyResult{
+		Version:  1,
+		Kind:     "rootline/schema-apply",
+		Root:     root,
+		DryRun:   schemaApplyDryRun,
+		Applied:  []string{},
+		Skipped:  []string{},
+		Rejected: []string{},
+		Errors:   []string{},
+	}
+
+	// Resolve closest .stem for the report path. A malformed governed overlay
+	// is an apply result failure, not a bare command error: callers depend on
+	// this existing envelope to learn why no report operation was performed.
 	res, resolveErr := rules.Resolve(root, root)
 	if resolveErr != nil {
-		return fmt.Errorf("resolving stems for %s: %w", report.Path, resolveErr)
+		result.Errors = append(result.Errors, fmt.Sprintf("resolving stems for %s: %v", report.Path, resolveErr))
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
 	}
 
 	if len(res.Chain) == 0 {
@@ -448,17 +477,6 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 				schemaInferences = append(schemaInferences, inf)
 			}
 		}
-	}
-
-	result := &SchemaApplyResult{
-		Version:  1,
-		Kind:     "rootline/schema-apply",
-		Root:     root,
-		DryRun:   schemaApplyDryRun,
-		Applied:  []string{},
-		Skipped:  []string{},
-		Rejected: []string{},
-		Errors:   []string{},
 	}
 
 	// Apply schema modifications to .stem
@@ -526,12 +544,19 @@ func runPostApplyValidation(ctx context.Context, root string) (*ValidationSummar
 	if err != nil {
 		return nil, fmt.Errorf("post-apply validation scan of %s: %w", root, err)
 	}
+	if err := ensureRecordsResolve(ctx, records, root); err != nil {
+		return nil, fmt.Errorf("resolving .stem: %w", err)
+	}
 
-	derive.DeriveAllSimple(ctx, records, root)
+	if err := derive.DeriveAllSimple(ctx, records, root); err != nil {
+		return nil, fmt.Errorf("deriving records: %w", err)
+	}
 	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
 		return nil, fmt.Errorf("enriching records: %w", err)
 	}
-	derive.AggregateAllSimple(ctx, records, root)
+	if err := derive.AggregateAllSimple(ctx, records, root); err != nil {
+		return nil, fmt.Errorf("aggregating records: %w", err)
+	}
 
 	validCount := 0
 	invalidCount := 0

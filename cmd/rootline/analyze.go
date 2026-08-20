@@ -68,14 +68,21 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
 	}
+	if err := ensureRecordsResolve(ctx, records, root); err != nil {
+		return fmt.Errorf("resolving .stem: %w", err)
+	}
 
 	gapsResolver := infer.DefaultStemResolver()
 
-	derive.DeriveAllSimple(ctx, records, root)
+	if err := derive.DeriveAllSimple(ctx, records, root); err != nil {
+		return fmt.Errorf("deriving records: %w", err)
+	}
 	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
 		return fmt.Errorf("enriching records: %w", err)
 	}
-	derive.AggregateAllSimple(ctx, records, root)
+	if err := derive.AggregateAllSimple(ctx, records, root); err != nil {
+		return fmt.Errorf("aggregating records: %w", err)
+	}
 
 	// Load stem for link schema.
 	linkSchema := resolveLinkSchema(root)
