@@ -1,18 +1,25 @@
 package migrate
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pablontiv/rootline/internal/rules"
 )
+
+func acceptScaffoldValidation(ctx context.Context, in ScaffoldValidationInput) (*rules.ValidationResult, error) {
+	return rules.NewValidationResult(in.Path, nil), nil
+}
 
 func TestScaffoldMissingRequiredSections_WithDefault(t *testing.T) {
 	stem := `version: 2
 schema:
   desbloqueo:
-    type: section
-    heading: "## Desbloqueo"
+    type: string
+    source: 'body.section["## Desbloqueo"]'
     required: true
     default: "<!-- TODO: define unblock criteria -->"
 `
@@ -23,8 +30,9 @@ schema:
 	dir := setupTestDir(t, stem, files)
 
 	op := &ScaffoldOperation{
-		RootPath: dir,
-		DryRun:   false,
+		RootPath:  dir,
+		DryRun:    false,
+		Validator: acceptScaffoldValidation,
 	}
 
 	result, err := op.Execute()
@@ -58,8 +66,8 @@ func TestScaffoldMissingRequiredSections_PlaceholderWhenNoDefault(t *testing.T) 
 	stem := `version: 2
 schema:
   notas:
-    type: section
-    heading: "## Notas"
+    type: string
+    source: 'body.section["## Notas"]'
     required: true
 `
 	files := map[string]string{
@@ -69,8 +77,9 @@ schema:
 	dir := setupTestDir(t, stem, files)
 
 	op := &ScaffoldOperation{
-		RootPath: dir,
-		DryRun:   false,
+		RootPath:  dir,
+		DryRun:    false,
+		Validator: acceptScaffoldValidation,
 	}
 
 	result, err := op.Execute()
@@ -100,8 +109,8 @@ func TestScaffoldSkipsExistingSections(t *testing.T) {
 	stem := `version: 2
 schema:
   contexto:
-    type: section
-    heading: "## Contexto"
+    type: string
+    source: 'body.section["## Contexto"]'
     required: true
     default: "<!-- TODO: add context -->"
 `
@@ -140,8 +149,8 @@ func TestScaffoldDryRun(t *testing.T) {
 	stem := `version: 2
 schema:
   plan:
-    type: section
-    heading: "## Plan"
+    type: string
+    source: 'body.section["## Plan"]'
     required: true
     default: "<!-- TODO: outline plan -->"
 `
@@ -152,8 +161,9 @@ schema:
 	dir := setupTestDir(t, stem, files)
 
 	op := &ScaffoldOperation{
-		RootPath: dir,
-		DryRun:   true,
+		RootPath:  dir,
+		DryRun:    true,
+		Validator: acceptScaffoldValidation,
 	}
 
 	result, err := op.Execute()
@@ -180,16 +190,14 @@ func TestScaffoldMultipleSections_OrderedInsertion(t *testing.T) {
 	stem := `version: 2
 schema:
   contexto:
-    type: section
-    heading: "## Contexto"
+    type: string
+    source: 'body.section["## Contexto"]'
     required: true
-    ordered: 1
     default: "<!-- context -->"
   aceptacion:
-    type: section
-    heading: "## Aceptacion"
+    type: string
+    source: 'body.section["## Aceptacion"]'
     required: true
-    ordered: 2
     default: "<!-- acceptance -->"
 `
 	files := map[string]string{
@@ -199,8 +207,9 @@ schema:
 	dir := setupTestDir(t, stem, files)
 
 	op := &ScaffoldOperation{
-		RootPath: dir,
-		DryRun:   false,
+		RootPath:  dir,
+		DryRun:    false,
+		Validator: acceptScaffoldValidation,
 	}
 
 	result, err := op.Execute()
@@ -226,11 +235,279 @@ schema:
 		t.Error("missing ## Aceptacion")
 	}
 
-	// Contexto must appear before Aceptacion.
+	// Sections are materialized in exact lexical heading order.
 	idxCtx := strings.Index(text, "## Contexto")
 	idxAce := strings.Index(text, "## Aceptacion")
-	if idxCtx >= idxAce {
-		t.Errorf("## Contexto (pos %d) should appear before ## Aceptacion (pos %d)", idxCtx, idxAce)
+	if idxAce >= idxCtx {
+		t.Errorf("## Aceptacion (pos %d) should appear before ## Contexto (pos %d)", idxAce, idxCtx)
+	}
+}
+
+func TestScaffoldRequiredSectionSourceLegacySectionFieldsAreRejected(t *testing.T) {
+	stem := `version: 2
+schema:
+  notas:
+    type: section
+    heading: "## Notas"
+    required: true
+`
+	files := map[string]string{
+		"item.md": "---\ntitle: Item\n---\n# Item\n",
+	}
+	dir := setupTestDir(t, stem, files)
+
+	op := &ScaffoldOperation{RootPath: dir}
+
+	_, err := op.Execute()
+	if err == nil {
+		t.Fatal("expected legacy section declaration error")
+	}
+	if !strings.Contains(err.Error(), `field "notas"`) {
+		t.Fatalf("error = %v, want field declaration context", err)
+	}
+	content, readErr := os.ReadFile(filepath.Join(dir, "item.md"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if strings.Contains(string(content), "## Notas") {
+		t.Fatalf("legacy declaration must not be written, got:\n%s", content)
+	}
+}
+
+func TestScaffoldRequiredSectionSourceValidateAndAppendInLexicalOrder(t *testing.T) {
+	stem := `version: 2
+schema:
+  zeta:
+    type: string
+    required: true
+    source: 'body.section["## Zeta"]'
+    default: zed
+  alpha:
+    type: string
+    required: true
+    source: 'body.section["## Alpha"]'
+`
+	files := map[string]string{
+		"story.md": "---\ntitle: Story\n---\n# Story\n",
+	}
+	dir := setupTestDir(t, stem, files)
+	var validated ScaffoldValidationInput
+
+	op := &ScaffoldOperation{
+		RootPath: dir,
+		Validator: func(ctx context.Context, in ScaffoldValidationInput) (*rules.ValidationResult, error) {
+			validated = in
+			return rules.NewValidationResult(in.Path, nil), nil
+		},
+	}
+
+	result, err := op.Execute()
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if result.FilesScaffolded != 1 || result.SectionsAdded != 2 || len(result.Details) != 2 {
+		t.Fatalf("result = %+v, want one file and two validated sections", result)
+	}
+	if result.Details[0].Heading != "## Alpha" || result.Details[1].Heading != "## Zeta" {
+		t.Fatalf("details not lexical: %+v", result.Details)
+	}
+	if validated.Path != "story.md" {
+		t.Fatalf("validator Path = %q, want logical scanner path", validated.Path)
+	}
+	if !filepath.IsAbs(validated.AbsPath) || validated.AbsPath != filepath.Join(dir, "story.md") {
+		t.Fatalf("validator AbsPath = %q, want exact absolute record path", validated.AbsPath)
+	}
+	if !strings.Contains(string(validated.Content), "## Alpha\n\n<!-- TODO -->\n\n## Zeta\n\nzed\n") {
+		t.Fatalf("validator saw unexpected prospective content:\n%s", validated.Content)
+	}
+	content, readErr := os.ReadFile(filepath.Join(dir, "story.md"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(content) != string(validated.Content) {
+		t.Fatalf("written bytes differ from validator bytes:\nvalidated:\n%s\nwritten:\n%s", validated.Content, content)
+	}
+	idxAlpha := strings.Index(string(content), "## Alpha")
+	idxZeta := strings.Index(string(content), "## Zeta")
+	if idxAlpha < 0 || idxZeta < 0 || idxAlpha > idxZeta {
+		t.Fatalf("written sections not lexical:\n%s", content)
+	}
+}
+
+func TestScaffoldRequiredSectionSourceNilValidatorFailsClosedOnlyWhenCandidateExists(t *testing.T) {
+	stem := `version: 2
+schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["## Notes"]'
+`
+	dir := setupTestDir(t, stem, map[string]string{
+		"missing.md": "---\ntitle: Missing\n---\n# Missing\n",
+	})
+
+	_, err := (&ScaffoldOperation{RootPath: dir}).Execute()
+	if err == nil {
+		t.Fatal("expected nil validator to fail closed for a mutation candidate")
+	}
+	content, readErr := os.ReadFile(filepath.Join(dir, "missing.md"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if strings.Contains(string(content), "## Notes") {
+		t.Fatalf("nil validator wrote candidate:\n%s", content)
+	}
+
+	noCandidateDir := setupTestDir(t, stem, map[string]string{
+		"present.md": "---\ntitle: Present\n---\n# Present\n\n## Notes\n\nAlready present.\n",
+	})
+	result, err := (&ScaffoldOperation{RootPath: noCandidateDir}).Execute()
+	if err != nil {
+		t.Fatalf("nil validator with no candidates should remain a zero-result success: %v", err)
+	}
+	if result.SectionsAdded != 0 || result.FilesScaffolded != 0 {
+		t.Fatalf("result = %+v, want no candidates", result)
+	}
+}
+
+func TestScaffoldRequiredSectionSourceRejectsMalformedZeroCandidateDryOrWrite(t *testing.T) {
+	stem := `version: 2
+schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["## Notes"]'
+`
+	original := "---\ntitle: [broken\n---\n# Present\n\n## Notes\n\nAlready present.\n"
+	for _, dryRun := range []bool{true, false} {
+		t.Run(map[bool]string{true: "dry", false: "write"}[dryRun], func(t *testing.T) {
+			dir := setupTestDir(t, stem, map[string]string{"present.md": original})
+			_, err := (&ScaffoldOperation{RootPath: dir, DryRun: dryRun}).Execute()
+			if err == nil {
+				t.Fatal("expected malformed frontmatter to fail despite zero candidates")
+			}
+			if !strings.Contains(err.Error(), "present.md") || !strings.Contains(err.Error(), "malformed YAML") {
+				t.Fatalf("error = %v, want contextual extraction failure", err)
+			}
+			content, readErr := os.ReadFile(filepath.Join(dir, "present.md"))
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if string(content) != original {
+				t.Fatalf("malformed record changed in dryRun=%v:\n%s", dryRun, content)
+			}
+		})
+	}
+}
+
+func TestScaffoldRequiredSectionSourceUsesLogicalPathForRelativeExcludes(t *testing.T) {
+	stem := `version: 2
+schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["## Notes"]'
+    excludes:
+      match: "docs/README.md"
+`
+	dir := setupTestDir(t, stem, map[string]string{
+		"docs/README.md": "---\ntitle: Docs\n---\n# Docs\n",
+	})
+	result, err := (&ScaffoldOperation{RootPath: dir}).Execute()
+	if err != nil {
+		t.Fatalf("logical relative exclude should yield clean zero result: %v", err)
+	}
+	if result.SectionsAdded != 0 || result.FilesScaffolded != 0 {
+		t.Fatalf("result = %+v, want relative exclude to suppress scaffold", result)
+	}
+	content, readErr := os.ReadFile(filepath.Join(dir, "docs", "README.md"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if strings.Contains(string(content), "## Notes") {
+		t.Fatalf("excluded relative path was scaffolded:\n%s", content)
+	}
+}
+
+func TestScaffoldRequiredSectionSourceValidationFailureDoesNotWriteOrCountCandidate(t *testing.T) {
+	stem := `version: 2
+schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["## Notes"]'
+`
+	original := "---\ntitle: Broken\n---\n# Broken\n"
+	dir := setupTestDir(t, stem, map[string]string{"broken.md": original})
+	target := filepath.Join(dir, "broken.md")
+	if err := os.Chmod(target, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	op := &ScaffoldOperation{
+		RootPath: dir,
+		Validator: func(ctx context.Context, in ScaffoldValidationInput) (*rules.ValidationResult, error) {
+			return rules.NewValidationResult(in.Path, []rules.ValidationError{{Rule: "test", Severity: "error", Message: "boom"}}), nil
+		},
+	}
+	_, err := op.Execute()
+	if err == nil {
+		t.Fatal("expected validation failure")
+	}
+	content, readErr := os.ReadFile(target)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(content) != original {
+		t.Fatalf("failed candidate changed bytes:\n%s", content)
+	}
+	info, statErr := os.Stat(target)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("mode = %o, want 600 after validation failure", got)
+	}
+}
+
+func TestScaffoldRequiredSectionSourceKeepsEarlierWriteWhenLaterFileFails(t *testing.T) {
+	stem := `version: 2
+schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["## Notes"]'
+`
+	dir := setupTestDir(t, stem, map[string]string{
+		"a.md": "---\ntitle: A\n---\n# A\n",
+		"b.md": "---\ntitle: B\n---\n# B\n",
+	})
+	op := &ScaffoldOperation{
+		RootPath: dir,
+		Validator: func(ctx context.Context, in ScaffoldValidationInput) (*rules.ValidationResult, error) {
+			if in.Path == "b.md" {
+				return rules.NewValidationResult(in.Path, []rules.ValidationError{{Rule: "test", Severity: "error", Message: "later failure"}}), nil
+			}
+			return rules.NewValidationResult(in.Path, nil), nil
+		},
+	}
+	_, err := op.Execute()
+	if err == nil {
+		t.Fatal("expected later file validation failure")
+	}
+	aContent, readErr := os.ReadFile(filepath.Join(dir, "a.md"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !strings.Contains(string(aContent), "## Notes") {
+		t.Fatalf("first successful write was rolled back or skipped:\n%s", aContent)
+	}
+	bContent, readErr := os.ReadFile(filepath.Join(dir, "b.md"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if strings.Contains(string(bContent), "## Notes") {
+		t.Fatalf("later failed file was written:\n%s", bContent)
 	}
 }
 
@@ -242,8 +519,8 @@ schema:
     required: true
     values: [open, done]
   notes:
-    type: section
-    heading: "## Notes"
+    type: string
+    source: 'body.section["## Notes"]'
     required: false
     default: "<!-- optional notes -->"
 `
