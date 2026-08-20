@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,6 +20,7 @@ func TestValidateFieldDeclaration(t *testing.T) {
 		{"boolean", SchemaField{Type: "boolean"}, ""},
 		{"legacy bool", SchemaField{Type: "bool"}, "legacy-type"},
 		{"integer", SchemaField{Type: "integer"}, ""},
+		{"top-level sequence", SchemaField{Type: "sequence", Prefix: "ID-", Digits: 3}, ""},
 		{"negative sequence digits", SchemaField{Type: "sequence", Prefix: "ID-", Digits: -1}, "incomplete-type"},
 		{"unknown", SchemaField{Type: "number"}, "unknown-type"},
 	}
@@ -33,6 +35,138 @@ func TestValidateFieldDeclaration(t *testing.T) {
 				t.Fatalf("got %q want %q issues=%+v", got, tt.wantCode, issues)
 			}
 		})
+	}
+}
+
+func TestValidateFieldDeclarationSequenceMapConfigs(t *testing.T) {
+	tests := []struct {
+		name       string
+		fieldYAML  string
+		wantCode   string
+		wantActual string
+	}{
+		{
+			name: "missing effective prefix without global fallback",
+			fieldYAML: `type: sequence
+match:
+  "O*": {digits: 2}
+`,
+			wantCode:   "incomplete-type",
+			wantActual: "incomplete sequence config",
+		},
+		{
+			name: "missing effective digits without global fallback",
+			fieldYAML: `type: sequence
+match:
+  "O*": {prefix: O}
+`,
+			wantCode:   "incomplete-type",
+			wantActual: "incomplete sequence config",
+		},
+		{
+			name: "explicit nonpositive digits override valid fallback",
+			fieldYAML: `type: sequence
+prefix: O
+digits: 2
+match:
+  "O*": {digits: 0}
+`,
+			wantCode:   "incomplete-type",
+			wantActual: "incomplete sequence config",
+		},
+		{
+			name: "explicit empty prefix override valid fallback",
+			fieldYAML: `type: sequence
+prefix: O
+digits: 2
+match:
+  "O*": {prefix: ""}
+`,
+			wantCode:   "incomplete-type",
+			wantActual: "incomplete sequence config",
+		},
+		{
+			name: "integral float digits config is rejected not accepted",
+			fieldYAML: `type: sequence
+match:
+  "O*": {prefix: O, digits: 2.0}
+`,
+			wantCode:   "incomplete-type",
+			wantActual: "incomplete sequence config",
+		},
+		{
+			name: "fractional digits config is rejected not truncated",
+			fieldYAML: `type: sequence
+match:
+  "O*": {prefix: O, digits: 1.5}
+`,
+			wantCode:   "incomplete-type",
+			wantActual: "incomplete sequence config",
+		},
+		{
+			name: "quoted digits config is rejected",
+			fieldYAML: `type: sequence
+match:
+  "O*": {prefix: O, digits: "2"}
+`,
+			wantCode:   "incomplete-type",
+			wantActual: "incomplete sequence config",
+		},
+		{
+			name: "scalar pattern config invalid despite complete global fallback",
+			fieldYAML: `type: sequence
+prefix: O
+digits: 2
+match:
+  "O*": O
+`,
+			wantCode:   "incomplete-type",
+			wantActual: "malformed sequence config",
+		},
+		{
+			name: "unsupported pattern config key",
+			fieldYAML: `type: sequence
+match:
+  "O*": {prefix: O, digits: 2, suffix: alpha}
+`,
+			wantCode:   "incomplete-type",
+			wantActual: "unsupported sequence config",
+		},
+		{
+			name: "unsupported key takes deterministic precedence over bad digits",
+			fieldYAML: `type: sequence
+match:
+  "O*": {prefix: O, digits: 1.5, suffix: alpha}
+`,
+			wantCode:   "incomplete-type",
+			wantActual: "unsupported sequence config",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			field := mustParseField(t, tt.fieldYAML)
+			issues := ValidateFieldDeclaration("id", field)
+			gotCode, gotActual := "", ""
+			if len(issues) > 0 {
+				gotCode, gotActual = issues[0].Code, issues[0].Actual
+			}
+			if gotCode != tt.wantCode || gotActual != tt.wantActual {
+				t.Fatalf("got code=%q actual=%q issues=%+v, want code=%q actual=%q", gotCode, gotActual, issues, tt.wantCode, tt.wantActual)
+			}
+		})
+	}
+}
+
+func TestValidateStemHealthActiveRoadmapAcceptsCanonicalSequenceConfig(t *testing.T) {
+	repo := rulesTestRepoRoot(t)
+	result, err := ValidateStemHealth(context.Background(), filepath.Join(repo, "docs", "roadmap"))
+	if err != nil {
+		t.Fatalf("ValidateStemHealth docs/roadmap: %v", err)
+	}
+	for _, check := range result.Checks {
+		if check.Name == "field-declaration" && check.Field == "id" && check.Status == "fail" {
+			t.Fatalf("docs/roadmap canonical sequence id failed declaration health: %+v", check)
+		}
 	}
 }
 
@@ -153,4 +287,22 @@ func mustParseField(t *testing.T, body string) SchemaField {
 		t.Fatal(err)
 	}
 	return stem.Schema["field"]
+}
+
+func rulesTestRepoRoot(t *testing.T) string {
+	t.Helper()
+	path, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+			return path
+		}
+		next := filepath.Dir(path)
+		if next == path {
+			t.Fatal("repository root with go.mod not found")
+		}
+		path = next
+	}
 }
