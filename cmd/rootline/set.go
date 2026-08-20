@@ -229,7 +229,7 @@ func runSet(cmd *cobra.Command, args []string) error {
 
 	// Step 10: Post-validate and rollback on failure.
 	if !setNoValidate {
-		if rollbackErr := postValidateOrRollback(ctx, absPath, dir, originalContent, effective); rollbackErr != nil {
+		if rollbackErr := postValidateOrRollback(ctx, absPath, dir, originalContent); rollbackErr != nil {
 			return rollbackErr
 		}
 	}
@@ -260,7 +260,7 @@ func buildProposal(op fieldOp, relPath string, effective *rules.StemFile) (propo
 
 // postValidateOrRollback re-extracts the file and validates it.
 // If validation fails, the original content is restored (rollback).
-func postValidateOrRollback(ctx context.Context, absPath, dir string, originalContent []byte, effective *rules.StemFile) error {
+func postValidateOrRollback(ctx context.Context, absPath, dir string, originalContent []byte) error {
 	newContent, err := os.ReadFile(absPath)
 	if err != nil {
 		return fmt.Errorf("re-reading %s after mutation: %w", absPath, err)
@@ -275,10 +275,13 @@ func postValidateOrRollback(ctx context.Context, absPath, dir string, originalCo
 		return fmt.Errorf("re-extracting %s after mutation (rolled back): %w", absPath, err)
 	}
 
-	// Re-resolve effective (could have changed if we modified .stem, but typically not).
+	// Re-resolve effective after the mutation. A failed governed resolution is
+	// never equivalent to the pre-write schema: restore the original bytes and
+	// surface the actual cause rather than validating against stale governance.
 	freshEffective, err := rules.ResolveForRecord(dir, absPath)
 	if err != nil {
-		freshEffective = effective
+		_ = os.WriteFile(absPath, originalContent, 0o644) //nolint:gosec // rollback intentionally restores the user-selected validated document path
+		return fmt.Errorf("resolving .stem for %s after mutation (rolled back): %w", absPath, err)
 	}
 
 	errs := rules.Validate(ctx, newRecord, freshEffective)

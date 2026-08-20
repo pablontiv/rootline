@@ -3,6 +3,7 @@ package fix
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -158,6 +159,12 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string, fillMi
 			continue
 		}
 
+		if _, err := rules.ResolveForRecord(filepath.Dir(absPath), absPath); err != nil && !errors.Is(err, rules.ErrNoSchemaFound) {
+			result.Errors = append(result.Errors, fmt.Sprintf("resolve schema for %s: %v", path, err))
+			delete(accepted, path)
+			continue
+		}
+
 		targets[path] = &repairTarget{abs: absPath, record: record, original: content}
 	}
 
@@ -310,8 +317,11 @@ func validateWrittenTarget(ctx context.Context, tgt *repairTarget) []string {
 	}
 
 	effective, err := rules.ResolveForRecord(filepath.Dir(tgt.abs), tgt.abs)
-	if err != nil {
+	if errors.Is(err, rules.ErrNoSchemaFound) {
 		return nil
+	}
+	if err != nil {
+		return []string{fmt.Sprintf("resolving schema after write: %v", err)}
 	}
 
 	var msgs []string
