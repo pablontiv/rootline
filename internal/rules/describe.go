@@ -31,37 +31,36 @@ type DescribeResult struct {
 
 // NewDescribeResult builds a DescribeResult from walk-up entries and
 // the effective (merged) StemFile for a given path.
-func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *DescribeResult {
+func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) (*DescribeResult, error) {
 	applies := make([]string, len(entries))
 	for i, e := range entries {
 		applies[i] = e.Path
 	}
 
-	schema := effective.Schema
-	if schema == nil {
-		schema = map[string]SchemaField{}
-	}
-
-	validate := effective.Validate
+	schema := copySchemaFields(effective.Schema)
+	validate := append([]ValidationRule(nil), effective.Validate...)
 	if validate == nil {
 		validate = []ValidationRule{}
 	}
+	derive := copyAnyMap(effective.Derive)
+	aggregate := copyAnyMap(effective.Aggregate)
 
-	derive := effective.Derive
-	if derive == nil {
-		derive = map[string]any{}
-	}
-
-	aggregate := effective.Aggregate
-	if aggregate == nil {
-		aggregate = map[string]any{}
-	}
-
-	// Compute Next and NextByPattern for sequence fields
-	for name, field := range schema {
+	// Compute Next and NextByPattern for sequence fields on the staged schema.
+	// Sorted names make the first error deterministic and avoid mutating the
+	// caller's effective schema if a later field fails.
+	for _, name := range sortedDescribeFieldNames(schema) {
+		field := schema[name]
 		if field.Type == "sequence" {
-			field.Next = computeNextSequence(path, field)
-			field.NextByPattern = computeAllNextSequences(path, field)
+			next, err := computeNextSequence(path, name, field)
+			if err != nil {
+				return nil, err
+			}
+			field.Next = next
+			nextByPattern, err := computeAllNextSequences(path, name, field)
+			if err != nil {
+				return nil, err
+			}
+			field.NextByPattern = nextByPattern
 			schema[name] = field
 		}
 	}
@@ -96,7 +95,7 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 		Links:      effective.Links,
 		Layers:     layers,
 		Provenance: provenance,
-	}
+	}, nil
 }
 
 // computeNextSequence scans dirPath for files/dirs matching the prefix pattern,
@@ -105,67 +104,92 @@ func NewDescribeResult(path string, entries []StemEntry, effective *StemFile) *D
 // where prefix/digits are nested per-pattern (e.g., "E*": {prefix: E, digits: 2}).
 // When multiple match config patterns are present, patterns are evaluated in
 // alphabetical order to ensure deterministic results.
-func computeNextSequence(dirPath string, field SchemaField) string {
+func copySchemaFields(in map[string]SchemaField) map[string]SchemaField {
+	out := make(map[string]SchemaField, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func copyAnyMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func sortedDescribeFieldNames(schema map[string]SchemaField) []string {
+	names := make([]string, 0, len(schema))
+	for name := range schema {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func computeNextSequence(dirPath, fieldName string, field SchemaField) (string, error) {
 	if field.Prefix != "" && field.Digits > 0 {
-		return computeNextFromPrefix(dirPath, field.Prefix, field.Digits)
+		return computeNextFromPrefix(dirPath, field.Prefix, field.Digits), nil
 	}
 
 	if field.Match == nil || field.Match.Configs == nil {
-		return ""
+		return "", nil
 	}
 
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
-		return ""
+		return "", nil
 	}
 
 	for _, globPattern := range sortedPatterns(field.Match.Configs) {
 		config := field.Match.Configs[globPattern]
 		cfgMap, ok := config.(map[string]any)
-		if !ok {
-			continue
+		if !ok || cfgMap == nil {
+			return "", fmt.Errorf("invalid match config for field %q pattern %q: config must be a map", fieldName, globPattern)
 		}
-		prefix, digits := extractPrefixDigits(cfgMap)
-		if prefix == "" || digits <= 0 {
-			continue
+		resolved, err := applySequenceConfig(field, cfgMap)
+		if err != nil {
+			return "", fmt.Errorf("invalid match config for field %q pattern %q: %w", fieldName, globPattern, err)
 		}
 
 		for _, e := range entries {
 			if matched, _ := filepath.Match(globPattern, e.Name()); matched {
-				return computeNextFromPrefix(dirPath, prefix, digits)
+				return computeNextFromPrefix(dirPath, resolved.Prefix, resolved.Digits), nil
 			}
 		}
 	}
 
-	return ""
+	return "", nil
 }
 
 // computeAllNextSequences returns the next sequence value for every pattern
 // in match configs. Unlike computeNextSequence, it does not stop at the first
 // match — it computes a value for each pattern independently.
-func computeAllNextSequences(dirPath string, field SchemaField) map[string]string {
+func computeAllNextSequences(dirPath, fieldName string, field SchemaField) (map[string]string, error) {
 	if field.Match == nil || field.Match.Configs == nil {
-		return nil
+		return nil, nil
 	}
 
 	result := make(map[string]string, len(field.Match.Configs))
 	for _, globPattern := range sortedPatterns(field.Match.Configs) {
 		config := field.Match.Configs[globPattern]
 		cfgMap, ok := config.(map[string]any)
-		if !ok {
-			continue
+		if !ok || cfgMap == nil {
+			return nil, fmt.Errorf("invalid match config for field %q pattern %q: config must be a map", fieldName, globPattern)
 		}
-		prefix, digits := extractPrefixDigits(cfgMap)
-		if prefix == "" || digits <= 0 {
-			continue
+		resolved, err := applySequenceConfig(field, cfgMap)
+		if err != nil {
+			return nil, fmt.Errorf("invalid match config for field %q pattern %q: %w", fieldName, globPattern, err)
 		}
-		result[globPattern] = computeNextFromPrefix(dirPath, prefix, digits)
+		result[globPattern] = computeNextFromPrefix(dirPath, resolved.Prefix, resolved.Digits)
 	}
 
 	if len(result) == 0 {
-		return nil
+		return nil, nil
 	}
-	return result
+	return result, nil
 }
 
 // sortedPatterns returns the keys of configs sorted alphabetically.
@@ -205,19 +229,6 @@ func computeNextFromPrefix(dirPath, prefix string, digits int) string {
 	}
 
 	return fmt.Sprintf("%s%0*d", prefix, digits, maxNum+1)
-}
-
-// extractPrefixDigits extracts prefix and digits from a match config map.
-func extractPrefixDigits(cfgMap map[string]any) (string, int) {
-	prefix, _ := cfgMap["prefix"].(string)
-	var digits int
-	switch v := cfgMap["digits"].(type) {
-	case int:
-		digits = v
-	case float64:
-		digits = int(v)
-	}
-	return prefix, digits
 }
 
 // ToJSON serializes the describe result to stable JSON.

@@ -18,6 +18,15 @@ import (
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
+func mustNewDescribeResult(t *testing.T, path string, entries []rules.StemEntry, effective *rules.StemFile) *rules.DescribeResult {
+	t.Helper()
+	result, err := rules.NewDescribeResult(path, entries, effective)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
 // setupProject creates a temporary directory tree simulating a real
 // rootline project. It creates a .git marker, files, and returns
 // the root path.
@@ -661,7 +670,7 @@ validate:
 		t.Fatalf("WalkUp error: %v", err)
 	}
 	effective := rules.MergeStemFiles(entries)
-	result := rules.NewDescribeResult("prd/", entries, effective)
+	result := mustNewDescribeResult(t, "prd/", entries, effective)
 
 	// Verify contract
 	if result.Version != 1 {

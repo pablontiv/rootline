@@ -82,7 +82,10 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 	// Use relative path for display
 	relPath := args[0]
 
-	result := rules.NewDescribeResult(relPath, entries, effective)
+	result, err := rules.NewDescribeResult(relPath, entries, effective)
+	if err != nil {
+		return fmt.Errorf("describing .stem: %w", err)
+	}
 
 	// Add hint when no schema is found
 	if effective == nil || len(effective.Schema) == 0 {
