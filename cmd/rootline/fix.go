@@ -29,8 +29,10 @@ type FixResult struct {
 type BatchFixResult struct {
 	Version           int          `json:"version"`
 	Kind              string       `json:"kind"`
+	Complete          *bool        `json:"complete,omitempty"`
 	Results           []*FixResult `json:"results"`
 	Summary           FixSummary   `json:"summary"`
+	Errors            []string     `json:"errors,omitempty"`
 	SchemaSuggestions int          `json:"schema_suggestions,omitempty"`
 	// SkippedProposals holds add_field proposals declined because the engine,
 	// not the schema, chose their value. Carried so the operator can see the
@@ -189,7 +191,9 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 
 	// Run derive pipeline so aggregate values are available for validation.
 	derive.DeriveAllSimple(ctx, records, root)
-	derive.EnrichBuiltinsSimple(ctx, records, root)
+	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
+		return emitFixResult(cmd, failedBatchFixResult(fmt.Sprintf("enriching records: %v", err)))
+	}
 	derive.AggregateAllSimple(ctx, records, root)
 
 	// First pass: collect all records, their effective stems, and errors.
@@ -275,10 +279,7 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	batch.SkippedProposals = skippedProposals
 	batch.LinkFindings = linkFindings
 
-	if outputFormat == "table" {
-		return renderFixTable(cmd, batch)
-	}
-	return outputJSON(cmd, batch, false)
+	return emitFixResult(cmd, batch)
 }
 
 // appendStemHealthProposals runs stem-health checks and appends remove_stem_field proposals.
@@ -422,6 +423,37 @@ func newBatchFixResultWithSuggestions(results []*FixResult, schemaSuggestionsCou
 	}
 }
 
+func failedBatchFixResult(message string) *BatchFixResult {
+	complete := false
+	return &BatchFixResult{
+		Version:  1,
+		Kind:     "rootline/fix-batch",
+		Complete: &complete,
+		Results:  []*FixResult{},
+		Summary:  FixSummary{},
+		Errors:   []string{message},
+	}
+}
+
+func fixBatchFailed(batch *BatchFixResult) bool {
+	return (batch.Complete != nil && !*batch.Complete) || len(batch.Errors) > 0
+}
+
+func emitFixResult(cmd *cobra.Command, batch *BatchFixResult) error {
+	if outputFormat == "table" {
+		if err := renderFixTable(cmd, batch); err != nil {
+			return err
+		}
+		if fixBatchFailed(batch) {
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			return ErrValidationFailed
+		}
+		return nil
+	}
+	return outputJSON(cmd, batch, fixBatchFailed(batch))
+}
+
 // renderLinkFindings prints the link problems fix reported but did not repair.
 // Shared by the dry-run preview and the applied run so the preview cannot go
 // quiet about something the real run reports.
@@ -498,6 +530,16 @@ func renderFixTable(cmd *cobra.Command, batch *BatchFixResult) error {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "To apply schema changes, use 'rootline schema propose' or manually edit .stem files.")
 	}
 	renderLinkFindings(cmd, batch.LinkFindings)
+
+	if len(batch.Errors) > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Errors")
+		var rows [][]string
+		for _, message := range batch.Errors {
+			rows = append(rows, []string{message})
+		}
+		renderTable(cmd.OutOrStdout(), []string{"Message"}, rows)
+	}
 
 	return nil
 }

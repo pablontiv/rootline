@@ -187,7 +187,28 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 	}
 
 	derive.DeriveAllSimple(ctx, records, root)
-	derive.EnrichBuiltinsSimple(ctx, records, root)
+	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
+		message := fmt.Sprintf("enriching records: %v", err)
+		notices = append(notices, rules.Notice{
+			Severity: rules.SeverityError,
+			Code:     "schema_resolution_failed",
+			Message:  message,
+		})
+		for _, rec := range records {
+			results = append(results, rules.NewValidationResult(rec.Path, []rules.ValidationError{{
+				Rule:     "skipped",
+				Field:    "",
+				Message:  "validation incomplete because schema resolution failed; see notices",
+				Source:   "schema",
+				Severity: rules.SeverityError,
+			}}))
+		}
+		return emitValidateEnvelope(cmd, rules.NewValidationEnvelope(rules.ValidationEnvelopeInput{
+			Results:    results,
+			StemHealth: health,
+			Notices:    notices,
+		}))
+	}
 	derive.AggregateAllSimple(ctx, records, root)
 
 	// Apply --where filter.
