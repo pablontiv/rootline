@@ -22,7 +22,9 @@ func TestAggregateAll_BasicEstado(t *testing.T) {
 	}
 	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived["estado"] != "Completed" {
@@ -48,7 +50,9 @@ func TestAggregateAll_NotAllCompleted(t *testing.T) {
 	}
 	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived["estado"] != "Blocked" {
@@ -75,7 +79,9 @@ func TestAggregateAll_MultiLevel(t *testing.T) {
 	}
 	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	// Story README: descendants = [T001, T002] → all Completed
@@ -104,7 +110,9 @@ func TestAggregateAll_ChildrenVariable(t *testing.T) {
 	}
 	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	// E01 README has 1 child index (F01/README.md)
@@ -127,7 +135,9 @@ func TestAggregateAll_NoConfig(t *testing.T) {
 	stem := &rules.StemFile{} // no aggregate
 	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	if _, hasEstado := records[0].Derived["estado"]; hasEstado {
@@ -146,7 +156,9 @@ func TestAggregateAll_NoIndexFiles(t *testing.T) {
 	}
 	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	// No index files → no aggregation (only isIndex from enrichment)
@@ -181,7 +193,9 @@ func TestAggregateAll_EmptyDescendants(t *testing.T) {
 	}
 	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	if records[0].Derived["estado"] != "Pending" {
@@ -207,7 +221,9 @@ func TestAggregateAll_RootReadme(t *testing.T) {
 	}
 	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
 
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 	AggregateAll(context.Background(), records, "/root", resolver)
 
 	// Root README should see all descendants including F02/T001 which is Pending.
