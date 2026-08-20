@@ -60,9 +60,10 @@ PR #193 validates proposed field declarations before writing, but the proposal p
 
 ```go
 type StemState struct {
-    Root    string
-    Stems   map[string]*StemFile
-    Entries map[string]StemStateEntry
+    Root        string
+    Stems       map[string]*StemFile
+    ParseErrors map[string]error
+    Entries     map[string]StemStateEntry
 }
 
 type StemStateEntry struct {
@@ -70,7 +71,9 @@ type StemStateEntry struct {
 }
 ```
 
-`Root` is the normalized absolute governance root. `Stems` is keyed by normalized absolute `.stem` path. `Entries` contains every discovered file and directory path needed by checks such as `scope-match`. Diagnostic paths are always derived relative to `Root`.
+`Root` is the normalized absolute governance root. `Stems` is keyed by normalized absolute `.stem` path. `ParseErrors` preserves parse failures by normalized absolute path so evaluation can emit the existing `yaml-valid` diagnostics instead of aborting discovery. `Entries` contains every discovered file and directory path needed by checks such as `scope-match`. Diagnostic paths are always derived relative to `Root`.
+
+Discovery records malformed real stems in `ParseErrors` and continues. A proposed overlay must parse successfully before entering the virtual state; candidate parse failures remain blocking planning errors.
 
 Discovery from the real filesystem produces an initial state. Overlay operations return a new state or a private mutable planning copy; callers cannot mutate the discovered baseline accidentally.
 
