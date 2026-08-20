@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -76,8 +77,13 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
+	if err := ensureRecordsResolve(ctx, records, absRoot); err != nil {
+		return fmt.Errorf("resolving .stem: %w", err)
+	}
 
-	rules.FilterLinksByStyles(records, absRoot)
+	if err := rules.FilterLinksByStyles(records, absRoot); err != nil {
+		return fmt.Errorf("filtering links by style: %w", err)
+	}
 
 	if err := derive.EnrichBuiltinsSimple(ctx, records, absRoot); err != nil {
 		return fmt.Errorf("enriching records: %w", err)
@@ -95,10 +101,15 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	// %20 target for the raw space its decoded form contains.
 	var linkIssues []linkCheckIssue
 	if graphCheck {
-		linkIssues = collectLinkCheckIssues(records, absRoot)
+		linkIssues, err = collectLinkCheckIssues(records, absRoot)
+		if err != nil {
+			return fmt.Errorf("resolving link checks: %w", err)
+		}
 	}
 
-	rules.PrepareLinks(records, absRoot)
+	if err := rules.PrepareLinks(records, absRoot); err != nil {
+		return fmt.Errorf("preparing links: %w", err)
+	}
 
 	// Typed-rule filtering and the cycle-failure opt-in both resolve per
 	// record. Reading them from the chain above the scan root meant hardening
@@ -107,8 +118,13 @@ func runGraph(cmd *cobra.Command, args []string) error {
 	//
 	// A missing .stem is still not a missing graph: an ungoverned record
 	// filters nothing and opts into nothing.
-	rules.FilterLinksByTypedRules(records, absRoot)
-	cycleScope := rules.CycleFailureScope(records, absRoot)
+	if err := rules.FilterLinksByTypedRules(records, absRoot); err != nil {
+		return fmt.Errorf("filtering links by type: %w", err)
+	}
+	cycleScope, err := rules.CycleFailureScope(records, absRoot)
+	if err != nil {
+		return fmt.Errorf("resolving cycle failure scope: %w", err)
+	}
 
 	g := graph.Build(ctx, records)
 	cycles := g.DetectCycles()
@@ -213,13 +229,19 @@ type linkCheckIssue struct {
 // Resolution failures are deliberately skipped: the graph already reports an
 // unresolvable target as a broken link, and reporting it twice under two names
 // would be noise. Checks stay opt-in — a schema declaring none yields nothing.
-func collectLinkCheckIssues(records []*extract.Record, root string) []linkCheckIssue {
+func collectLinkCheckIssues(records []*extract.Record, root string) ([]linkCheckIssue, error) {
 	cache := rules.NewHeadingCache()
 	var issues []linkCheckIssue
 	for _, rec := range records {
 		absPath := filepath.Join(root, rec.Path)
 		effective, err := rules.ResolveForRecord(filepath.Dir(absPath), rec.Path)
-		if err != nil || effective == nil {
+		if err != nil {
+			if errors.Is(err, rules.ErrNoSchemaFound) {
+				continue
+			}
+			return nil, fmt.Errorf("resolve schema for %s: %w", rec.Path, err)
+		}
+		if effective == nil {
 			continue
 		}
 		for _, e := range rules.CheckLinks(rec.Links, effective.Links, absPath, root, cache) {
@@ -229,7 +251,7 @@ func collectLinkCheckIssues(records []*extract.Record, root string) []linkCheckI
 			issues = append(issues, linkCheckIssue{path: rec.Path, rule: e.Rule, message: e.Message})
 		}
 	}
-	return issues
+	return issues, nil
 }
 
 func renderDOT(cmd *cobra.Command, g *graph.Graph) {

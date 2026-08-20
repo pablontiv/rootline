@@ -2,6 +2,7 @@ package rules
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -20,7 +21,9 @@ func TestPrepareLinks_ResolvesWikilinkToNodeKey(t *testing.T) {
 	writeFile(t, filepath.Join(root, "t.md"), "body")
 	rec := recWithLinks("t.md", extract.Link{Target: "b", Type: "reference", Style: extract.StyleWikilink, Line: 1})
 
-	PrepareLinks([]*extract.Record{rec}, root)
+	if err := PrepareLinks([]*extract.Record{rec}, root); err != nil {
+		t.Fatalf("PrepareLinks: %v", err)
+	}
 
 	if got := rec.Links[0].Target; got != "b.md" {
 		t.Errorf("Target = %q, want %q", got, "b.md")
@@ -38,7 +41,9 @@ func TestPrepareLinks_ResolvesPathQualifiedWikilink(t *testing.T) {
 	writeFile(t, filepath.Join(root, "t.md"), "body")
 	rec := recWithLinks("t.md", extract.Link{Target: "sub/README", Type: "reference", Style: extract.StyleWikilink, Line: 1})
 
-	PrepareLinks([]*extract.Record{rec}, root)
+	if err := PrepareLinks([]*extract.Record{rec}, root); err != nil {
+		t.Fatalf("PrepareLinks: %v", err)
+	}
 
 	if got := rec.Links[0].Target; got != filepath.Join("sub", "README.md") {
 		t.Errorf("Target = %q, want sub/README.md", got)
@@ -58,14 +63,18 @@ func TestPrepareLinks_BasenameFallback(t *testing.T) {
 		return extract.Link{Target: target, Type: "reference", Style: extract.StyleWikilink, Line: 1}
 	}
 	unique := []*extract.Record{recWithLinks("t.md", link("far")), recWithLinks(filepath.Join("deep", "far.md"))}
-	PrepareLinks(unique, root)
+	if err := PrepareLinks(unique, root); err != nil {
+		t.Fatalf("PrepareLinks unique: %v", err)
+	}
 	if unique[0].Links[0].Resolution != extract.LinkResolved || unique[0].Links[0].Target != filepath.Join("deep", "far.md") {
 		t.Errorf("unique basename should resolve, got %+v", unique[0].Links[0])
 	}
 
 	ambiguous := []*extract.Record{recWithLinks("t.md", link("dup")),
 		recWithLinks(filepath.Join("a", "dup.md")), recWithLinks(filepath.Join("b", "dup.md"))}
-	PrepareLinks(ambiguous, root)
+	if err := PrepareLinks(ambiguous, root); err != nil {
+		t.Fatalf("PrepareLinks ambiguous: %v", err)
+	}
 	if ambiguous[0].Links[0].Resolution != extract.LinkUnresolved {
 		t.Errorf("ambiguous basename must stay unresolved, got %q", ambiguous[0].Links[0].Resolution)
 	}
@@ -76,7 +85,9 @@ func TestPrepareLinks_MarksMissingTargetUnresolved(t *testing.T) {
 	writeFile(t, filepath.Join(root, "t.md"), "body")
 	rec := recWithLinks("t.md", extract.Link{Target: "nope", Type: "reference", Style: extract.StyleWikilink, Line: 1})
 
-	PrepareLinks([]*extract.Record{rec}, root)
+	if err := PrepareLinks([]*extract.Record{rec}, root); err != nil {
+		t.Fatalf("PrepareLinks: %v", err)
+	}
 
 	if rec.Links[0].Resolution != extract.LinkUnresolved {
 		t.Errorf("Resolution = %q, want unresolved", rec.Links[0].Resolution)
@@ -91,7 +102,9 @@ func TestPrepareLinks_ExistingButUngovernedTargetResolves(t *testing.T) {
 	writeFile(t, filepath.Join(root, "t.md"), "body")
 	rec := recWithLinks("t.md", extract.Link{Target: "ungoverned.md", Type: "reference", Style: extract.StyleMarkdown, Line: 1})
 
-	PrepareLinks([]*extract.Record{rec}, root)
+	if err := PrepareLinks([]*extract.Record{rec}, root); err != nil {
+		t.Fatalf("PrepareLinks: %v", err)
+	}
 
 	if rec.Links[0].Resolution != extract.LinkResolved {
 		t.Errorf("Resolution = %q, want resolved", rec.Links[0].Resolution)
@@ -105,7 +118,9 @@ func TestPrepareLinks_RootAnchoredTarget(t *testing.T) {
 	rec := recWithLinks(filepath.Join("deep", "t.md"),
 		extract.Link{Target: "/docs/Page.md", Type: "reference", Style: extract.StyleMarkdown, Line: 1})
 
-	PrepareLinks([]*extract.Record{rec}, root)
+	if err := PrepareLinks([]*extract.Record{rec}, root); err != nil {
+		t.Fatalf("PrepareLinks: %v", err)
+	}
 
 	if got := rec.Links[0].Target; got != filepath.Join("docs", "Page.md") {
 		t.Errorf("Target = %q, want docs/Page.md", got)
@@ -124,7 +139,9 @@ func TestPrepareLinks_UnrelatableTargetStaysUnresolved(t *testing.T) {
 		Style: extract.StyleMarkdown, Line: 1,
 	})
 
-	PrepareLinks([]*extract.Record{rec}, root)
+	if err := PrepareLinks([]*extract.Record{rec}, root); err != nil {
+		t.Fatalf("PrepareLinks: %v", err)
+	}
 
 	if rec.Links[0].Resolution == extract.LinkResolved && rec.Links[0].Target == filepath.Join(other, "elsewhere.md") {
 		t.Errorf("target outside root marked resolved without a usable key: %+v", rec.Links[0])
@@ -144,7 +161,9 @@ func TestPrepareLinks_BasenameFallbackIsOptIn(t *testing.T) {
 			recWithLinks("t.md", extract.Link{Target: "far", Type: "reference", Style: extract.StyleWikilink, Line: 1}),
 			recWithLinks(filepath.Join("deep", "far.md")),
 		}
-		PrepareLinks(recs, root)
+		if err := PrepareLinks(recs, root); err != nil {
+			t.Fatalf("PrepareLinks: %v", err)
+		}
 		return recs
 	}
 
@@ -159,5 +178,25 @@ func TestPrepareLinks_BasenameFallbackIsOptIn(t *testing.T) {
 	}
 	if got := on[0].Links[0].Target; got != filepath.Join("deep", "far.md") {
 		t.Errorf("opted in: Target = %q, want deep/far.md", got)
+	}
+}
+
+func TestPrepareLinksPropagatesInvalidRecordSchema(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".stem"), `version: 2
+root: true
+schema:
+  id:
+    type: sequence
+    match:
+      "bad*": {prefix: BAD, digits: 2.0}
+links:
+  basename_fallback: true
+`)
+	rec := recWithLinks("bad.md", extract.Link{Target: "target", Style: extract.StyleWikilink})
+
+	err := PrepareLinks([]*extract.Record{rec}, root)
+	if err == nil || !strings.Contains(err.Error(), "bad.md") || !strings.Contains(err.Error(), "digits") {
+		t.Fatalf("PrepareLinks error = %v, want schema digits cause", err)
 	}
 }

@@ -61,9 +61,15 @@ func brokenByValidate(t *testing.T, root string) []string {
 func brokenByGraph(t *testing.T, root string) []string {
 	t.Helper()
 	records := scanFresh(t, root)
-	rules.FilterLinksByStyles(records, root)
-	rules.FilterLinksByTypedRules(records, root)
-	rules.PrepareLinks(records, root)
+	if err := rules.FilterLinksByStyles(records, root); err != nil {
+		t.Fatalf("FilterLinksByStyles: %v", err)
+	}
+	if err := rules.FilterLinksByTypedRules(records, root); err != nil {
+		t.Fatalf("FilterLinksByTypedRules: %v", err)
+	}
+	if err := rules.PrepareLinks(records, root); err != nil {
+		t.Fatalf("PrepareLinks: %v", err)
+	}
 	g := graph.Build(context.Background(), records)
 
 	var out []string
@@ -235,8 +241,12 @@ func TestE2E_Parity_GraphWorksWithoutSchema(t *testing.T) {
 		"a.md": "See [[missing]].\n",
 	})
 	records := scanFresh(t, root)
-	rules.FilterLinksByStyles(records, root)
-	rules.PrepareLinks(records, root)
+	if err := rules.FilterLinksByStyles(records, root); err != nil {
+		t.Fatalf("FilterLinksByStyles: %v", err)
+	}
+	if err := rules.PrepareLinks(records, root); err != nil {
+		t.Fatalf("PrepareLinks: %v", err)
+	}
 	g := graph.Build(context.Background(), records)
 	if len(g.Nodes) != 1 {
 		t.Fatalf("nodes = %d, want the schemaless record still graphed", len(g.Nodes))

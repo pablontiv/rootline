@@ -112,16 +112,25 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("scanning %s: %w", scanRoot, err)
 		}
+		if err := ensureRecordsResolve(ctx, records, absRoot); err != nil {
+			return fmt.Errorf("resolving .stem: %w", err)
+		}
 		// Style filtering belongs to the projection too. Without it the same
 		// --select links returned different link sets depending on whether an
 		// unrelated traversal flag was present, leaking styles the schema
 		// declared ungoverned.
-		rules.FilterLinksByStyles(records, absRoot)
-		derive.DeriveAllSimple(ctx, records, absRoot)
+		if err := rules.FilterLinksByStyles(records, absRoot); err != nil {
+			return fmt.Errorf("filtering links by style: %w", err)
+		}
+		if err := derive.DeriveAllSimple(ctx, records, absRoot); err != nil {
+			return fmt.Errorf("deriving records: %w", err)
+		}
 		if err := derive.EnrichBuiltinsSimple(ctx, records, absRoot); err != nil {
 			return fmt.Errorf("enriching records: %w", err)
 		}
-		derive.AggregateAllSimple(ctx, records, absRoot)
+		if err := derive.AggregateAllSimple(ctx, records, absRoot); err != nil {
+			return fmt.Errorf("aggregating records: %w", err)
+		}
 	}
 
 	q := &query.Query{
@@ -244,18 +253,31 @@ func scanForTraversal(ctx context.Context, absQueryRoot string) ([]*extract.Reco
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("scanning graph root %s: %w", absGraphRoot, err)
 	}
+	if err := ensureRecordsResolve(ctx, all, absGraphRoot); err != nil {
+		return nil, nil, "", fmt.Errorf("resolving .stem: %w", err)
+	}
 
 	// Mirror the `graph` command's link preparation so both commands see
 	// the same edge universe for the same root.
-	rules.FilterLinksByStyles(all, absGraphRoot)
-	rules.FilterLinksByTypedRules(all, absGraphRoot)
-	rules.PrepareLinks(all, absGraphRoot)
+	if err := rules.FilterLinksByStyles(all, absGraphRoot); err != nil {
+		return nil, nil, "", fmt.Errorf("filtering graph links by style: %w", err)
+	}
+	if err := rules.FilterLinksByTypedRules(all, absGraphRoot); err != nil {
+		return nil, nil, "", fmt.Errorf("filtering graph links by type: %w", err)
+	}
+	if err := rules.PrepareLinks(all, absGraphRoot); err != nil {
+		return nil, nil, "", fmt.Errorf("preparing links: %w", err)
+	}
 
-	derive.DeriveAllSimple(ctx, all, absGraphRoot)
+	if err := derive.DeriveAllSimple(ctx, all, absGraphRoot); err != nil {
+		return nil, nil, "", fmt.Errorf("deriving graph records: %w", err)
+	}
 	if err := derive.EnrichBuiltinsSimple(ctx, all, absGraphRoot); err != nil {
 		return nil, nil, "", fmt.Errorf("enriching graph records: %w", err)
 	}
-	derive.AggregateAllSimple(ctx, all, absGraphRoot)
+	if err := derive.AggregateAllSimple(ctx, all, absGraphRoot); err != nil {
+		return nil, nil, "", fmt.Errorf("aggregating graph records: %w", err)
+	}
 
 	g := graph.Build(ctx, all)
 

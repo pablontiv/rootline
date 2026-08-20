@@ -72,3 +72,16 @@ func scanGoverned(ctx context.Context, root string, reg *extract.Registry) ([]*e
 	}
 	return records, err
 }
+
+func ensureRecordsResolve(ctx context.Context, records []*extract.Record, root string) error {
+	for _, rec := range records {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		absPath := filepath.Join(root, rec.Path)
+		if _, err := rules.ResolveForRecord(filepath.Dir(absPath), rec.Path); err != nil && !errors.Is(err, rules.ErrNoSchemaFound) {
+			return err
+		}
+	}
+	return nil
+}

@@ -1,6 +1,8 @@
 package rules
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -23,12 +25,16 @@ import (
 // exists, so such a link is an edge to a non-node, not a broken link.
 //
 // It replaces ResolveMarkdownTargets, which handled only markdown targets.
-func PrepareLinks(records []*extract.Record, root string) {
+func PrepareLinks(records []*extract.Record, root string) error {
 	index := basenameIndex(records)
 	for _, rec := range records {
 		dir := filepath.Dir(filepath.Join(root, rec.Path))
 		fallback := false
-		if eff, err := ResolveForRecord(dir, rec.Path); err == nil && eff != nil {
+		eff, err := ResolveForRecord(dir, rec.Path)
+		if err != nil && !errors.Is(err, ErrNoSchemaFound) {
+			return fmt.Errorf("resolve schema for %s: %w", rec.Path, err)
+		}
+		if eff != nil {
 			fallback = eff.Links.BasenameFallback
 		}
 		for i, link := range rec.Links {
@@ -55,6 +61,7 @@ func PrepareLinks(records []*extract.Record, root string) {
 			rec.Links[i].Resolution = extract.LinkUnresolved
 		}
 	}
+	return nil
 }
 
 // basenames maps a bare name to the record paths carrying it.
