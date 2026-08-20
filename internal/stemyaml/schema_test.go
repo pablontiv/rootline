@@ -7,6 +7,15 @@ import (
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
+func mustFilterRulesSchemaByMatch(t *testing.T, schema map[string]*rules.SchemaField, recordPath string) map[string]*rules.SchemaField {
+	t.Helper()
+	filtered, err := rules.FilterSchemaByMatch(schema, recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filtered
+}
+
 func TestAppendSchemaField_RoundTripsCanonicalAttributes(t *testing.T) {
 	field := rules.SchemaField{
 		Type:     "sequence",
@@ -111,7 +120,7 @@ func TestAppendSchemaField_RoundTripsEmptyMatchSemantics(t *testing.T) {
 	}
 	never := parsed.Schema["never"]
 	sometimesRequired := parsed.Schema["sometimes_required"]
-	filtered := rules.FilterSchemaByMatch(map[string]*rules.SchemaField{
+	filtered := mustFilterRulesSchemaByMatch(t, map[string]*rules.SchemaField{
 		"never":              &never,
 		"sometimes_required": &sometimesRequired,
 	}, "E01/file.md")

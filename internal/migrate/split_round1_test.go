@@ -9,6 +9,15 @@ import (
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
+func mustFilterRulesSchemaByMatch(t *testing.T, schema map[string]*rules.SchemaField, recordPath string) map[string]*rules.SchemaField {
+	t.Helper()
+	filtered, err := rules.FilterSchemaByMatch(schema, recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filtered
+}
+
 func TestBuildSplitStems_RoundTripsCanonicalRootAndChildFields(t *testing.T) {
 	existing := &rules.StemFile{
 		Version: 2,
@@ -120,7 +129,7 @@ schema:
 	}
 	never := parsed.Schema["never"]
 	sometimesRequired := parsed.Schema["sometimes_required"]
-	filtered := rules.FilterSchemaByMatch(map[string]*rules.SchemaField{
+	filtered := mustFilterRulesSchemaByMatch(t, map[string]*rules.SchemaField{
 		"never":              &never,
 		"sometimes_required": &sometimesRequired,
 	}, filepath.Join("E01", "README.md"))

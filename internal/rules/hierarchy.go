@@ -20,7 +20,10 @@ func ResolveForRecord(dir string, recordPath string) (*StemFile, error) {
 			ptrSchema[name] = &f
 		}
 
-		filtered := FilterSchemaByMatch(ptrSchema, recordPath)
+		filtered, err := FilterSchemaByMatch(ptrSchema, recordPath)
+		if err != nil {
+			return nil, err
+		}
 
 		// Write back to value map
 		effective := make(map[string]SchemaField, len(filtered))

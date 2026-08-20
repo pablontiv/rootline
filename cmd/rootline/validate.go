@@ -142,22 +142,14 @@ type validationRecordContext struct {
 }
 
 func resolveValidationRecordContext(absPath, recordPath string) (validationRecordContext, error) {
-	entries, err := rules.WalkUp(filepath.Dir(absPath))
+	dir := filepath.Dir(absPath)
+	entries, err := rules.WalkUp(dir)
 	if err != nil {
 		return validationRecordContext{}, err
 	}
-	effective := rules.MergeStemFiles(entries)
-	if len(effective.Schema) > 0 {
-		ptrSchema := make(map[string]*rules.SchemaField, len(effective.Schema))
-		for name, field := range effective.Schema {
-			f := field
-			ptrSchema[name] = &f
-		}
-		filtered := rules.FilterSchemaByMatch(ptrSchema, recordPath)
-		effective.Schema = make(map[string]rules.SchemaField, len(filtered))
-		for name, field := range filtered {
-			effective.Schema[name] = *field
-		}
+	effective, err := rules.ResolveForRecord(dir, recordPath)
+	if err != nil {
+		return validationRecordContext{}, err
 	}
 	return validationRecordContext{effective: effective, governanceRoot: filepath.Dir(entries[0].Path)}, nil
 }
@@ -209,6 +201,29 @@ func appendNormalizedValidationResult(results []*rules.ValidationResult, notices
 
 func appendSkippedSchemaResolutionResult(results []*rules.ValidationResult, notices []rules.Notice, path, message string) ([]*rules.ValidationResult, []rules.Notice) {
 	return append(results, skippedValidationResult(path)), appendSchemaResolutionNotice(notices, message)
+}
+
+func emitValidateSchemaResolutionEnvelope(cmd *cobra.Command, records []*extract.Record, results []*rules.ValidationResult, health []rules.StemHealthDiagnostic, notices []rules.Notice, message string) error {
+	for _, rec := range records {
+		results, notices = appendSkippedSchemaResolutionResult(results, notices, rec.Path, fmt.Sprintf("%s for %s", message, rec.Path))
+	}
+	return emitValidateEnvelope(cmd, rules.NewValidationEnvelope(rules.ValidationEnvelopeInput{
+		Results:    results,
+		StemHealth: health,
+		Notices:    notices,
+	}))
+}
+
+func emitValidateRunLevelSchemaEnvelope(cmd *cobra.Command, records []*extract.Record, results []*rules.ValidationResult, health []rules.StemHealthDiagnostic, notices []rules.Notice, message string) error {
+	notices = appendSchemaResolutionNotice(notices, message)
+	for _, rec := range records {
+		results = append(results, skippedValidationResult(rec.Path))
+	}
+	return emitValidateEnvelope(cmd, rules.NewValidationEnvelope(rules.ValidationEnvelopeInput{
+		Results:    results,
+		StemHealth: health,
+		Notices:    notices,
+	}))
 }
 
 func appendSchemaResolutionNotice(notices []rules.Notice, message string) []rules.Notice {
@@ -302,30 +317,15 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	derive.DeriveAllSimple(ctx, records, root)
-	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
-		message := fmt.Sprintf("enriching records: %v", err)
-		notices = append(notices, rules.Notice{
-			Severity: rules.SeverityError,
-			Code:     "schema_resolution_failed",
-			Message:  message,
-		})
-		for _, rec := range records {
-			results = append(results, rules.NewValidationResult(rec.Path, []rules.ValidationError{{
-				Rule:     "skipped",
-				Field:    "",
-				Message:  "validation incomplete because schema resolution failed; see notices",
-				Source:   "schema",
-				Severity: rules.SeverityError,
-			}}))
-		}
-		return emitValidateEnvelope(cmd, rules.NewValidationEnvelope(rules.ValidationEnvelopeInput{
-			Results:    results,
-			StemHealth: health,
-			Notices:    notices,
-		}))
+	if err := derive.DeriveAllSimple(ctx, records, root); err != nil {
+		return emitValidateSchemaResolutionEnvelope(cmd, records, results, health, notices, fmt.Sprintf("deriving records: %v", err))
 	}
-	derive.AggregateAllSimple(ctx, records, root)
+	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
+		return emitValidateRunLevelSchemaEnvelope(cmd, records, results, health, notices, fmt.Sprintf("enriching records: %v", err))
+	}
+	if err := derive.AggregateAllSimple(ctx, records, root); err != nil {
+		return emitValidateSchemaResolutionEnvelope(cmd, records, results, health, notices, fmt.Sprintf("aggregating records: %v", err))
+	}
 
 	// Apply --where filter.
 	records, err = filterRecords(ctx, records, validateWhere, knownWhereFields(records, root), cmd.ErrOrStderr())

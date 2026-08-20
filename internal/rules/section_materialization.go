@@ -36,7 +36,11 @@ func RequiredSectionMaterializations(record *extract.Record, effective *StemFile
 		recordPath = record.Path
 	}
 	local := *effective
-	local.Schema = filterValueSchemaByMatch(effective.Schema, recordPath)
+	var err error
+	local.Schema, err = filterValueSchemaByMatch(effective.Schema, recordPath)
+	if err != nil {
+		return nil, err
+	}
 
 	fields = fields[:0]
 	for name := range local.Schema {

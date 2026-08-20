@@ -52,8 +52,10 @@ func ValidateFieldDeclaration(name string, field SchemaField) []FieldContractIss
 	if field.Type == "enum" && len(field.Values) == 0 {
 		return []FieldContractIssue{issue("incomplete-type", "one or more values", "empty values", fmt.Sprintf("enum field %q must declare at least one value", name))}
 	}
-	if field.Type == "sequence" && (field.Prefix == "" || field.Digits <= 0) {
-		return []FieldContractIssue{issue("incomplete-type", "prefix and positive digits", "incomplete sequence", fmt.Sprintf("sequence field %q must declare prefix and positive digits", name))}
+	if field.Type == "sequence" {
+		if sequenceIssue := validateSequenceDeclaration(name, field); sequenceIssue != nil {
+			return []FieldContractIssue{*sequenceIssue}
+		}
 	}
 	if field.Extract != "" {
 		if _, err := extract.ParseBodySource(field.Extract); err != nil {
@@ -61,6 +63,34 @@ func ValidateFieldDeclaration(name string, field SchemaField) []FieldContractIss
 		}
 	}
 	return nil
+}
+
+func validateSequenceDeclaration(name string, field SchemaField) *FieldContractIssue {
+	if field.Match == nil || len(field.Match.Configs) == 0 {
+		if field.Prefix == "" || field.Digits <= 0 {
+			return incompleteSequenceIssue(name, "incomplete sequence")
+		}
+		return nil
+	}
+
+	for _, pattern := range sortedPatterns(field.Match.Configs) {
+		config, ok := field.Match.Configs[pattern].(map[string]any)
+		if !ok || config == nil {
+			return incompleteSequenceIssue(name, "malformed sequence config")
+		}
+		if _, err := applySequenceConfig(field, config); err != nil {
+			if seqErr, ok := err.(sequenceConfigError); ok {
+				return incompleteSequenceIssue(name, seqErr.actual)
+			}
+			return incompleteSequenceIssue(name, "incomplete sequence config")
+		}
+	}
+	return nil
+}
+
+func incompleteSequenceIssue(name, actual string) *FieldContractIssue {
+	issue := issue("incomplete-type", "prefix and positive digits", actual, fmt.Sprintf("sequence field %q must declare prefix and positive digits", name))
+	return &issue
 }
 
 func ValidateFieldValue(field SchemaField, value any) *FieldContractIssue {

@@ -196,7 +196,7 @@ func TestRequiredSectionMaterializations_NormalizesRecordSpecificSchemaWithoutMu
 		t.Fatal("materialization mutated caller schema Match")
 	}
 
-	filtered := FilterSchemaByMatch(pointerSchema(stem.Schema), rec.Path)
+	filtered := mustFilterSchemaByMatch(t, pointerSchema(stem.Schema), rec.Path)
 	alreadyEffective := &StemFile{Schema: valueSchema(filtered)}
 	got, err = RequiredSectionMaterializations(rec, alreadyEffective)
 	if err != nil {

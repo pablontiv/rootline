@@ -1118,7 +1118,7 @@ func TestValidate_PerRecordMatchFiltering_RequiredField(t *testing.T) {
 			Frontmatter: map[string]any{"title": "Test"},
 		}
 		// Simulate ResolveForRecord by applying match filtering
-		filtered := FilterSchemaByMatch(pointerSchema(stem.Schema), rec.Path)
+		filtered := mustFilterSchemaByMatch(t, pointerSchema(stem.Schema), rec.Path)
 		effectiveStem := &StemFile{
 			Path:   stem.Path,
 			Schema: valueSchema(filtered),
@@ -1145,7 +1145,7 @@ func TestValidate_PerRecordMatchFiltering_RequiredField(t *testing.T) {
 			Frontmatter: map[string]any{"title": "Feature"},
 		}
 		// Simulate ResolveForRecord by applying match filtering
-		filtered := FilterSchemaByMatch(pointerSchema(stem.Schema), rec.Path)
+		filtered := mustFilterSchemaByMatch(t, pointerSchema(stem.Schema), rec.Path)
 		effectiveStem := &StemFile{
 			Path:   stem.Path,
 			Schema: valueSchema(filtered),

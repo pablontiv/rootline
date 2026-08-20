@@ -63,7 +63,10 @@ func EffectiveSchema(path string, root string) (map[string]SchemaField, error) {
 	}
 
 	// Apply match-based field scoping for the specific record path.
-	filtered := FilterSchemaByMatch(ptrSchema, path)
+	filtered, err := FilterSchemaByMatch(ptrSchema, path)
+	if err != nil {
+		return nil, err
+	}
 
 	// Convert back to value map.
 	effective := make(map[string]SchemaField, len(filtered))
@@ -101,7 +104,10 @@ func Resolve(path string, root string) (*Resolution, error) {
 			ptrSchema[name] = &f
 		}
 
-		filtered := FilterSchemaByMatch(ptrSchema, path)
+		filtered, err := FilterSchemaByMatch(ptrSchema, path)
+		if err != nil {
+			return nil, err
+		}
 
 		// Convert back to value map.
 		for name, field := range filtered {
