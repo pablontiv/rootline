@@ -2,12 +2,16 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/rules"
 )
@@ -279,6 +283,69 @@ func executeSchemaApply(t *testing.T, args ...string) (string, error) {
 	rootCmd.SetArgs(append([]string{"schema", "apply"}, args...))
 	err := rootCmd.Execute()
 	return buf.String(), err
+}
+
+func TestSchemaApplyExecutorRetargetWritesOriginalPhysicalTarget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink semantics differ")
+	}
+
+	root := t.TempDir()
+	original := filepath.Join(root, "original")
+	redirected := filepath.Join(root, "redirected")
+	for _, dir := range []string{original, redirected} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink("original", link); err != nil {
+		t.Fatal(err)
+	}
+
+	logicalTarget := filepath.Join(link, ".stem")
+	target, err := fsx.ResolveAtomicTarget(root, logicalTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = target.Close() })
+
+	content := []byte("version: 2\nschema:\n  title:\n    type: string\n")
+	plan := schemaApplyBatchPlan{
+		writes: []stemWritePlan{{
+			reportTarget: logicalTarget,
+			targetPath:   logicalTarget,
+			target:       target,
+			content:      content,
+		}},
+		actionsByWrite: [][]string{{"create_stem: " + logicalTarget}},
+	}
+	writer := func(target *fsx.AtomicTarget, content []byte, mode fs.FileMode) error {
+		if err := os.Remove(link); err != nil {
+			return err
+		}
+		if err := os.Symlink("redirected", link); err != nil {
+			return err
+		}
+		return target.WriteFileAtomic(content, mode)
+	}
+
+	applied, errs := executeStemWrites(context.Background(), plan, false, writer)
+	if len(errs) != 0 {
+		t.Fatalf("errs = %#v, want none", errs)
+	}
+	if len(applied) != 1 || applied[0] != "create_stem: "+logicalTarget {
+		t.Fatalf("applied = %#v", applied)
+	}
+	if got := mustReadFile(t, filepath.Join(original, ".stem")); string(got) != string(content) {
+		t.Fatalf("original physical target content = %q, want %q", got, content)
+	}
+	if _, err := os.Stat(filepath.Join(redirected, ".stem")); !os.IsNotExist(err) {
+		t.Fatalf("redirected target touched: %v", err)
+	}
+	if _, err := os.Stat(logicalTarget); !os.IsNotExist(err) {
+		t.Fatalf("lexical retarget now resolves to a written file: %v", err)
+	}
 }
 
 // TestSchemaApplyInvalidKind tests that wrong report kind is rejected.

@@ -4,12 +4,142 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/rules"
 )
+
+func TestSchemaApplyProposalValidatesPhysicalSymlinkTarget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink semantics differ")
+	}
+
+	for _, dryRun := range []bool{true, false} {
+		t.Run(map[bool]string{true: "dry_run", false: "write"}[dryRun], func(t *testing.T) {
+			root := setupValidateProject(t, map[string]string{
+				".stem":         "version: 2\nroot: true\nschema:\n  root_only:\n    type: string\n",
+				"a/.stem":       "version: 2\nschema:\n  estado:\n    type: enum\n    values: [Pending, Done]\n",
+				"a/deep/doc.md": "---\nestado: Pending\n---\n# Record\n",
+			})
+			if err := os.Symlink(filepath.Join("a", "deep"), filepath.Join(root, "link")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join("a", "deep"), filepath.Join(root, "other-link")); err != nil {
+				t.Fatal(err)
+			}
+
+			logicalTarget := filepath.Join(root, "link", ".stem")
+			physicalTarget := filepath.Join(root, "a", "deep", ".stem")
+			otherAliasTarget := filepath.Join(root, "other-link", ".stem")
+			report := SchemaProposalsReport{
+				Version: 1,
+				Kind:    "rootline/schema-proposals",
+				Path:    filepath.Join(root, "link"),
+				Root:    root,
+				Proposals: []SchemaProposal{{
+					ID:        "child-string",
+					Operation: "create_stem",
+					Target:    logicalTarget,
+					Patch:     "version: 2\nschema:\n  estado:\n    type: string\n",
+				}},
+			}
+			reportPath := filepath.Join(root, "report.json")
+			writeSchemaApplyPreflightReport(t, reportPath, report)
+
+			args := []string{"--report", reportPath}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			out, err := executeSchemaApply(t, args...)
+			if err == nil {
+				t.Fatalf("schema apply accepted physical symlink target conflict: %s", out)
+			}
+			result := decodeSchemaApplyResult(t, out)
+			if result.Complete {
+				t.Fatalf("complete = true, want false: %+v", result)
+			}
+			if len(result.Applied) != 0 {
+				t.Fatalf("applied = %#v, want empty before physical hierarchy gate passes", result.Applied)
+			}
+			assertSchemaApplyHasStemHealth(t, result, filepath.Join("a", "deep", ".stem"), "type-consistency", "estado", rules.SeverityError)
+			assertSchemaApplyAbsent(t, physicalTarget)
+			assertSchemaApplyAbsent(t, logicalTarget)
+			assertSchemaApplyAbsent(t, otherAliasTarget)
+		})
+	}
+}
+
+func TestSchemaApplyMalformedExternalAncestorBlocksProposalAndAnalyze(t *testing.T) {
+	for _, reportKind := range []string{"rootline/schema-proposals", "rootline/analyze"} {
+		for _, dryRun := range []bool{true, false} {
+			t.Run(reportKind+"/dry_run="+map[bool]string{true: "true", false: "false"}[dryRun], func(t *testing.T) {
+				project := setupValidateProject(t, map[string]string{
+					".stem":               "version: 2\nroot: true\nschema:\n  title:\n    type: string\n",
+					"subtree/.stem":       "version: [broken\n",
+					"subtree/work/doc.md": "---\ntitle: Test\n---\n# Record\n",
+				})
+				workRoot := filepath.Join(project, "subtree", "work")
+				malformedStem := filepath.Join(project, "subtree", ".stem")
+				before := snapshotSchemaApplyFile(t, malformedStem)
+				reportPath := filepath.Join(workRoot, "report.json")
+
+				switch reportKind {
+				case "rootline/schema-proposals":
+					writeSchemaApplyPreflightReport(t, reportPath, SchemaProposalsReport{
+						Version: 1,
+						Kind:    reportKind,
+						Path:    workRoot,
+						Root:    workRoot,
+						Proposals: []SchemaProposal{{
+							ID:        "candidate",
+							Operation: "create_stem",
+							Target:    filepath.Join(workRoot, ".stem"),
+							Patch:     "version: 2\nschema:\n  estado:\n    type: string\n",
+						}},
+					})
+				case "rootline/analyze":
+					writeSchemaApplyPreflightReport(t, reportPath, infer.AnalyzeReport{
+						Version: 1,
+						Kind:    reportKind,
+						Path:    workRoot,
+						Root:    workRoot,
+						Categories: []infer.CategoryResult{{
+							ID:         "field-types",
+							Inferences: []infer.ReportInference{{Type: "field_type", Field: "estado", Value: "string"}},
+						}},
+					})
+				default:
+					t.Fatalf("unhandled report kind %q", reportKind)
+				}
+
+				args := []string{"--report", reportPath}
+				if dryRun {
+					args = append(args, "--dry-run")
+				}
+				out, err := executeSchemaApply(t, args...)
+				if err == nil {
+					t.Fatalf("schema apply accepted malformed external ancestor: %s", out)
+				}
+				result := decodeSchemaApplyResult(t, out)
+				if len(result.StemHealth) != 1 {
+					t.Fatalf("result = %+v; stem health = %+v, want one malformed external ancestor diagnostic", result, result.StemHealth)
+				}
+				got := result.StemHealth[0]
+				if got.Path != filepath.Join("..", ".stem") || got.Check != "yaml-valid" || got.Severity != rules.SeverityError {
+					t.Fatalf("stem health = %+v", result.StemHealth)
+				}
+				if len(result.Applied) != 0 || result.Complete {
+					t.Fatalf("result = %+v", result)
+				}
+				assertSchemaApplyFileUnchanged(t, malformedStem, before)
+				assertSchemaApplyAbsent(t, filepath.Join(workRoot, ".stem"))
+			})
+		}
+	}
+}
 
 func TestSchemaApplyProposalRejectsEnumToStringChildBeforePublication(t *testing.T) {
 	for _, dryRun := range []bool{true, false} {

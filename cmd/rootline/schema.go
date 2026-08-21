@@ -514,7 +514,7 @@ func planSchemaProposalApplyWithResolver(proposals []SchemaProposal, scanRoot st
 }
 
 func classifyCurrentStemHealthBeforeAnalyzeResolve(ctx context.Context, cmd *cobra.Command, root string, result *SchemaApplyResult) (bool, error) {
-	stemHealth, stemHealthErr := validateProspectiveStemWrites(ctx, root, schemaApplyBatchPlan{})
+	stemHealth, stemHealthErr := currentStemHealthForAnalyzeResolve(ctx, root)
 	if stemHealthErr != nil {
 		return false, nil
 	}
@@ -535,6 +535,37 @@ func classifyCurrentStemHealthBeforeAnalyzeResolve(ctx context.Context, cmd *cob
 		return true, err
 	}
 	return true, applyExitError(len(result.Errors), 0)
+}
+
+func currentStemHealthForAnalyzeResolve(ctx context.Context, root string) ([]rules.StemHealthDiagnostic, error) {
+	physicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, fmt.Errorf("resolving validation root %s: %w", root, err)
+	}
+	state, err := rules.DiscoverStemState(ctx, physicalRoot)
+	if err != nil {
+		return nil, err
+	}
+	if state.Evaluated == nil {
+		state.Evaluated = make(map[string]bool)
+	}
+	for path := range state.ParseErrors {
+		if isSchemaApplyExternalPath(state.Root, path) {
+			state.Evaluated[path] = true
+		}
+	}
+	result, err := rules.EvaluateStemState(ctx, state)
+	if err != nil {
+		return nil, err
+	}
+	diags := rules.StemHealthDiagnostics(result)
+	sortStemHealthDiagnostics(diags)
+	return diags, nil
+}
+
+func isSchemaApplyExternalPath(root, path string) bool {
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
+	return err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func schemaApplyTargetObservationFromStat(_ os.FileInfo, err error) schemaApplyTargetObservation {
