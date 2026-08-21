@@ -27,26 +27,26 @@ func ResolveAtomicTarget(allowedRoot, logicalTarget string) (*AtomicTarget, erro
 	}
 	physicalRoot, err := filepath.EvalSymlinks(allowedRoot)
 	if err != nil {
-		return nil, fmt.Errorf("resolving allowed root %s: %w", allowedRoot, err)
+		return nil, fmt.Errorf("opening root %s: %w", allowedRoot, err)
 	}
 	physicalRoot, err = filepath.Abs(physicalRoot)
 	if err != nil {
-		return nil, fmt.Errorf("normalizing allowed root %s: %w", allowedRoot, err)
+		return nil, fmt.Errorf("opening root %s: %w", allowedRoot, err)
 	}
 	physicalParent, err := filepath.EvalSymlinks(filepath.Dir(logicalTarget))
 	if err != nil {
-		return nil, fmt.Errorf("resolving parent for %s: %w", logicalTarget, err)
+		return nil, fmt.Errorf("stat %s: %w", logicalTarget, err)
 	}
 	physicalParent, err = filepath.Abs(physicalParent)
 	if err != nil {
-		return nil, fmt.Errorf("normalizing parent for %s: %w", logicalTarget, err)
+		return nil, fmt.Errorf("stat %s: %w", logicalTarget, err)
 	}
 	if !pathAtOrBelow(physicalRoot, physicalParent) {
 		return nil, fmt.Errorf("target %s escapes root %s", logicalTarget, allowedRoot)
 	}
 	parent, err := os.OpenRoot(physicalParent)
 	if err != nil {
-		return nil, fmt.Errorf("opening physical parent %s: %w", physicalParent, err)
+		return nil, fmt.Errorf("stat %s: %w", logicalTarget, err)
 	}
 	target := &AtomicTarget{
 		logicalPath:  filepath.Clean(logicalTarget),
