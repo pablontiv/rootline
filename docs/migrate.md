@@ -26,7 +26,7 @@ rootline migrate --split --dry-run        # Preview split without writing files
 | `--from` | Compare against specified `.stem` file instead of git HEAD |
 | `--rename old=new` | Rename a field across all documents and `.stem` files |
 | `--split` | Split a flat `.stem` into hierarchical `.stem` files per level |
-| `--scaffold` | Scaffold missing required sections into documents using schema defaults |
+| `--scaffold` | Scaffold missing required source-backed sections into documents using schema defaults |
 
 ## Change Detection
 
@@ -36,7 +36,8 @@ Diff mode compares `.stem` files and classifies each change:
 |-------------|-----------|---------|
 | `field_added` | No | New optional field in schema |
 | `field_removed` | Yes | Field deleted from schema |
-| `type_changed` | Yes | Field type changed (e.g., string → enum) |
+| `type_changed` | Yes | Field type changed (for example string → enum) |
+| `source_changed` | Yes | A body-source binding changed or was removed |
 | `enum_value_added` | No | New allowed value |
 | `enum_value_removed` | Yes | Value no longer valid |
 | `required_added` | Yes | Field now required |
@@ -152,7 +153,7 @@ Requires at least 2 hierarchy levels to be detected. Use `--dry-run` to preview 
 
 ## Scaffold Mode
 
-`--scaffold` adds missing required sections to documents that do not have them. It uses the `default` property of each `type: section` field in the effective `.stem` to populate inserted content.
+`--scaffold` adds missing required source-backed sections to documents that do not have them. It uses the `default` property of each applicable field in the effective `.stem` to populate inserted content.
 
 ```bash
 rootline migrate --scaffold docs/epics/          # Add missing required sections
@@ -163,8 +164,8 @@ rootline migrate --scaffold --dry-run docs/      # Preview without writing
 
 When inserting a missing section, content is selected in this order:
 
-1. `default` value from the `type: section` field in the effective `.stem`
-2. `"<!-- TODO -->"` (fallback when no default is defined)
+1. Non-empty `default` value from the source-backed field in the effective `.stem`
+2. `"<!-- TODO -->"` fallback when no default is defined
 
 ### Example
 
@@ -172,12 +173,14 @@ Given a `.stem` with:
 
 ```yaml
 schema:
-  "## Summary":
-    type: section
+  summary:
+    type: string
+    source: body.section["## Summary"]
     required: true
     default: "Describe the purpose of this document."
-  "## References":
-    type: section
+  references:
+    type: string
+    source: body.section["## References"]
     required: true
 ```
 
@@ -191,7 +194,7 @@ Running `rootline migrate --scaffold` on a file missing both sections produces:
     <!-- TODO -->
 ```
 
-Sections are inserted at the end of the document body. Use `--dry-run` to review insertions before applying.
+Sections are inserted at the end of the document body. Multiple additions are appended in lexical heading order. A frontmatter override or an empty-present section needs no materialization. Ambiguous source resolution and invalid declarations fail rather than becoming a successful no-op. Scaffold validates prospective bytes before its atomic write. Use `--dry-run` to review insertions before applying.
 
 ## Schema Evolution
 

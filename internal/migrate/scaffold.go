@@ -2,9 +2,9 @@ package migrate
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -30,18 +30,24 @@ type ScaffoldDetail struct {
 	DryRun  bool   `json:"dry_run,omitempty"`
 }
 
-// sectionCandidate holds a section field that needs to be scaffolded into a file.
-type sectionCandidate struct {
-	heading string
-	content string
-	ordered int // 0 means no ordering specified; positive values determine insertion order
+// ScaffoldValidationInput is the prospective record supplied to the command
+// layer for validation before scaffold writes replace the record on disk.
+type ScaffoldValidationInput struct {
+	Path      string
+	AbsPath   string
+	Content   []byte
+	Effective *rules.StemFile
 }
+
+// ScaffoldValidator validates a prospective scaffolded record.
+type ScaffoldValidator func(context.Context, ScaffoldValidationInput) (*rules.ValidationResult, error)
 
 // ScaffoldOperation detects documents missing required section fields and
 // scaffolds the missing sections with default or placeholder content.
 type ScaffoldOperation struct {
-	RootPath string
-	DryRun   bool
+	RootPath  string
+	DryRun    bool
+	Validator ScaffoldValidator
 }
 
 // Execute performs the scaffold operation, returning which files and sections
@@ -53,7 +59,7 @@ func (op *ScaffoldOperation) Execute() (*ScaffoldResult, error) {
 		return nil, err
 	}
 
-	// Use AST registry so that Record.Sections is populated.
+	// Use AST registry so that BodySections and links are populated for source resolution.
 	reg := extract.NewASTRegistry()
 
 	// Build a scope resolver so that index.Scan respects .stem scope rules.
@@ -73,33 +79,51 @@ func (op *ScaffoldOperation) Execute() (*ScaffoldResult, error) {
 	result := &ScaffoldResult{}
 
 	for _, rec := range records {
-		// Determine the directory the record lives in so we can resolve the
-		// correct effective .stem (handles nested directories).
-		recDir := filepath.Dir(filepath.Join(absRoot, rec.Path))
+		if extractionErrs := rules.ExtractionErrors(rec); len(extractionErrs) > 0 {
+			return nil, fmt.Errorf("scanning %s: %s", rec.Path, validationMessages(rules.NewValidationResult(rec.Path, extractionErrs)))
+		}
 
-		effective, resolveErr := rules.ResolveForRecord(recDir, rec.Path)
-		if resolveErr != nil || effective == nil {
+		absPath, err := absoluteRecordPath(absRoot, rec.Path)
+		if err != nil {
+			return nil, fmt.Errorf("resolving path for %s: %w", rec.Path, err)
+		}
+
+		effective, resolveErr := rules.ResolveForRecord(filepath.Dir(absPath), absPath)
+		if resolveErr != nil {
+			return nil, fmt.Errorf("resolving schema for %s: %w", rec.Path, resolveErr)
+		}
+		if effective == nil {
+			return nil, fmt.Errorf("no .stem schema found for %s", absPath)
+		}
+
+		sections, err := rules.RequiredSectionMaterializations(rec, effective)
+		if err != nil {
+			return nil, fmt.Errorf("materializing sections for %s: %w", rec.Path, err)
+		}
+		if len(sections) == 0 {
 			continue
 		}
 
-		candidates := missingSections(rec, effective)
-		if len(candidates) == 0 {
-			continue
+		prospective, err := renderScaffoldedContent(absPath, sections)
+		if err != nil {
+			return nil, fmt.Errorf("rendering scaffold for %s: %w", rec.Path, err)
+		}
+		if err := op.validateProspective(rec.Path, absPath, prospective, effective); err != nil {
+			return nil, fmt.Errorf("validating scaffold for %s: %w", rec.Path, err)
 		}
 
-		for _, c := range candidates {
+		for _, section := range sections {
 			result.SectionsAdded++
 			result.Details = append(result.Details, ScaffoldDetail{
 				File:    rec.Path,
-				Heading: c.heading,
+				Heading: section.Heading,
 				DryRun:  op.DryRun,
 			})
 		}
 
 		if !op.DryRun {
-			absPath := filepath.Join(absRoot, rec.Path)
-			if writeErr := appendSections(absPath, candidates); writeErr != nil {
-				return nil, writeErr
+			if writeErr := fsx.WriteFileAtomic(absPath, prospective, 0o644); writeErr != nil {
+				return nil, fmt.Errorf("writing scaffold for %s: %w", rec.Path, writeErr)
 			}
 		}
 
@@ -109,79 +133,22 @@ func (op *ScaffoldOperation) Execute() (*ScaffoldResult, error) {
 	return result, nil
 }
 
-// missingSections returns section candidates that are required by the schema but
-// absent from the record's Sections map.
-func missingSections(rec *extract.Record, effective *rules.StemFile) []sectionCandidate {
-	if effective == nil || len(effective.Schema) == 0 {
-		return nil
+func absoluteRecordPath(absRoot, recordPath string) (string, error) {
+	if filepath.IsAbs(recordPath) {
+		return filepath.Abs(recordPath)
 	}
-
-	// Collect all section fields that are required and missing.
-	var candidates []sectionCandidate
-
-	for _, sf := range effective.Schema {
-		if sf.Type != "section" || !sf.Required {
-			continue
-		}
-		heading := sf.Heading
-		if heading == "" {
-			continue
-		}
-
-		// Check whether the section already exists in the record.
-		if _, present := rec.Sections[heading]; present {
-			continue
-		}
-
-		// Determine the content to scaffold.
-		content := sf.Default
-		if content == "" {
-			content = "<!-- TODO -->"
-		}
-
-		ordered := 0
-		if sf.Ordered != nil {
-			ordered = *sf.Ordered
-		}
-
-		candidates = append(candidates, sectionCandidate{
-			heading: heading,
-			content: content,
-			ordered: ordered,
-		})
-	}
-
-	if len(candidates) == 0 {
-		return nil
-	}
-
-	// Sort candidates: ordered fields (ordered > 0) come first in ascending
-	// order; unordered fields follow in their natural map iteration order.
-	sort.SliceStable(candidates, func(i, j int) bool {
-		oi, oj := candidates[i].ordered, candidates[j].ordered
-		if oi == 0 && oj == 0 {
-			return false // preserve natural order among unordered
-		}
-		if oi == 0 {
-			return false // unordered goes after ordered
-		}
-		if oj == 0 {
-			return true // ordered goes before unordered
-		}
-		return oi < oj
-	})
-
-	return candidates
+	return filepath.Abs(filepath.Join(absRoot, recordPath))
 }
 
-// appendSections appends one or more sections to the end of a file.
-// Each section is written as: \n<heading>\n\n<content>\n
-func appendSections(absPath string, candidates []sectionCandidate) error {
+func renderScaffoldedContent(absPath string, sections []rules.SectionMaterialization) ([]byte, error) {
 	data, err := os.ReadFile(absPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	return renderScaffoldedContentFromBytes(data, sections), nil
+}
 
+func renderScaffoldedContentFromBytes(data []byte, sections []rules.SectionMaterialization) []byte {
 	content := string(data)
 	if !strings.HasSuffix(content, "\n") {
 		content += "\n"
@@ -189,15 +156,50 @@ func appendSections(absPath string, candidates []sectionCandidate) error {
 
 	var sb strings.Builder
 	sb.WriteString(content)
-
-	for _, c := range candidates {
-		body := strings.TrimRight(c.content, "\n")
+	for _, section := range sections {
+		body := strings.TrimRight(section.Content, "\n")
 		sb.WriteString("\n")
-		sb.WriteString(c.heading)
+		sb.WriteString(section.Heading)
 		sb.WriteString("\n\n")
 		sb.WriteString(body)
 		sb.WriteString("\n")
 	}
+	return []byte(sb.String())
+}
 
-	return fsx.WriteFileAtomic(absPath, []byte(sb.String()), 0o644)
+func (op *ScaffoldOperation) validateProspective(path, absPath string, content []byte, effective *rules.StemFile) error {
+	if op.Validator == nil {
+		return fmt.Errorf("prospective scaffold validation unavailable for %s", absPath)
+	}
+	result, err := op.Validator(context.Background(), ScaffoldValidationInput{
+		Path:      path,
+		AbsPath:   absPath,
+		Content:   content,
+		Effective: effective,
+	})
+	if err != nil {
+		return err
+	}
+	if result == nil {
+		return fmt.Errorf("prospective scaffold validation returned nil result for %s", absPath)
+	}
+	if !result.Valid {
+		return fmt.Errorf("prospective scaffold validation failed for %s: %s", absPath, validationMessages(result))
+	}
+	return nil
+}
+
+func validationMessages(result *rules.ValidationResult) string {
+	msgs := make([]string, 0, len(result.Errors))
+	for _, err := range result.Errors {
+		if err.Field != "" {
+			msgs = append(msgs, fmt.Sprintf("%s: %s", err.Field, err.Message))
+			continue
+		}
+		msgs = append(msgs, err.Message)
+	}
+	if len(msgs) == 0 {
+		return "invalid record"
+	}
+	return strings.Join(msgs, "; ")
 }

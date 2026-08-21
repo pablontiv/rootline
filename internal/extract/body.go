@@ -51,6 +51,12 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 			startLine = lineFromOffset(source, seg.Start)
 			lastSeg := lines.At(lines.Len() - 1)
 			endOffset = lastSeg.Stop
+			if _, _, ok := parseATXHeading(string(source[seg.Start:lastSeg.Stop])); !ok {
+				underlineStart, underlineEnd := lineOffset(source, startLine+1), lineOffset(source, startLine+2)
+				if _, ok := parseSetextUnderline(string(source[underlineStart:underlineEnd])); ok {
+					endOffset = underlineEnd
+				}
+			}
 		}
 
 		headings = append(headings, headingInfo{
@@ -191,6 +197,128 @@ func ExtractTables(node ast.Node, source []byte) []Table {
 	return tables
 }
 
+// ExtractSectionsFromText splits markdown text into heading-delimited sections.
+func ExtractSectionsFromText(body string) []Section {
+	source := []byte(body)
+	type heading struct {
+		text        string
+		level       int
+		line, start int
+		end         int
+	}
+	var headings []heading
+	prevLine, prevLineNo, prevStart, prevOK := "", 0, 0, false
+	inFence, fenceChar, fenceLen := false, byte(0), 0
+	for start, lineNo := 0, 1; start <= len(source); lineNo++ {
+		end := start
+		for end < len(source) && source[end] != '\n' {
+			end++
+		}
+		lineEnd := end
+		if end < len(source) {
+			lineEnd++
+		}
+		line := string(source[start:end])
+		if char, length, ok := parseFenceLine(line); ok {
+			prevOK = false
+			if !inFence {
+				inFence, fenceChar, fenceLen = true, char, length
+			} else if char == fenceChar && length >= fenceLen {
+				inFence = false
+			}
+		} else if !inFence {
+			if level, text, ok := parseATXHeading(line); ok {
+				headings = append(headings, heading{text: text, level: level, line: lineNo, start: start, end: lineEnd})
+				prevOK = false
+			} else if level, ok := parseSetextUnderline(line); ok && prevOK {
+				headings = append(headings, heading{text: strings.TrimSpace(strings.TrimRight(prevLine, "\r")), level: level, line: prevLineNo, start: prevStart, end: lineEnd})
+				prevOK = false
+			} else if _, ok := parseSetextUnderline(line); ok {
+				prevOK = false
+			} else {
+				prevLine, prevLineNo, prevStart, prevOK = line, lineNo, start, strings.TrimSpace(line) != ""
+			}
+		}
+		if end >= len(source) {
+			break
+		}
+		start = lineEnd
+	}
+	if len(headings) == 0 {
+		return []Section{{Heading: "", Level: 0, Content: body, StartLine: 1}}
+	}
+	sections := make([]Section, 0, len(headings))
+	for i, h := range headings {
+		contentEnd := len(source)
+		if i+1 < len(headings) {
+			contentEnd = headings[i+1].start
+		}
+		content := ""
+		if h.end < contentEnd {
+			content = strings.TrimSpace(string(source[h.end:contentEnd]))
+		}
+		sections = append(sections, Section{Heading: h.text, Level: h.level, Content: content, StartLine: h.line})
+	}
+	return sections
+}
+
+func parseATXHeading(line string) (int, string, bool) {
+	line = strings.TrimRight(line, "\r")
+	indent := len(line) - len(strings.TrimLeft(line, " "))
+	if indent > 3 {
+		return 0, "", false
+	}
+	rest := line[indent:]
+	level := len(rest) - len(strings.TrimLeft(rest, "#"))
+	if level == 0 || level > 6 || (level < len(rest) && rest[level] != ' ' && rest[level] != '\t') {
+		return 0, "", false
+	}
+	text := strings.TrimSpace(rest[level:])
+	if i := len(text) - 1; i > 0 && text[i] == '#' {
+		for i >= 0 && text[i] == '#' {
+			i--
+		}
+		if i >= 0 && (text[i] == ' ' || text[i] == '\t') {
+			text = strings.TrimSpace(text[:i])
+		}
+	}
+	return level, text, true
+}
+
+func parseSetextUnderline(line string) (int, bool) {
+	line = strings.TrimRight(line, "\r\n")
+	indent := len(line) - len(strings.TrimLeft(line, " "))
+	if indent > 3 {
+		return 0, false
+	}
+	rest := strings.TrimSpace(line[indent:])
+	if rest == "" || (rest[0] != '=' && rest[0] != '-') {
+		return 0, false
+	}
+	for i := range rest {
+		if rest[i] != rest[0] {
+			return 0, false
+		}
+	}
+	if rest[0] == '=' {
+		return 1, true
+	}
+	return 2, true
+}
+
+func parseFenceLine(line string) (byte, int, bool) {
+	line = strings.TrimRight(line, "\r")
+	indent := len(line) - len(strings.TrimLeft(line, " "))
+	if indent > 3 || indent >= len(line) || (line[indent] != '`' && line[indent] != '~') {
+		return 0, 0, false
+	}
+	char, count := line[indent], 0
+	for i := indent; i < len(line) && line[i] == char; i++ {
+		count++
+	}
+	return char, count, count >= 3
+}
+
 // lineOffset returns the byte offset of the start of a 1-based line number.
 func lineOffset(source []byte, line int) int {
 	current := 1
@@ -249,52 +377,4 @@ func ExtractBodySection(body string, heading string) string {
 		return strings.TrimSpace(strings.Join(result, "\n"))
 	}
 	return ""
-}
-
-// ResolveBodyValue resolves a `source:` directive against a record's body.
-// It deliberately never consults frontmatter: precedence between an explicit
-// frontmatter value and an extracted one belongs to the caller, and the derive
-// pipeline needs the extracted value even when frontmatter also carries the key.
-//
-// Supported directives:
-//   - body.h1                       the text of the first H1 heading
-//   - body.section["## Heading"]    the content under that heading
-//
-// The second form prefers record.Sections, which the AST extractors populate
-// with keys in the same "## Heading" shape the directive uses. When Sections is
-// nil — the non-AST registries leave it so — it falls back to parsing the body.
-//
-// Returns ok=false for an unknown directive or an empty result.
-func ResolveBodyValue(record *Record, directive string) (string, bool) {
-	if record == nil {
-		return "", false
-	}
-
-	// body.h1 must yield the heading TEXT, whereas record.Sections is keyed by
-	// "# Title" and stores the section CONTENT. The map cannot answer this
-	// directive, and ranging over it to recover the text would be
-	// non-deterministic: Go randomises map iteration order, so a document with
-	// more than one H1 would resolve to an arbitrary heading. Parse the body,
-	// which returns the first H1.
-	if directive == "body.h1" {
-		value := ExtractBodyH1(record.Body)
-		return value, value != ""
-	}
-
-	if strings.HasPrefix(directive, "body.section[") {
-		start := strings.Index(directive, "[\"")
-		end := strings.LastIndex(directive, "\"]")
-		if start < 0 || end <= start {
-			return "", false
-		}
-		heading := directive[start+2 : end]
-
-		if content, ok := record.Sections[heading]; ok && content != "" {
-			return content, true
-		}
-		value := ExtractBodySection(record.Body, heading)
-		return value, value != ""
-	}
-
-	return "", false
 }

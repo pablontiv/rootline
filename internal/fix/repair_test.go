@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pablontiv/rootline/internal/proposal"
 )
@@ -318,6 +319,103 @@ estado: Pendng
 	if !contains(string(content2After), "estado: Pending") {
 		t.Errorf("test2.md not updated correctly")
 	}
+}
+
+func writeFixedRepairDoc(t *testing.T, content string) (root, rel, path string, mtime time.Time) {
+	t.Helper()
+	root, rel = t.TempDir(), "test.md"
+	path = filepath.Join(root, rel)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mtime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := os.Chtimes(path, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+	return root, rel, path, mtime
+}
+
+func assertUnchangedRepairDoc(t *testing.T, path, want string, wantTime time.Time) {
+	t.Helper()
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != want {
+		t.Fatalf("content changed:\n%s", after)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(wantTime) {
+		t.Fatalf("mtime changed: got %s want %s", info.ModTime(), wantTime)
+	}
+}
+
+func TestApplyRepair_ValueAndFieldSafetyClassifiesWithoutWriting(t *testing.T) {
+	tests := []struct {
+		name             string
+		content          string
+		proposal         proposal.Proposal
+		changed, skipped int
+		rejected         int
+	}{
+		{"correct replay skips", "---\nestado: In Progress\n---\n# Test\n", proposal.Proposal{Type: proposal.CorrectValue, Field: "estado", From: "Inprogres", To: "In Progress"}, 0, 1, 0},
+		{"stale correct rejects", "---\nestado: Blocked\n---\n# Test\n", proposal.Proposal{Type: proposal.CorrectValue, Field: "estado", From: "Inprogres", To: "In Progress"}, 0, 0, 1},
+		{"add existing equal skips", "---\nestado: Pending\ntipo: Epic\n---\n# Test\n", proposal.Proposal{Type: proposal.AddField, Field: "tipo", Value: "Epic"}, 0, 1, 0},
+		{"add existing conflict rejects", "---\nestado: Pending\ntipo: Task\n---\n# Test\n", proposal.Proposal{Type: proposal.AddField, Field: "tipo", Value: "Epic"}, 0, 0, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root, rel, path, mtime := writeFixedRepairDoc(t, tt.content)
+			tt.proposal.Paths = []string{rel}
+			result, err := ApplyRepair([]proposal.Proposal{tt.proposal}, false, root, false)
+			if err != nil {
+				t.Fatalf("ApplyRepair failed: %v", err)
+			}
+			if len(result.Changed) != tt.changed || len(result.Skipped) != tt.skipped || len(result.Rejected) != tt.rejected {
+				t.Fatalf("changed=%v skipped=%v rejected=%v", result.Changed, result.Skipped, result.Rejected)
+			}
+			assertUnchangedRepairDoc(t, path, tt.content, mtime)
+		})
+	}
+}
+
+func TestApplyRepair_SetSectionDryRunRealParity(t *testing.T) {
+	proposals := []proposal.Proposal{
+		{Type: proposal.SetSection, Heading: "## Status", Value: "rewritten", Mode: "bogus", Paths: []string{"task.md"}},
+		{Type: proposal.SetSection, Heading: "## Missing", Value: "rewritten", Mode: "replace", Paths: []string{"task.md"}},
+	}
+	for _, p := range proposals {
+		for _, dryRun := range []bool{true, false} {
+			t.Run(p.Heading+p.Mode, func(t *testing.T) {
+				root := t.TempDir()
+				path := filepath.Join(root, "task.md")
+				original := "# Task\n\n## Status\n\noriginal\n"
+				if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				result, err := ApplyRepair([]proposal.Proposal{p}, dryRun, root, false)
+				if err != nil {
+					t.Fatalf("ApplyRepair failed: %v", err)
+				}
+				if result.Complete || len(result.Errors) != 1 || len(result.Changed) != 0 {
+					t.Fatalf("complete=%v errors=%v changed=%v", result.Complete, result.Errors, result.Changed)
+				}
+				assertUnchangedRepairDoc(t, path, original, fileModTime(t, path))
+			})
+		}
+	}
+}
+
+func fileModTime(t *testing.T, path string) time.Time {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.ModTime()
 }
 
 // Helper function.

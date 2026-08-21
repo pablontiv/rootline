@@ -3,7 +3,6 @@ package rules
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -87,30 +86,29 @@ func StemHealthDiagnostics(result *StemHealthResult) []StemHealthDiagnostic {
 // ValidateStemHealth runs all stem-health diagnostic checks against .stem files
 // under absRoot and returns the results.
 func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult, error) {
-	var checks []StemHealthCheck
-
-	// Find all .stem files
-	var stemFiles []string
-	err := filepath.Walk(absRoot, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return nil
-		}
-		if info.IsDir() {
-			if info.Name() == ".git" || info.Name() == "node_modules" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if info.Name() == stemFileName {
-			stemFiles = append(stemFiles, path)
-		}
-		return nil
-	})
+	state, err := DiscoverStemState(ctx, absRoot)
 	if err != nil {
-		return nil, fmt.Errorf("walking %s: %w", absRoot, err)
+		return nil, err
+	}
+	return EvaluateStemState(ctx, state)
+}
+
+// EvaluateStemState runs all stem-health diagnostic checks against an explicit
+// StemState snapshot. It does not read from the filesystem; discovery, parse
+// errors, matching files and ancestor chains are all supplied by state.
+func EvaluateStemState(ctx context.Context, state *StemState) (*StemHealthResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if state == nil {
+		return nil, fmt.Errorf("evaluating stem health: nil stem state")
 	}
 
-	if len(stemFiles) == 0 {
+	absRoot := filepath.Clean(state.Root)
+	var checks []StemHealthCheck
+
+	stemPaths := state.EvaluatedStemPaths()
+	if len(stemPaths) == 0 {
 		checks = append(checks, StemHealthCheck{
 			Name:    "stem-files-exist",
 			Status:  "warn",
@@ -120,24 +118,27 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 
 	// Check 1: Parse validity
 	parsedStems := make(map[string]*StemFile)
-	for _, sf := range stemFiles {
-		relPath, _ := filepath.Rel(absRoot, sf)
-		stem, parseErr := ParseStemFile(sf)
-		if parseErr != nil {
+	for _, sf := range stemPaths {
+		relPath := stemHealthRelPath(absRoot, sf)
+		if parseErr := state.ParseErrors[sf]; parseErr != nil {
 			checks = append(checks, StemHealthCheck{
 				Name:    "yaml-valid",
 				Status:  "fail",
 				Message: fmt.Sprintf("invalid YAML: %v", parseErr),
 				Path:    relPath,
 			})
-		} else {
-			checks = append(checks, StemHealthCheck{
-				Name:   "yaml-valid",
-				Status: "pass",
-				Path:   relPath,
-			})
-			parsedStems[sf] = stem
+			continue
 		}
+		stem := state.Stems[sf]
+		if stem == nil {
+			continue
+		}
+		checks = append(checks, StemHealthCheck{
+			Name:   "yaml-valid",
+			Status: "pass",
+			Path:   relPath,
+		})
+		parsedStems[sf] = stem
 	}
 
 	if ctx.Err() != nil {
@@ -145,33 +146,25 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 	}
 
 	// Check 2: Orphan scopes (scope.match doesn't match any file in directory)
-	for sf, stem := range parsedStems {
+	for _, sf := range sortedStemPaths(parsedStems) {
+		stem := parsedStems[sf]
 		if stem.Scope.Match == "" {
 			continue
 		}
-		relPath, _ := filepath.Rel(absRoot, sf)
-		dir := filepath.Dir(sf)
-		entries, readErr := os.ReadDir(dir)
-		if readErr != nil {
-			continue
-		}
 		hasMatch := false
-		for _, e := range entries {
-			if e.IsDir() || e.Name() == stemFileName {
+		for _, match := range state.MatchingFiles(filepath.Dir(sf), stem.Scope.Match) {
+			if filepath.Base(match) == stemFileName {
 				continue
 			}
-			matched, _ := filepath.Match(stem.Scope.Match, e.Name())
-			if matched {
-				hasMatch = true
-				break
-			}
+			hasMatch = true
+			break
 		}
 		if !hasMatch {
 			checks = append(checks, StemHealthCheck{
 				Name:    "scope-match",
 				Status:  "warn",
 				Message: fmt.Sprintf("scope.match %q matches no files in directory", stem.Scope.Match),
-				Path:    relPath,
+				Path:    stemHealthRelPath(absRoot, sf),
 			})
 		}
 	}
@@ -180,47 +173,32 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		return nil, ctx.Err()
 	}
 
-	// Check 3: Inheritance consistency (child doesn't change type of inherited field)
-	for sf, stem := range parsedStems {
-		relPath, _ := filepath.Rel(absRoot, sf)
-		dir := filepath.Dir(sf)
-		parentEntries, walkErr := WalkUp(dir)
-		if walkErr != nil || len(parentEntries) < 2 {
+	// Check 3: Inheritance type consistency through the shared compatibility algebra.
+	for _, sf := range sortedStemPaths(parsedStems) {
+		stem := parsedStems[sf]
+		parentEntries := entriesBeforeStem(state.Chain(filepath.Dir(sf)), sf)
+		if len(parentEntries) == 0 {
 			continue
 		}
-		parentMerged := MergeStemFiles(parentEntries[:len(parentEntries)-1])
+		parentMerged := MergeStemFiles(parentEntries)
 		if parentMerged == nil {
 			continue
 		}
-		for fieldName, childField := range stem.Schema {
-			if parentField, exists := parentMerged.Schema[fieldName]; exists {
-				if childField.Type != "" && parentField.Type != "" && childField.Type != parentField.Type {
-					checks = append(checks, StemHealthCheck{
-						Name:    "type-consistency",
-						Status:  "fail",
-						Message: fmt.Sprintf("field %q changes type from %q to %q (inherited from parent)", fieldName, parentField.Type, childField.Type),
-						Path:    relPath,
-						Field:   fieldName,
-					})
-				}
+		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
+			childField := stem.Schema[fieldName]
+			parentField, exists := parentMerged.Schema[fieldName]
+			if !exists {
+				continue
 			}
-		}
-	}
-
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-
-	// Check 4: Enum fields have at least 2 values
-	for sf, stem := range parsedStems {
-		relPath, _ := filepath.Rel(absRoot, sf)
-		for fieldName, field := range stem.Schema {
-			if field.Type == "enum" && len(field.Values) < 2 {
+			for _, issue := range CheckFieldCompatibility(parentField, childField) {
+				if issue.Constraint != "type" {
+					continue
+				}
 				checks = append(checks, StemHealthCheck{
-					Name:    "enum-values",
-					Status:  "warn",
-					Message: fmt.Sprintf("enum field %q has %d value(s), expected at least 2", fieldName, len(field.Values)),
-					Path:    relPath,
+					Name:    "type-consistency",
+					Status:  "fail",
+					Message: issue.Message,
+					Path:    stemHealthRelPath(absRoot, sf),
 					Field:   fieldName,
 				})
 			}
@@ -231,15 +209,17 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		return nil, ctx.Err()
 	}
 
+	// Check 4: Schema field declarations use the canonical type/source contract.
+	checks = append(checks, fieldDeclarationChecks(absRoot, parsedStems)...)
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// Check 5: Validate rules reference existing schema fields
-	for sf, stem := range parsedStems {
-		relPath, _ := filepath.Rel(absRoot, sf)
-		dir := filepath.Dir(sf)
-		entries, walkErr := WalkUp(dir)
-		if walkErr != nil {
-			continue
-		}
-		effective := MergeStemFiles(entries)
+	for _, sf := range sortedStemPaths(parsedStems) {
+		stem := parsedStems[sf]
+		effective := MergeStemFiles(state.Chain(filepath.Dir(sf)))
 		if effective == nil {
 			continue
 		}
@@ -250,7 +230,7 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 						Name:    "rule-field-exists",
 						Status:  "warn",
 						Message: fmt.Sprintf("validation rule references field %q not in schema", rule.Field),
-						Path:    relPath,
+						Path:    stemHealthRelPath(absRoot, sf),
 						Field:   rule.Field,
 					})
 				}
@@ -262,28 +242,31 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		return nil, ctx.Err()
 	}
 
-	// Check 6: Child redefines parent field (informative warning)
-	for sf, stem := range parsedStems {
-		relPath, _ := filepath.Rel(absRoot, sf)
-		dir := filepath.Dir(sf)
-		parentEntries, walkErr := WalkUp(dir)
-		if walkErr != nil || len(parentEntries) < 2 {
+	// Check 6: Child redefines parent field (informative warning). Valid
+	// type/value narrowings are accepted without generic override noise.
+	for _, sf := range sortedStemPaths(parsedStems) {
+		stem := parsedStems[sf]
+		parentEntries := entriesBeforeStem(state.Chain(filepath.Dir(sf)), sf)
+		if len(parentEntries) == 0 {
 			continue
 		}
-		parentMerged := MergeStemFiles(parentEntries[:len(parentEntries)-1])
+		parentMerged := MergeStemFiles(parentEntries)
 		if parentMerged == nil {
 			continue
 		}
-		for fieldName := range stem.Schema {
-			if _, exists := parentMerged.Schema[fieldName]; exists {
-				checks = append(checks, StemHealthCheck{
-					Name:    "field-override",
-					Status:  "warn",
-					Message: fmt.Sprintf("field %q overrides parent definition", fieldName),
-					Path:    relPath,
-					Field:   fieldName,
-				})
+		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
+			childField := stem.Schema[fieldName]
+			parentField, exists := parentMerged.Schema[fieldName]
+			if !exists || validNarrowingOverride(parentField, childField) || len(CheckFieldCompatibility(parentField, childField)) > 0 {
+				continue
 			}
+			checks = append(checks, StemHealthCheck{
+				Name:    "field-override",
+				Status:  "warn",
+				Message: fmt.Sprintf("field %q overrides parent definition", fieldName),
+				Path:    stemHealthRelPath(absRoot, sf),
+				Field:   fieldName,
+			})
 		}
 	}
 
@@ -292,9 +275,10 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 	}
 
 	// Check 7: Aggregated required fields (required + aggregate on same field)
-	for sf, stem := range parsedStems {
-		relPath, _ := filepath.Rel(absRoot, sf)
-		for fieldName, field := range stem.Schema {
+	for _, sf := range sortedStemPaths(parsedStems) {
+		stem := parsedStems[sf]
+		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
+			field := stem.Schema[fieldName]
 			if !field.Required {
 				continue
 			}
@@ -306,7 +290,7 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 						"field %q is required but also has an aggregate expression; required is auto-skipped on index files — consider removing required or using excludes",
 						fieldName,
 					),
-					Path:  relPath,
+					Path:  stemHealthRelPath(absRoot, sf),
 					Field: fieldName,
 				})
 			}
@@ -319,26 +303,21 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 
 	// Check 8: Aggregate formula coverage (formula references all enum values)
 	quotedStringRe := regexp.MustCompile(`"([^"]*)"`)
-	for sf, stem := range parsedStems {
-		relPath, _ := filepath.Rel(absRoot, sf)
-		// Build effective schema for this stem.
-		dir := filepath.Dir(sf)
-		entries, walkErr := WalkUp(dir)
-		if walkErr != nil {
-			continue
-		}
-		effective := MergeStemFiles(entries)
+	for _, sf := range sortedStemPaths(parsedStems) {
+		stem := parsedStems[sf]
+		effective := MergeStemFiles(state.Chain(filepath.Dir(sf)))
 		if effective == nil {
 			continue
 		}
 
-		for fieldName, exprAny := range stem.Aggregate {
+		for _, fieldName := range sortedAggregateFieldNames(stem.Aggregate) {
+			exprAny := stem.Aggregate[fieldName]
 			expr, ok := exprAny.(string)
 			if !ok {
 				continue
 			}
-			sf, exists := effective.Schema[fieldName]
-			if !exists || sf.Type != "enum" || len(sf.Values) == 0 {
+			schemaField, exists := effective.Schema[fieldName]
+			if !exists || schemaField.Type != "enum" || len(schemaField.Values) == 0 {
 				continue
 			}
 
@@ -351,7 +330,7 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 
 			// Check each enum value is referenced.
 			var missing []string
-			for _, v := range sf.Values {
+			for _, v := range schemaField.Values {
 				if !quotedValues[v] {
 					missing = append(missing, v)
 				}
@@ -361,7 +340,7 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 					Name:    "aggregate-formula-coverage",
 					Status:  "warn",
 					Message: fmt.Sprintf("aggregate formula for %q does not reference enum value(s): %s", fieldName, strings.Join(missing, ", ")),
-					Path:    relPath,
+					Path:    stemHealthRelPath(absRoot, sf),
 					Field:   fieldName,
 				})
 			}
@@ -381,25 +360,33 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 	}
 
 	// Check 11: Monotonic constraint violations
-	for sf := range parsedStems {
-		relPath, _ := filepath.Rel(absRoot, sf)
-		dir := filepath.Dir(sf)
-
-		// Resolve layered constraints with monotonic=true for this directory
-		lr, resolveErr := ResolveLayered(dir, absRoot, true)
+	emittedMonotonic := make(map[layerConflictIdentity]struct{})
+	for _, sf := range sortedStemPaths(parsedStems) {
+		lr, resolveErr := resolveLayeredFromEntries(filepath.Dir(sf), state.Chain(filepath.Dir(sf)))
 		if resolveErr != nil {
 			continue
 		}
 
-		// For each conflict, emit a diagnostic error
+		// For each conflict, emit a diagnostic error only from the .stem that
+		// owns the violation. Descendant resolutions include ancestor conflicts
+		// in their chain, but those must not be re-reported at descendant paths.
 		for _, conflict := range lr.Conflicts {
+			if conflict.StemPath != sf || monotonicConflictIsType(conflict) {
+				continue
+			}
+			identity := layerConflictIdentity{StemPath: conflict.StemPath, Field: conflict.Field, Operation: conflict.Operation}
+			if _, exists := emittedMonotonic[identity]; exists {
+				continue
+			}
+			emittedMonotonic[identity] = struct{}{}
+
 			fieldName, msg := monotonicViolation(conflict)
 
 			checks = append(checks, StemHealthCheck{
 				Name:    "monotonic-violations",
 				Status:  "fail",
 				Message: msg,
-				Path:    relPath,
+				Path:    stemHealthRelPath(absRoot, conflict.StemPath),
 				Field:   fieldName,
 			})
 		}
@@ -410,8 +397,8 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 	}
 
 	// Check 11: unknown keys under links.checks (silently inert otherwise)
-	for sf, stem := range parsedStems {
-		relPath, _ := filepath.Rel(absRoot, sf)
+	for _, sf := range sortedStemPaths(parsedStems) {
+		stem := parsedStems[sf]
 		for _, key := range stem.Links.UnknownCheckKeys {
 			msg := fmt.Sprintf("unknown key %q in links.checks", key)
 			if match := fuzzy.Match(key, knownCheckKeys); match != "" {
@@ -421,7 +408,7 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 				Name:    "unknown-check-keys",
 				Status:  "warn",
 				Message: msg,
-				Path:    relPath,
+				Path:    stemHealthRelPath(absRoot, sf),
 				Field:   key,
 			})
 		}
@@ -429,15 +416,16 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 
 	// Check 12: nested-root-marker (INFO level)
 	// Detect when a directory declares root: true and has an ancestor also with root: true
-	for sf, stem := range parsedStems {
+	for _, sf := range sortedStemPaths(parsedStems) {
+		stem := parsedStems[sf]
 		if !stem.Root {
 			continue // Only check stems with root: true
 		}
 
-		relPath, _ := filepath.Rel(absRoot, sf)
+		relPath := stemHealthRelPath(absRoot, sf)
 		dir := filepath.Dir(sf)
 
-		// Manually walk up the directory tree (without stopping at markers) to find
+		// Manually walk up the state path hierarchy (without stopping at markers) to find
 		// ancestor directories that contain .stem files with root: true
 		current := dir
 		foundAncestorRoot := false
@@ -452,7 +440,7 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 
 			// Check if parent contains a .stem with root: true
 			parentStemPath := filepath.Join(parent, stemFileName)
-			if parentStem, exists := parsedStems[parentStemPath]; exists && parentStem.Root {
+			if parentStem, exists := state.Stems[parentStemPath]; exists && parentStem.Root {
 				foundAncestorRoot = true
 				ancestorRootPath = parentStemPath
 				break
@@ -462,7 +450,7 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		}
 
 		if foundAncestorRoot {
-			ancestorRelPath, _ := filepath.Rel(absRoot, ancestorRootPath)
+			ancestorRelPath := stemHealthRelPath(absRoot, ancestorRootPath)
 			checks = append(checks, StemHealthCheck{
 				Name:    "nested-root-marker",
 				Status:  "info",
@@ -472,13 +460,111 @@ func ValidateStemHealth(ctx context.Context, absRoot string) (*StemHealthResult,
 		}
 	}
 
+	sortStemHealthChecks(checks)
 	return &StemHealthResult{Checks: checks}, nil
+}
+
+func stemHealthRelPath(absRoot, path string) string {
+	relPath, err := filepath.Rel(absRoot, path)
+	if err != nil {
+		return path
+	}
+	return relPath
+}
+
+func entriesBeforeStem(entries []StemEntry, stemPath string) []StemEntry {
+	for i, entry := range entries {
+		if entry.Path == stemPath {
+			return entries[:i]
+		}
+	}
+	return nil
+}
+
+func sortedAggregateFieldNames(aggregate map[string]any) []string {
+	fieldNames := make([]string, 0, len(aggregate))
+	for fieldName := range aggregate {
+		fieldNames = append(fieldNames, fieldName)
+	}
+	slices.Sort(fieldNames)
+	return fieldNames
+}
+
+func sortStemHealthChecks(checks []StemHealthCheck) {
+	slices.SortFunc(checks, func(a, b StemHealthCheck) int {
+		if c := strings.Compare(a.Path, b.Path); c != 0 {
+			return c
+		}
+		if c := strings.Compare(a.Name, b.Name); c != 0 {
+			return c
+		}
+		if c := strings.Compare(a.Field, b.Field); c != 0 {
+			return c
+		}
+		if c := strings.Compare(a.Status, b.Status); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Message, b.Message)
+	})
+}
+
+func fieldDeclarationChecks(absRoot string, parsedStems map[string]*StemFile) []StemHealthCheck {
+	stemPaths := sortedStemPaths(parsedStems)
+
+	var checks []StemHealthCheck
+	for _, stemPath := range stemPaths {
+		stem := parsedStems[stemPath]
+		relPath, _ := filepath.Rel(absRoot, stemPath)
+		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
+			field := stem.Schema[fieldName]
+			for _, contractIssue := range ValidateFieldDeclaration(fieldName, field) {
+				checks = append(checks, StemHealthCheck{
+					Name:    "field-declaration",
+					Status:  "fail",
+					Message: fmt.Sprintf("%s: %s", contractIssue.Code, contractIssue.Message),
+					Path:    relPath,
+					Field:   fieldName,
+				})
+			}
+		}
+	}
+	return checks
+}
+
+func sortedStemPaths(parsedStems map[string]*StemFile) []string {
+	stemPaths := make([]string, 0, len(parsedStems))
+	for stemPath := range parsedStems {
+		stemPaths = append(stemPaths, stemPath)
+	}
+	slices.Sort(stemPaths)
+	return stemPaths
+}
+
+func validNarrowingOverride(parentField, childField SchemaField) bool {
+	if len(CheckFieldCompatibility(parentField, childField)) != 0 {
+		return false
+	}
+	if parentField.Type == "string" && childField.Type == "enum" {
+		return true
+	}
+	return parentField.Type == "enum" && childField.Type == "enum" && len(childField.Values) > 0 && len(parentField.Values) > 0
+}
+
+type layerConflictIdentity struct {
+	StemPath  string
+	Field     string
+	Operation string
+}
+
+func monotonicConflictIsType(conflict LayerConstraint) bool {
+	_, constraint := monotonicField(conflict.Field)
+	return constraint == "type"
 }
 
 // monotonicConstraintSuffixes are the schema-level constraints the resolver
 // appends to a field name when it records a conflict. Anything else — a
 // structural path like "structural.subdirs.min_children" — is reported whole.
-var monotonicConstraintSuffixes = []string{"type", "required", "severity", "values"}
+var monotonicConstraintSuffixes = []string{"type", "source", "required", "severity", "values"}
 
 // monotonicField splits a conflict path into the name a reader recognises and
 // the constraint that was loosened.
@@ -521,6 +607,8 @@ func monotonicViolation(conflict LayerConstraint) (field, message string) {
 	switch constraint {
 	case "type":
 		return field, fmt.Sprintf("field %q widens type: %v", field, conflict.Value)
+	case "source":
+		return field, fmt.Sprintf("field %q changes source: %v", field, conflict.Value)
 	case "required":
 		return field, fmt.Sprintf("field %q loosens required: %v", field, conflict.Value)
 	case "severity":

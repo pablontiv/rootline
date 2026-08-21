@@ -23,12 +23,18 @@ rootline describe <dir> --field schema.id.next
   "path": "docs/example/",
   "applies": ["docs/.stem", ".stem"],
   "schema": {
+    "notes": {
+      "type": "string",
+      "required": true,
+      "source": "body.section[\"## Notes\"]",
+      "defined_in": "docs/.stem"
+    },
     "estado": {
       "type": "enum",
       "required": true,
       "values": ["Pending", "Completed"],
       "default": "Pending",
-      "source": "docs/.stem"
+      "defined_in": "docs/.stem"
     }
   },
   "validate": [],
@@ -46,10 +52,11 @@ For sequence fields, JSON may include `prefix`, `digits`, and `next`.
 When explaining a schema, use this table:
 
 ```markdown
-| Field | Type | Required | Values | Source |
-|---|---|---:|---|---|
-| estado | enum | yes | Pending, Completed | docs/.stem |
-| id | sequence | yes | next: T005 | docs/.stem |
+| Field | Type | Required | Values | Defined In | Source |
+|---|---|---:|---|---|---|
+| notes | string | yes |  | docs/.stem | body.section["## Notes"] |
+| estado | enum | yes | Pending, Completed | docs/.stem |  |
+| id | sequence | yes | next: T005 | docs/.stem |  |
 ```
 
 Then list, only when non-empty:
@@ -100,8 +107,11 @@ The generated document:
 
 - includes fields from the effective schema
 - uses field defaults when defined
-- leaves enum fields empty (with values as inline comment) when no explicit default exists
-- writes required fields with empty values when needed
+- writes enum fields only when a default exists or the field is required
+- Required enum fields without a default cause `rootline new` to refuse before dry-run output or disk write; the internal prospective renderer does not invent the first allowed value and validation reports the missing required value
+- optional enum fields with no default are omitted
+- does not invent the first allowed value
+- writes required non-enum fields with empty values when needed
 - derives the title from the filename
 
 ### Schemas multi-patrón: `next` vs `next_by_pattern`
@@ -127,15 +137,28 @@ The central resolver in `internal/rules/resolver.go` exposes:
 - `EffectiveSchema(path, root)` — merged schema with match filtering
 - `Resolve(path, root)` — chain + schema + field provenance
 - `(*Resolution).ClosestStem()` / `RootMostStem()` — explicit closest vs. root-most selection
-- `ResolveLayered(path, root, monotonic bool)` — extends with `LayeredResolution.Layers` and `Conflicts`; in monotonic mode surfaces type widening, required loosening, enum extension, and structural loosening as conflicts
+- `ResolveLayered(path, root)` — returns cumulative `LayeredResolution.Layers` and `Conflicts`; monotonic compatibility is always enforced
 
 Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new command code.
 
 ## Describe / Explain Provenance
 
-`rootline describe` and `rootline explain` JSON output now includes:
+`rootline describe` and `rootline explain` JSON output includes:
 - `layers` (array of strings) — ordered `.stem` chain root→leaf
 - `provenance` (object) — field name → `.stem` path that last defined it
+- `source` — a logical body extraction directive when the field has one
+- `defined_in` — the physical `.stem` that declares the field
+
+A source-backed field uses a real type plus `source: body.section["## Heading"]`; frontmatter is an override. Child omission inherits the stable source binding. `new` and `migrate --scaffold` materialize missing required sections in lexical heading order using a non-empty default or `<!-- TODO -->`.
+
+Author required section-backed fields in `.stem` like this; `defined_in` appears only in command output, not in authored declarations:
+
+```yaml
+notes:
+  type: string
+  required: true
+  source: body.section["## Notes"]
+```
 
 ## Schema Commands
 
@@ -151,17 +174,23 @@ Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new comman
 
 ### schema apply
 
-`rootline schema apply --report <proposals.json> [--dry-run] [--force]` applies schema proposals to `.stem` files:
-- Input kind must be `"rootline/schema-proposals"`, version must be 1 (else structured error)
+`rootline schema apply --report <proposals.json> [--dry-run] [--force]` applies schema proposals or analyze-derived schema inferences to `.stem` files:
+- Input kind must be `"rootline/schema-proposals"`, `"rootline/analyze"`, or legacy `"analyze"`; report version must be 1 (else structured error)
 - Skips proposals with `requires_agent: true`
 - `create_stem` operation: writes `proposal.patch` **byte-identical** to the target `.stem`. Apply never re-derives the schema, so what a reviewer approved is what lands on disk
 - A proposal with an empty or missing `patch` is refused into `errors[]` with an instruction to re-run `schema propose`; it is never silently scaffolded into untyped `type: string` shells
+- Analyze reports are planned in memory first, then pass through the same prospective hierarchy gate as proposal reports before any dry-run action is published or any file is written
 - Unknown operations: rejected with message in `rejected[]` (policy refusal, not error)
 - **Flag: `--force`** — Overwrites existing `.stem` files when applying `create_stem` proposals. Without `--force`, proposals targeting existing files are rejected (policy refusal).
-- `--dry-run`: no files written; reports what would be done
+- `--dry-run`: no files written; reports the same accepted actions and `stem_health[]` governance verdicts the real write path would use
 - Scan root: `report.root` when present, else `report.path` resolved against the caller's CWD (legacy reports)
-- Post-apply: runs `rootline validate --all` against that scan root. A failed scan surfaces in `errors[]` — it is never reported as an all-zero `validation_summary`, which would be indistinguishable from a clean run
-- Emits JSON: version 1, kind `"rootline/schema-apply"` with applied/skipped/rejected/errors/validation_summary
+- Schema proposal targets must use the literal basename `.stem`; alternate casing is rejected before resolution.
+- Before publishing `applied[]` actions or writing files, apply validates the complete virtual `.stem` hierarchy produced by the whole batch. Error-severity `stem_health[]` diagnostics block with `complete:false`, non-zero exit, and `applied:[]`; warning/info diagnostics remain visible and nonblocking
+- Writes use atomic per-file replacement. In a multi-file batch, each accepted file is replaced atomically on its own; if a write fails after earlier files succeeded, apply records the error and continues best-effort for remaining files rather than rolling back prior successful files
+- Accepted writes are validated and replaced through one bound physical target. Internal aliases are supported, including symlinked parents inside the scan root, but aliases that physically escape the scan root are rejected before any write is attempted
+- Post-apply: runs `rootline validate --all` against that scan root. A failed scan surfaces in `errors[]` — it is never reported as an all-zero `validation_summary`, which would be indistinguishable from a clean run. Document invalidity stays separate from apply governance: a governance-valid apply can return `complete:true` while `validation_summary.invalid_files` is non-zero
+- Emits JSON: version 1, kind `"rootline/schema-apply"` with applied/skipped/rejected/errors/validation_summary and non-omitempty `stem_health[]` (serialized as `[]` when empty)
+- Table output renders a `Stem Health` section only when diagnostics are non-empty, with columns `Path`, `Check`, `Field`, `Severity`, and `Message`
 
 **Path containment.** Each `create_stem` target is validated with
 `fix.ContainPath(scanRoot, target, fix.PolicyAcceptAbsolute)` before anything is written, and the

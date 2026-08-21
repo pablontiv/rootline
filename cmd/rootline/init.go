@@ -12,6 +12,7 @@ import (
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/internal/stemyaml"
 	"github.com/pablontiv/rootline/internal/templates"
 	"github.com/spf13/cobra"
 )
@@ -121,7 +122,10 @@ func runInitFlat(cmd *cobra.Command, absTarget, target string, records []*extrac
 	}
 
 	// Generate YAML from StemFile
-	yaml := stemFileToYAML(stemFile, absTarget)
+	yaml, err := stemFileToYAML(stemFile, absTarget)
+	if err != nil {
+		return fmt.Errorf("serializing flat schema: %w", err)
+	}
 
 	if initDryRun {
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), yaml)
@@ -156,7 +160,10 @@ func runInitHierarchical(cmd *cobra.Command, absTarget, target string, hierarchy
 	// Convert StemFiles to file content for writing
 	stemFiles := make([]stemFile, 0, len(stemMap))
 	for _, rootStem := range stemMap {
-		yaml := stemFileToYAML(rootStem, absTarget)
+		yaml, err := stemFileToYAML(rootStem, absTarget)
+		if err != nil {
+			return fmt.Errorf("serializing hierarchical schema: %w", err)
+		}
 		stemFiles = append(stemFiles, stemFile{
 			path:    filepath.Join(absTarget, ".stem"),
 			content: yaml,
@@ -215,7 +222,7 @@ type stemFile struct {
 }
 
 // stemFileToYAML converts a StemFile to YAML string representation.
-func stemFileToYAML(stem *rules.StemFile, scanRoot string) string {
+func stemFileToYAML(stem *rules.StemFile, scanRoot string) (string, error) {
 	var b strings.Builder
 	b.WriteString("version: 2\n")
 	if stem.Root {
@@ -230,56 +237,8 @@ func stemFileToYAML(stem *rules.StemFile, scanRoot string) string {
 	sort.Strings(keys)
 
 	for _, name := range keys {
-		field := stem.Schema[name]
-		fmt.Fprintf(&b, "  %s:\n", name)
-		fmt.Fprintf(&b, "    type: %s\n", field.Type)
-		if field.Required {
-			b.WriteString("    required: true\n")
-		}
-		if len(field.Values) > 0 {
-			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(field.Values, ", "))
-		}
-		if field.Heading != "" {
-			fmt.Fprintf(&b, "    heading: %q\n", field.Heading)
-		}
-		if field.Prefix != "" {
-			fmt.Fprintf(&b, "    prefix: %s\n", field.Prefix)
-		}
-		if field.Digits > 0 {
-			fmt.Fprintf(&b, "    digits: %d\n", field.Digits)
-		}
-		if field.Match != nil {
-			switch {
-			case len(field.Match.Configs) > 0:
-				b.WriteString("    match:\n")
-				matchKeys := make([]string, 0, len(field.Match.Configs))
-				for k := range field.Match.Configs {
-					matchKeys = append(matchKeys, k)
-				}
-				sort.Strings(matchKeys)
-				for _, mk := range matchKeys {
-					cfg := field.Match.Configs[mk]
-					if cfgMap, ok := cfg.(map[string]any); ok {
-						fmt.Fprintf(&b, "      \"%s\": {", mk)
-						first := true
-						if p, ok := cfgMap["prefix"]; ok {
-							fmt.Fprintf(&b, "prefix: %s", p)
-							first = false
-						}
-						if d, ok := cfgMap["digits"]; ok {
-							if !first {
-								b.WriteString(", ")
-							}
-							fmt.Fprintf(&b, "digits: %v", d)
-						}
-						b.WriteString("}\n")
-					}
-				}
-			case len(field.Match.Patterns) == 1:
-				fmt.Fprintf(&b, "    match: \"%s\"\n", field.Match.Patterns[0])
-			case len(field.Match.Patterns) > 1:
-				fmt.Fprintf(&b, "    match: [%s]\n", strings.Join(field.Match.Patterns, ", "))
-			}
+		if err := stemyaml.AppendSchemaField(&b, name, stem.Schema[name]); err != nil {
+			return "", fmt.Errorf("serializing field %q: %w", name, err)
 		}
 	}
 
@@ -315,5 +274,9 @@ func stemFileToYAML(stem *rules.StemFile, scanRoot string) string {
 		}
 	}
 
-	return b.String()
+	out := b.String()
+	if _, err := rules.ParseStem(filepath.Join(scanRoot, ".stem"), []byte(out)); err != nil {
+		return "", err
+	}
+	return out, nil
 }

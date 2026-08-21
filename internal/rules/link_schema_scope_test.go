@@ -2,6 +2,7 @@ package rules
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -25,7 +26,9 @@ func TestFilterLinksByTypedRules_ResolvesPerRecord(t *testing.T) {
 		{Target: "y", Type: "blocks", Line: 1},
 	}}
 
-	FilterLinksByTypedRules([]*extract.Record{sub, top}, root)
+	if err := FilterLinksByTypedRules([]*extract.Record{sub, top}, root); err != nil {
+		t.Fatalf("FilterLinksByTypedRules: %v", err)
+	}
 
 	if len(sub.Links) != 1 || sub.Links[0].Type != "reference" {
 		t.Errorf("sub/x.md links = %+v, want only the declared reference rule", sub.Links)
@@ -50,7 +53,10 @@ func TestCycleFailureScope_ResolvesPerRecord(t *testing.T) {
 		{Path: filepath.Join("sub", "n1.md")},
 		{Path: "top.md"},
 	}
-	scope := CycleFailureScope(recs, root)
+	scope, err := CycleFailureScope(recs, root)
+	if err != nil {
+		t.Fatalf("CycleFailureScope: %v", err)
+	}
 
 	if !scope[filepath.Join("sub", "n1.md")] {
 		t.Errorf("sub/n1.md should opt into cycle failure via its own .stem")
@@ -79,11 +85,39 @@ func TestFilterLinksByTypedRules_NonRuleSchemasDoNotSuppress(t *testing.T) {
 				{Target: "y", Type: "blocks", Line: 2},
 			}}
 
-			FilterLinksByTypedRules([]*extract.Record{rec}, root)
+			if err := FilterLinksByTypedRules([]*extract.Record{rec}, root); err != nil {
+				t.Fatalf("FilterLinksByTypedRules: %v", err)
+			}
 
 			if len(rec.Links) != 2 {
 				t.Errorf("links = %+v, want both kept", rec.Links)
 			}
 		})
+	}
+}
+
+func TestLinkSchemaScopePropagatesInvalidRecordSchema(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".stem"), `version: 2
+root: true
+schema:
+  id:
+    type: sequence
+    match:
+      "bad*": {prefix: BAD, digits: 2.0}
+links:
+  checks:
+    cycles: true
+`)
+	rec := &extract.Record{Path: "bad.md", Links: []extract.Link{{Target: "x", Type: "reference"}}}
+
+	err := FilterLinksByTypedRules([]*extract.Record{rec}, root)
+	if err == nil || !strings.Contains(err.Error(), "bad.md") || !strings.Contains(err.Error(), "digits") {
+		t.Fatalf("FilterLinksByTypedRules error = %v, want schema digits cause", err)
+	}
+
+	_, err = CycleFailureScope([]*extract.Record{{Path: "bad.md"}}, root)
+	if err == nil || !strings.Contains(err.Error(), "bad.md") || !strings.Contains(err.Error(), "digits") {
+		t.Fatalf("CycleFailureScope error = %v, want schema digits cause", err)
 	}
 }

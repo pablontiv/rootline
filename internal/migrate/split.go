@@ -8,6 +8,7 @@ import (
 
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/internal/stemyaml"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,7 +27,7 @@ type SplitResult struct {
 // BuildSplitStems distributes fields from existing .stem across hierarchy levels.
 // Derive, aggregate, links, structural, and validate stay at root.
 // Auto-generates aggregate expressions for root enum fields not already in existing.Aggregate.
-func BuildSplitStems(absTarget string, existing *rules.StemFile, hierarchy *infer.HierarchyResult) SplitResult {
+func BuildSplitStems(absTarget string, existing *rules.StemFile, hierarchy *infer.HierarchyResult) (SplitResult, error) {
 	var files []StemOutput
 
 	// Determine which fields from existing schema belong at root vs per-level.
@@ -55,6 +56,12 @@ func BuildSplitStems(absTarget string, existing *rules.StemFile, hierarchy *infe
 		}
 	}
 
+	// Level 0 is represented by the root .stem itself. Keep level-0-only fields
+	// there, beside common root fields, rather than dropping the unused bucket.
+	for name, field := range levelFields[0] {
+		rootFields[name] = field
+	}
+
 	// Generate aggregate expressions for root enum fields without existing aggregate.
 	generatedAgg := GenerateAggregates(rootFields, existing.Aggregate)
 	aggNames := make([]string, 0, len(generatedAgg))
@@ -64,7 +71,10 @@ func BuildSplitStems(absTarget string, existing *rules.StemFile, hierarchy *infe
 	sort.Strings(aggNames)
 
 	// Build root .stem YAML preserving derive/aggregate/links/structural.
-	rootYAML := buildSplitRootYAML(existing, rootFields, hierarchy, generatedAgg)
+	rootYAML, err := buildSplitRootYAML(existing, rootFields, hierarchy, generatedAgg)
+	if err != nil {
+		return SplitResult{}, err
+	}
 	files = append(files, StemOutput{
 		Path:    filepath.Join(absTarget, ".stem"),
 		Content: rootYAML,
@@ -75,7 +85,10 @@ func BuildSplitStems(absTarget string, existing *rules.StemFile, hierarchy *infe
 		ls := hierarchy.Levels[i]
 		prevLevel := hierarchy.Levels[i-1]
 
-		childYAML := buildSplitChildYAML(&ls, levelFields[i])
+		childYAML, err := buildSplitChildYAML(&ls, levelFields[i])
+		if err != nil {
+			return SplitResult{}, err
+		}
 
 		for _, parentDir := range prevLevel.Level.DirPaths {
 			files = append(files, StemOutput{
@@ -85,11 +98,17 @@ func BuildSplitStems(absTarget string, existing *rules.StemFile, hierarchy *infe
 		}
 	}
 
-	return SplitResult{Stems: files, GeneratedAggs: aggNames}
+	for _, sf := range files {
+		if _, err := rules.ParseStem(sf.Path, []byte(sf.Content)); err != nil {
+			return SplitResult{}, fmt.Errorf("generated split stem %s did not parse: %w", sf.Path, err)
+		}
+	}
+
+	return SplitResult{Stems: files, GeneratedAggs: aggNames}, nil
 }
 
 // buildSplitRootYAML generates the root .stem preserving non-schema sections.
-func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.SchemaField, hierarchy *infer.HierarchyResult, generatedAgg map[string]string) string {
+func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.SchemaField, hierarchy *infer.HierarchyResult, generatedAgg map[string]string) (string, error) {
 	var b strings.Builder
 
 	b.WriteString("version: 2\n")
@@ -106,13 +125,8 @@ func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.Sc
 	// Add first level's sequence id.
 	if len(hierarchy.Levels) > 0 {
 		if idField, ok := hierarchy.Levels[0].OnlyHere["id"]; ok {
-			b.WriteString("  id:\n")
-			fmt.Fprintf(&b, "    type: %s\n", idField.Type)
-			if idField.Prefix != "" {
-				fmt.Fprintf(&b, "    prefix: %s\n", idField.Prefix)
-			}
-			if idField.Digits > 0 {
-				fmt.Fprintf(&b, "    digits: %d\n", idField.Digits)
+			if err := stemyaml.AppendSchemaField(&b, "id", idField); err != nil {
+				return "", fmt.Errorf("serializing field %q: %w", "id", err)
 			}
 		}
 	}
@@ -125,17 +139,8 @@ func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.Sc
 	sort.Strings(keys)
 
 	for _, name := range keys {
-		sf := rootFields[name]
-		fmt.Fprintf(&b, "  %s:\n", name)
-		fmt.Fprintf(&b, "    type: %s\n", sf.Type)
-		if sf.Required {
-			b.WriteString("    required: true\n")
-		}
-		if len(sf.Values) > 0 {
-			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(sf.Values, ", "))
-		}
-		if sf.Severity != "" {
-			fmt.Fprintf(&b, "    severity: %s\n", sf.Severity)
+		if err := stemyaml.AppendSchemaField(&b, name, rootFields[name]); err != nil {
+			return "", fmt.Errorf("serializing field %q: %w", name, err)
 		}
 	}
 
@@ -228,24 +233,19 @@ func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.Sc
 		}
 	}
 
-	return b.String()
+	return b.String(), nil
 }
 
 // buildSplitChildYAML generates a child .stem with level-specific overrides.
-func buildSplitChildYAML(ls *infer.LevelSchema, extraFields map[string]rules.SchemaField) string {
+func buildSplitChildYAML(ls *infer.LevelSchema, extraFields map[string]rules.SchemaField) (string, error) {
 	var b strings.Builder
 	b.WriteString("version: 2\n")
 	b.WriteString("schema:\n")
 
 	// Sequence id.
 	if idField, ok := ls.OnlyHere["id"]; ok {
-		b.WriteString("  id:\n")
-		fmt.Fprintf(&b, "    type: %s\n", idField.Type)
-		if idField.Prefix != "" {
-			fmt.Fprintf(&b, "    prefix: %s\n", idField.Prefix)
-		}
-		if idField.Digits > 0 {
-			fmt.Fprintf(&b, "    digits: %d\n", idField.Digits)
+		if err := stemyaml.AppendSchemaField(&b, "id", idField); err != nil {
+			return "", fmt.Errorf("serializing field %q: %w", "id", err)
 		}
 	}
 
@@ -257,19 +257,10 @@ func buildSplitChildYAML(ls *infer.LevelSchema, extraFields map[string]rules.Sch
 	sort.Strings(keys)
 
 	for _, name := range keys {
-		sf := extraFields[name]
-		fmt.Fprintf(&b, "  %s:\n", name)
-		fmt.Fprintf(&b, "    type: %s\n", sf.Type)
-		if sf.Required {
-			b.WriteString("    required: true\n")
-		}
-		if len(sf.Values) > 0 {
-			fmt.Fprintf(&b, "    values: [%s]\n", strings.Join(sf.Values, ", "))
-		}
-		if sf.Severity != "" {
-			fmt.Fprintf(&b, "    severity: %s\n", sf.Severity)
+		if err := stemyaml.AppendSchemaField(&b, name, extraFields[name]); err != nil {
+			return "", fmt.Errorf("serializing field %q: %w", name, err)
 		}
 	}
 
-	return b.String()
+	return b.String(), nil
 }

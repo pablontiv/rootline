@@ -3,6 +3,7 @@ package rules
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -322,21 +323,21 @@ schema:
 
 // ====== Monotonic Constraint Tests ======
 
-func TestResolveLayered_NonMonotonicMode(t *testing.T) {
+func TestResolveLayered_PopulatesLayers(t *testing.T) {
 	root := setupResolverTest(t)
 	targetPath := filepath.Join(root, "docs", "roadmap", "plan.md")
 
-	lr, err := ResolveLayered(targetPath, root, false)
+	lr, err := ResolveLayered(targetPath, root)
 	if err != nil {
 		t.Fatalf("ResolveLayered() error: %v", err)
 	}
 
-	// In non-monotonic mode, Layers should be populated but Conflicts should be empty.
+	// Layers should be populated and compatible chains should have no conflicts.
 	if len(lr.Layers) == 0 {
-		t.Fatal("expected Layers to be populated in non-monotonic mode")
+		t.Fatal("expected Layers to be populated")
 	}
 	if len(lr.Conflicts) != 0 {
-		t.Fatalf("expected no Conflicts in non-monotonic mode, got %d", len(lr.Conflicts))
+		t.Fatalf("expected no Conflicts for compatible chain, got %d", len(lr.Conflicts))
 	}
 }
 
@@ -378,8 +379,8 @@ schema:
 
 	targetPath := filepath.Join(subDir, "task.md")
 
-	// In monotonic mode, this narrowing should be valid (string→enum is allowed narrowing).
-	lr, err := ResolveLayered(targetPath, root, true)
+	// This narrowing should be valid (string→enum is allowed narrowing).
+	lr, err := ResolveLayered(targetPath, root)
 	if err != nil {
 		t.Fatalf("ResolveLayered() error: %v", err)
 	}
@@ -429,7 +430,7 @@ schema:
 
 	targetPath := filepath.Join(subDir, "task.md")
 
-	lr, err := ResolveLayered(targetPath, root, true)
+	lr, err := ResolveLayered(targetPath, root)
 	if err != nil {
 		t.Fatalf("ResolveLayered() error: %v", err)
 	}
@@ -491,7 +492,7 @@ schema:
 
 	targetPath := filepath.Join(subDir, "task.md")
 
-	lr, err := ResolveLayered(targetPath, root, true)
+	lr, err := ResolveLayered(targetPath, root)
 	if err != nil {
 		t.Fatalf("ResolveLayered() error: %v", err)
 	}
@@ -541,7 +542,7 @@ schema:
 
 	targetPath := filepath.Join(subDir, "doc.md")
 
-	lr, err := ResolveLayered(targetPath, root, true)
+	lr, err := ResolveLayered(targetPath, root)
 	if err != nil {
 		t.Fatalf("ResolveLayered() error: %v", err)
 	}
@@ -603,7 +604,7 @@ schema:
 
 	targetPath := filepath.Join(subDir, "task.md")
 
-	lr, err := ResolveLayered(targetPath, root, true)
+	lr, err := ResolveLayered(targetPath, root)
 	if err != nil {
 		t.Fatalf("ResolveLayered() error: %v", err)
 	}
@@ -662,7 +663,7 @@ structural:
 
 	targetPath := filepath.Join(subDir, "epic.md")
 
-	lr, err := ResolveLayered(targetPath, root, true)
+	lr, err := ResolveLayered(targetPath, root)
 	if err != nil {
 		t.Fatalf("ResolveLayered() error: %v", err)
 	}
@@ -710,7 +711,7 @@ structural:
 
 	targetPath := filepath.Join(subDir, "epic.md")
 
-	lr, err := ResolveLayered(targetPath, root, true)
+	lr, err := ResolveLayered(targetPath, root)
 	if err != nil {
 		t.Fatalf("ResolveLayered() error: %v", err)
 	}
@@ -729,6 +730,143 @@ structural:
 	}
 	if !found {
 		t.Errorf("expected structural.subdirs.min_children conflict, got conflicts: %+v", lr.Conflicts)
+	}
+}
+
+func TestResolveLayered_CumulativeSourceChangeRejected(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteStemTestFile(t, filepath.Join(root, ".stem"), []byte(`version: 2
+schema:
+  summary:
+    type: string
+    source: body.section["## Summary"]
+`))
+	middle := filepath.Join(root, "middle")
+	mustWriteStemTestFile(t, filepath.Join(middle, ".stem"), []byte(`version: 2
+schema:
+  summary:
+    type: string
+`))
+	leaf := filepath.Join(middle, "leaf")
+	mustWriteStemTestFile(t, filepath.Join(leaf, ".stem"), []byte(`version: 2
+schema:
+  summary:
+    type: string
+    source: body.section["## Context"]
+`))
+
+	lr, err := ResolveLayered(filepath.Join(leaf, "doc.md"), root)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	want := LayerConstraint{
+		StemPath:  filepath.Join(leaf, ".stem"),
+		Field:     "summary.source",
+		Value:     `source changes from "body.section[\"## Summary\"]" to "body.section[\"## Context\"]"`,
+		Operation: "conflict",
+	}
+	assertLayerConflicts(t, lr.Conflicts, []LayerConstraint{want})
+}
+
+func TestResolveLayered_CumulativeSourceRemovalOwnedByMiddle(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteStemTestFile(t, filepath.Join(root, ".stem"), []byte(`version: 2
+schema:
+  summary:
+    type: string
+    source: body.section["## Summary"]
+`))
+	middle := filepath.Join(root, "middle")
+	mustWriteStemTestFile(t, filepath.Join(middle, ".stem"), []byte(`version: 2
+schema:
+  summary:
+    type: string
+    source: null
+`))
+	leaf := filepath.Join(middle, "leaf")
+	mustWriteStemTestFile(t, filepath.Join(leaf, ".stem"), []byte(`version: 2
+schema:
+  summary:
+    type: string
+`))
+
+	lr, err := ResolveLayered(filepath.Join(leaf, "doc.md"), root)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	want := LayerConstraint{
+		StemPath:  filepath.Join(middle, ".stem"),
+		Field:     "summary.source",
+		Value:     `source removes inherited source "body.section[\"## Summary\"]"`,
+		Operation: "conflict",
+	}
+	assertLayerConflicts(t, lr.Conflicts, []LayerConstraint{want})
+	if got := lr.EffectiveSchema["summary"].Extract; got != "" {
+		t.Fatalf("effective summary source = %q, want explicit removal to persist", got)
+	}
+}
+
+func TestResolveLayered_CumulativeRequiredLooseningRejected(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteStemTestFile(t, filepath.Join(root, ".stem"), []byte(`version: 2
+schema:
+  title:
+    type: string
+    required: true
+`))
+	middle := filepath.Join(root, "middle")
+	mustWriteStemTestFile(t, filepath.Join(middle, ".stem"), []byte(`version: 2
+schema:
+  other:
+    type: string
+`))
+	leaf := filepath.Join(middle, "leaf")
+	mustWriteStemTestFile(t, filepath.Join(leaf, ".stem"), []byte(`version: 2
+schema:
+  title:
+    type: string
+    required: false
+`))
+
+	lr, err := ResolveLayered(filepath.Join(leaf, "doc.md"), root)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+
+	if !hasLayerConflict(lr, "title.required", "conflict") {
+		t.Fatalf("expected cumulative required conflict, got %+v", lr.Conflicts)
+	}
+}
+
+func hasLayerConflict(lr *LayeredResolution, field, operation string) bool {
+	for _, conflict := range lr.Conflicts {
+		if conflict.Field == field && conflict.Operation == operation {
+			return true
+		}
+	}
+	return false
+}
+
+func assertLayerConflicts(t *testing.T, got, want []LayerConstraint) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("conflict count = %d, want %d\ngot:  %+v\nwant: %+v", len(got), len(want), got, want)
+	}
+	for i := range want {
+		if got[i].StemPath != want[i].StemPath || got[i].Field != want[i].Field || got[i].Operation != want[i].Operation || got[i].Value != want[i].Value {
+			t.Fatalf("conflict[%d] = %+v, want %+v", i, got[i], want[i])
+		}
 	}
 }
 
@@ -786,7 +924,7 @@ schema:
 
 	targetPath := filepath.Join(tasksDir, "task.md")
 
-	lr, err := ResolveLayered(targetPath, root, true)
+	lr, err := ResolveLayered(targetPath, root)
 	if err != nil {
 		t.Fatalf("ResolveLayered() error: %v", err)
 	}
@@ -800,4 +938,96 @@ schema:
 	if len(lr.Conflicts) != 0 {
 		t.Fatalf("expected no conflicts for three-level valid narrowing, got %d: %+v", len(lr.Conflicts), lr.Conflicts)
 	}
+}
+
+func TestResolveFromEntriesMatchesFilesystem(t *testing.T) {
+	root := setupResolverTest(t)
+	targetPath := filepath.Join(root, "docs", "roadmap", "plan.md")
+
+	entries, err := WalkUp(targetPath)
+	if err != nil {
+		t.Fatalf("WalkUp() error: %v", err)
+	}
+	filesystem, err := Resolve(targetPath, root)
+	if err != nil {
+		t.Fatalf("Resolve() error: %v", err)
+	}
+	explicit, err := resolveFromEntries(targetPath, entries)
+	if err != nil {
+		t.Fatalf("resolveFromEntries() error: %v", err)
+	}
+
+	assertResolutionEquivalent(t, explicit, filesystem)
+}
+
+func TestResolveLayeredFromEntriesMatchesFilesystem(t *testing.T) {
+	root := t.TempDir()
+	mustWriteStemTestFile(t, filepath.Join(root, ".stem"), []byte(`version: 2
+schema:
+  status:
+    type: enum
+    values: [pending, done]
+  title:
+    type: string
+    required: true
+`))
+	childDir := filepath.Join(root, "child")
+	mustWriteStemTestFile(t, filepath.Join(childDir, ".stem"), []byte(`version: 2
+schema:
+  status:
+    type: enum
+    values: [pending, blocked, done]
+  title:
+    type: string
+    required: false
+`))
+	targetPath := filepath.Join(childDir, "record.md")
+
+	entries, err := WalkUp(targetPath)
+	if err != nil {
+		t.Fatalf("WalkUp() error: %v", err)
+	}
+	filesystem, err := ResolveLayered(targetPath, root)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+	explicit, err := resolveLayeredFromEntries(targetPath, entries)
+	if err != nil {
+		t.Fatalf("resolveLayeredFromEntries() error: %v", err)
+	}
+
+	assertResolutionEquivalent(t, explicit.Resolution, filesystem.Resolution)
+	if !reflect.DeepEqual(explicit.Layers, filesystem.Layers) {
+		t.Fatalf("layers mismatch\ngot:  %+v\nwant: %+v", explicit.Layers, filesystem.Layers)
+	}
+	if !reflect.DeepEqual(explicit.Conflicts, filesystem.Conflicts) {
+		t.Fatalf("conflicts mismatch\ngot:  %+v\nwant: %+v", explicit.Conflicts, filesystem.Conflicts)
+	}
+}
+
+func assertResolutionEquivalent(t *testing.T, got, want *Resolution) {
+	t.Helper()
+	if got.Path != want.Path {
+		t.Fatalf("path = %q, want %q", got.Path, want.Path)
+	}
+	if !reflect.DeepEqual(stemEntryPaths(got.Chain), stemEntryPaths(want.Chain)) {
+		t.Fatalf("chain paths = %+v, want %+v", stemEntryPaths(got.Chain), stemEntryPaths(want.Chain))
+	}
+	if !reflect.DeepEqual(got.EffectiveSchema, want.EffectiveSchema) {
+		t.Fatalf("effective schema mismatch\ngot:  %+v\nwant: %+v", got.EffectiveSchema, want.EffectiveSchema)
+	}
+	if !reflect.DeepEqual(got.Provenance, want.Provenance) {
+		t.Fatalf("provenance mismatch\ngot:  %+v\nwant: %+v", got.Provenance, want.Provenance)
+	}
+	if !reflect.DeepEqual(got.EffectiveStem, want.EffectiveStem) {
+		t.Fatalf("effective stem mismatch\ngot:  %+v\nwant: %+v", got.EffectiveStem, want.EffectiveStem)
+	}
+}
+
+func stemEntryPaths(entries []StemEntry) []string {
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		paths = append(paths, entry.Path)
+	}
+	return paths
 }

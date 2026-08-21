@@ -154,11 +154,17 @@ Schema fields with `source:` directives (e.g., `source: body.h1` or `source: bod
 - **Extraction directives**: `body.h1` extracts the text of the first H1 heading; `body.section["## Heading"]` extracts content under the named heading (e.g., `body.section["## Notes"]`).
 - **Frontmatter precedence**: If a field exists in record frontmatter, its value is used directly. Body extraction only occurs when the frontmatter key is absent.
 - **Resolution independence**: Validation resolves body-sourced fields directly without depending on the derive pipeline. Both `rootline validate <file>` and `rootline validate --all` use the same resolution logic.
-- **Constraint application**: `required: true` fields fail if extraction yields empty or no match; `enum: [values...]` fields validate the extracted value against the allowed list.
+- **Constraint application**: `required` means presence, so an empty section is present; `non_empty` is separate. `values: [...]` validates extracted enum values.
 - **Match scoping**: Fields with `match:` blocks are filtered by `ResolveForRecord` upstream, so non-matching records never have the field in their effective schema.
 - **Breaking**: extending `enum` to extracted values can fail a document that passed before. A body-sourced field used to resolve to nothing, so its `values:` list never ran; now the extracted prose is checked against it. A `.stem` pairing `values:` with `source: body.section[...]` over free-form text will start reporting `enum` errors. Drop `values:`, widen the list, or set `severity: off`.
 
-**Implementation**: `internal/extract/body.go` exports `ResolveBodyValue(record, directive)` for unified body extraction. `internal/rules/validate.go` calls `resolveFieldValue()` during Phase 1 auto-checks to apply frontmatter-first resolution to both `required` and `enum` checks.
+**Implementation**: `internal/extract/body_source.go` owns directive parsing and body-source extraction. `internal/rules/field_source.go` exports the effective-field resolver used by validation, query, describe, explain, and derived-field enrichment to keep logical `source` separate from physical `defined_in`.
+
+## Canonical Field Contract
+
+Use exactly `string`, `list`, `enum`, `sequence`, `link`, `boolean`, and `integer`; validation does not coerce YAML representations. A body section is a source binding on a real type, such as `source: body.section["## Summary"]`. Frontmatter is an explicit override, duplicate matching headings fail, and an inherited source binding is stable: a child omission inherits it, while a change or removal conflicts.
+
+`new` and `migrate --scaffold` append missing required sections in lexical heading order, using a non-empty default or `<!-- TODO -->`. `query`, `set`, `describe`, and `explain` resolve the same canonical binding; `set` writes frontmatter only. In public inspection output, logical `source` is separate from physical `defined_in`. Path-like validation errors are relative to the governance root; symbolic sources remain symbolic. Ancestor-qualified selectors are deferred to #190.
 
 ## Module Path
 

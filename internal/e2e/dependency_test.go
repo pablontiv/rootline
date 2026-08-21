@@ -71,7 +71,9 @@ func TestDependencyChain_LinearChain(t *testing.T) {
 	}
 
 	// Run derivation on all records.
-	derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver())
+	if err := derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver()); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 
 	// Build a map for easy lookup.
 	byPath := make(map[string]*extract.Record)
@@ -140,7 +142,9 @@ func TestDependencyChain_MultipleBlockers(t *testing.T) {
 		t.Fatalf("Scan error: %v", err)
 	}
 
-	derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver())
+	if err := derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver()); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 
 	byPath := make(map[string]*extract.Record)
 	for _, r := range records {
@@ -182,7 +186,9 @@ func TestDependencyChain_MultipleBlockersAllDone(t *testing.T) {
 		t.Fatalf("Scan error: %v", err)
 	}
 
-	derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver())
+	if err := derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver()); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 
 	byPath := make(map[string]*extract.Record)
 	for _, r := range records {
@@ -226,7 +232,9 @@ func TestDependencyChain_Cycle(t *testing.T) {
 	}
 
 	// This must complete without hanging (no infinite loop).
-	derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver())
+	if err := derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver()); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 
 	byPath := make(map[string]*extract.Record)
 	for _, r := range records {
@@ -279,7 +287,9 @@ func TestDependencyChain_MissingTarget(t *testing.T) {
 		t.Fatalf("Scan error: %v", err)
 	}
 
-	derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver())
+	if err := derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver()); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 
 	if len(records) != 1 {
 		t.Fatalf("got %d records, want 1", len(records))
@@ -315,7 +325,9 @@ func TestDependencyChain_NoLinks(t *testing.T) {
 		t.Fatalf("Scan error: %v", err)
 	}
 
-	derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver())
+	if err := derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver()); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 
 	if len(records) != 1 {
 		t.Fatalf("got %d records, want 1", len(records))
@@ -352,7 +364,9 @@ func TestDependencyChain_QueryAfterDerive(t *testing.T) {
 		t.Fatalf("Scan error: %v", err)
 	}
 
-	derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver())
+	if err := derive.DeriveAll(context.Background(), records, root, derive.DefaultResolver()); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
 
 	// Query on frontmatter estado (not derived) — both A and B have frontmatter Pending.
 	result, err := query.Execute(records, &query.Query{

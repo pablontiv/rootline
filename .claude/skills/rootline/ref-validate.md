@@ -109,9 +109,9 @@ Schema fields with `source:` directives (body-extracted fields) now participate 
 **Precedence**: Frontmatter takes absolute precedence. If a field key exists in the record's YAML frontmatter, that value is used and body extraction is skipped.
 
 **Constraint application**:
-- `required: true` with `source:` — fails if extraction yields empty or missing section
-- `enum: [values...]` with `source:` — validates extracted value against the allowed list
-- Both are checked in Phase 1 auto-checks; no dependency on the derive pipeline
+- `required means presence`: a missing section fails, while an empty section is present with value `""`
+- `values: [values...]` with `source:` validates the extracted value against the allowed list
+- `non_empty` is a separate content constraint; both checks use the same Phase 1 resolver
 
 **This can turn a passing document into a failing one.** Before, a body-sourced field
 resolved to nothing, so its `enum` never ran. Now the extracted text is checked. A `.stem`
@@ -140,6 +140,10 @@ In validation:
 - Document with `## Status` containing "approved" → passes `enum`
 - Document with "invalid" in that section → fails `enum`
 - Document with frontmatter `notes: "value"` and no body section → passes (frontmatter wins)
+
+### Source and provenance
+
+`body.section[...]` matches an exact heading level and text. Duplicate matching headings fail rather than choosing an occurrence; frontmatter remains an override. Path-like validation error sources are governance-root-relative, while symbolic sources stay symbolic.
 
 ### Reporting Format
 

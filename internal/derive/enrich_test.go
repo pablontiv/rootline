@@ -17,8 +17,10 @@ func TestEnrichBuiltins_IndexDetection(t *testing.T) {
 		{Path: "dir/T002.md", Type: "markdown", Frontmatter: map[string]any{}},
 	}
 
-	resolver := func(dir, recordPath string) *rules.StemFile { return &rules.StemFile{} }
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return &rules.StemFile{}, nil }
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 
 	if records[0].Derived["isIndex"] != true {
 		t.Errorf("README.isIndex = %v, want true", records[0].Derived["isIndex"])
@@ -42,8 +44,10 @@ func TestEnrichBuiltins_CustomRequireIndex(t *testing.T) {
 			Subdirs: rules.SubdirRules{RequireIndex: "index.md"},
 		},
 	}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 
 	if records[0].Derived["isIndex"] != true {
 		t.Errorf("index.md.isIndex = %v, want true", records[0].Derived["isIndex"])
@@ -58,7 +62,9 @@ func TestEnrichBuiltins_NilResolver(t *testing.T) {
 		{Path: "dir/README.md", Type: "markdown", Frontmatter: map[string]any{}},
 	}
 
-	EnrichBuiltins(context.Background(), records, "/root", nil)
+	if err := EnrichBuiltins(context.Background(), records, "/root", nil); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 
 	if records[0].Derived != nil {
 		t.Errorf("Derived = %v, want nil (nil resolver)", records[0].Derived)
@@ -76,11 +82,15 @@ func TestEnrichBuiltins_SurvivesDeriveAll(t *testing.T) {
 			"slug": "lower(titulo)",
 		},
 	}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
 	// Pipeline: DeriveAll → EnrichBuiltins (real order)
-	DeriveAll(context.Background(), records, "/root", resolver)
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	if err := DeriveAll(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("DeriveAll: %v", err)
+	}
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 
 	// isIndex should be set after enrichment.
 	if records[0].Derived["isIndex"] != true {
@@ -97,7 +107,9 @@ func TestEnrichBuiltinsSimple(t *testing.T) {
 		{Path: "a.md", Frontmatter: map[string]any{"titulo": "Hello"}},
 	}
 	// No .stem in temp dir — should not panic.
-	EnrichBuiltinsSimple(context.Background(), records, t.TempDir())
+	if err := EnrichBuiltinsSimple(context.Background(), records, t.TempDir()); err != nil {
+		t.Fatalf("EnrichBuiltinsSimple: %v", err)
+	}
 }
 
 func TestEnrichBuiltins_SourceExtraction_BodyH1(t *testing.T) {
@@ -118,9 +130,11 @@ func TestEnrichBuiltins_SourceExtraction_BodyH1(t *testing.T) {
 			},
 		},
 	}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 
 	if records[0].Derived["titulo"] != "Extract This Title" {
 		t.Errorf("titulo = %v, want 'Extract This Title'", records[0].Derived["titulo"])
@@ -145,12 +159,62 @@ func TestEnrichBuiltins_SourceExtraction_BodySection(t *testing.T) {
 			},
 		},
 	}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 
 	if records[0].Derived["contexto"] != "This is the context" {
 		t.Errorf("contexto = %v, want 'This is the context'", records[0].Derived["contexto"])
+	}
+}
+
+func TestEnrichBuiltins_SourceExtraction_FrontmatterPresenceOverridesBody(t *testing.T) {
+	records := []*extract.Record{
+		{
+			Path:        "docs/T001.md",
+			Type:        "markdown",
+			Body:        "# Body Title\n",
+			Frontmatter: map[string]any{"titulo": ""},
+			Derived:     map[string]any{"titulo": "stale-derived"},
+		},
+	}
+	stem := &rules.StemFile{Schema: map[string]rules.SchemaField{
+		"titulo": {Type: "string", Extract: "body.h1"},
+	}}
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
+
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
+
+	if got, ok := records[0].Derived["titulo"]; !ok || got != "" {
+		t.Fatalf("derived titulo = %#v, %v; want present empty frontmatter value", got, ok)
+	}
+}
+
+func TestEnrichBuiltins_SourceExtraction_AbsentSourcePreservesExistingDerivedValue(t *testing.T) {
+	records := []*extract.Record{
+		{
+			Path:        "docs/T001.md",
+			Type:        "markdown",
+			Body:        "## Not a Title\n\nNo h1 body source here",
+			Frontmatter: map[string]any{},
+			Derived:     map[string]any{"titulo": "derived-default"},
+		},
+	}
+	stem := &rules.StemFile{Schema: map[string]rules.SchemaField{
+		"titulo": {Type: "string", Extract: "body.h1"},
+	}}
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
+
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
+
+	if got, ok := records[0].Derived["titulo"]; !ok || got != "derived-default" {
+		t.Fatalf("derived titulo = %#v, %v; want existing derived value preserved", got, ok)
 	}
 }
 
@@ -171,9 +235,11 @@ func TestEnrichBuiltins_SourceExtraction_NoExtract(t *testing.T) {
 			},
 		},
 	}
-	resolver := func(dir, recordPath string) *rules.StemFile { return stem }
+	resolver := func(dir, recordPath string) (*rules.StemFile, error) { return stem, nil }
 
-	EnrichBuiltins(context.Background(), records, "/root", resolver)
+	if err := EnrichBuiltins(context.Background(), records, "/root", resolver); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 
 	// No Extract directive, so campo should not be in Derived
 	if _, ok := records[0].Derived["campo"]; ok {
@@ -215,7 +281,9 @@ schema:
 		Derived:     map[string]any{},
 	}
 
-	EnrichBuiltins(context.Background(), []*extract.Record{fMatch, tNoMatch}, dir, DefaultResolver())
+	if err := EnrichBuiltins(context.Background(), []*extract.Record{fMatch, tNoMatch}, dir, DefaultResolver()); err != nil {
+		t.Fatalf("EnrichBuiltins: %v", err)
+	}
 
 	if _, ok := fMatch.Derived["resumen"]; !ok {
 		t.Errorf("matching record F01 should have source-derived 'resumen'")

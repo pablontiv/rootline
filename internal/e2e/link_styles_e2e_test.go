@@ -22,7 +22,9 @@ func TestE2E_LinkStyles_GraphIncludesMarkdownWhenDeclared(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rules.FilterLinksByStyles(records, root)
+	if err := rules.FilterLinksByStyles(records, root); err != nil {
+		t.Fatalf("FilterLinksByStyles: %v", err)
+	}
 	rules.ResolveMarkdownTargets(records, root)
 	g := graph.Build(ctx, records)
 
@@ -74,7 +76,9 @@ func TestE2E_LinkStyles_WikilinkRepoUnaffected(t *testing.T) {
 	}
 
 	// Graph: only the wikilink edge exists.
-	rules.FilterLinksByStyles(records, root)
+	if err := rules.FilterLinksByStyles(records, root); err != nil {
+		t.Fatalf("FilterLinksByStyles: %v", err)
+	}
 	g := graph.Build(ctx, records)
 	edges := g.Edges["a.md"]
 	if len(edges) != 1 || edges[0].Type != "reference" {
@@ -122,8 +126,12 @@ func TestE2E_LinkStyles_BrokenWikilinkFailsBothEngines(t *testing.T) {
 		}
 	}
 
-	rules.FilterLinksByStyles(records, root)
-	rules.PrepareLinks(records, root)
+	if err := rules.FilterLinksByStyles(records, root); err != nil {
+		t.Fatalf("FilterLinksByStyles: %v", err)
+	}
+	if err := rules.PrepareLinks(records, root); err != nil {
+		t.Fatalf("PrepareLinks: %v", err)
+	}
 	g := graph.Build(ctx, records)
 	graphBroken := len(g.BrokenLinks())
 
@@ -145,7 +153,9 @@ func TestE2E_LinkStyles_GraphMixedStyles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rules.FilterLinksByStyles(records, root)
+	if err := rules.FilterLinksByStyles(records, root); err != nil {
+		t.Fatalf("FilterLinksByStyles: %v", err)
+	}
 	rules.ResolveMarkdownTargets(records, root)
 	g := graph.Build(ctx, records)
 

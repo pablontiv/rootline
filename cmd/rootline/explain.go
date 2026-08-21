@@ -46,8 +46,9 @@ func runExplain(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%s is a directory; use 'rootline explain <file>'", file)
 	}
 
-	// Extract record.
-	reg := extract.NewRegistry()
+	// Extract record with body structure because source-backed schema fields
+	// resolve through the same canonical body-aware contract as query.
+	reg := extract.NewASTRegistry()
 	ext := reg.ForFile(absPath, "")
 	if ext == nil {
 		return fmt.Errorf("no extractor for %s", file)
@@ -63,28 +64,43 @@ func runExplain(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("extracting %s: %w", file, err)
 	}
 
-	// Resolve effective stem.
+	// Resolve the target through the same record-specific schema boundary used by
+	// validation so match-scoped invalid governance cannot bypass explain.
 	dir := filepath.Dir(absPath)
 	entries, err := rules.WalkUp(dir)
 	if err != nil {
 		return fmt.Errorf("resolving .stem for %s: %w", file, err)
 	}
-	effective := rules.MergeStemFiles(entries)
+	effective, err := rules.ResolveForRecord(dir, absPath)
+	if err != nil {
+		return fmt.Errorf("resolving .stem for %s: %w", file, err)
+	}
 
 	// Run derivation.
 	if effective != nil && len(effective.Derive) > 0 {
 		_, _ = derive.DeriveRecord(ctx, record, effective, nil)
 	}
+	markExplainBuiltinIsIndex(record, effective)
 
 	// Run aggregation for index files.
 	if effective != nil && len(effective.Aggregate) > 0 && rules.IsIndexFile(absPath, effective) {
 		scanDir := filepath.Dir(absPath)
-		reg2 := extract.NewRegistry()
+		reg2 := extract.NewASTRegistry()
 		siblings, scanErr := index.Scan(ctx, scanDir, reg2)
 		if scanErr == nil && len(siblings) > 0 {
-			derive.DeriveAllSimple(ctx, siblings, scanDir)
-			derive.EnrichBuiltinsSimple(ctx, siblings, scanDir)
-			derive.AggregateAllSimple(ctx, siblings, scanDir)
+			if err := derive.DeriveAllSimple(ctx, siblings, scanDir); err != nil {
+				return fmt.Errorf("deriving aggregate input records: %w", err)
+			}
+			if err := markExplainSiblingIndexes(siblings, scanDir); err != nil {
+				return err
+			}
+			aggregateInputs := explainAggregateInputRecords(siblings, scanDir, absPath)
+			if err := derive.EnrichBuiltins(ctx, aggregateInputs, scanDir, derive.DefaultResolver()); err != nil {
+				return fmt.Errorf("enriching aggregate input records: %w", err)
+			}
+			if err := derive.AggregateAllSimple(ctx, siblings, scanDir); err != nil {
+				return fmt.Errorf("aggregating input records: %w", err)
+			}
 			// Copy derived values from the scanned version of this record.
 			for _, s := range siblings {
 				sAbs := filepath.Join(scanDir, s.Path)
@@ -96,14 +112,20 @@ func runExplain(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Run validation.
-	var valErrs []rules.ValidationError
-	if effective != nil {
-		valErrs = rules.Validate(ctx, record, effective)
+	// Build explain result before validation so source-backed target fields are
+	// resolved first by the authoritative explain builder.
+	result, err := rules.NewExplainResult(file, entries, effective, record, nil)
+	if err != nil {
+		return fmt.Errorf("resolving explain fields: %w", err)
 	}
 
-	// Build explain result.
-	result := rules.NewExplainResult(file, entries, effective, record, valErrs)
+	// Run validation only after a complete explain result exists, then attach its
+	// diagnostics before rendering any output.
+	if effective != nil {
+		for _, ve := range rules.Validate(ctx, record, effective) {
+			result.Errors = append(result.Errors, rules.ExplainError(ve))
+		}
+	}
 
 	if outputFormat == "table" {
 		return renderExplainTable(cmd, result)
@@ -111,19 +133,53 @@ func runExplain(cmd *cobra.Command, args []string) error {
 	return outputJSON(cmd, result, false)
 }
 
+func markExplainBuiltinIsIndex(record *extract.Record, effective *rules.StemFile) {
+	if record == nil {
+		return
+	}
+	if record.Derived == nil {
+		record.Derived = make(map[string]any)
+	}
+	record.Derived["isIndex"] = rules.IsIndexFile(record.Path, effective)
+}
+
+func markExplainSiblingIndexes(records []*extract.Record, root string) error {
+	resolver := derive.DefaultResolver()
+	for _, record := range records {
+		absPath := filepath.Join(root, record.Path)
+		effective, err := resolver(filepath.Dir(absPath), record.Path)
+		if err != nil {
+			return fmt.Errorf("resolving .stem for %s: %w", record.Path, err)
+		}
+		markExplainBuiltinIsIndex(record, effective)
+	}
+	return nil
+}
+
+func explainAggregateInputRecords(records []*extract.Record, root, targetAbsPath string) []*extract.Record {
+	inputs := make([]*extract.Record, 0, len(records))
+	for _, record := range records {
+		if filepath.Clean(filepath.Join(root, record.Path)) == filepath.Clean(targetAbsPath) {
+			continue
+		}
+		inputs = append(inputs, record)
+	}
+	return inputs
+}
+
 func renderExplainTable(cmd *cobra.Command, r *rules.ExplainResult) error {
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "File: %s\n", r.Path)
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Stem chain: %v\n\n", r.StemChain)
 
 	// Fields table.
-	headers := []string{"Field", "Value", "Origin", "Source", "Expression"}
+	headers := []string{"Field", "Value", "Origin", "Source", "Defined In", "Expression"}
 	var rows [][]string
 	for _, f := range r.Fields {
 		valStr := fmt.Sprintf("%v", f.Value)
 		if f.Value == nil {
 			valStr = "<nil>"
 		}
-		rows = append(rows, []string{f.Name, valStr, f.Origin, f.Source, f.Expression})
+		rows = append(rows, []string{f.Name, valStr, f.Origin, f.Source, f.DefinedIn, f.Expression})
 	}
 	renderTable(cmd.OutOrStdout(), headers, rows)
 

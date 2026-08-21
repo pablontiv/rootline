@@ -1,6 +1,8 @@
 package rules
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -10,14 +12,18 @@ import (
 // is declared in the record's effective links.styles (resolved per record).
 // Records that resolve no .stem keep the wikilink default, so markdown links
 // never leak into style-unaware consumers like the graph.
-func FilterLinksByStyles(records []*extract.Record, root string) {
+func FilterLinksByStyles(records []*extract.Record, root string) error {
 	for _, rec := range records {
 		if len(rec.Links) == 0 {
 			continue
 		}
 		styles := map[string]bool{extract.StyleWikilink: true}
 		dir := filepath.Dir(filepath.Join(root, rec.Path))
-		if effective, err := ResolveForRecord(dir, rec.Path); err == nil && effective != nil {
+		effective, err := ResolveForRecord(dir, rec.Path)
+		if err != nil && !errors.Is(err, ErrNoSchemaFound) {
+			return fmt.Errorf("resolve schema for %s: %w", rec.Path, err)
+		}
+		if effective != nil {
 			styles = make(map[string]bool)
 			for _, s := range effective.Links.EffectiveStyles() {
 				styles[s] = true
@@ -31,4 +37,5 @@ func FilterLinksByStyles(records []*extract.Record, root string) {
 		}
 		rec.Links = filtered
 	}
+	return nil
 }

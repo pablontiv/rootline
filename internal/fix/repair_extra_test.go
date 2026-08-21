@@ -3,8 +3,10 @@ package fix
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/proposal"
 )
 
@@ -259,5 +261,100 @@ func TestReplaceOnce(t *testing.T) {
 		if got := replaceOnce(c.s, c.old, c.new); got != c.want {
 			t.Errorf("replaceOnce(%q,%q,%q) = %q, want %q", c.s, c.old, c.new, got, c.want)
 		}
+	}
+}
+
+func TestPostValidateWrittenTargetRollsBackWhenSchemaResolutionFails(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".stem"), []byte(`version: 2
+root: true
+schema:
+  id:
+    type: sequence
+    match:
+      "BAD*": {prefix: BAD, digits: 2.0}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "BAD001.md")
+	original := []byte("---\nestado: Pending\n---\n# Original\n")
+	written := []byte("---\nestado: Done\n---\n# Written\n")
+	if err := os.WriteFile(path, written, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result := &RepairResult{}
+	result.recordChange("BAD001.md", "changed BAD001.md")
+	postValidateWrittenTargets(map[string]*repairTarget{
+		"BAD001.md": {abs: path, record: &extract.Record{Path: "BAD001.md"}, original: original, written: true},
+	}, result)
+	if len(result.RolledBack) != 1 || !strings.Contains(strings.Join(result.RolledBack[0].Errors, " "), "resolving schema after write") || !strings.Contains(strings.Join(result.RolledBack[0].Errors, " "), "digits") {
+		t.Fatalf("RolledBack = %#v, want schema-resolution rollback message", result.RolledBack)
+	}
+	if len(result.Changed) != 0 {
+		t.Fatalf("Changed = %#v, want rollback to retract change", result.Changed)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(original) {
+		t.Fatalf("bytes after rollback = %q, want %q", got, original)
+	}
+}
+
+func TestApplyRepairMixedInvalidGovernanceClassifiesTargetAndContinues(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".stem"), []byte(`version: 2
+root: true
+schema:
+  id:
+    type: sequence
+    match:
+      "BAD*": {prefix: BAD, digits: 2.0}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "A.md"), []byte("---\nestado: Pendng\n---\n# A\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "BAD001.md"), []byte("---\n---\n# Bad\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ApplyRepair([]proposal.Proposal{{
+		Type:        proposal.CorrectValue,
+		Field:       "estado",
+		Description: "correct status",
+		Paths:       []string{"A.md", "BAD001.md"},
+		From:        "Pendng",
+		To:          "Pending",
+	}}, false, root, false)
+	if err != nil {
+		t.Fatalf("ApplyRepair: %v", err)
+	}
+	if result.Complete {
+		t.Fatalf("Complete = true, want false for classified invalid target: %#v", result)
+	}
+	if len(result.Errors) != 1 || !strings.Contains(result.Errors[0], "BAD001.md") || !strings.Contains(result.Errors[0], "digits") {
+		t.Fatalf("Errors = %#v, want BAD001 digits classification", result.Errors)
+	}
+	if len(result.Changed) != 1 || !strings.Contains(result.Changed[0], "A.md") {
+		t.Fatalf("Changed = %#v, want only valid target", result.Changed)
+	}
+	validBytes, err := os.ReadFile(filepath.Join(root, "A.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := string(validBytes)
+	if !strings.Contains(valid, "estado: Pending") {
+		t.Fatalf("valid target was not repaired:\n%s", valid)
+	}
+	invalidBytes, err := os.ReadFile(filepath.Join(root, "BAD001.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalid := string(invalidBytes)
+	if strings.Contains(invalid, "estado:") {
+		t.Fatalf("invalid target was mutated:\n%s", invalid)
 	}
 }

@@ -8,8 +8,9 @@ import (
 )
 
 // setupMonotonicViolations builds a two-level monotonic chain whose child
-// loosens every category the resolver detects: type, required, severity, enum
-// values, and both structural bounds.
+// loosens the categories owned by monotonic diagnostics: required, severity,
+// enum values, and both structural bounds. The unequal type transition in the
+// same fixture is owned by type-consistency instead.
 func setupMonotonicViolations(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -78,13 +79,12 @@ func TestMonotonicViolations_DiscriminateCategories(t *testing.T) {
 	}
 	all := strings.Join(joined, "\n")
 
-	// Every category must be named for what it is. Before the fix, four of the
-	// five rendered as "(type change: ...)".
+	// Every monotonic-owned category must be named for what it is. Before the
+	// message fix, these rendered as undifferentiated type changes.
 	wants := []struct {
 		desc     string
 		fragment string
 	}{
-		{"type widening", "widens type"},
 		{"required loosening", "loosens required"},
 		{"severity loosening", "loosens severity"},
 		{"enum extension", "enum extended with disallowed value(s)"},
@@ -118,8 +118,8 @@ func TestMonotonicViolations_StructuralFieldsAreDistinguishable(t *testing.T) {
 		t.Errorf("max_children field count = %d, want 1 (fields: %v)", fields["structural.subdirs.max_children"], fields)
 	}
 	// Schema-field conflicts keep the bare field name, not the constraint suffix.
-	if fields["estado"] < 3 {
-		t.Errorf("estado field count = %d, want 3 (type, required, severity); fields: %v", fields["estado"], fields)
+	if fields["estado"] != 2 {
+		t.Errorf("estado field count = %d, want 2 (required, severity); fields: %v", fields["estado"], fields)
 	}
 	if fields["estado.type"] != 0 {
 		t.Errorf("schema conflicts must not carry the %q constraint suffix", "estado.type")

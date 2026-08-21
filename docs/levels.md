@@ -85,13 +85,14 @@ When multiple `.stem` files exist in a hierarchy (parent and child), they form a
 - **Required narrowing** — child cannot relax `required: true` to `required: false`
 - **Enum narrowing** — child's enum values must be a subset of parent's values
 - **Severity narrowing** — child cannot reduce severity level
+- **An inherited source binding is stable** — Child omission inherits a parent `source:`; changing or removing it is incompatible
 
 For example:
 - Parent: `estado: { type: string }`
 - Child: `estado: { type: enum, values: [draft, active] }` ✓ Valid narrowing
 - Child: `estado: { type: string, required: false }` ✗ Invalid (widening if parent required)
 
-When a child `.stem` violates monotonic constraints, `rootline validate --all` detects this in the **monotonic-violations** stemhealth check.
+When a child `.stem` violates monotonic constraints, `rootline validate --all` detects this in the **monotonic-violations** stemhealth check. Ancestor-qualified section selectors remain deferred to #190; current `body.section[...]` directives always identify one exact heading.
 
 ## Benefits
 

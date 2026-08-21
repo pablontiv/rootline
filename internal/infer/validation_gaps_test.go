@@ -163,3 +163,20 @@ func TestDetectValidationGaps_MultiScope(t *testing.T) {
 		t.Errorf("expected enum_without_values for sources/.stem:tipo, got %+v", got)
 	}
 }
+
+func TestDetectValidationGaps_LegacySectionParticipatesInRequiredUnderstatement(t *testing.T) {
+	stem := &rules.StemFile{Schema: map[string]rules.SchemaField{
+		"notes": {Type: "section", Source: "docs/.stem"},
+	}}
+	records := make([]*extract.Record, 5)
+	for i := range records {
+		records[i] = &extract.Record{Path: "doc.md", Frontmatter: map[string]any{"notes": "present"}}
+	}
+	got := detectGapsForScope(stem, records, nil)
+	for _, inf := range got {
+		if inf.Type == "required_understatement" && inf.Field == "notes" {
+			return
+		}
+	}
+	t.Fatalf("expected required_understatement for legacy section, got %+v", got)
+}

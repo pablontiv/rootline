@@ -54,6 +54,95 @@ func TestValidate_RequiredFieldPresent(t *testing.T) {
 	}
 }
 
+func TestValidate_PresenceRulesStayIndependent(t *testing.T) {
+	tests := []struct {
+		name  string
+		field string
+		stem  *StemFile
+		rec   *extract.Record
+	}{
+		{
+			name:  "required string accepts present empty string",
+			field: "title",
+			stem: &StemFile{Schema: map[string]SchemaField{
+				"title": {Type: "string", Required: true, Severity: "error"},
+			}},
+			rec: &extract.Record{Frontmatter: map[string]any{"title": ""}},
+		},
+		{
+			name:  "required list accepts present empty list",
+			field: "tags",
+			stem: &StemFile{Schema: map[string]SchemaField{
+				"tags": {Type: "list", Required: true, Severity: "error"},
+			}},
+			rec: &extract.Record{Frontmatter: map[string]any{"tags": []any{}}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Validate(context.Background(), tt.rec, tt.stem); len(got) != 0 {
+				t.Fatalf("required must accept present %s: %+v", tt.field, got)
+			}
+		})
+	}
+}
+
+func TestValidate_TypeMismatchStopsSemanticChecks(t *testing.T) {
+	rec := &extract.Record{Frontmatter: map[string]any{"status": []any{"draft"}}}
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"status": {Type: "enum", Values: []string{"draft", "done"}, Source: "root/.stem", Severity: "warn"},
+		},
+		Validate: []ValidationRule{{Field: "status", Rule: "enum", Source: "root/.stem", Severity: "error"}},
+	}
+	got := Validate(context.Background(), rec, stem)
+	if len(got) != 1 || got[0].Rule != "type" || got[0].Suggestion != "" {
+		t.Fatalf("expected one type error without enum suggestion, got %+v", got)
+	}
+	if got[0].Field != "status" || got[0].Source != "root/.stem" || got[0].Severity != "warn" {
+		t.Fatalf("type error must retain field/source/severity, got %+v", got[0])
+	}
+	if got[0].Message != `field "status" expected string, got sequence` {
+		t.Fatalf("message = %q", got[0].Message)
+	}
+}
+
+func TestValidate_TypeConformanceMatrix(t *testing.T) {
+	tests := []struct {
+		name  string
+		field SchemaField
+		value any
+		valid bool
+	}{
+		{"string", SchemaField{Type: "string"}, "text", true},
+		{"string rejects integer", SchemaField{Type: "string"}, 3, false},
+		{"list", SchemaField{Type: "list"}, []any{"a"}, true},
+		{"single enum", SchemaField{Type: "enum", Values: []string{"theory"}}, "theory", true},
+		{"single enum rejects other", SchemaField{Type: "enum", Values: []string{"theory"}}, "hypothesis", false},
+		{"sequence", SchemaField{Type: "sequence", Prefix: "T", Digits: 3}, "T007", true},
+		{"link", SchemaField{Type: "link"}, "[[target]]", true},
+		{"boolean", SchemaField{Type: "boolean"}, true, true},
+		{"boolean rejects string", SchemaField{Type: "boolean"}, "true", false},
+		{"integer", SchemaField{Type: "integer"}, 3, true},
+		{"integer rejects float", SchemaField{Type: "integer"}, 3.5, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.field.Source = "contract.stem"
+			tt.field.Severity = "error"
+			got := Validate(context.Background(), makeRecord(map[string]any{"field": tt.value}), &StemFile{
+				Schema: map[string]SchemaField{"field": tt.field},
+			})
+			if tt.valid && len(got) != 0 {
+				t.Fatalf("got errors %+v, want valid", got)
+			}
+			if !tt.valid && len(got) == 0 {
+				t.Fatalf("got valid, want conformance error")
+			}
+		})
+	}
+}
+
 func TestValidate_EnumValidValue(t *testing.T) {
 	stem := &StemFile{
 		Schema: map[string]SchemaField{
@@ -294,25 +383,33 @@ func TestValidate_MultipleErrors(t *testing.T) {
 func TestValidate_ExplicitEnumRule(t *testing.T) {
 	stem := &StemFile{
 		Schema: map[string]SchemaField{
-			"priority": {Type: "enum", Values: []string{"high", "low"}, Source: "root/.stem"},
+			"priority": {Type: "enum", Values: []string{"high", "low"}, Source: "root/.stem", Severity: "warn"},
+			"summary":  {Type: "string", Source: "root/.stem"},
 		},
 		Validate: []ValidationRule{
-			{Field: "priority", Rule: "enum", Source: "root/.stem"},
+			{Field: "priority", Rule: "enum", Source: "root/.stem", Severity: "error"},
+			{Field: "summary", Rule: "non_empty", Source: "root/.stem", Severity: "error"},
 		},
 	}
-	record := makeRecord(map[string]any{"priority": "medium"})
+	record := makeRecord(map[string]any{"priority": "medium", "summary": ""})
 
 	errs := Validate(context.Background(), record, stem)
-	// Both schema auto-check and explicit rule fire — but they produce the same error.
-	// We expect at least 1 enum error.
-	hasEnum := false
+	enumCount := 0
+	nonEmptyCount := 0
+	enumKeepsContract := true
 	for _, e := range errs {
-		if e.Rule == "enum" && e.Field == "priority" {
-			hasEnum = true
+		switch {
+		case e.Rule == "enum" && e.Field == "priority":
+			enumCount++
+			if e.Source != "root/.stem" || e.Severity != "warn" {
+				enumKeepsContract = false
+			}
+		case e.Rule == "non_empty" && e.Field == "summary":
+			nonEmptyCount++
 		}
 	}
-	if !hasEnum {
-		t.Error("expected enum error for priority")
+	if enumCount != 1 || nonEmptyCount != 1 || !enumKeepsContract {
+		t.Fatalf("expected exactly one schema enum error and unrelated non_empty rule, got %+v", errs)
 	}
 }
 
@@ -918,7 +1015,7 @@ func TestValidate_Requires_NoMatchBackwardCompat(t *testing.T) {
 func TestValidate_LinkFieldWithoutWikilink(t *testing.T) {
 	stem := &StemFile{
 		Schema: map[string]SchemaField{
-			"spec": {Type: "link", Required: false, Severity: "warn"},
+			"spec": {Type: "link", Required: false, Source: "links/.stem", Severity: "warn"},
 		},
 	}
 	rec := &extract.Record{
@@ -926,15 +1023,11 @@ func TestValidate_LinkFieldWithoutWikilink(t *testing.T) {
 		Frontmatter: map[string]any{"spec": "plain-text-no-brackets"},
 	}
 	errs := Validate(context.Background(), rec, stem)
-	found := false
-	for _, e := range errs {
-		if e.Rule == "link-format" && e.Field == "spec" {
-			found = true
-			break
-		}
+	if len(errs) != 1 {
+		t.Fatalf("got %d errors, want 1 link-format warning: %+v", len(errs), errs)
 	}
-	if !found {
-		t.Error("expected link-format warning for plain text in link field")
+	if errs[0].Rule != "link-format" || errs[0].Field != "spec" || errs[0].Source != "links/.stem" || errs[0].Severity != "warn" {
+		t.Fatalf("link-format error must retain field source/severity, got %+v", errs[0])
 	}
 }
 
@@ -1025,7 +1118,7 @@ func TestValidate_PerRecordMatchFiltering_RequiredField(t *testing.T) {
 			Frontmatter: map[string]any{"title": "Test"},
 		}
 		// Simulate ResolveForRecord by applying match filtering
-		filtered := FilterSchemaByMatch(pointerSchema(stem.Schema), rec.Path)
+		filtered := mustFilterSchemaByMatch(t, pointerSchema(stem.Schema), rec.Path)
 		effectiveStem := &StemFile{
 			Path:   stem.Path,
 			Schema: valueSchema(filtered),
@@ -1052,7 +1145,7 @@ func TestValidate_PerRecordMatchFiltering_RequiredField(t *testing.T) {
 			Frontmatter: map[string]any{"title": "Feature"},
 		}
 		// Simulate ResolveForRecord by applying match filtering
-		filtered := FilterSchemaByMatch(pointerSchema(stem.Schema), rec.Path)
+		filtered := mustFilterSchemaByMatch(t, pointerSchema(stem.Schema), rec.Path)
 		effectiveStem := &StemFile{
 			Path:   stem.Path,
 			Schema: valueSchema(filtered),
@@ -1126,6 +1219,29 @@ func bodySourceStem(name string, field SchemaField) *StemFile {
 	return &StemFile{Schema: map[string]SchemaField{name: field}}
 }
 
+func TestValidate_BodySourceUsesSameTypeContract(t *testing.T) {
+	record := &extract.Record{
+		Path:        "test.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+		Body:        "# Title\n\n## Tags\n\nnot-a-list\n",
+	}
+	stem := bodySourceStem("tags", SchemaField{
+		Type:     "list",
+		Required: true,
+		Extract:  `body.section["## Tags"]`,
+		Severity: "error",
+	})
+
+	errs := Validate(context.Background(), record, stem)
+	if len(errs) != 1 || errs[0].Rule != "type" {
+		t.Fatalf("got %+v, want one type error", errs)
+	}
+	if errs[0].Field != "tags" || errs[0].Source != "root/.stem" || errs[0].Message != `field "tags" expected sequence, got string` {
+		t.Fatalf("type error does not describe the body value contract: %+v", errs[0])
+	}
+}
+
 // TestValidatePhase1_BodySourcedFields covers Phase 1 resolution of fields
 // carrying a `source:` directive. Both directions matter: a satisfied body
 // source must pass, and an unsatisfied one must still fail — a fix that makes
@@ -1157,11 +1273,10 @@ func TestValidatePhase1_BodySourcedFields(t *testing.T) {
 			wantRule: "required",
 		},
 		{
-			name:     "section present but empty fails required",
-			field:    "notes",
-			stem:     bodySourceStem("notes", sectionField),
-			body:     "# Title\n\n## Notes\n\n## End\n\nOther content\n",
-			wantRule: "required",
+			name:  "section present but empty satisfies required presence",
+			field: "notes",
+			stem:  bodySourceStem("notes", sectionField),
+			body:  "# Title\n\n## Notes\n\n## End\n\nOther content\n",
 		},
 		{
 			name:  "h1 present satisfies required",
@@ -1250,6 +1365,35 @@ func TestValidatePhase1_BodySourcedFields(t *testing.T) {
 // resolution path (ResolveForRecord -> FilterSchemaByMatch) rather than a
 // hand-built schema, so that match: scoping is actually exercised: the field
 // must fire on a matching record and be absent entirely on a non-matching one.
+func TestValidate_SourceResolutionErrorEmittedOnceForSchemaAndExplicitRule(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"notes": {
+				Type:     "string",
+				Required: true,
+				Extract:  `body.section["## Notes"]`,
+				Source:   "root/.stem",
+			},
+		},
+		Validate: []ValidationRule{{Rule: "non_empty", Field: "notes", Source: "root/.stem", Severity: "error"}},
+	}
+	record := &extract.Record{
+		Path:        "test.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{},
+		Body:        "# Title\n\n## Notes\n\nfirst\n\n## Notes\n\nsecond\n",
+	}
+
+	errs := Validate(context.Background(), record, stem)
+
+	if len(errs) != 1 {
+		t.Fatalf("got %d errors, want exactly one source error: %+v", len(errs), errs)
+	}
+	if errs[0].Rule != "source" || errs[0].Field != "notes" {
+		t.Fatalf("got error %+v, want ValidationError{Rule: source, Field: notes}", errs[0])
+	}
+}
+
 func TestValidatePhase1_BodySourcedFieldRespectsMatchScope(t *testing.T) {
 	dir := t.TempDir()
 	stemYAML := `version: 2

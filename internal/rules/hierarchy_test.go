@@ -3,8 +3,37 @@ package rules
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestResolveForRecordRejectsInvalidSequenceMatchConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".stem"), []byte(`version: 2
+scope:
+  match: "*.md"
+schema:
+  id:
+    type: sequence
+    match:
+      "T*": {prefix: T, digits: 1.5}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := ResolveForRecord(dir, "T001-task.md")
+	if err == nil {
+		t.Fatal("ResolveForRecord accepted fractional sequence digits; want strict config error")
+	}
+	for _, want := range []string{"field \"id\"", "pattern \"T*\"", "digits"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q does not contain %q", err.Error(), want)
+		}
+	}
+}
 
 func TestResolveForRecord(t *testing.T) {
 	dir := t.TempDir()

@@ -187,9 +187,6 @@ func runSet(cmd *cobra.Command, args []string) error {
 			if !ok {
 				continue
 			}
-			if sf.Type == "section" {
-				continue
-			}
 			if sf.Type == "enum" && len(sf.Values) > 0 && op.Value != "" {
 				valid := false
 				for _, v := range sf.Values {
@@ -209,16 +206,7 @@ func runSet(cmd *cobra.Command, args []string) error {
 	// Step 7: Dry-run mode.
 	if setDryRun {
 		for _, p := range proposals {
-			switch p.Type {
-			case proposal.SetField:
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would set %s = %q\n", p.Field, p.Value)
-			case proposal.SetSection:
-				mode := p.Mode
-				if mode == "" {
-					mode = "replace"
-				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would %s section %s (%s)\n", mode, p.Heading, p.Field)
-			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "would set %s = %q\n", p.Field, p.Value)
 		}
 		return nil
 	}
@@ -241,23 +229,14 @@ func runSet(cmd *cobra.Command, args []string) error {
 
 	// Step 10: Post-validate and rollback on failure.
 	if !setNoValidate {
-		if rollbackErr := postValidateOrRollback(ctx, absPath, dir, originalContent, effective); rollbackErr != nil {
+		if rollbackErr := postValidateOrRollback(ctx, absPath, dir, originalContent); rollbackErr != nil {
 			return rollbackErr
 		}
 	}
 
 	// Print summary.
 	for _, p := range report.Proposals {
-		switch p.Type {
-		case proposal.SetField:
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "set %s = %q\n", p.Field, p.Value)
-		case proposal.SetSection:
-			mode := p.Mode
-			if mode == "" {
-				mode = "replace"
-			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s section %s\n", mode, p.Heading)
-		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "set %s = %q\n", p.Field, p.Value)
 	}
 
 	return nil
@@ -281,7 +260,7 @@ func buildProposal(op fieldOp, relPath string, effective *rules.StemFile) (propo
 
 // postValidateOrRollback re-extracts the file and validates it.
 // If validation fails, the original content is restored (rollback).
-func postValidateOrRollback(ctx context.Context, absPath, dir string, originalContent []byte, effective *rules.StemFile) error {
+func postValidateOrRollback(ctx context.Context, absPath, dir string, originalContent []byte) error {
 	newContent, err := os.ReadFile(absPath)
 	if err != nil {
 		return fmt.Errorf("re-reading %s after mutation: %w", absPath, err)
@@ -296,10 +275,13 @@ func postValidateOrRollback(ctx context.Context, absPath, dir string, originalCo
 		return fmt.Errorf("re-extracting %s after mutation (rolled back): %w", absPath, err)
 	}
 
-	// Re-resolve effective (could have changed if we modified .stem, but typically not).
+	// Re-resolve effective after the mutation. A failed governed resolution is
+	// never equivalent to the pre-write schema: restore the original bytes and
+	// surface the actual cause rather than validating against stale governance.
 	freshEffective, err := rules.ResolveForRecord(dir, absPath)
 	if err != nil {
-		freshEffective = effective
+		_ = os.WriteFile(absPath, originalContent, 0o644) //nolint:gosec // rollback intentionally restores the user-selected validated document path
+		return fmt.Errorf("resolving .stem for %s after mutation (rolled back): %w", absPath, err)
 	}
 
 	errs := rules.Validate(ctx, newRecord, freshEffective)

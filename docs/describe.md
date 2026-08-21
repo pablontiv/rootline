@@ -25,14 +25,15 @@ rootline describe docs/api/
     "title": {
       "type": "string",
       "required": true,
-      "source": "docs/.stem"
+      "source": "body.section[\"## Title\"]",
+      "defined_in": "docs/.stem"
     },
     "status": {
       "type": "enum",
       "values": ["draft", "review", "published"],
       "default": "draft",
       "excludes": { "match": "*/README.md" },
-      "source": "docs/api/.stem"
+      "defined_in": "docs/api/.stem"
     }
   },
   "validate": [
@@ -70,8 +71,7 @@ above; `hints` only appears when there is advice to give:
 }
 ```
 
-Every field includes `source` — the `.stem` file that defined it.
-This makes the merge cascade transparent and debuggable.
+For source-backed fields, `source` is the logical extraction directive (for example `body.section["## Title"]`); `defined_in` is the physical `.stem` declaration path. This separation keeps source identity and schema provenance unambiguous.
 
 The `layers` array lists all `.stem` files in resolution order (root-to-leaf).
 The `provenance` map shows which `.stem` file defined each field, enabling
@@ -89,6 +89,7 @@ absolute; they are shortened here for readability.
 | `links` | Wiki-link schema: allowed types and target validation patterns |
 | `layers` | The `.stem` chain in resolution order, root-most first (omitted when empty) |
 | `provenance` | Field name → the `.stem` file that defined it (omitted when empty) |
+| `source` / `defined_in` | Logical extraction directive / physical `.stem` declaration for a field |
 | `hints` | Actionable advice, e.g. run `rootline init` when no schema was found (omitted when empty) |
 
 ## Field Extraction

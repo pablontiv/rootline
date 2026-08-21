@@ -141,7 +141,7 @@ links:
 rootline describe <file-or-dir> -o json
 ```
 
-Report: field, type, required, values or sequence `next`, and source `.stem`.
+Report: field, type, required, values or sequence `next`, logical `source` when present, and defined_in `.stem`.
 
 ### Create a Document
 
@@ -165,7 +165,7 @@ rootline validate <file.md> -o json
 git diff -- <file.md>
 ```
 
-`set` accepts `field=value`, `field=@file`, and `field=""`; it does not support `--create` or section append (`+=`). Use `rootline new` to scaffold documents. `--no-validate` skips post-mutation validation only; pre-validation of enum constraints always runs. `type: section` remains available for schema-driven document scaffolding.
+`set` accepts `field=value`, `field=@file`, and `field=""`; it does not support `--create` or section append (`+=`). Use `rootline new` to scaffold documents. `--no-validate` skips post-mutation validation only; pre-validation of enum constraints always runs. For `source: body.section[...]`, `set` writes a frontmatter override and leaves the body unchanged.
 
 ### Analyze Existing Documents
 
@@ -177,6 +177,10 @@ rootline analyze <dir> --incremental -o json
 Analyze always parses Markdown ASTs: section-pattern, invariant, and formal-dependency categories are expected to run. `--threshold` controls section-pattern sensitivity, and structural naming checks score directory names separately from record-file stems.
 
 Do not apply results automatically. For `apply`, inspect the report first and treat the command as a write to `.stem` and documents.
+
+## Canonical Field Contract
+
+Use only `string`, `list`, `enum`, `sequence`, `link`, `boolean`, and `integer`; do not coerce YAML values. A body section pairs a real type with `source: body.section["## Heading"]`. Frontmatter is an explicit override; an empty section is present, duplicate matching headings fail, and child omission inherits a stable source binding. `new` and `migrate --scaffold` add missing required sections in lexical heading order with a non-empty default or `<!-- TODO -->`. Validation error paths are governance-root-relative while symbolic sources remain symbolic. Ancestor-qualified selectors are deferred to #190.
 
 ## Reference Files
 

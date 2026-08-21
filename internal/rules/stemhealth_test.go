@@ -112,7 +112,7 @@ scope:
 	}
 }
 
-func TestValidateStemHealth_EnumValues(t *testing.T) {
+func TestValidateStemHealth_SingleValueEnumHasNoWarning(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
@@ -125,15 +125,10 @@ schema:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	found := false
 	for _, c := range result.Checks {
-		if c.Name == "enum-values" && c.Status == "warn" {
-			found = true
-			break
+		if c.Name == "enum-values" || c.Name == "field-declaration" {
+			t.Errorf("unexpected enum declaration warning for one-value enum: %+v", c)
 		}
-	}
-	if !found {
-		t.Error("expected enum-values warning")
 	}
 }
 
@@ -158,6 +153,53 @@ schema:
 }
 
 func TestValidateStemHealth_TypeConsistency(t *testing.T) {
+	tests := []struct {
+		name        string
+		parentField string
+		childField  string
+		message     string
+	}{
+		{
+			name:        "enum to string",
+			parentField: "type: enum\n    values: [A, B]\n",
+			childField:  "type: string\n",
+			message:     `type changes from "enum" to "string"`,
+		},
+		{
+			name:        "string to list",
+			parentField: "type: string\n",
+			childField:  "type: list\n",
+			message:     `type changes from "string" to "list"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nschema:\n  estado:\n    "+tt.parentField))
+			sub := filepath.Join(dir, "sub")
+			mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte("version: 2\nschema:\n  estado:\n    "+tt.childField))
+
+			result, err := ValidateStemHealth(context.Background(), dir)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			assertStemDiagnostics(t, diagnosticsForField(StemHealthDiagnostics(result), "estado"), []StemHealthDiagnostic{{
+				Path:     "sub/.stem",
+				Check:    "type-consistency",
+				Field:    "estado",
+				Severity: "error",
+				Message:  tt.message,
+			}})
+		})
+	}
+}
+
+func TestValidateStemHealth_StringToEnumNarrowingHasNoCompatibilityNoise(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
 		t.Fatal(err)
@@ -179,18 +221,221 @@ schema:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	found := false
-	for _, c := range result.Checks {
-		if c.Name == "type-consistency" && c.Status == "fail" {
-			found = true
-			if c.Field != "estado" {
-				t.Errorf("expected field 'estado', got %q", c.Field)
+	assertNoStemHealthCheck(t, result, "type-consistency", "estado")
+	assertNoStemHealthCheck(t, result, "field-override", "estado")
+	assertNoStemHealthCheck(t, result, "monotonic-violations", "estado")
+}
+
+func TestValidateStemHealth_EnumSubsetNarrowingHasNoOverrideNoise(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: enum
+    values: [A, B, C]
+`))
+	sub := filepath.Join(dir, "sub")
+	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: enum
+    values: [A, B]
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertNoStemHealthCheck(t, result, "field-override", "estado")
+	assertNoStemHealthCheck(t, result, "monotonic-violations", "estado")
+}
+
+func TestValidateStemHealth_SourceIncompatibilityFails(t *testing.T) {
+	tests := []struct{ name, parent, child string }{
+		{"changed", "source: body.section[\"## Summary\"]\n", "source: body.section[\"## Context\"]\n"},
+		{"removed", "source: body.section[\"## Summary\"]\n", "source: null\n"},
+		{"added", "", "source: body.h1\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+				t.Fatal(err)
 			}
-			break
+			mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nschema:\n  summary:\n    type: string\n    "+tt.parent))
+			sub := filepath.Join(dir, "sub")
+			mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte("version: 2\nschema:\n  summary:\n    type: string\n    "+tt.child))
+
+			result, err := ValidateStemHealth(context.Background(), dir)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			found := false
+			for _, c := range result.Checks {
+				if c.Name == "monotonic-violations" && c.Status == "fail" && c.Field == "summary" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("expected source compatibility failure, got %+v", result.Checks)
+			}
+		})
+	}
+}
+
+func TestValidateStemHealth_MonotonicConflictOwnedByDeclaringStemOnly(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  title:
+    type: string
+    required: true
+`))
+	middle := filepath.Join(dir, "middle")
+	mustWriteStemTestFile(t, filepath.Join(middle, ".stem"), []byte(`version: 2
+schema:
+  title:
+    type: string
+    required: false
+`))
+	leaf := filepath.Join(middle, "leaf")
+	mustWriteStemTestFile(t, filepath.Join(leaf, ".stem"), []byte(`version: 2
+schema:
+  other:
+    type: string
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got []StemHealthDiagnostic
+	for _, diag := range StemHealthDiagnostics(result) {
+		if diag.Check == "monotonic-violations" && diag.Field == "title" {
+			got = append(got, diag)
 		}
 	}
-	if !found {
-		t.Error("expected type-consistency failure")
+	assertStemDiagnostics(t, got, []StemHealthDiagnostic{{
+		Path:     "middle/.stem",
+		Check:    "monotonic-violations",
+		Field:    "title",
+		Severity: "error",
+		Message:  `field "title" loosens required: false`,
+	}})
+}
+
+func TestValidateStemHealth_DefaultErrorSeveritySurvivesInvalidWarningDescendants(t *testing.T) {
+	tests := []struct {
+		name       string
+		leafSchema string
+		wantPaths  []string
+	}{
+		{
+			name: "leaf explicit warning owns second loosening",
+			leafSchema: `schema:
+  estado:
+    type: string
+    severity: warn
+`,
+			wantPaths: []string{"middle/.stem", "middle/leaf/.stem"},
+		},
+		{
+			name: "leaf omission inherits cumulative error without duplicate",
+			leafSchema: `schema:
+  estado:
+    type: string
+`,
+			wantPaths: []string{"middle/.stem"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: string
+`))
+			middle := filepath.Join(dir, "middle")
+			mustWriteStemTestFile(t, filepath.Join(middle, ".stem"), []byte(`version: 2
+schema:
+  estado:
+    type: string
+    severity: warn
+`))
+			leaf := filepath.Join(middle, "leaf")
+			mustWriteStemTestFile(t, filepath.Join(leaf, ".stem"), []byte("version: 2\n"+tt.leafSchema))
+
+			result, err := ValidateStemHealth(context.Background(), dir)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			var got []StemHealthDiagnostic
+			for _, diag := range StemHealthDiagnostics(result) {
+				if diag.Check == "monotonic-violations" && diag.Field == "estado" {
+					got = append(got, diag)
+				}
+			}
+			if len(got) != len(tt.wantPaths) {
+				t.Fatalf("severity monotonic diagnostic count = %d, want %d: %+v", len(got), len(tt.wantPaths), got)
+			}
+			for i, wantPath := range tt.wantPaths {
+				if got[i].Path != wantPath {
+					t.Fatalf("severity conflict[%d] path = %q, want %q: %+v", i, got[i].Path, wantPath, got)
+				}
+			}
+
+			lr, err := ResolveLayered(filepath.Join(leaf, "doc.md"), dir)
+			if err != nil {
+				t.Fatalf("ResolveLayered() error: %v", err)
+			}
+			if got := lr.EffectiveSchema["estado"].Severity; got != "error" {
+				t.Fatalf("effective severity = %q, want cumulative default error", got)
+			}
+		})
+	}
+}
+
+func assertNoStemHealthCheck(t *testing.T, result *StemHealthResult, name, field string) {
+	t.Helper()
+	for _, c := range result.Checks {
+		if c.Name == name && c.Field == field {
+			t.Fatalf("unexpected %s check for %s: %+v", name, field, c)
+		}
+	}
+}
+
+func diagnosticsForField(diags []StemHealthDiagnostic, field string) []StemHealthDiagnostic {
+	var out []StemHealthDiagnostic
+	for _, diag := range diags {
+		if diag.Field == field {
+			out = append(out, diag)
+		}
+	}
+	return out
+}
+
+func assertStemDiagnostics(t *testing.T, got, want []StemHealthDiagnostic) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("diagnostic count = %d, want %d\ngot:  %+v\nwant: %+v", len(got), len(want), got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("diagnostic[%d] = %+v, want %+v", i, got[i], want[i])
+		}
 	}
 }
 
@@ -391,13 +636,13 @@ schema:
 	}
 	found := false
 	for _, c := range result.Checks {
-		if c.Name == "enum-values" && c.Status == "warn" {
+		if c.Name == "field-declaration" && c.Status == "fail" && c.Field == "estado" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("expected enum-values warning for 0-value enum")
+		t.Error("expected field-declaration failure for 0-value enum")
 	}
 }
 
@@ -567,43 +812,36 @@ schema:
 	}
 }
 
-func TestValidateStemHealth_MonotonicViolation_TypeWidening(t *testing.T) {
+func TestValidateStemHealth_MonotonicViolation_EnumExtension(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	// Parent: estado is enum
 	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
 schema:
   estado:
     type: enum
-    values: [draft, active, completed]
+    values: [draft, active]
 `))
-	// Child: estado is widened to string (violation!)
 	sub := filepath.Join(dir, "sub")
 	mustWriteStemTestFile(t, filepath.Join(sub, ".stem"), []byte(`version: 2
 schema:
   estado:
-    type: string
+    type: enum
+    values: [draft, active, completed]
 `))
 
 	result, err := ValidateStemHealth(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	found := false
-	for _, c := range result.Checks {
-		if c.Name == "monotonic-violations" && c.Status == "fail" {
-			found = true
-			if c.Field != "estado" {
-				t.Errorf("expected field 'estado', got %q", c.Field)
-			}
-			break
-		}
-	}
-	if !found {
-		t.Error("expected monotonic-violations error for type widening (enum → string)")
-	}
+	assertStemDiagnostics(t, diagnosticsForField(StemHealthDiagnostics(result), "estado"), []StemHealthDiagnostic{{
+		Path:     "sub/.stem",
+		Check:    "monotonic-violations",
+		Field:    "estado",
+		Severity: "error",
+		Message:  `field "estado": enum extended with disallowed value(s): [completed]`,
+	}})
 }
 
 func TestValidateStemHealth_MonotonicNarrowing_AllowedNoViolation(t *testing.T) {

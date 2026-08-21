@@ -10,7 +10,7 @@ func TestAnalyzeReport_Roundtrip(t *testing.T) {
 	report := NewAnalyzeReport("/some/path")
 
 	inferences := []Inference{
-		{Type: "required_section", Field: "Contexto", Value: "1.00", Message: "required"},
+		{Type: "required_section", Field: "Contexto", Value: "1.00", Message: "required", SourceDirective: `body.section["## Contexto"]`},
 		{Type: "informal_dependency_candidate", Source: "task.md", Value: "F01 needed", Message: "informal"},
 	}
 
@@ -27,6 +27,28 @@ func TestAnalyzeReport_Roundtrip(t *testing.T) {
 	data, err := json.Marshal(report)
 	if err != nil {
 		t.Fatalf("marshal error: %v", err)
+	}
+
+	if !json.Valid(data) {
+		t.Fatalf("invalid json: %s", data)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal raw report: %v", err)
+	}
+	categories := raw["categories"].([]any)
+	sectionCategory := categories[0].(map[string]any)
+	sectionInference := sectionCategory["inferences"].([]any)[0].(map[string]any)
+	if _, ok := sectionInference["source_directive"]; !ok {
+		t.Fatalf("section inference omitted source_directive: %s", data)
+	}
+	if _, ok := sectionInference["section_source"]; ok {
+		t.Fatalf("report used parallel section source field: %s", data)
+	}
+	informalCategory := categories[1].(map[string]any)
+	informalInference := informalCategory["inferences"].([]any)[0].(map[string]any)
+	if _, ok := informalInference["source_directive"]; ok {
+		t.Fatalf("source_directive should be omitted when empty: %s", data)
 	}
 
 	// Unmarshal.
@@ -54,6 +76,12 @@ func TestAnalyzeReport_Roundtrip(t *testing.T) {
 	}
 	if !decoded.Categories[1].Inferences[0].RequiresAgent {
 		t.Error("informal_dependency_candidate should require agent")
+	}
+	if got := decoded.Categories[0].Inferences[0].SourceDirective; got != `body.section["## Contexto"]` {
+		t.Errorf("expected source directive to round-trip, got %q", got)
+	}
+	if got := decoded.Categories[1].Inferences[0].SourceDirective; got != "" {
+		t.Errorf("expected omitted source directive to decode empty, got %q", got)
 	}
 
 	// Check summary.
@@ -84,6 +112,19 @@ func TestAnalyzeReport_EmptyCategories(t *testing.T) {
 
 	if decoded.Summary.TotalInferences != 0 {
 		t.Errorf("expected 0 total, got %d", decoded.Summary.TotalInferences)
+	}
+}
+
+func TestAnalyzeReport_SortsBySourceDirective(t *testing.T) {
+	t.Parallel()
+
+	report := NewAnalyzeReport("/stable")
+	report.AddCategory("body_sections", "Body Section Patterns", []Inference{
+		{Type: "optional_section", Field: "notes", SourceDirective: `body.section["### Notes"]`},
+		{Type: "optional_section", Field: "notes", SourceDirective: `body.section["## Notes"]`},
+	}, nil)
+	if report.Categories[0].Inferences[0].SourceDirective != `body.section["## Notes"]` {
+		t.Fatalf("non-deterministic report: %+v", report.Categories[0].Inferences)
 	}
 }
 
@@ -127,7 +168,8 @@ func TestCompareReportInferencesUsesEveryContractField(t *testing.T) {
 		{name: "type", a: ReportInference{Type: "a"}, b: ReportInference{Type: "b"}},
 		{name: "source", a: ReportInference{Type: "same", Source: "a"}, b: ReportInference{Type: "same", Source: "b"}},
 		{name: "field", a: ReportInference{Type: "same", Source: "same", Field: "a"}, b: ReportInference{Type: "same", Source: "same", Field: "b"}},
-		{name: "value", a: ReportInference{Type: "same", Field: "same", Value: "a"}, b: ReportInference{Type: "same", Field: "same", Value: "b"}},
+		{name: "source directive", a: ReportInference{Type: "same", Field: "same", SourceDirective: `body.section["## Notes"]`}, b: ReportInference{Type: "same", Field: "same", SourceDirective: `body.section["### Notes"]`}},
+		{name: "value", a: ReportInference{Type: "same", Field: "same", SourceDirective: "same", Value: "a"}, b: ReportInference{Type: "same", Field: "same", SourceDirective: "same", Value: "b"}},
 		{name: "from", a: ReportInference{Type: "same", Value: "same", From: "a"}, b: ReportInference{Type: "same", Value: "same", From: "b"}},
 		{name: "to", a: ReportInference{Type: "same", From: "same", To: "a"}, b: ReportInference{Type: "same", From: "same", To: "b"}},
 		{name: "paths element", a: ReportInference{Type: "same", To: "same", Paths: []string{"a"}}, b: ReportInference{Type: "same", To: "same", Paths: []string{"b"}}},

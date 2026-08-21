@@ -165,6 +165,18 @@ A field name is considered known when it is a query builtin (`path`, `body`, `ty
 
 It stays a warning, not an error. A field absent from every record is a legal filter that yields zero matches, and pipelines depend on that exit code.
 
+## Source-Backed Fields
+
+A query resolves a canonical body source through the same effective schema as validation:
+
+```yaml
+notes:
+  type: string
+  source: body.section["## Notes"]
+```
+
+A frontmatter override wins over the extracted value. An empty-present section resolves to `""`; duplicate matching headings fail rather than returning one occurrence. Inherited source bindings stay stable, so a child omission inherits the parent binding and a changed binding is a schema conflict.
+
 ## Operators
 
 Standard expr-lang operators apply:

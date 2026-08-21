@@ -29,8 +29,10 @@ type FixResult struct {
 type BatchFixResult struct {
 	Version           int          `json:"version"`
 	Kind              string       `json:"kind"`
+	Complete          *bool        `json:"complete,omitempty"`
 	Results           []*FixResult `json:"results"`
 	Summary           FixSummary   `json:"summary"`
+	Errors            []string     `json:"errors,omitempty"`
 	SchemaSuggestions int          `json:"schema_suggestions,omitempty"`
 	// SkippedProposals holds add_field proposals declined because the engine,
 	// not the schema, chose their value. Carried so the operator can see the
@@ -186,27 +188,49 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
 	}
-
-	// Run derive pipeline so aggregate values are available for validation.
-	derive.DeriveAllSimple(ctx, records, root)
-	derive.EnrichBuiltinsSimple(ctx, records, root)
-	derive.AggregateAllSimple(ctx, records, root)
-
-	// First pass: collect all records, their effective stems, and errors.
+	// First pass: resolve each record independently. Broken governed records are
+	// classified in the batch envelope; valid independent records still proceed.
 	allErrs := make(map[string][]rules.ValidationError)
 	effectiveStems := make(map[string]*rules.StemFile)
 	linkCache := rules.NewHeadingCache()
 	var linkFindings []proposal.LinkFinding
+	var validRecords []*extract.Record
+	var resolutionErrors []string
+	unresolvedPopulation := false
 
 	for _, rec := range records {
+		if err := ctx.Err(); err != nil {
+			return emitFixResult(cmd, failedBatchFixResult(fmt.Sprintf("resolving .stem: %v", err)))
+		}
 		absPath := filepath.Join(root, rec.Path)
 		dir := filepath.Dir(absPath)
 		effective, resolveErr := rules.ResolveForRecord(dir, rec.Path)
 		if resolveErr != nil {
+			unresolvedPopulation = true
+			resolutionErrors = append(resolutionErrors, fmt.Sprintf("resolving .stem for %s: %v", rec.Path, resolveErr))
 			continue
 		}
+		validRecords = append(validRecords, rec)
 		effectiveStems[rec.Path] = effective
+	}
 
+	// Run derive pipeline for valid records only so aggregate values are available
+	// without manufacturing cross-record facts from an unresolved corpus.
+	if err := derive.DeriveAllSimple(ctx, validRecords, root); err != nil {
+		return emitFixResult(cmd, failedBatchFixResult(fmt.Sprintf("deriving records: %v", err)))
+	}
+	if err := derive.EnrichBuiltinsSimple(ctx, validRecords, root); err != nil {
+		return emitFixResult(cmd, failedBatchFixResult(fmt.Sprintf("enriching records: %v", err)))
+	}
+	if !unresolvedPopulation {
+		if err := derive.AggregateAllSimple(ctx, validRecords, root); err != nil {
+			return emitFixResult(cmd, failedBatchFixResult(fmt.Sprintf("aggregating records: %v", err)))
+		}
+	}
+
+	for _, rec := range validRecords {
+		absPath := filepath.Join(root, rec.Path)
+		effective := effectiveStems[rec.Path]
 		errs := rules.Validate(ctx, rec, effective)
 
 		// Link checks never reached fix, so a record validate failed with
@@ -231,12 +255,14 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	report := proposal.Analyze(records, effective, allErrs)
+	report := proposal.Analyze(validRecords, effective, allErrs)
 	report.Path = scanRoot
 	report.Root = root
-	appendAggregateProposals(report, root, records, effective)
-	if !fixNoPropagate {
-		appendPropagateProposals(report, records, effective)
+	if !unresolvedPopulation {
+		appendAggregateProposals(report, root, validRecords, effective)
+		if !fixNoPropagate {
+			appendPropagateProposals(report, validRecords, effective)
+		}
 	}
 	appendStemHealthProposals(report, ctx, root)
 
@@ -246,6 +272,23 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	separateSchemaAndDataProposals(report)
 
 	report.LinkFindings = linkFindings
+
+	// An unresolved record makes a dry-run proposal corpus incomplete and thus
+	// unsafe to publish as a reusable rootline/proposals report. Reuse the
+	// established batch failure protocol while retaining valid-record previews.
+	if fixDryRun && len(resolutionErrors) > 0 {
+		results := proposalsToFixResults(report, validRecords)
+		for _, result := range results {
+			result.Fixed = false
+		}
+		results = appendInvalidFixResults(results, records, resolutionErrors)
+		batch := newBatchFixResultWithSuggestions(results, len(report.SchemaSuggestions))
+		complete := false
+		batch.Complete = &complete
+		batch.Errors = append(batch.Errors, resolutionErrors...)
+		batch.LinkFindings = linkFindings
+		return emitFixResult(cmd, batch)
+	}
 
 	// In dry-run mode, use proposal engine for richer output.
 	if fixDryRun {
@@ -263,22 +306,25 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	var skippedProposals []proposal.Proposal
 	if len(report.Proposals) > 0 {
 		var err error
-		skippedProposals, err = fix.ApplyProposals(ctx, report, root, records, fixFillMissing)
+		skippedProposals, err = fix.ApplyProposals(ctx, report, root, validRecords, fixFillMissing)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Convert proposals to BatchFixResult for output compatibility.
-	results := proposalsToFixResults(report, records)
+	results := proposalsToFixResults(report, validRecords)
+	results = appendInvalidFixResults(results, records, resolutionErrors)
 	batch := newBatchFixResultWithSuggestions(results, len(report.SchemaSuggestions))
+	if len(resolutionErrors) > 0 {
+		complete := false
+		batch.Complete = &complete
+		batch.Errors = append(batch.Errors, resolutionErrors...)
+	}
 	batch.SkippedProposals = skippedProposals
 	batch.LinkFindings = linkFindings
 
-	if outputFormat == "table" {
-		return renderFixTable(cmd, batch)
-	}
-	return outputJSON(cmd, batch, false)
+	return emitFixResult(cmd, batch)
 }
 
 // appendStemHealthProposals runs stem-health checks and appends remove_stem_field proposals.
@@ -404,6 +450,28 @@ func proposalsToFixResults(report *proposal.Report, records []*extract.Record) [
 	return results
 }
 
+func appendInvalidFixResults(results []*FixResult, records []*extract.Record, resolutionErrors []string) []*FixResult {
+	if len(resolutionErrors) == 0 {
+		return results
+	}
+	already := make(map[string]bool, len(results))
+	for _, result := range results {
+		already[result.Path] = true
+	}
+	for _, rec := range records {
+		if already[rec.Path] {
+			continue
+		}
+		for _, msg := range resolutionErrors {
+			if strings.Contains(msg, rec.Path) {
+				results = append(results, &FixResult{Path: rec.Path, Fixed: false, Changes: []string{"skipped: schema resolution failed"}})
+				break
+			}
+		}
+	}
+	return results
+}
+
 func newBatchFixResultWithSuggestions(results []*FixResult, schemaSuggestionsCount int) *BatchFixResult {
 	summary := FixSummary{Total: len(results)}
 	for _, r := range results {
@@ -420,6 +488,37 @@ func newBatchFixResultWithSuggestions(results []*FixResult, schemaSuggestionsCou
 		Summary:           summary,
 		SchemaSuggestions: schemaSuggestionsCount,
 	}
+}
+
+func failedBatchFixResult(message string) *BatchFixResult {
+	complete := false
+	return &BatchFixResult{
+		Version:  1,
+		Kind:     "rootline/fix-batch",
+		Complete: &complete,
+		Results:  []*FixResult{},
+		Summary:  FixSummary{},
+		Errors:   []string{message},
+	}
+}
+
+func fixBatchFailed(batch *BatchFixResult) bool {
+	return (batch.Complete != nil && !*batch.Complete) || len(batch.Errors) > 0
+}
+
+func emitFixResult(cmd *cobra.Command, batch *BatchFixResult) error {
+	if outputFormat == "table" {
+		if err := renderFixTable(cmd, batch); err != nil {
+			return err
+		}
+		if fixBatchFailed(batch) {
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			return ErrValidationFailed
+		}
+		return nil
+	}
+	return outputJSON(cmd, batch, fixBatchFailed(batch))
 }
 
 // renderLinkFindings prints the link problems fix reported but did not repair.
@@ -498,6 +597,16 @@ func renderFixTable(cmd *cobra.Command, batch *BatchFixResult) error {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "To apply schema changes, use 'rootline schema propose' or manually edit .stem files.")
 	}
 	renderLinkFindings(cmd, batch.LinkFindings)
+
+	if len(batch.Errors) > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Errors")
+		var rows [][]string
+		for _, message := range batch.Errors {
+			rows = append(rows, []string{message})
+		}
+		renderTable(cmd.OutOrStdout(), []string{"Message"}, rows)
+	}
 
 	return nil
 }

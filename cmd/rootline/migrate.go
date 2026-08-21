@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -353,6 +354,16 @@ func runMigrateScaffold(cmd *cobra.Command, args []string) error {
 	op := &migrate.ScaffoldOperation{
 		RootPath: absPath,
 		DryRun:   migrateDryRun,
+		Validator: func(ctx context.Context, in migrate.ScaffoldValidationInput) (*rules.ValidationResult, error) {
+			return validateProspectiveRecord(ctx, prospectiveRecordValidationInput{
+				Path:                         in.Path,
+				AbsPath:                      in.AbsPath,
+				Content:                      in.Content,
+				Effective:                    in.Effective,
+				ProspectiveLinkTargetAbsPath: in.AbsPath,
+				ProspectiveLinkTargetContent: in.Content,
+			})
+		},
 	}
 
 	result, err := op.Execute()
@@ -432,8 +443,11 @@ func runMigrateSplit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no hierarchy detected in %s; nothing to split", targetPath)
 	}
 
-	// Build split stems using field distribution from existing .stem.
-	result := migrate.BuildSplitStems(absTarget, existing, hierarchy)
+	// Build and parse-check split stems before entering any write path.
+	result, err := migrate.BuildSplitStems(absTarget, existing, hierarchy)
+	if err != nil {
+		return fmt.Errorf("serializing split stems: %w", err)
+	}
 
 	// Emit notes for auto-generated aggregates.
 	for _, name := range result.GeneratedAggs {

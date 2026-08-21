@@ -4,8 +4,19 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
+
+func mustNewDescribeResult(t *testing.T, path string, entries []StemEntry, effective *StemFile) *DescribeResult {
+	t.Helper()
+	result, err := NewDescribeResult(path, entries, effective)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
 
 func TestNewDescribeResult_FullSchema(t *testing.T) {
 	entries := []StemEntry{
@@ -23,7 +34,7 @@ func TestNewDescribeResult_FullSchema(t *testing.T) {
 		},
 	}
 
-	result := NewDescribeResult("docs/prd/", entries, effective)
+	result := mustNewDescribeResult(t, "docs/prd/", entries, effective)
 
 	if result.Version != 1 {
 		t.Errorf("version = %d", result.Version)
@@ -52,7 +63,7 @@ func TestNewDescribeResult_FullSchema(t *testing.T) {
 }
 
 func TestNewDescribeResult_EmptySchema(t *testing.T) {
-	result := NewDescribeResult("some/path/", nil, &StemFile{})
+	result := mustNewDescribeResult(t, "some/path/", nil, &StemFile{})
 
 	if len(result.Applies) != 0 {
 		t.Errorf("applies = %v, want empty", result.Applies)
@@ -69,10 +80,10 @@ func TestDescribeResult_ToJSON(t *testing.T) {
 	entries := []StemEntry{{Path: "root/.stem", Stem: &StemFile{}}}
 	effective := &StemFile{
 		Schema: map[string]SchemaField{
-			"title": {Type: "string", Required: true, Source: "root/.stem"},
+			"title": {Type: "string", Required: true, Source: "root/.stem", Extract: `body.section["## Title"]`},
 		},
 	}
-	result := NewDescribeResult("docs/", entries, effective)
+	result := mustNewDescribeResult(t, "docs/", entries, effective)
 
 	data, err := result.ToJSON()
 	if err != nil {
@@ -92,8 +103,11 @@ func TestDescribeResult_ToJSON(t *testing.T) {
 	}
 	schema := parsed["schema"].(map[string]any)
 	titleField := schema["title"].(map[string]any)
-	if titleField["source"] != "root/.stem" {
+	if titleField["source"] != `body.section["## Title"]` {
 		t.Errorf("schema.title.source = %v", titleField["source"])
+	}
+	if titleField["defined_in"] != "root/.stem" {
+		t.Errorf("schema.title.defined_in = %v", titleField["defined_in"])
 	}
 }
 
@@ -110,7 +124,7 @@ func TestDescribeResult_SequenceNext(t *testing.T) {
 		},
 	}
 
-	result := NewDescribeResult(dir, entries, effective)
+	result := mustNewDescribeResult(t, dir, entries, effective)
 
 	idField, ok := result.Schema["id"]
 	if !ok {
@@ -144,7 +158,7 @@ func TestDescribeResult_NonSequenceFieldUnchanged(t *testing.T) {
 		},
 	}
 
-	result := NewDescribeResult("test/", entries, effective)
+	result := mustNewDescribeResult(t, "test/", entries, effective)
 
 	titleField := result.Schema["title"]
 	if titleField.Next != "" {
@@ -153,7 +167,7 @@ func TestDescribeResult_NonSequenceFieldUnchanged(t *testing.T) {
 }
 
 func TestDescribeResult_NilFieldsBecomeMaps(t *testing.T) {
-	result := NewDescribeResult("x/", nil, &StemFile{})
+	result := mustNewDescribeResult(t, "x/", nil, &StemFile{})
 
 	data, err := result.ToJSON()
 	if err != nil {
@@ -201,7 +215,7 @@ func TestDescribeResult_ProvenanceWithNestedStems(t *testing.T) {
 		},
 	}
 
-	result := NewDescribeResult("docs/tasks/", entries, effective)
+	result := mustNewDescribeResult(t, "docs/tasks/", entries, effective)
 
 	// Check layers
 	if len(result.Layers) != 2 {
@@ -270,7 +284,7 @@ func TestDescribeResult_NextByPatternInJSON(t *testing.T) {
 		},
 	}
 
-	result := NewDescribeResult(dir, entries, effective)
+	result := mustNewDescribeResult(t, dir, entries, effective)
 
 	idField := result.Schema["id"]
 	if idField.NextByPattern == nil {
@@ -300,5 +314,54 @@ func TestDescribeResult_NextByPatternInJSON(t *testing.T) {
 	}
 	if nbp["O*"] != "O02" {
 		t.Errorf("JSON next_by_pattern[O*] = %v, want O02", nbp["O*"])
+	}
+}
+
+func TestNewDescribeResultInvalidSequenceDoesNotMutateInput(t *testing.T) {
+	dir := t.TempDir()
+	effective := &StemFile{Schema: map[string]SchemaField{
+		"alpha": {Type: "sequence", Prefix: "A", Digits: 2},
+		"beta": {
+			Type:   "sequence",
+			Prefix: "B",
+			Digits: 2,
+			Match: &FieldMatch{Configs: map[string]any{
+				"B*": map[string]any{"digits": 2.0},
+			}},
+		},
+	}}
+	beforeAlpha := effective.Schema["alpha"]
+	beforeBeta := effective.Schema["beta"]
+
+	result, err := NewDescribeResult(dir, nil, effective)
+	if err == nil || !strings.Contains(err.Error(), "beta") || !strings.Contains(err.Error(), "digits") {
+		t.Fatalf("NewDescribeResult result=%#v err=%v, want beta digits error", result, err)
+	}
+	if !reflect.DeepEqual(effective.Schema["alpha"], beforeAlpha) || !reflect.DeepEqual(effective.Schema["beta"], beforeBeta) {
+		t.Fatalf("effective schema fields mutated: got alpha=%#v beta=%#v", effective.Schema["alpha"], effective.Schema["beta"])
+	}
+}
+
+func TestNewDescribeResultInvalidSequenceFirstErrorDeterministic(t *testing.T) {
+	dir := t.TempDir()
+	effective := &StemFile{Schema: map[string]SchemaField{
+		"zeta": {
+			Type:   "sequence",
+			Prefix: "Z",
+			Digits: 2,
+			Match:  &FieldMatch{Configs: map[string]any{"Z*": map[string]any{"digits": 2.0}}},
+		},
+		"alpha": {
+			Type:   "sequence",
+			Prefix: "A",
+			Digits: 2,
+			Match:  &FieldMatch{Configs: map[string]any{"A*": map[string]any{"digits": 2.0}}},
+		},
+	}}
+	for i := 0; i < 20; i++ {
+		_, err := NewDescribeResult(dir, nil, effective)
+		if err == nil || !strings.Contains(err.Error(), "alpha") {
+			t.Fatalf("run %d error = %v, want deterministic alpha first error", i, err)
+		}
 	}
 }

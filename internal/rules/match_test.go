@@ -122,7 +122,7 @@ func TestFilterSchemaByMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FilterSchemaByMatch(tt.schema, tt.recordPath)
+			result := mustFilterSchemaByMatch(t, tt.schema, tt.recordPath)
 
 			for _, field := range tt.wantFields {
 				if _, ok := result[field]; !ok {
@@ -152,7 +152,7 @@ func TestFilterSchemaByMatch_MapFormConfig(t *testing.T) {
 	}
 
 	t.Run("E-level gets E prefix and 2 digits", func(t *testing.T) {
-		result := FilterSchemaByMatch(schema, "docs/epics/E01-name/README.md")
+		result := mustFilterSchemaByMatch(t, schema, "docs/epics/E01-name/README.md")
 		id := result["id"]
 		if id == nil {
 			t.Fatal("expected id field in result")
@@ -166,7 +166,7 @@ func TestFilterSchemaByMatch_MapFormConfig(t *testing.T) {
 	})
 
 	t.Run("T-level gets T prefix and 3 digits", func(t *testing.T) {
-		result := FilterSchemaByMatch(schema, "docs/epics/E01-name/F01-feat/S001-story/T001-task.md")
+		result := mustFilterSchemaByMatch(t, schema, "docs/epics/E01-name/F01-feat/S001-story/T001-task.md")
 		id := result["id"]
 		if id == nil {
 			t.Fatal("expected id field in result")
@@ -192,7 +192,7 @@ func TestFilterSchemaByMatch_RequiredMatch(t *testing.T) {
 	}
 
 	t.Run("required true at T-level", func(t *testing.T) {
-		result := FilterSchemaByMatch(schema, "docs/epics/E01/F01/S001/T001-task.md")
+		result := mustFilterSchemaByMatch(t, schema, "docs/epics/E01/F01/S001/T001-task.md")
 		tipo := result["tipo"]
 		if tipo == nil {
 			t.Fatal("expected tipo field")
@@ -203,7 +203,7 @@ func TestFilterSchemaByMatch_RequiredMatch(t *testing.T) {
 	})
 
 	t.Run("required false at F-level", func(t *testing.T) {
-		result := FilterSchemaByMatch(schema, "docs/epics/E01/F01-feat/README.md")
+		result := mustFilterSchemaByMatch(t, schema, "docs/epics/E01/F01-feat/README.md")
 		tipo := result["tipo"]
 		if tipo == nil {
 			t.Fatal("expected tipo field")
@@ -214,7 +214,7 @@ func TestFilterSchemaByMatch_RequiredMatch(t *testing.T) {
 	})
 
 	t.Run("not included at E-level", func(t *testing.T) {
-		result := FilterSchemaByMatch(schema, "docs/epics/E01/README.md")
+		result := mustFilterSchemaByMatch(t, schema, "docs/epics/E01/README.md")
 		if _, ok := result["tipo"]; ok {
 			t.Error("expected tipo absent at E-level (Match restricts to F* and T*)")
 		}
@@ -231,18 +231,27 @@ func TestFilterSchemaByMatch_RequiredMatchWithoutMatch(t *testing.T) {
 	}
 
 	t.Run("required true at T-level", func(t *testing.T) {
-		result := FilterSchemaByMatch(schema, "docs/epics/E01/F01/S001/T001-task.md")
+		result := mustFilterSchemaByMatch(t, schema, "docs/epics/E01/F01/S001/T001-task.md")
 		if !result["estado"].Required {
 			t.Error("expected required true at T-level")
 		}
 	})
 
 	t.Run("required false at E-level", func(t *testing.T) {
-		result := FilterSchemaByMatch(schema, "docs/epics/E01/README.md")
+		result := mustFilterSchemaByMatch(t, schema, "docs/epics/E01/README.md")
 		if result["estado"].Required {
 			t.Error("expected required false at E-level")
 		}
 	})
+}
+
+func mustFilterSchemaByMatch(t *testing.T, schema map[string]*SchemaField, recordPath string) map[string]*SchemaField {
+	t.Helper()
+	filtered, err := FilterSchemaByMatch(schema, recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filtered
 }
 
 func fieldNames(schema map[string]*SchemaField) []string {

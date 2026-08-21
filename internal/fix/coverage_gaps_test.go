@@ -769,8 +769,8 @@ total: 10
 		t.Fatalf("ApplyRepair: %v", err)
 	}
 
-	if len(result.Changed) != 1 {
-		t.Errorf("expected 1 changed entry, got %d", len(result.Changed))
+	if len(result.Changed) != 0 || len(result.Rejected) != 1 {
+		t.Errorf("changed=%v rejected=%v, want strict YAML type conflict rejected", result.Changed, result.Rejected)
 	}
 }
 

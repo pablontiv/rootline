@@ -22,30 +22,51 @@ type ValidationError struct {
 	Suggestion string `json:"suggestion,omitempty"`
 }
 
-// resolveFieldValue resolves a field value using frontmatter-first precedence.
-// Priority:
-// 1. If the field exists in record.Frontmatter, return that value.
-// 2. If the field has an Extract directive, try to extract from the body.
-// 3. Otherwise, return (nil, false).
-//
-// This ensures frontmatter always takes precedence over body extraction,
-// implementing the spec's "Frontmatter Precedence Over Body Extraction" requirement.
-func resolveFieldValue(record *extract.Record, name string, field SchemaField) (any, bool) {
-	// Frontmatter takes precedence (highest priority).
-	if v, ok := record.Frontmatter[name]; ok {
-		return v, true
+func sourceResolutionError(fieldName, source, severity string, err error) ValidationError {
+	if severity == "" {
+		severity = "error"
 	}
+	return ValidationError{
+		Rule:     "source",
+		Field:    fieldName,
+		Message:  err.Error(),
+		Source:   source,
+		Severity: severity,
+	}
+}
 
-	// If no frontmatter value and field has an Extract directive, try body extraction.
-	if field.Extract != "" {
-		bodyVal, exists := extract.ResolveBodyValue(record, field.Extract)
-		if exists && bodyVal != "" {
-			return bodyVal, true
+func validationErrorFromContract(fieldName string, field SchemaField, issue *FieldContractIssue) ValidationError {
+	severity := field.Severity
+	if severity == "" {
+		severity = "error"
+	}
+	err := ValidationError{
+		Rule:     "type",
+		Field:    fieldName,
+		Message:  fmt.Sprintf("field %q expected %s, got %s", fieldName, issue.Expected, issue.Actual),
+		Source:   field.Source,
+		Severity: severity,
+	}
+	switch issue.Code {
+	case "invalid-enum":
+		valStr := issue.Actual
+		err.Rule = "enum"
+		err.Message = fmt.Sprintf("value %v is not in allowed values: [%s]", issue.Actual, strings.Join(field.Values, ", "))
+		err.Suggestion = fuzzy.Match(valStr, field.Values)
+		if err.Suggestion != "" && err.Suggestion != valStr {
+			err.Message += fmt.Sprintf(" (did you mean %q?)", err.Suggestion)
 		}
+	case "invalid-link":
+		err.Rule = "link-format"
+		err.Message = fmt.Sprintf("field %q should contain wiki-link syntax [[target]]", fieldName)
+		if field.Severity == "" {
+			err.Severity = "warn"
+		}
+	case "invalid-sequence":
+		err.Rule = "sequence-format"
+		err.Message = issue.Message
 	}
-
-	// Field does not exist.
-	return nil, false
+	return err
 }
 
 // Validate checks a Record's frontmatter against the effective StemFile.
@@ -58,27 +79,27 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 	}
 
 	var errs []ValidationError
+	sourceResolutionFailed := make(map[string]bool)
+	fieldContractFailed := make(map[string]bool)
 
 	// Phase 1: Schema auto-checks.
 	for name, field := range effective.Schema {
-		val, exists := resolveFieldValue(record, name, field)
-
 		// Skip if severity is "off"
 		if field.Severity == "off" {
 			continue
 		}
 
+		val, exists, err := ResolveFieldValue(record, name, field)
+		if err != nil {
+			errs = append(errs, sourceResolutionError(name, field.Source, field.Severity, err))
+			sourceResolutionFailed[name] = true
+			continue
+		}
+
 		// required: true → field must exist
 		if field.Required && !exists {
-			// Layer 1: Skip for aggregate-computed fields on index files.
-			if _, hasAggregate := effective.Aggregate[name]; hasAggregate && IsIndexFile(record.Path, effective) {
+			if !requiredCheckApplies(record, effective, name, field) {
 				continue
-			}
-			// Layer 2: Skip if excludes.match pattern matches the record path.
-			if field.Excludes != nil && field.Excludes.Match != "" {
-				if matched, _ := filepath.Match(field.Excludes.Match, record.Path); matched {
-					continue
-				}
 			}
 			msg := fmt.Sprintf("required field %q is missing", name)
 			suggestion := ""
@@ -101,55 +122,13 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 			continue
 		}
 
-		// enum: if values defined and field exists, value must be in list
-		if exists && len(field.Values) > 0 {
-			if !enumContains(field.Values, val) {
-				valStr := fmt.Sprintf("%v", val)
-				msg := fmt.Sprintf("value %v is not in allowed values: [%s]", val, strings.Join(field.Values, ", "))
-				suggestion := fuzzy.Match(valStr, field.Values)
-				if suggestion != "" && suggestion != valStr {
-					msg += fmt.Sprintf(" (did you mean %q?)", suggestion)
-				}
-				errs = append(errs, ValidationError{
-					Rule:       "enum",
-					Field:      name,
-					Message:    msg,
-					Source:     field.Source,
-					Severity:   field.Severity,
-					Suggestion: suggestion,
-				})
-			}
+		if !exists {
+			continue
 		}
-
-		// link: if type is "link" and field exists, value must contain [[target]] syntax
-		if exists && field.Type == "link" {
-			valid := false
-			switch v := val.(type) {
-			case string:
-				valid = extract.ContainsWikilink(v)
-			case []any:
-				valid = true
-				for _, item := range v {
-					s, ok := item.(string)
-					if !ok || !extract.ContainsWikilink(s) {
-						valid = false
-						break
-					}
-				}
-			}
-			if !valid {
-				sev := field.Severity
-				if sev == "" {
-					sev = "warn"
-				}
-				errs = append(errs, ValidationError{
-					Rule:     "link-format",
-					Field:    name,
-					Message:  fmt.Sprintf("field %q should contain wiki-link syntax [[target]]", name),
-					Source:   "schema",
-					Severity: sev,
-				})
-			}
+		if issue := ValidateFieldValue(field, val); issue != nil {
+			errs = append(errs, validationErrorFromContract(name, field, issue))
+			fieldContractFailed[name] = true
+			continue
 		}
 	}
 
@@ -189,16 +168,19 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 		if rule.Severity == "off" {
 			continue
 		}
+		if sourceResolutionFailed[rule.Field] || fieldContractFailed[rule.Field] {
+			continue
+		}
 		var ruleErrs []ValidationError
 		switch rule.Rule {
 		case "non_empty":
-			ruleErrs = checkNonEmpty(record, rule)
+			ruleErrs = checkNonEmpty(record, effective, rule)
 		case "exists":
-			ruleErrs = checkExists(record, rule)
+			ruleErrs = checkExists(record, effective, rule)
 		case "requires":
-			ruleErrs = checkRequires(record, rule)
+			ruleErrs = checkRequires(record, effective, rule)
 		case "enum":
-			ruleErrs = checkEnum(record, rule, effective)
+			ruleErrs = checkEnum(record, effective, rule)
 		}
 		for i := range ruleErrs {
 			ruleErrs[i].Severity = rule.Severity
@@ -210,9 +192,11 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 }
 
 // checkNonEmpty validates that a field exists and is not an empty string.
-// Uses EffectiveField to consider derived values.
-func checkNonEmpty(record *extract.Record, rule ValidationRule) []ValidationError {
-	val, exists := record.EffectiveField(rule.Field)
+func checkNonEmpty(record *extract.Record, effective *StemFile, rule ValidationRule) []ValidationError {
+	val, exists, err := ResolveEffectiveField(record, effective, rule.Field)
+	if err != nil {
+		return []ValidationError{sourceResolutionError(rule.Field, rule.Source, rule.Severity, err)}
+	}
 	if !exists {
 		return []ValidationError{{
 			Rule:    "non_empty",
@@ -232,9 +216,11 @@ func checkNonEmpty(record *extract.Record, rule ValidationRule) []ValidationErro
 	return nil
 }
 
-// checkExists validates that a field is present (in frontmatter or derived).
-func checkExists(record *extract.Record, rule ValidationRule) []ValidationError {
-	if _, exists := record.EffectiveField(rule.Field); !exists {
+// checkExists validates that a field is present according to the effective schema.
+func checkExists(record *extract.Record, effective *StemFile, rule ValidationRule) []ValidationError {
+	if _, exists, err := ResolveEffectiveField(record, effective, rule.Field); err != nil {
+		return []ValidationError{sourceResolutionError(rule.Field, rule.Source, rule.Severity, err)}
+	} else if !exists {
 		return []ValidationError{{
 			Rule:    "exists",
 			Field:   rule.Field,
@@ -247,10 +233,12 @@ func checkExists(record *extract.Record, rule ValidationRule) []ValidationError 
 
 // checkRequires validates that if a condition matches, listed fields exist.
 // Format: { rule: requires, if: { Field: Value }, then: { fields: [f1, f2] } }
-// Uses EffectiveField to consider derived values in both condition and field checks.
-func checkRequires(record *extract.Record, rule ValidationRule) []ValidationError {
-	// Check if condition matches (using effective fields: derived + frontmatter).
-	if !conditionMatchesRecord(record, rule.If) {
+func checkRequires(record *extract.Record, effective *StemFile, rule ValidationRule) []ValidationError {
+	matched, fieldName, err := conditionMatchesRecord(record, effective, rule.If)
+	if err != nil {
+		return []ValidationError{sourceResolutionError(fieldName, rule.Source, rule.Severity, err)}
+	}
+	if !matched {
 		return nil
 	}
 
@@ -262,7 +250,12 @@ func checkRequires(record *extract.Record, rule ValidationRule) []ValidationErro
 
 	var errs []ValidationError
 	for _, f := range fields {
-		if _, exists := record.EffectiveField(f); !exists {
+		_, exists, err := ResolveEffectiveField(record, effective, f)
+		if err != nil {
+			errs = append(errs, sourceResolutionError(f, rule.Source, rule.Severity, err))
+			continue
+		}
+		if !exists {
 			errs = append(errs, ValidationError{
 				Rule:    "requires",
 				Field:   f,
@@ -275,12 +268,15 @@ func checkRequires(record *extract.Record, rule ValidationRule) []ValidationErro
 }
 
 // checkEnum validates a field value against schema values (explicit rule).
-func checkEnum(record *extract.Record, rule ValidationRule, effective *StemFile) []ValidationError {
+func checkEnum(record *extract.Record, effective *StemFile, rule ValidationRule) []ValidationError {
 	field, ok := effective.Schema[rule.Field]
 	if !ok || len(field.Values) == 0 {
 		return nil
 	}
-	val, exists := record.Frontmatter[rule.Field]
+	val, exists, err := ResolveEffectiveField(record, effective, rule.Field)
+	if err != nil {
+		return []ValidationError{sourceResolutionError(rule.Field, rule.Source, rule.Severity, err)}
+	}
 	if !exists {
 		return nil
 	}
@@ -308,7 +304,7 @@ func checkEnum(record *extract.Record, rule ValidationRule, effective *StemFile)
 //
 // The key "match" is treated specially: its value is a glob pattern matched
 // against the directory name of the record (e.g., "T*" matches "T001-name").
-func conditionMatchesRecord(record *extract.Record, condition map[string]any) bool {
+func conditionMatchesRecord(record *extract.Record, effective *StemFile, condition map[string]any) (bool, string, error) {
 	for key, expected := range condition {
 		if key == "match" {
 			pattern := fmt.Sprintf("%v", expected)
@@ -321,19 +317,22 @@ func conditionMatchesRecord(record *extract.Record, condition map[string]any) bo
 				}
 			}
 			if !found {
-				return false
+				return false, "", nil
 			}
 			continue
 		}
-		actual, exists := record.EffectiveField(key)
+		actual, exists, err := ResolveEffectiveField(record, effective, key)
+		if err != nil {
+			return false, key, err
+		}
 		if !exists {
-			return false
+			return false, "", nil
 		}
 		if fmt.Sprintf("%v", actual) != fmt.Sprintf("%v", expected) {
-			return false
+			return false, "", nil
 		}
 	}
-	return true
+	return true, "", nil
 }
 
 // extractThenFields extracts the fields list from a then clause.

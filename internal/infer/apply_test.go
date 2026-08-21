@@ -393,33 +393,24 @@ func TestApplySchemaInferences_TypeAlreadySet(t *testing.T) {
 func TestApplySchemaInferences_RequiredFieldNotInSchema(t *testing.T) {
 	dir := t.TempDir()
 	stemPath := filepath.Join(dir, ".stem")
-	if err := os.WriteFile(stemPath, []byte("version: 2\nschema:\n  estado:\n    type: string\n"), 0o644); err != nil {
+	original := []byte("version: 2\nschema:\n  estado:\n    type: string\n")
+	if err := os.WriteFile(stemPath, original, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// required_field for a field not in schema → field is CREATED with required: true.
-	inferences := []ReportInference{
+	// required_field for a field not in schema would create a declaration with no
+	// type. Prospective validation rejects that before publishing or writing.
+	result, err := ApplySchemaInferences(stemPath, []ReportInference{
 		{Type: "required_field", Field: "owner"},
+	}, false)
+	if err == nil {
+		t.Fatalf("expected incomplete declaration error, got result %+v", result)
 	}
-
-	result, err := ApplySchemaInferences(stemPath, inferences, false)
-	if err != nil {
-		t.Fatalf("apply error: %v", err)
+	if !strings.Contains(err.Error(), `field "owner" must declare one supported type`) {
+		t.Fatalf("error = %q", err)
 	}
-	if len(result.Applied) != 1 {
-		t.Fatalf("expected 1 applied (field created), got %d: %v", len(result.Applied), result.Applied)
-	}
-	if !strings.Contains(result.Applied[0], "add_field: owner") {
-		t.Errorf("expected add_field message, got %q", result.Applied[0])
-	}
-
-	data, _ := os.ReadFile(stemPath)
-	stem, err := rules.ParseStem(stemPath, data)
-	if err != nil {
-		t.Fatalf("re-parse after grow: %v", err)
-	}
-	if !stem.Schema["owner"].Required {
-		t.Errorf("expected created field to be required, got %+v", stem.Schema["owner"])
+	if got, _ := os.ReadFile(stemPath); string(got) != string(original) {
+		t.Fatalf("stem changed despite rejected required_field:\n%s", got)
 	}
 }
 
@@ -509,33 +500,24 @@ func TestSetFieldProperty_UpdateExisting(t *testing.T) {
 func TestApplySchemaInferences_DefaultNotInSchema(t *testing.T) {
 	dir := t.TempDir()
 	stemPath := filepath.Join(dir, ".stem")
-	if err := os.WriteFile(stemPath, []byte("version: 2\nschema:\n  tipo:\n    type: string\n"), 0o644); err != nil {
+	original := []byte("version: 2\nschema:\n  tipo:\n    type: string\n")
+	if err := os.WriteFile(stemPath, original, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// constant_field for a field NOT in schema → field is CREATED with default.
-	inferences := []ReportInference{
+	// constant_field for a field not in schema would create a declaration with no
+	// type. Prospective validation rejects that before publishing or writing.
+	result, err := ApplySchemaInferences(stemPath, []ReportInference{
 		{Type: "constant_field", Field: "estado", Value: "Pending"},
+	}, false)
+	if err == nil {
+		t.Fatalf("expected incomplete declaration error, got result %+v", result)
 	}
-
-	result, err := ApplySchemaInferences(stemPath, inferences, false)
-	if err != nil {
-		t.Fatalf("apply error: %v", err)
+	if !strings.Contains(err.Error(), `field "estado" must declare one supported type`) {
+		t.Fatalf("error = %q", err)
 	}
-	if len(result.Applied) != 1 {
-		t.Fatalf("expected 1 applied (field created), got %d: %v", len(result.Applied), result.Applied)
-	}
-	if !strings.Contains(result.Applied[0], "add_field: estado") {
-		t.Errorf("expected add_field message, got %q", result.Applied[0])
-	}
-
-	data, _ := os.ReadFile(stemPath)
-	stem, err := rules.ParseStem(stemPath, data)
-	if err != nil {
-		t.Fatalf("re-parse after grow: %v", err)
-	}
-	if stem.Schema["estado"].Default != "Pending" {
-		t.Errorf("expected created field default 'Pending', got %q", stem.Schema["estado"].Default)
+	if got, _ := os.ReadFile(stemPath); string(got) != string(original) {
+		t.Fatalf("stem changed despite rejected constant_field:\n%s", got)
 	}
 }
 
@@ -934,4 +916,207 @@ func TestApplySchemaInferences_MixedKnownAndUnknown(t *testing.T) {
 	if stem.Schema["nuevo"].Type != "integer" {
 		t.Error("expected nuevo field with type integer (from known inference)")
 	}
+}
+
+func TestApplySchemaInferences_RejectsProspectiveInvalidChangedFieldsWithoutPublishingOrWriting(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		stem       string
+		inferences []ReportInference
+		want       []string
+	}{
+		{
+			name: "retained_match_becomes_invalid_sequence",
+			stem: "version: 2\nschema:\n  id:\n    prefix: QX\n    digits: 2\n    match:\n      \"QXBAD*\": {prefix: QX, digits: 2.0}\n  old_debt:\n    type: enum\n",
+			inferences: []ReportInference{
+				{Type: "untyped_field", Field: "id", Value: "sequence"},
+			},
+			want: []string{"id", "QXBAD*", "digits"},
+		},
+		{
+			name: "new_enum_type_without_values",
+			stem: "version: 2\nschema:\n  old_debt:\n    type: enum\n",
+			inferences: []ReportInference{
+				{Type: "field_type", Field: "estado", Value: "enum"},
+			},
+			want: []string{"estado", "at least one value"},
+		},
+		{
+			name: "new_sequence_type_without_config",
+			stem: "version: 2\nschema:\n  old_debt:\n    type: enum\n",
+			inferences: []ReportInference{
+				{Type: "field_type", Field: "id", Value: "sequence"},
+			},
+			want: []string{"id", "prefix and positive digits"},
+		},
+	} {
+		for _, dryRun := range []bool{true, false} {
+			t.Run(tc.name+"/dry_run="+map[bool]string{true: "true", false: "false"}[dryRun], func(t *testing.T) {
+				dir := t.TempDir()
+				stemPath := filepath.Join(dir, ".stem")
+				original := []byte(tc.stem)
+				if err := os.WriteFile(stemPath, original, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(stemPath, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				infoBefore, err := os.Stat(stemPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				result, err := ApplySchemaInferences(stemPath, tc.inferences, dryRun)
+				if err == nil {
+					t.Fatalf("ApplySchemaInferences accepted invalid prospective state: %+v", result)
+				}
+				if result != nil && len(result.Applied) != 0 {
+					t.Fatalf("invalid prospective state published actions: %+v", result)
+				}
+				for _, want := range tc.want {
+					if !strings.Contains(err.Error(), want) {
+						t.Fatalf("error %q does not retain %q", err, want)
+					}
+				}
+				after, readErr := os.ReadFile(stemPath)
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				if string(after) != string(original) {
+					t.Fatalf("stem changed despite prospective failure:\nbefore:\n%s\nafter:\n%s", original, after)
+				}
+				infoAfter, err := os.Stat(stemPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if infoAfter.Mode() != infoBefore.Mode() {
+					t.Fatalf("mode changed: got %v want %v", infoAfter.Mode(), infoBefore.Mode())
+				}
+			})
+		}
+	}
+}
+
+func TestApplySchemaInferences_ValidatesComposedFinalDeclarationNotIntermediateState(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		t.Run(map[bool]string{true: "dry_run", false: "write"}[dryRun], func(t *testing.T) {
+			dir := t.TempDir()
+			stemPath := filepath.Join(dir, ".stem")
+			original := []byte("version: 2\nschema: {}\n")
+			if err := os.WriteFile(stemPath, original, 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			result, err := ApplySchemaInferences(stemPath, []ReportInference{
+				{Type: "field_type", Field: "estado", Value: "enum"},
+				{Type: "enum_values", Field: "estado", Value: "[Pending Done]"},
+			}, dryRun)
+			if err != nil {
+				t.Fatalf("valid composed declaration rejected: %v", err)
+			}
+			if len(result.Applied) != 2 {
+				t.Fatalf("applied = %v, want both composing actions", result.Applied)
+			}
+			after, err := os.ReadFile(stemPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if dryRun {
+				if string(after) != string(original) {
+					t.Fatalf("dry-run changed stem:\n%s", after)
+				}
+				return
+			}
+			stem, err := rules.ParseStem(stemPath, after)
+			if err != nil {
+				t.Fatal(err)
+			}
+			field := stem.Schema["estado"]
+			if field.Type != "enum" || len(field.Values) != 2 {
+				t.Fatalf("composed declaration not written as complete enum: %+v\n%s", field, after)
+			}
+		})
+	}
+}
+
+func TestApplySchemaInferences_WrapperParityWithPlanForDryRunAndWrite(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		t.Run(map[bool]string{true: "dry_run", false: "write"}[dryRun], func(t *testing.T) {
+			dir := t.TempDir()
+			planPath := filepath.Join(dir, "plan.stem")
+			wrapperPath := filepath.Join(dir, "wrapper.stem")
+			original := []byte("version: 2\nschema:\n  status:\n    type: enum\n    values: [Pending]\n")
+			for _, path := range []string{planPath, wrapperPath} {
+				if err := os.WriteFile(path, original, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(path, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			inferences := []ReportInference{{Type: "enum_values", Field: "status", Value: "[Pending Done]"}}
+			plan, err := PlanSchemaInferences(planPath, inferences)
+			if err != nil {
+				t.Fatalf("PlanSchemaInferences: %v", err)
+			}
+			expected := plan.Result
+			expected.DryRun = dryRun
+			if !dryRun {
+				if err := ApplySchemaInferencePlan(plan); err != nil {
+					t.Fatalf("ApplySchemaInferencePlan: %v", err)
+				}
+			}
+
+			actual, err := ApplySchemaInferences(wrapperPath, inferences, dryRun)
+			if err != nil {
+				t.Fatalf("ApplySchemaInferences: %v", err)
+			}
+			assertApplyResultEqual(t, *actual, expected)
+
+			planBytes, err := os.ReadFile(planPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wrapperBytes, err := os.ReadFile(wrapperPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if dryRun {
+				if string(wrapperBytes) != string(original) {
+					t.Fatalf("wrapper dry-run changed target:\n%s", wrapperBytes)
+				}
+				return
+			}
+			if string(wrapperBytes) != string(planBytes) {
+				t.Fatalf("wrapper content differs from explicit plan/apply:\nwrapper:\n%s\nplan:\n%s", wrapperBytes, planBytes)
+			}
+			info, err := os.Stat(wrapperPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := info.Mode().Perm(); got != 0o600 {
+				t.Fatalf("wrapper mode = %v, want 0600", got)
+			}
+		})
+	}
+}
+
+func assertApplyResultEqual(t *testing.T, got, want ApplyResult) {
+	t.Helper()
+	if got.DryRun != want.DryRun || !equalStringSlices(got.Applied, want.Applied) || !equalStringSlices(got.Skipped, want.Skipped) || !equalStringSlices(got.Rejected, want.Rejected) {
+		t.Fatalf("ApplyResult = %+v, want %+v", got, want)
+	}
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

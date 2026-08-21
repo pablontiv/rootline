@@ -64,10 +64,13 @@ func TestDescribeCmd_FullContract(t *testing.T) {
 		t.Error("missing Estado in schema")
 	}
 
-	// Source tracking
+	// Physical declaration tracking is distinct from logical extraction source.
 	fechaField := schema["Fecha"].(map[string]any)
-	if fechaField["source"] == nil || fechaField["source"] == "" {
-		t.Error("Fecha.source should be set")
+	if fechaField["source"] != nil {
+		t.Errorf("Fecha.source = %v, want absent without body source", fechaField["source"])
+	}
+	if fechaField["defined_in"] == nil || fechaField["defined_in"] == "" {
+		t.Error("Fecha.defined_in should be set")
 	}
 
 	// Validate section

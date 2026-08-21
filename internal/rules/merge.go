@@ -75,6 +75,7 @@ func mergeSchemaFields(parent, child map[string]SchemaField, source string) map[
 	for k, v := range child {
 		v.Source = source
 		if parentField, exists := out[k]; exists {
+			v = mergeFieldSource(parentField, v)
 			v = mergeFieldSeverity(parentField, v)
 		}
 		out[k] = v
@@ -82,19 +83,31 @@ func mergeSchemaFields(parent, child map[string]SchemaField, source string) map[
 	return out
 }
 
+// mergeFieldSource carries an inherited extraction source through child fields
+// that omit source. Explicit empty or null source declarations are preserved as
+// removals so compatibility checks can reject them when inherited.
+func mergeFieldSource(parent, child SchemaField) SchemaField {
+	if child.Extract == "" && !child.declaration.SourcePresent {
+		child.Extract = parent.Extract
+	}
+	return child
+}
+
 // mergeFieldSeverity applies the tighten-only rule for severity:
 // child can tighten (warn -> error) but not loosen (error -> warn).
 // An unspecified severity ("") defaults to "error" — the absence of
 // an explicit severity is not a loosening intent.
 func mergeFieldSeverity(parent, child SchemaField) SchemaField {
-	if child.Severity == "" {
-		child.Severity = "error"
+	parentSeverity, parentOK := normalizedSeverity(parent.Severity)
+	childSeverity, childOK := normalizedSeverity(child.Severity)
+	if !parentOK || !childOK {
+		return child
 	}
-	parentSev := severityOrder[parent.Severity]
-	childSev := severityOrder[child.Severity]
-	if childSev < parentSev {
-		// Child is trying to loosen — keep parent's stricter severity
-		child.Severity = parent.Severity
+	if severityOrder[childSeverity] < severityOrder[parentSeverity] {
+		// Child is trying to loosen — keep parent's stricter severity.
+		child.Severity = parentSeverity
+	} else {
+		child.Severity = childSeverity
 	}
 	return child
 }

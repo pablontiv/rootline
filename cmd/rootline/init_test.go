@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 func TestInitDryRun(t *testing.T) {
@@ -120,6 +122,130 @@ func TestInitCleanContentNoWarning(t *testing.T) {
 	}
 	if strings.Contains(out, "Warning") {
 		t.Errorf("expected no warning when all files have frontmatter, got: %s", out)
+	}
+}
+
+func TestStemSerializer_PreservesSource(t *testing.T) {
+	ordered := 1
+	stem := &rules.StemFile{
+		Version: 2,
+		Root:    true,
+		Schema: map[string]rules.SchemaField{
+			"h1":     {Type: "string", Extract: `body.h1`},
+			"notes":  {Type: "string", Extract: `body.section["## Notes: risks #1"]`, Required: true},
+			"legacy": {Type: "string", Heading: "## Legacy", Ordered: &ordered},
+		},
+	}
+
+	out, err := stemFileToYAML(stem, t.TempDir())
+	if err != nil {
+		t.Fatalf("stemFileToYAML: %v", err)
+	}
+	if !strings.Contains(out, "source: body.h1") {
+		t.Fatalf("body.h1 source not serialized:\n%s", out)
+	}
+	if !strings.Contains(out, `source: 'body.section["## Notes: risks #1"]'`) {
+		t.Fatalf("hazardous section source not safely serialized:\n%s", out)
+	}
+	if strings.Contains(out, "heading:") || strings.Contains(out, "ordered:") {
+		t.Fatalf("canonical serializer emitted legacy keys:\n%s", out)
+	}
+
+	parsed, err := rules.ParseStem(".stem", []byte(out))
+	if err != nil {
+		t.Fatalf("serialized stem did not parse: %v\n%s", err, out)
+	}
+	if got := parsed.Schema["h1"].Extract; got != `body.h1` {
+		t.Fatalf("h1 source=%q", got)
+	}
+	if got := parsed.Schema["notes"].Extract; got != `body.section["## Notes: risks #1"]` {
+		t.Fatalf("notes source=%q", got)
+	}
+	if got := parsed.Schema["legacy"].Extract; got != "" {
+		t.Fatalf("legacy source invented as %q", got)
+	}
+}
+
+func TestInitSectionSourceCanonicalDryRunRoundTrips(t *testing.T) {
+	tests := []struct {
+		name     string
+		heading  string
+		field    string
+		wantLine string
+		wantSrc  string
+	}{
+		{"h1", "# Overview", "overview", `    source: body.section["# Overview"]`, `body.section["# Overview"]`},
+		{"h2", "## Notes", "notes", `    source: body.section["## Notes"]`, `body.section["## Notes"]`},
+		{"h3", "### Deep Dive", "deep_dive", `    source: body.section["### Deep Dive"]`, `body.section["### Deep Dive"]`},
+		{"colon", "## Has: colon", "has_colon", `    source: 'body.section["## Has: colon"]'`, `body.section["## Has: colon"]`},
+		{"comment", "## Hash # marker", "hash_marker", `    source: 'body.section["## Hash # marker"]'`, `body.section["## Hash # marker"]`},
+		{"braces", "## Brace {value}", "brace_value", `    source: body.section["## Brace {value}"]`, `body.section["## Brace {value}"]`},
+		{"brackets", "## Bracket [value]", "bracket_value", `    source: body.section["## Bracket [value]"]`, `body.section["## Bracket [value]"]`},
+		{"quotes", `## Quote "double"`, "quote_double", `    source: body.section["## Quote \"double\""]`, `body.section["## Quote \"double\""]`},
+		{"backslash", `## Backslash \ path`, "backslash_path", `    source: body.section["## Backslash \\ path"]`, `body.section["## Backslash \\ path"]`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for i := 0; i < 4; i++ {
+				body := fmt.Sprintf("---\ntitle: doc-%d\n---\n%s\nBody\n", i, tt.heading)
+				mustWriteFile(t, filepath.Join(dir, fmt.Sprintf("with-section-%d.md", i)), []byte(body), 0644)
+			}
+			mustWriteFile(t, filepath.Join(dir, "without-section.md"), []byte("---\ntitle: other\n---\n# Different\n"), 0644)
+
+			out, err := runCmd(t, "init", dir, "--dry-run")
+			if err != nil {
+				t.Fatalf("unexpected error: %v\noutput:\n%s", err, out)
+			}
+			if !strings.Contains(out, tt.wantLine) {
+				t.Fatalf("init output source bytes mismatch; want line %q in:\n%s", tt.wantLine, out)
+			}
+			stem, err := rules.ParseStem(filepath.Join(dir, ".stem"), []byte(out))
+			if err != nil {
+				t.Fatalf("dry-run output did not parse with production parser: %v\n%s", err, out)
+			}
+			field := stem.Schema[tt.field]
+			if field.Type != "string" || field.Required || field.Extract != tt.wantSrc || field.Heading != "" {
+				t.Fatalf("parsed field = %+v, want optional string source %q without heading", field, tt.wantSrc)
+			}
+			if strings.Contains(out, "heading:") {
+				t.Fatalf("init output should not serialize legacy heading:\n%s", out)
+			}
+		})
+	}
+}
+
+func TestInitSectionSourceFieldCollisionLeavesNoPartialOutput(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 2; i++ {
+		mustWriteFile(t, filepath.Join(dir, fmt.Sprintf("notes-%d.md", i)), []byte("---\nnotes:\n  - keep\n---\n## Notes\nBody\n"), 0644)
+	}
+
+	out, err := runCmd(t, "init", dir)
+	if err == nil || !strings.Contains(err.Error(), `field "notes"`) || !strings.Contains(err.Error(), "frontmatter") || !strings.Contains(err.Error(), "body section") {
+		t.Fatalf("expected frontmatter/body section collision error, got out=%q err=%v", out, err)
+	}
+	if strings.Contains(out, "version: 2") || strings.Contains(out, "Created") {
+		t.Fatalf("expected no partial schema output, got %q", out)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".stem")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no partial .stem, stat err=%v", statErr)
+	}
+}
+
+func TestInitSectionSourceErrorLeavesNoPartialOutput(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "collision.md"), []byte("## Notes\nA\n\n### Notes\nB\n"), 0644)
+
+	out, err := runCmd(t, "init", dir)
+	if err == nil || !strings.Contains(err.Error(), "section field name collision") {
+		t.Fatalf("expected collision error, got out=%q err=%v", out, err)
+	}
+	if strings.Contains(out, "version: 2") || strings.Contains(out, "Created") {
+		t.Fatalf("expected no partial schema output, got %q", out)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".stem")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no partial .stem, stat err=%v", statErr)
 	}
 }
 
@@ -382,19 +508,25 @@ func TestInitEmitsSectionFields(t *testing.T) {
 	if !strings.Contains(out, "context:") {
 		t.Errorf("expected 'context:' field name in output, got:\n%s", out)
 	}
-	if !strings.Contains(out, `heading: "## Context"`) {
-		t.Errorf("expected 'heading: \"## Context\"' in output, got:\n%s", out)
+	if !strings.Contains(out, `source: body.section["## Context"]`) {
+		t.Errorf("expected canonical Context source in output, got:\n%s", out)
 	}
 	if !strings.Contains(out, "required: true") {
 		t.Errorf("expected 'required: true' for context section, got:\n%s", out)
 	}
 
-	// "## Notes" appears in 4/5 = 80% → exactly at 0.80 threshold → required_section
+	// "## Notes" appears in 4/5 = 80% → exactly at 0.80 threshold → optional_section
 	if !strings.Contains(out, "notes:") {
 		t.Errorf("expected 'notes:' field name in output, got:\n%s", out)
 	}
-	if !strings.Contains(out, `heading: "## Notes"`) {
-		t.Errorf("expected 'heading: \"## Notes\"' in output, got:\n%s", out)
+	if !strings.Contains(out, `source: body.section["## Notes"]`) {
+		t.Errorf("expected canonical Notes source in output, got:\n%s", out)
+	}
+	if strings.Contains(out, "notes:\n    type: string\n    required: true") {
+		t.Errorf("expected Notes to remain optional, got:\n%s", out)
+	}
+	if strings.Contains(out, "heading:") {
+		t.Errorf("expected no legacy heading serialization, got:\n%s", out)
 	}
 }
 
@@ -425,8 +557,11 @@ func TestInitSectionFieldsWrittenToFile(t *testing.T) {
 	if !strings.Contains(s, "context:") {
 		t.Errorf("expected 'context:' field in .stem, got:\n%s", s)
 	}
-	if !strings.Contains(s, `heading: "## Context"`) {
-		t.Errorf("expected heading in .stem, got:\n%s", s)
+	if !strings.Contains(s, `source: body.section["## Context"]`) {
+		t.Errorf("expected canonical source in .stem, got:\n%s", s)
+	}
+	if strings.Contains(s, "heading:") {
+		t.Errorf("expected no legacy heading in .stem, got:\n%s", s)
 	}
 }
 

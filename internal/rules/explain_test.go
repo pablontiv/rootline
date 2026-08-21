@@ -48,7 +48,10 @@ func TestNewExplainResult_FrontmatterOnly(t *testing.T) {
 		},
 	}
 
-	result := NewExplainResult("doc.md", entries, effective, record, nil)
+	result, err := NewExplainResult("doc.md", entries, effective, record, nil)
+	if err != nil {
+		t.Fatalf("NewExplainResult error: %v", err)
+	}
 
 	if result.Version != 1 {
 		t.Errorf("version = %d, want 1", result.Version)
@@ -70,8 +73,11 @@ func TestNewExplainResult_FrontmatterOnly(t *testing.T) {
 	if result.Fields[0].Name != "estado" || result.Fields[0].Origin != "frontmatter" {
 		t.Errorf("fields[0] = %v, want estado/frontmatter", result.Fields[0])
 	}
-	if result.Fields[0].Source != "/tmp/.stem" {
-		t.Errorf("fields[0].source = %q, want /tmp/.stem", result.Fields[0].Source)
+	if result.Fields[0].Source != "" {
+		t.Errorf("fields[0].source = %q, want empty logical source", result.Fields[0].Source)
+	}
+	if result.Fields[0].DefinedIn != "/tmp/.stem" {
+		t.Errorf("fields[0].defined_in = %q, want /tmp/.stem", result.Fields[0].DefinedIn)
 	}
 	if len(result.Errors) != 0 {
 		t.Errorf("errors = %d, want 0", len(result.Errors))
@@ -84,7 +90,10 @@ func TestNewExplainResult_NilEffective(t *testing.T) {
 		Derived:     map[string]any{},
 	}
 
-	result := NewExplainResult("doc.md", nil, nil, record, nil)
+	result, err := NewExplainResult("doc.md", nil, nil, record, nil)
+	if err != nil {
+		t.Fatalf("NewExplainResult error: %v", err)
+	}
 
 	if result.Version != 1 {
 		t.Errorf("version = %d, want 1", result.Version)
@@ -115,7 +124,10 @@ func TestNewExplainResult_DerivedFields(t *testing.T) {
 		},
 	}
 
-	result := NewExplainResult("doc.md", nil, effective, record, nil)
+	result, err := NewExplainResult("doc.md", nil, effective, record, nil)
+	if err != nil {
+		t.Fatalf("NewExplainResult error: %v", err)
+	}
 
 	// Find the slug field.
 	var slugField *ExplainField
@@ -149,7 +161,10 @@ func TestNewExplainResult_AggregateFields(t *testing.T) {
 		Aggregate: map[string]any{"total": "count(children)"},
 	}
 
-	result := NewExplainResult("README.md", nil, effective, record, nil)
+	result, err := NewExplainResult("README.md", nil, effective, record, nil)
+	if err != nil {
+		t.Fatalf("NewExplainResult error: %v", err)
+	}
 
 	var totalField *ExplainField
 	for i := range result.Fields {
@@ -181,7 +196,10 @@ func TestNewExplainResult_SchemaFieldMissing(t *testing.T) {
 		},
 	}
 
-	result := NewExplainResult("doc.md", nil, effective, record, nil)
+	result, err := NewExplainResult("doc.md", nil, effective, record, nil)
+	if err != nil {
+		t.Fatalf("NewExplainResult error: %v", err)
+	}
 
 	if len(result.Fields) != 1 {
 		t.Fatalf("fields = %d, want 1", len(result.Fields))
@@ -205,7 +223,10 @@ func TestNewExplainResult_SchemaFieldWithDefault(t *testing.T) {
 		},
 	}
 
-	result := NewExplainResult("doc.md", nil, effective, record, nil)
+	result, err := NewExplainResult("doc.md", nil, effective, record, nil)
+	if err != nil {
+		t.Fatalf("NewExplainResult error: %v", err)
+	}
 
 	if len(result.Fields) != 1 {
 		t.Fatalf("fields = %d, want 1", len(result.Fields))
@@ -229,7 +250,10 @@ func TestNewExplainResult_ValidationErrors(t *testing.T) {
 		{Rule: "enum", Field: "estado", Message: "invalid value", Source: ".stem", Severity: "error"},
 	}
 
-	result := NewExplainResult("doc.md", nil, effective, record, valErrs)
+	result, err := NewExplainResult("doc.md", nil, effective, record, valErrs)
+	if err != nil {
+		t.Fatalf("NewExplainResult error: %v", err)
+	}
 
 	if len(result.Errors) != 1 {
 		t.Fatalf("errors = %d, want 1", len(result.Errors))
@@ -261,7 +285,10 @@ func TestNewExplainResult_MultipleStemChain(t *testing.T) {
 		},
 	}
 
-	result := NewExplainResult("docs/task.md", entries, effective, record, nil)
+	result, err := NewExplainResult("docs/task.md", entries, effective, record, nil)
+	if err != nil {
+		t.Fatalf("NewExplainResult error: %v", err)
+	}
 
 	if len(result.StemChain) != 2 {
 		t.Fatalf("stem_chain = %d, want 2", len(result.StemChain))
@@ -287,7 +314,10 @@ func TestNewExplainResult_DeriveNonStringExpression(t *testing.T) {
 		},
 	}
 
-	result := NewExplainResult("doc.md", nil, effective, record, nil)
+	result, err := NewExplainResult("doc.md", nil, effective, record, nil)
+	if err != nil {
+		t.Fatalf("NewExplainResult error: %v", err)
+	}
 
 	var field *ExplainField
 	for i := range result.Fields {
@@ -337,7 +367,10 @@ func TestNewExplainResult_ProvenanceWithNestedStems(t *testing.T) {
 		},
 	}
 
-	result := NewExplainResult("tasks/task01.md", entries, effective, record, nil)
+	result, err := NewExplainResult("tasks/task01.md", entries, effective, record, nil)
+	if err != nil {
+		t.Fatalf("NewExplainResult error: %v", err)
+	}
 
 	// Check layers
 	if len(result.Layers) != 2 {

@@ -140,7 +140,11 @@ Fields available in projection:
 
 Derived fields are populated via `.stem` `source:` rules. For example, `titulo: {source: body.h1}` extracts the first Markdown heading. If a source cannot be extracted, the field is omitted from the row.
 
-### Link-traversal predicates
+### Source-Backed Fields
+
+`query` resolves `source: body.section["## Heading"]` through the effective schema. The field has a real type; frontmatter is an explicit frontmatter override. An empty section is present, while duplicate matching headings fail instead of returning one value. A child may omit and inherit a source binding, but cannot change it.
+
+## Link-traversal predicates
 
 Use `--has-inbound` / `--has-outbound` to filter records by their RELATIONS: a record is kept when at least one linked record matches the sub-expression (same syntax as `--where`, evaluated against the linked record — the source for inbound, the target for outbound). An empty expression (`""`) means "any linked record" (existence check). Predicates AND-compose with `--where` and apply before `--sort`/`--limit`/`--count`.
 
@@ -201,8 +205,8 @@ Report:
 
 - `stem_chain`
 - each field name/value
-- origin: frontmatter, derived, aggregated, schema
-- source `.stem`
+- origin: frontmatter, derived, aggregate, schema
+- logical `source` when present and defined_in `.stem`
 - expression when present
 - errors
 

@@ -3,13 +3,18 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/fix"
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -62,23 +67,43 @@ type SchemaApplyResult struct {
 	// the command exits 0. It exists so a stored report artifact, read long after
 	// the exit status is gone, does not require its consumer to re-implement the
 	// rule. Rejections and skips do not make a run incomplete.
-	Complete          bool               `json:"complete"`
-	Applied           []string           `json:"applied"`
-	Skipped           []string           `json:"skipped"`
-	Rejected          []string           `json:"rejected,omitempty"`
-	DryRun            bool               `json:"dry_run,omitempty"`
-	Errors            []string           `json:"errors,omitempty"`
-	ValidationSummary *ValidationSummary `json:"validation_summary,omitempty"`
+	Complete          bool                         `json:"complete"`
+	Applied           []string                     `json:"applied"`
+	Skipped           []string                     `json:"skipped"`
+	Rejected          []string                     `json:"rejected,omitempty"`
+	DryRun            bool                         `json:"dry_run,omitempty"`
+	Errors            []string                     `json:"errors,omitempty"`
+	ValidationSummary *ValidationSummary           `json:"validation_summary,omitempty"`
+	StemHealth        []rules.StemHealthDiagnostic `json:"stem_health"`
 
 	// ResolvedTargets is populated in dry-run only, where the caller cannot
 	// inspect the outcome on disk and needs to see where each .stem would land.
 	ResolvedTargets *fix.ResolvedTargetsBreakdown `json:"resolved_targets,omitempty"`
 }
 
+func newSchemaApplyResult(root string, dryRun bool) *SchemaApplyResult {
+	return &SchemaApplyResult{
+		Version:    1,
+		Kind:       "rootline/schema-apply",
+		Root:       root,
+		DryRun:     dryRun,
+		Applied:    []string{},
+		Skipped:    []string{},
+		Rejected:   []string{},
+		Errors:     []string{},
+		StemHealth: []rules.StemHealthDiagnostic{},
+	}
+}
+
 // seal records the run's completeness verdict once every phase has had its say,
 // so Complete can never disagree with the fields it summarizes. schema apply
 // performs no post-validation rollback, so Errors is the whole story here.
 func (r *SchemaApplyResult) seal() {
+	if r.StemHealth == nil {
+		r.StemHealth = []rules.StemHealthDiagnostic{}
+	}
+	sort.Strings(r.Skipped)
+	sort.Strings(r.Rejected)
 	r.Complete = len(r.Errors) == 0
 }
 
@@ -165,6 +190,9 @@ func runSchemaPropose(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("scanning: %w", err)
 	}
+	if err := ensureRecordsResolve(ctx, records, root); err != nil {
+		return fmt.Errorf("resolving .stem: %w", err)
+	}
 
 	if len(records) == 0 {
 		// No records found, emit empty report
@@ -185,9 +213,15 @@ func runSchemaPropose(cmd *cobra.Command, args []string) error {
 	}
 
 	// Derive and aggregate
-	derive.DeriveAllSimple(ctx, records, root)
-	derive.EnrichBuiltinsSimple(ctx, records, root)
-	derive.AggregateAllSimple(ctx, records, root)
+	if err := derive.DeriveAllSimple(ctx, records, root); err != nil {
+		return fmt.Errorf("deriving records: %w", err)
+	}
+	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
+		return fmt.Errorf("enriching records: %w", err)
+	}
+	if err := derive.AggregateAllSimple(ctx, records, root); err != nil {
+		return fmt.Errorf("aggregating records: %w", err)
+	}
 
 	// Check for existing stem
 	var existingStem *rules.StemFile
@@ -275,102 +309,82 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving report root: %w", err)
 	}
 
-	result := &SchemaApplyResult{
-		Version:  1,
-		Kind:     "rootline/schema-apply",
-		Root:     scanRoot,
-		DryRun:   schemaApplyDryRun,
-		Applied:  []string{},
-		Skipped:  []string{},
-		Rejected: []string{},
-		Errors:   []string{},
-	}
+	result := newSchemaApplyResult(scanRoot, schemaApplyDryRun)
 
 	resolved := &fix.ResolvedTargetsBreakdown{
 		Accepted: map[string]string{},
 		Rejected: map[string]string{},
 	}
 
-	// Process each proposal.
-	for _, proposal := range report.Proposals {
-		// Skip proposals that require agent intervention.
-		if proposal.RequiresAgent {
-			result.Skipped = append(result.Skipped, fmt.Sprintf("%s: %s (requires agent)", proposal.ID, proposal.Target))
-			continue
-		}
-
-		// Process based on operation type.
-		if proposal.Operation == "create_stem" {
-			// `schema propose` emits absolute targets under the scan root, so the
-			// propose->apply contract depends on absolute paths staying valid —
-			// they are accepted, then confined.
-			target, err := fix.ContainPath(scanRoot, proposal.Target, fix.PolicyAcceptAbsolute)
-			if err != nil {
-				// A target outside the scan root is a policy refusal, not a
-				// failed write: the command declined on purpose and named the
-				// path it declined. It belongs in rejected[], which is where
-				// repair apply already puts the identical event — and rejected[]
-				// exists here now, so the older note that it did not is stale.
-				// Classifying it as an error would make the two commands
-				// disagree about the same containment decision.
-				result.Rejected = append(result.Rejected, err.Error())
-				resolved.Rejected[proposal.Target] = fix.ContainmentReason(err)
-				continue
-			}
-			resolved.Accepted[proposal.Target] = target
-
-			// Check for empty patch before write attempt
-			if proposal.Patch == "" {
-				result.Errors = append(result.Errors, fmt.Sprintf("create_stem: %s: patch content required; re-run 'schema propose' to generate it", proposal.Target))
-				continue
-			}
-
-			// Overwrite guard: replacing a governed .stem discards root, scope,
-			// enum values, required markers, derive and aggregate in one write,
-			// so it is a policy refusal unless the caller opted in with --force.
-			_, statErr := os.Stat(target)
-			targetExists := statErr == nil
-			if targetExists && !schemaApplyForce {
-				result.Rejected = append(result.Rejected,
-					fmt.Sprintf(".stem already exists in %s (use --force to overwrite)", filepath.Dir(target)))
-				continue
-			}
-
-			// Name the action after what it actually does. A dry run is the only
-			// chance the caller has to notice that "create" means "replace".
-			action := "create_stem"
-			if targetExists {
-				action = "overwrite_stem"
-			}
-
-			// Write the patch content byte-identical to what was proposed (not regenerated)
-			if !schemaApplyDryRun {
-				if err := os.WriteFile(target, []byte(proposal.Patch), 0o644); err != nil {
-					result.Errors = append(result.Errors, fmt.Sprintf("write %s: %v", proposal.Target, err))
-				} else {
-					result.Applied = append(result.Applied, fmt.Sprintf("%s: %s", action, target))
-				}
-			} else {
-				// In dry-run, just record the action without writing
-				result.Applied = append(result.Applied, fmt.Sprintf("%s: %s", action, target))
-			}
-		} else {
-			// Unknown operation: reject with descriptive message
-			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: unknown operation \"%s\"", proposal.ID, proposal.Operation))
-		}
+	plan := planSchemaProposalApply(report.Proposals, scanRoot, schemaApplyForce, result, resolved)
+	if len(plan.writes) > 0 {
+		defer func() { _ = closeSchemaApplyBatch(plan) }()
 	}
-
 	if schemaApplyDryRun {
 		result.ResolvedTargets = resolved
 	}
+	if len(result.Errors) > 0 {
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
+	}
 
-	// If not dry-run, run validation.
-	if !schemaApplyDryRun {
-		validationResult, validationErr := runPostApplyValidation(ctx, scanRoot)
-		if validationErr != nil {
-			result.Errors = append(result.Errors, validationErr.Error())
+	if len(plan.writes) > 0 {
+		// Gate publication on the complete prospective hierarchy, not on each patch
+		// in isolation. Warnings and info diagnostics remain visible in the envelope;
+		// only error-severity diagnostics block publication and writes.
+		stemHealth, stemHealthErr := validateProspectiveStemWrites(ctx, scanRoot, plan)
+		if stemHealthErr != nil {
+			result.Errors = append(result.Errors, stemHealthErr.Error())
 		} else {
-			result.ValidationSummary = validationResult
+			result.StemHealth = stemHealth
+			for _, diag := range blockingStemHealth(stemHealth) {
+				result.Errors = append(result.Errors, schemaApplyStemHealthError(diag))
+			}
+		}
+		if len(result.Errors) > 0 {
+			result.seal()
+			if outputFormat == "table" {
+				if err := renderSchemaApplyTable(cmd, result); err != nil {
+					return err
+				}
+			} else if err := outputJSON(cmd, result, false); err != nil {
+				return err
+			}
+			return applyExitError(len(result.Errors), 0)
+		}
+
+		if err := preflightSchemaApplyRecords(ctx, scanRoot); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("resolving .stem: %v", err))
+			result.seal()
+			if outputFormat == "table" {
+				if err := renderSchemaApplyTable(cmd, result); err != nil {
+					return err
+				}
+			} else if err := outputJSON(cmd, result, false); err != nil {
+				return err
+			}
+			return applyExitError(len(result.Errors), 0)
+		}
+
+		applied, writeErrors := executeStemWrites(ctx, plan, schemaApplyDryRun, writeStemFileAtomic)
+		result.Applied = append(result.Applied, applied...)
+		result.Errors = append(result.Errors, writeErrors...)
+
+		// If not dry-run, run validation.
+		if !schemaApplyDryRun {
+			validationResult, validationErr := runPostApplyValidation(ctx, scanRoot)
+			if validationErr != nil {
+				result.Errors = append(result.Errors, validationErr.Error())
+			} else {
+				result.ValidationSummary = validationResult
+			}
 		}
 	}
 
@@ -390,8 +404,201 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 	return applyExitError(len(result.Errors), 0)
 }
 
+type schemaApplyTargetResolver func(root, target string) (*fsx.AtomicTarget, error)
+
+func writeStemFileAtomic(target *fsx.AtomicTarget, content []byte, mode fs.FileMode) error {
+	return target.WriteFileAtomic(content, mode)
+}
+
+func schemaApplyStemHealthError(diag rules.StemHealthDiagnostic) string {
+	return fmt.Sprintf("stem health error: path=%s check=%s field=%s message=%s", diag.Path, diag.Check, diag.Field, diag.Message)
+}
+
+type schemaApplyTargetObservation struct {
+	exists  bool
+	statErr error
+}
+
+type schemaApplyObservedTarget struct {
+	target      *fsx.AtomicTarget
+	observation schemaApplyTargetObservation
+}
+
+func planSchemaProposalApply(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown) schemaApplyBatchPlan {
+	return planSchemaProposalApplyWithResolver(proposals, scanRoot, force, result, resolved, fsx.ResolveAtomicTarget)
+}
+
+func planSchemaProposalApplyWithResolver(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown, resolve schemaApplyTargetResolver) schemaApplyBatchPlan {
+	plan := schemaApplyBatchPlan{writes: []stemWritePlan{}, actionsByWrite: [][]string{}}
+	var virtualTargets []schemaApplyObservedTarget
+	for _, proposal := range proposals {
+		// Skip proposals that require agent intervention.
+		if proposal.RequiresAgent {
+			result.Skipped = append(result.Skipped, fmt.Sprintf("%s: %s (requires agent)", proposal.ID, proposal.Target))
+			continue
+		}
+
+		if proposal.Operation != "create_stem" {
+			// Unknown operation: reject with descriptive message.
+			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: unknown operation \"%s\"", proposal.ID, proposal.Operation))
+			continue
+		}
+
+		// `schema propose` emits absolute targets under the scan root, so the
+		// propose->apply contract depends on absolute paths staying valid — they
+		// are accepted, then confined. Containment remains the lexical policy
+		// classifier; the resolved atomic target below becomes the physical write
+		// authority.
+		targetPath, err := fix.ContainPath(scanRoot, proposal.Target, fix.PolicyAcceptAbsolute)
+		if err != nil {
+			// A target outside the scan root is a policy refusal, not a failed write.
+			result.Rejected = append(result.Rejected, err.Error())
+			resolved.Rejected[proposal.Target] = fix.ContainmentReason(err)
+			continue
+		}
+		if filepath.Base(targetPath) != ".stem" {
+			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: target basename must be \".stem\"", proposal.Target))
+			resolved.Rejected[proposal.Target] = "target basename must be \".stem\""
+			continue
+		}
+		resolved.Accepted[proposal.Target] = targetPath
+
+		// Check for empty patch before write attempt.
+		if proposal.Patch == "" {
+			result.Errors = append(result.Errors, fmt.Sprintf("create_stem: %s: patch content required; re-run 'schema propose' to generate it", proposal.Target))
+			continue
+		}
+		if err := validateProspectiveSchemaPatch(targetPath, proposal.Patch); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("validating proposed .stem %s: %v", proposal.Target, err))
+			continue
+		}
+
+		target, err := resolve(scanRoot, targetPath)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("resolving target %s: %v", proposal.Target, err))
+			continue
+		}
+
+		// Overwrite guard: replacing a governed .stem discards root, scope, enum
+		// values, required markers, derive and aggregate in one write, so it is a
+		// policy refusal unless the caller opted in with --force. The planner has to
+		// model earlier accepted operations in this same report because execution is
+		// intentionally deferred until all validation has completed.
+		observation, observationIndex := schemaApplyObservationForTarget(virtualTargets, target)
+		if observationIndex < 0 {
+			observation = schemaApplyTargetObservationFromStat(target.Stat())
+			virtualTargets = append(virtualTargets, schemaApplyObservedTarget{target: target, observation: observation})
+			observationIndex = len(virtualTargets) - 1
+		}
+		if observation.statErr != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("stat %s: %v", proposal.Target, observation.statErr))
+			_ = target.Close()
+			continue
+		}
+		targetExists := observation.exists
+		if targetExists && !force {
+			result.Rejected = append(result.Rejected,
+				fmt.Sprintf(".stem already exists in %s (use --force to overwrite)", filepath.Dir(targetPath)))
+			_ = target.Close()
+			continue
+		}
+
+		// Name the action after what it actually does. A dry run is the only chance
+		// the caller has to notice that "create" means "replace".
+		action := "create_stem"
+		if targetExists {
+			action = "overwrite_stem"
+		}
+
+		plan.writes = append(plan.writes, stemWritePlan{
+			reportTarget: proposal.Target,
+			targetPath:   targetPath,
+			target:       target,
+			content:      []byte(proposal.Patch),
+			action:       action,
+		})
+		plan.actionsByWrite = append(plan.actionsByWrite, []string{fmt.Sprintf("%s: %s", action, targetPath)})
+		virtualTargets[observationIndex].observation = schemaApplyTargetObservation{exists: true}
+	}
+	return plan
+}
+
+func classifyCurrentStemHealthBeforeAnalyzeResolve(ctx context.Context, cmd *cobra.Command, root string, result *SchemaApplyResult) (bool, error) {
+	stemHealth, stemHealthErr := currentStemHealthForAnalyzeResolve(ctx, root)
+	if stemHealthErr != nil {
+		return false, nil
+	}
+	blocking := blockingStemHealth(stemHealth)
+	if len(blocking) == 0 {
+		return false, nil
+	}
+	result.StemHealth = stemHealth
+	for _, diag := range blocking {
+		result.Errors = append(result.Errors, schemaApplyStemHealthError(diag))
+	}
+	result.seal()
+	if outputFormat == "table" {
+		if err := renderSchemaApplyTable(cmd, result); err != nil {
+			return true, err
+		}
+	} else if err := outputJSON(cmd, result, false); err != nil {
+		return true, err
+	}
+	return true, applyExitError(len(result.Errors), 0)
+}
+
+func currentStemHealthForAnalyzeResolve(ctx context.Context, root string) ([]rules.StemHealthDiagnostic, error) {
+	physicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, fmt.Errorf("resolving validation root %s: %w", root, err)
+	}
+	state, err := rules.DiscoverStemState(ctx, physicalRoot)
+	if err != nil {
+		return nil, err
+	}
+	if state.Evaluated == nil {
+		state.Evaluated = make(map[string]bool)
+	}
+	for path := range state.ParseErrors {
+		if isSchemaApplyExternalPath(state.Root, path) {
+			state.Evaluated[path] = true
+		}
+	}
+	result, err := rules.EvaluateStemState(ctx, state)
+	if err != nil {
+		return nil, err
+	}
+	diags := rules.StemHealthDiagnostics(result)
+	sortStemHealthDiagnostics(diags)
+	return diags, nil
+}
+
+func isSchemaApplyExternalPath(root, path string) bool {
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
+	return err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func schemaApplyObservationForTarget(observed []schemaApplyObservedTarget, target *fsx.AtomicTarget) (schemaApplyTargetObservation, int) {
+	for i, item := range observed {
+		if item.target.SameTarget(target) {
+			return item.observation, i
+		}
+	}
+	return schemaApplyTargetObservation{}, -1
+}
+
+func schemaApplyTargetObservationFromStat(_ os.FileInfo, err error) schemaApplyTargetObservation {
+	if err == nil {
+		return schemaApplyTargetObservation{exists: true}
+	}
+	if isNotExist(err) {
+		return schemaApplyTargetObservation{exists: false}
+	}
+	return schemaApplyTargetObservation{statErr: err}
+}
+
 // runSchemaApplyFromAnalyze processes an analyze report and applies schema-modifying inferences to .stem files.
-// Mirrors apply.go's schema half: resolves closest .stem, filters schema-modifying inferences, calls ApplySchemaInferences.
+// Mirrors apply.go's schema half: resolves closest .stem, filters schema-modifying inferences, plans candidate bytes, and applies them through the shared prospective gate.
 func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	ctx := cmd.Context()
 
@@ -416,10 +623,63 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 		return fmt.Errorf("resolving report root: %w", err)
 	}
 
-	// Resolve closest .stem for the report path.
+	result := newSchemaApplyResult(root, schemaApplyDryRun)
+
+	// Separate schema-modifying inferences from data-correction inferences before
+	// any filesystem resolution. Empty and requires-agent-only analyze reports are
+	// policy-only no-ops, so they must not be failed by unrelated existing stem
+	// health.
+	var schemaInferences []infer.ReportInference
+	var hasActionableSchemaInference bool
+	for _, cat := range report.Categories {
+		for _, inf := range cat.Inferences {
+			switch inf.Type {
+			case "enum_values", "required_field", "constant_field", "field_type", "untyped_field", "sequence_incomplete", "required_section", "optional_section":
+				schemaInferences = append(schemaInferences, inf)
+				if !inf.RequiresAgent {
+					hasActionableSchemaInference = true
+				}
+			}
+		}
+	}
+	if !hasActionableSchemaInference {
+		for _, inf := range schemaInferences {
+			if inf.RequiresAgent {
+				result.Skipped = append(result.Skipped, fmt.Sprintf("%s: %s (requires agent)", inf.Type, inf.Message))
+			}
+		}
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
+	}
+
+	// Resolve closest .stem for the report path. A malformed governed overlay
+	// is an apply result failure, not a bare command error: callers depend on
+	// this existing envelope to learn why no report operation was performed.
 	res, resolveErr := rules.Resolve(root, root)
 	if resolveErr != nil {
-		return fmt.Errorf("resolving stems for %s: %w", report.Path, resolveErr)
+		// rules.Resolve is intentionally fail-fast; this fallback promotes known
+		// governance parse failures into structured stem_health diagnostics so
+		// schema apply can explain why no analyze mutation was performed.
+		if emit, err := classifyCurrentStemHealthBeforeAnalyzeResolve(ctx, cmd, root, result); emit || err != nil {
+			return err
+		}
+		result.Errors = append(result.Errors, fmt.Sprintf("resolving stems for %s: %v", report.Path, resolveErr))
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
 	}
 
 	if len(res.Chain) == 0 {
@@ -433,51 +693,106 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	}
 	stemPath := closestStem.Path
 
-	// Separate schema-modifying inferences from data-correction inferences.
-	// Schema-modifying: enum_values, required_field, constant_field, field_type, untyped_field, sequence_incomplete
-	// Data-correction: migrate_value, correct_value, add_field (these go to repair apply, not here)
-	// Routing filter: emits only schema-modifying types. Drift guard in apply.go:default catches divergence.
-	var schemaInferences []infer.ReportInference
-	for _, cat := range report.Categories {
-		for _, inf := range cat.Inferences {
-			switch inf.Type {
-			case "enum_values", "required_field", "constant_field", "field_type", "untyped_field", "sequence_incomplete":
-				schemaInferences = append(schemaInferences, inf)
+	// Plan schema modifications to .stem. Planning preserves analyze action strings
+	// but does not publish them: applied[] is gated on complete prospective
+	// hierarchy validation and executor success, exactly like proposal writes.
+	inferencePlan, err := infer.PlanSchemaInferences(stemPath, schemaInferences)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("applying schema: %v", err))
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
+	}
+	result.Skipped = inferencePlan.Result.Skipped
+	result.Rejected = inferencePlan.Result.Rejected
+
+	if inferencePlan.Modified {
+		writeAnchor := root
+		if isSchemaApplyExternalPath(root, stemPath) {
+			writeAnchor = filepath.Dir(stemPath)
+		}
+		target, err := fsx.ResolveAtomicTarget(writeAnchor, stemPath)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("resolving target %s: %v", stemPath, err))
+			result.seal()
+			if outputFormat == "table" {
+				if err := renderSchemaApplyTable(cmd, result); err != nil {
+					return err
+				}
+			} else if err := outputJSON(cmd, result, false); err != nil {
+				return err
+			}
+			return applyExitError(len(result.Errors), 0)
+		}
+		plan := schemaApplyBatchPlan{
+			writes: []stemWritePlan{{
+				reportTarget: stemPath,
+				targetPath:   inferencePlan.Target,
+				target:       target,
+				content:      inferencePlan.Content,
+				action:       "apply_schema_inferences",
+			}},
+			actionsByWrite: [][]string{append([]string(nil), inferencePlan.Result.Applied...)},
+		}
+		defer func() { _ = closeSchemaApplyBatch(plan) }()
+
+		stemHealth, stemHealthErr := validateProspectiveStemWrites(ctx, root, plan)
+		if stemHealthErr != nil {
+			result.Errors = append(result.Errors, stemHealthErr.Error())
+		} else {
+			result.StemHealth = stemHealth
+			for _, diag := range blockingStemHealth(stemHealth) {
+				result.Errors = append(result.Errors, schemaApplyStemHealthError(diag))
+			}
+		}
+		if len(result.Errors) > 0 {
+			result.seal()
+			if outputFormat == "table" {
+				if err := renderSchemaApplyTable(cmd, result); err != nil {
+					return err
+				}
+			} else if err := outputJSON(cmd, result, false); err != nil {
+				return err
+			}
+			return applyExitError(len(result.Errors), 0)
+		}
+
+		if err := preflightSchemaApplyRecords(ctx, root); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("resolving .stem: %v", err))
+			result.seal()
+			if outputFormat == "table" {
+				if err := renderSchemaApplyTable(cmd, result); err != nil {
+					return err
+				}
+			} else if err := outputJSON(cmd, result, false); err != nil {
+				return err
+			}
+			return applyExitError(len(result.Errors), 0)
+		}
+
+		applied, writeErrors := executeStemWrites(ctx, plan, schemaApplyDryRun, writeStemFileAtomic)
+		result.Applied = append(result.Applied, applied...)
+		result.Errors = append(result.Errors, writeErrors...)
+
+		if !schemaApplyDryRun {
+			validationResult, validationErr := runPostApplyValidation(ctx, root)
+			if validationErr != nil {
+				result.Errors = append(result.Errors, validationErr.Error())
+			} else {
+				result.ValidationSummary = validationResult
 			}
 		}
 	}
 
-	// Apply schema modifications to .stem
-	schemaResult, err := infer.ApplySchemaInferences(stemPath, schemaInferences, schemaApplyDryRun)
-	if err != nil {
-		return fmt.Errorf("applying schema: %w", err)
-	}
-
-	// Format result as SchemaApplyResult
-	result := &SchemaApplyResult{
-		Version:  1,
-		Kind:     "rootline/schema-apply",
-		Root:     root,
-		DryRun:   schemaApplyDryRun,
-		Applied:  schemaResult.Applied,
-		Skipped:  schemaResult.Skipped,
-		Rejected: schemaResult.Rejected,
-		Errors:   []string{},
-	}
-
-	// If not dry-run, run validation.
-	if !schemaApplyDryRun {
-		validationResult, validationErr := runPostApplyValidation(ctx, root)
-		if validationErr != nil {
-			result.Errors = append(result.Errors, validationErr.Error())
-		} else {
-			result.ValidationSummary = validationResult
-		}
-	}
-
 	// Emit the payload first, then let the run's own outcome decide the exit
-	// status. The analyze path writes through ApplySchemaInferences, which has
-	// no rollback of its own, so there is no rolled_back[] to count.
+	// status. schema apply performs no post-validation rollback, so it has no
+	// rolled_back[] to count.
 	result.seal()
 
 	if outputFormat == "table" {
@@ -489,6 +804,46 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	}
 
 	return applyExitError(len(result.Errors), 0)
+}
+
+// preflightSchemaApplyRecords resolves the actual record population before schema
+// apply writes or publishes a dry-run result. A root-directory resolution cannot
+// exercise match overlays that only apply to record path components.
+func preflightSchemaApplyRecords(ctx context.Context, root string) error {
+	reg := extract.NewRegistry()
+	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(stemScopeResolver()), index.AllowUngoverned())
+	if err != nil {
+		if errors.Is(err, rules.ErrNoSchemaFound) {
+			return nil
+		}
+		return fmt.Errorf("post-apply validation scan of %s: %w", root, err)
+	}
+	if err := ensureRecordsResolve(ctx, records, root); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateProspectiveSchemaPatch verifies a typed create_stem operation in
+// memory. It uses the declaration owner rather than a temporary file or a
+// second resolver, so an invalid overlay cannot be written then normalized by
+// a later read path.
+func validateProspectiveSchemaPatch(path, content string) error {
+	stem, err := rules.ParseStem(path, []byte(content))
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(stem.Schema))
+	for name := range stem.Schema {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if issues := rules.ValidateFieldDeclaration(name, stem.Schema[name]); len(issues) > 0 {
+			return fmt.Errorf("field %q: %s", name, issues[0].Message)
+		}
+	}
+	return nil
 }
 
 // runPostApplyValidation runs validate --all on the root and returns a summary.
@@ -512,10 +867,19 @@ func runPostApplyValidation(ctx context.Context, root string) (*ValidationSummar
 	if err != nil {
 		return nil, fmt.Errorf("post-apply validation scan of %s: %w", root, err)
 	}
+	if err := ensureRecordsResolve(ctx, records, root); err != nil {
+		return nil, fmt.Errorf("resolving .stem: %w", err)
+	}
 
-	derive.DeriveAllSimple(ctx, records, root)
-	derive.EnrichBuiltinsSimple(ctx, records, root)
-	derive.AggregateAllSimple(ctx, records, root)
+	if err := derive.DeriveAllSimple(ctx, records, root); err != nil {
+		return nil, fmt.Errorf("deriving records: %w", err)
+	}
+	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
+		return nil, fmt.Errorf("enriching records: %w", err)
+	}
+	if err := derive.AggregateAllSimple(ctx, records, root); err != nil {
+		return nil, fmt.Errorf("aggregating records: %w", err)
+	}
 
 	validCount := 0
 	invalidCount := 0
@@ -568,7 +932,10 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 
 		for _, rootStem := range stemMap {
 			generatedStem = rootStem
-			yaml := stemFileToYAML(rootStem, root)
+			yaml, err := stemFileToYAML(rootStem, root)
+			if err != nil {
+				return nil, fmt.Errorf("serializing hierarchical schema: %w", err)
+			}
 			proposal := SchemaProposal{
 				ID:            "bootstrap-hierarchical",
 				Operation:     "create_stem",
@@ -589,7 +956,10 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 		}
 
 		generatedStem = stemFile
-		yaml := stemFileToYAML(stemFile, root)
+		yaml, err := stemFileToYAML(stemFile, root)
+		if err != nil {
+			return nil, fmt.Errorf("serializing flat schema: %w", err)
+		}
 		proposal := SchemaProposal{
 			ID:            "bootstrap-flat",
 			Operation:     "create_stem",
@@ -623,6 +993,22 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 func schemaToInferences(stem *rules.StemFile) []infer.Inference {
 	var inferences []infer.Inference
 	for fieldName, sf := range stem.Schema {
+		if sf.Extract != "" && sf.Type == "string" {
+			if source, err := extract.ParseBodySource(sf.Extract); err == nil && source.Kind == extract.BodySourceSection {
+				if canonical, err := extract.CanonicalSectionSource(source.Heading); err == nil && canonical == sf.Extract {
+					infType := "optional_section"
+					if sf.Required {
+						infType = "required_section"
+					}
+					inferences = append(inferences, infer.Inference{
+						Type:            infType,
+						Field:           fieldName,
+						SourceDirective: sf.Extract,
+					})
+					continue
+				}
+			}
+		}
 		// Create inferences based on field properties
 		if sf.Required {
 			inferences = append(inferences, infer.Inference{
@@ -717,6 +1103,16 @@ func renderSchemaApplyTable(cmd *cobra.Command, result *SchemaApplyResult) error
 		for _, e := range result.Errors {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  ! %s\n", e)
 		}
+	}
+
+	if len(result.StemHealth) > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "\nStem Health:")
+		headers := []string{"Path", "Check", "Field", "Severity", "Message"}
+		rows := make([][]string, 0, len(result.StemHealth))
+		for _, diag := range result.StemHealth {
+			rows = append(rows, []string{diag.Path, diag.Check, diag.Field, string(diag.Severity), diag.Message})
+		}
+		renderTable(cmd.OutOrStdout(), headers, rows)
 	}
 
 	if result.ValidationSummary != nil {

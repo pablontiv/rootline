@@ -30,15 +30,16 @@ type CategoryResult struct {
 
 // ReportInference extends Inference with analyze-specific fields.
 type ReportInference struct {
-	Type          string   `json:"type"`
-	Source        string   `json:"source,omitempty"`
-	Field         string   `json:"field,omitempty"`
-	Value         string   `json:"value,omitempty"`
-	From          string   `json:"from,omitempty"`
-	To            string   `json:"to,omitempty"`
-	Paths         []string `json:"paths,omitempty"`
-	Message       string   `json:"message"`
-	RequiresAgent bool     `json:"requires_agent"`
+	Type            string   `json:"type"`
+	Source          string   `json:"source,omitempty"`
+	Field           string   `json:"field,omitempty"`
+	SourceDirective string   `json:"source_directive,omitempty"`
+	Value           string   `json:"value,omitempty"`
+	From            string   `json:"from,omitempty"`
+	To              string   `json:"to,omitempty"`
+	Paths           []string `json:"paths,omitempty"`
+	Message         string   `json:"message"`
+	RequiresAgent   bool     `json:"requires_agent"`
 }
 
 // ReportSummary provides aggregate counts for the analyze report.
@@ -62,12 +63,13 @@ func (r *AnalyzeReport) AddCategory(id, name string, inferences []Inference, age
 	reportInfs := make([]ReportInference, len(inferences))
 	for i, inf := range inferences {
 		reportInfs[i] = ReportInference{
-			Type:          inf.Type,
-			Source:        inf.Source,
-			Field:         inf.Field,
-			Value:         inf.Value,
-			Message:       inf.Message,
-			RequiresAgent: agentTypes[inf.Type],
+			Type:            inf.Type,
+			Source:          inf.Source,
+			Field:           inf.Field,
+			SourceDirective: inf.SourceDirective,
+			Value:           inf.Value,
+			Message:         inf.Message,
+			RequiresAgent:   agentTypes[inf.Type],
 		}
 	}
 	slices.SortFunc(reportInfs, compareReportInferences)
@@ -88,6 +90,7 @@ func compareReportInferences(a, b ReportInference) int {
 		cmp.Compare(a.Type, b.Type),
 		cmp.Compare(a.Source, b.Source),
 		cmp.Compare(a.Field, b.Field),
+		cmp.Compare(a.SourceDirective, b.SourceDirective),
 		cmp.Compare(a.Value, b.Value),
 		cmp.Compare(a.From, b.From),
 		cmp.Compare(a.To, b.To),

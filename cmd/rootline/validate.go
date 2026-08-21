@@ -56,10 +56,18 @@ func runValidate(cmd *cobra.Command, args []string) error {
 }
 
 func runValidateFiles(cmd *cobra.Command, files []string) error {
+	commandScopeRoot, err := filepath.Abs(".")
+	if err != nil {
+		return err
+	}
+	return runValidateFilesInScope(cmd, files, commandScopeRoot)
+}
+
+func runValidateFilesInScope(cmd *cobra.Command, files []string, commandScopeRoot string) error {
 	ctx := cmd.Context()
 
-	reg := extract.NewASTRegistry()
 	var results []*rules.ValidationResult
+	var notices []rules.Notice
 	linkCache := rules.NewHeadingCache()
 
 	for _, file := range files {
@@ -84,7 +92,7 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 		// must not smuggle it back into governance, or the pre-commit hook
 		// and CI enforce different rules on the same file. The skip is
 		// reported rather than silent so the user can tell why.
-		if reason := excludedFromGovernance(absPath); reason != "" {
+		if reason := excludedFromGovernance(absPath, commandScopeRoot); reason != "" {
 			results = append(results, rules.NewValidationResult(file, []rules.ValidationError{{
 				Rule:     "skipped",
 				Field:    "",
@@ -95,46 +103,28 @@ func runValidateFiles(cmd *cobra.Command, files []string) error {
 			continue
 		}
 
-		// Check extractor exists
-		ext := reg.ForFile(absPath, "")
-		if ext == nil {
-			return fmt.Errorf("no extractor for %s", file)
-		}
-
-		// Read and extract
-		content, err := os.ReadFile(absPath)
+		recCtx, err := resolveValidationRecordContext(absPath, file)
 		if err != nil {
-			return fmt.Errorf("reading %s: %w", file, err)
+			results, notices = appendSkippedSchemaResolutionResult(results, notices, file, fmt.Sprintf("resolving .stem for %s: %v", file, err))
+			continue
 		}
 
-		record, err := ext.Extract(file, content)
+		result, err := validateProspectiveRecord(ctx, prospectiveRecordValidationInput{
+			Path:      file,
+			AbsPath:   absPath,
+			ReadFile:  true,
+			Effective: recCtx.effective,
+			LinkCache: linkCache,
+		})
 		if err != nil {
-			return fmt.Errorf("extracting %s: %w", file, err)
+			return err
 		}
-
-		// Resolve effective stem (with levels expansion for hierarchical schemas)
-		dir := filepath.Dir(absPath)
-		effective, err := rules.ResolveForRecord(dir, file)
-		if err != nil {
-			return fmt.Errorf("resolving .stem for %s: %w", file, err)
-		}
-
-		// Structural integrity check: detect multiple YAML documents.
-		structErrs := rules.ValidateStructure(content, file)
-		var errs []rules.ValidationError
-
-		// Validate
-		errs = append(errs, rules.Validate(ctx, record, effective)...)
-		errs = append(errs, rules.CheckLinks(record.Links, effective.Links, absPath, rules.SchemaRoot(absPath), linkCache)...)
-		errs = append(errs, rules.ExtractionErrors(record)...)
-		errs = append(errs, structErrs...)
-
-		results = append(results, rules.NewValidationResult(file, errs))
+		results, notices = appendNormalizedValidationResult(results, notices, result, file, absPath, recCtx.governanceRoot)
 	}
 
 	// One file, several files or none: the envelope is the same shape, so a
 	// consumer never has to branch on how the command was invoked.
-	return emitValidateEnvelope(cmd, rules.NewValidationEnvelope(rules.ValidationEnvelopeInput{Results: results}))
+	return emitValidateEnvelope(cmd, rules.NewValidationEnvelope(rules.ValidationEnvelopeInput{Results: results, Notices: notices}))
 }
 
 // emitValidateEnvelope writes the envelope in the requested format and maps it
@@ -144,6 +134,130 @@ func emitValidateEnvelope(cmd *cobra.Command, batch *rules.BatchValidationResult
 		return renderValidateTable(cmd, batch)
 	}
 	return outputJSON(cmd, batch, validateHasFailure(batch))
+}
+
+type validationRecordContext struct {
+	effective      *rules.StemFile
+	governanceRoot string
+}
+
+func resolveValidationRecordContext(absPath, recordPath string) (validationRecordContext, error) {
+	dir := filepath.Dir(absPath)
+	entries, err := rules.WalkUp(dir)
+	if err != nil {
+		return validationRecordContext{}, err
+	}
+	effective, err := rules.ResolveForRecord(dir, recordPath)
+	if err != nil {
+		return validationRecordContext{}, err
+	}
+	return validationRecordContext{effective: effective, governanceRoot: filepath.Dir(entries[0].Path)}, nil
+}
+
+func normalizeValidationResultSources(result *rules.ValidationResult, recordPath, absPath, governanceRoot string) (*rules.ValidationResult, error) {
+	errs, err := normalizeDocumentValidationErrors(result.Errors, recordPath, absPath, governanceRoot)
+	if err != nil {
+		return nil, err
+	}
+	warnings, err := normalizeDocumentValidationErrors(result.Warnings, recordPath, absPath, governanceRoot)
+	if err != nil {
+		return nil, err
+	}
+	out := *result
+	out.Errors = errs
+	out.Warnings = warnings
+	return &out, nil
+}
+
+func normalizeDocumentValidationErrors(errs []rules.ValidationError, recordPath, absPath, governanceRoot string) ([]rules.ValidationError, error) {
+	if len(errs) == 0 {
+		return errs, nil
+	}
+	return rules.NormalizeValidationSources(canonicalizeRecordOwnedSources(errs, recordPath, absPath), governanceRoot)
+}
+
+func canonicalizeRecordOwnedSources(errs []rules.ValidationError, recordPath, absPath string) []rules.ValidationError {
+	out := append([]rules.ValidationError(nil), errs...)
+	recordSource := comparableRecordOwnedSource(recordPath)
+	for i := range out {
+		if comparableRecordOwnedSource(out[i].Source) == recordSource {
+			out[i].Source = absPath
+		}
+	}
+	return out
+}
+
+func comparableRecordOwnedSource(source string) string {
+	return strings.ReplaceAll(filepath.ToSlash(source), `\\`, "/")
+}
+
+func appendNormalizedValidationResult(results []*rules.ValidationResult, notices []rules.Notice, result *rules.ValidationResult, recordPath, absPath, governanceRoot string) ([]*rules.ValidationResult, []rules.Notice) {
+	normalized, err := normalizeValidationResultSources(result, recordPath, absPath, governanceRoot)
+	if err != nil {
+		return appendSkippedSchemaResolutionResult(results, notices, recordPath, fmt.Sprintf("normalizing validation sources for %s: %v", recordPath, err))
+	}
+	return append(results, normalized), notices
+}
+
+func appendSkippedSchemaResolutionResult(results []*rules.ValidationResult, notices []rules.Notice, path, message string) ([]*rules.ValidationResult, []rules.Notice) {
+	return append(results, skippedValidationResult(path)), appendSchemaResolutionNotice(notices, message)
+}
+
+func emitValidateSchemaResolutionEnvelope(cmd *cobra.Command, records []*extract.Record, results []*rules.ValidationResult, health []rules.StemHealthDiagnostic, notices []rules.Notice, message string) error {
+	for _, rec := range records {
+		results, notices = appendSkippedSchemaResolutionResult(results, notices, rec.Path, fmt.Sprintf("%s for %s", message, rec.Path))
+	}
+	return emitValidateEnvelope(cmd, rules.NewValidationEnvelope(rules.ValidationEnvelopeInput{
+		Results:    results,
+		StemHealth: health,
+		Notices:    notices,
+	}))
+}
+
+func emitValidateRunLevelSchemaEnvelope(cmd *cobra.Command, records []*extract.Record, results []*rules.ValidationResult, health []rules.StemHealthDiagnostic, notices []rules.Notice, message string) error {
+	notices = appendSchemaResolutionNotice(notices, message)
+	for _, rec := range records {
+		results = append(results, skippedValidationResult(rec.Path))
+	}
+	return emitValidateEnvelope(cmd, rules.NewValidationEnvelope(rules.ValidationEnvelopeInput{
+		Results:    results,
+		StemHealth: health,
+		Notices:    notices,
+	}))
+}
+
+func appendSchemaResolutionNotice(notices []rules.Notice, message string) []rules.Notice {
+	return append(notices, rules.Notice{
+		Severity: rules.SeverityError,
+		Code:     "schema_resolution_failed",
+		Message:  message,
+	})
+}
+
+func skippedValidationResult(path string) *rules.ValidationResult {
+	return rules.NewValidationResult(path, []rules.ValidationError{{
+		Rule:     "skipped",
+		Field:    "",
+		Message:  "validation incomplete because schema resolution failed; see notices",
+		Source:   "schema",
+		Severity: rules.SeverityError,
+	}})
+}
+
+func resilientValidateAllScopeResolver() func(dir string) (*rules.StemFile, error) {
+	return func(dir string) (*rules.StemFile, error) {
+		entries, err := rules.WalkUp(dir)
+		if err != nil {
+			if errors.Is(err, rules.ErrNoSchemaFound) {
+				return nil, err
+			}
+			return &rules.StemFile{}, nil
+		}
+		if len(entries) == 0 {
+			return nil, rules.ErrNoSchemaFound
+		}
+		return rules.MergeStemFiles(entries), nil
+	}
 }
 
 func runValidateAll(cmd *cobra.Command, args []string) error {
@@ -174,7 +288,7 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 
 	// Phase 2: Document validation.
 	reg := extract.NewASTRegistry()
-	resolver := stemScopeResolver()
+	resolver := resilientValidateAllScopeResolver()
 
 	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver))
 	if err != nil {
@@ -203,9 +317,15 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	derive.DeriveAllSimple(ctx, records, root)
-	derive.EnrichBuiltinsSimple(ctx, records, root)
-	derive.AggregateAllSimple(ctx, records, root)
+	if err := derive.DeriveAllSimple(ctx, records, root); err != nil {
+		return emitValidateSchemaResolutionEnvelope(cmd, records, results, health, notices, fmt.Sprintf("deriving records: %v", err))
+	}
+	if err := derive.EnrichBuiltinsSimple(ctx, records, root); err != nil {
+		return emitValidateRunLevelSchemaEnvelope(cmd, records, results, health, notices, fmt.Sprintf("enriching records: %v", err))
+	}
+	if err := derive.AggregateAllSimple(ctx, records, root); err != nil {
+		return emitValidateSchemaResolutionEnvelope(cmd, records, results, health, notices, fmt.Sprintf("aggregating records: %v", err))
+	}
 
 	// Apply --where filter.
 	records, err = filterRecords(ctx, records, validateWhere, knownWhereFields(records, root), cmd.ErrOrStderr())
@@ -219,18 +339,18 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 	for _, rec := range records {
 		absPath := filepath.Join(root, rec.Path)
 		dir := filepath.Dir(absPath)
-		effective, resolveErr := rules.ResolveForRecord(dir, rec.Path)
+		recCtx, resolveErr := resolveValidationRecordContext(absPath, rec.Path)
 		if resolveErr != nil {
+			results, notices = appendSkippedSchemaResolutionResult(results, notices, rec.Path, fmt.Sprintf("resolving .stem for %s: %v", rec.Path, resolveErr))
 			continue
 		}
-		errs := rules.Validate(ctx, rec, effective)
-		errs = append(errs, rules.CheckLinks(rec.Links, effective.Links, absPath, root, linkCache)...)
+		errs := rules.Validate(ctx, rec, recCtx.effective)
+		errs = append(errs, rules.CheckLinks(rec.Links, recCtx.effective.Links, absPath, root, linkCache)...)
 		errs = append(errs, rules.ExtractionErrors(rec)...)
 		if content, readErr := os.ReadFile(absPath); readErr == nil {
 			errs = append(errs, rules.ValidateStructure(content, rec.Path)...)
 		}
-
-		results = append(results, rules.NewValidationResult(rec.Path, errs))
+		results, notices = appendNormalizedValidationResult(results, notices, rules.NewValidationResult(rec.Path, errs), rec.Path, absPath, recCtx.governanceRoot)
 
 		// Track directories for structural validation.
 		if !visitedDirs[dir] {
@@ -341,13 +461,17 @@ func getStagedFiles() ([]string, error) {
 // info never fails: a nested root marker is a supported configuration, and
 // promoting it to a warning broke CI runs that had no way to suppress it.
 func validateHasFailure(batch *rules.BatchValidationResult) bool {
+	return validationBatchHasFailure(batch, validateStrict)
+}
+
+func validationBatchHasFailure(batch *rules.BatchValidationResult, strict bool) bool {
 	if batch.Summary.Invalid > 0 ||
 		batch.Summary.StructuralErrorsCount > 0 ||
 		batch.Summary.StemHealthErrorsCount > 0 ||
 		batch.HasErrorNotice() {
 		return true
 	}
-	if !validateStrict {
+	if !strict {
 		return false
 	}
 	if batch.Summary.WarningsCount > 0 ||

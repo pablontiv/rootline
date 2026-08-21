@@ -40,7 +40,7 @@ Batch validation runs four phases in order:
    - `yaml-valid` — valid YAML syntax
    - `scope-match` — scope patterns match at least one file
    - `type-consistency` — field types are consistent across hierarchy
-   - `enum-values` — enums have at least 2 values
+   - `field-declaration` — schema fields use supported canonical types, values, and source declarations
    - `rule-field-exists` — validation rules reference defined fields
    - `field-override` — child field overrides warn about partial override
    - `aggregated-required` — warns when a field is both `required` and aggregated (`required` is auto-skipped on index files, so the combination rarely does what it looks like)
@@ -162,12 +162,23 @@ command was called.
 {
   "version": 2,
   "kind": "rootline/validate-batch",
-  "results": [ ... ],
-  "structural": [ ... ],
-  "stem_health": [ ... ],
-  "drift_warnings": [ ... ],
-  "notices": [ ... ],
-  "summary": { ... }
+  "results": [],
+  "structural": [],
+  "stem_health": [],
+  "drift_warnings": [],
+  "notices": [],
+  "summary": {
+    "total": 0,
+    "valid": 0,
+    "invalid": 0,
+    "warnings_count": 0,
+    "errors_count": 0,
+    "structural_errors_count": 0,
+    "structural_warnings_count": 0,
+    "stem_health_errors_count": 0,
+    "stem_health_warnings_count": 0,
+    "stem_health_info_count": 0
+  }
 }
 ```
 
@@ -208,7 +219,7 @@ where a verdict is *reported*, never whether it counts: an error anywhere still 
 }
 ```
 
-Each error carries the rule, field, message, source `.stem`, severity, and an optional
+Each error carries the rule, field, message, governance-root-relative diagnostic source, severity, and an optional
 `suggestion` (fuzzy "did you mean?" hint).
 
 ### `structural[]`
@@ -297,23 +308,22 @@ Switch on `code`; it is stable. `message` is for humans.
 | `validate --staged` wrote nothing on an empty index | Emits the envelope with `summary.total: 0` |
 | A missing or unparseable `.stem` wrote a Go error to stderr | Emits the envelope with a `scan_failed` notice, still exit 1 |
 
-## Section Validation
+## Source-Backed Field Validation
 
-When a `.stem` defines `type: section` fields, Rootline validates their presence alongside frontmatter fields during Document Validation (phase 2).
+A body location composes with a real value type:
 
-Required sections are checked like required frontmatter fields. A missing section emits an error with `rule: required` and the heading as the `field` value:
-
-```json
-{
-  "rule": "required",
-  "field": "## Summary",
-  "message": "required section \"## Summary\" is missing",
-  "source": "docs/.stem",
-  "severity": "error"
-}
+```yaml
+summary:
+  type: string
+  source: body.section["## Summary"]
+  required: true
 ```
 
-Section validation works in both single-file (`validate <file>`) and batch (`validate --all`) modes. Sections are matched by their heading text, normalized to trim leading/trailing whitespace.
+`required means presence`: an empty section is present with value `""`; use `non_empty` when content is required, and `exists` for an effective field including derived values. Frontmatter has precedence and is a deliberate override.
+
+A `body.section[...]` directive matches its exact heading level and text, and duplicate matching headings fail as ambiguous; Rootline does not select the first or last. The same source resolver serves single-file and batch validation, query, describe, and explain.
+
+Public path-like error `source` values are governance-root-relative with `/` separators. Symbolic sources remain symbolic, so results are stable across working directories and `--all` scan roots.
 
 ## Exit Codes
 

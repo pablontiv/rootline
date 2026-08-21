@@ -157,8 +157,13 @@ For identical inputs and flags, `analyze -o json` emits each category's `inferen
 ## Consuming the Report
 
 Analyze generates schema and diagnostic inferences. Feed supported schema
-inference types to `schema apply` to update `.stem` files. Document repairs use
-the versioned `rootline/proposals` report produced by `fix --all --dry-run`.
+inference types to `schema apply` to update `.stem` files. Analyze-derived
+changes are planned in memory and pass the same prospective hierarchy gate as
+schema proposal reports before dry-run actions or writes are published. A
+malformed governing `.stem` above the report root appears in `stem_health` with
+a relative path and blocks both dry-run and write mode before any apply action is
+published. Document repairs use the versioned `rootline/proposals` report
+produced by `fix --all --dry-run`.
 
 ### Workflow
 
@@ -176,6 +181,18 @@ rootline schema apply --report analyze.json
 Inferences with `requires_agent: true` are logged in the report but skipped by
 `schema apply`. Human or agent review is needed to resolve them; they remain
 actionable for future tooling.
+
+## Canonical Section Inferences
+
+Section candidates preserve the exact heading and carry a real type plus a canonical source binding:
+
+```yaml
+notes:
+  type: string
+  source: body.section["## Notes"]
+```
+
+Every record contributes to the denominator. A candidate is optional unless the heading occurs in every record. Distinct exact headings that normalize to one logical name are a logical-name collision: analysis fails with each colliding heading and requires explicit names. Analyze, schema proposal, and schema application preserve the canonical source identity.
 
 ## Filtering with --incremental
 

@@ -3,6 +3,8 @@
 package fsx
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/fs"
@@ -83,4 +85,79 @@ func writeFileAtomic(target string, perm fs.FileMode, write func(io.Writer) erro
 	}
 	committed = true
 	return nil
+}
+
+func writeFileAtomicRoot(root *os.Root, relTarget string, perm fs.FileMode, write func(io.Writer) error) error {
+	relTarget = filepath.Clean(relTarget)
+	relDir := filepath.Dir(relTarget)
+	base := filepath.Base(relTarget)
+
+	dirRoot, err := root.OpenRoot(relDir)
+	if err != nil {
+		return fmt.Errorf("opening rooted parent %s: %w", relDir, err)
+	}
+	defer func() { _ = dirRoot.Close() }()
+
+	if info, err := dirRoot.Stat(base); err == nil {
+		perm = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("stating %s: %w", relTarget, err)
+	}
+
+	tmp, tmpName, err := createRootTemp(dirRoot)
+	if err != nil {
+		return fmt.Errorf("staging a rooted write for %s: %w", relTarget, err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tmp.Close()
+			_ = dirRoot.Remove(tmpName)
+		}
+	}()
+
+	if err := write(tmp); err != nil {
+		return fmt.Errorf("writing staged content for %s: %w", relTarget, err)
+	}
+	if err := tmp.Sync(); err != nil {
+		return fmt.Errorf("flushing staged content for %s: %w", relTarget, err)
+	}
+	if err := tmp.Chmod(perm); err != nil {
+		return fmt.Errorf("setting mode on staged content for %s: %w", relTarget, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("closing staged content for %s: %w", relTarget, err)
+	}
+	if err := dirRoot.Rename(tmpName, base); err != nil {
+		return fmt.Errorf("replacing %s: %w", relTarget, err)
+	}
+	committed = true
+	return nil
+}
+
+func createRootTemp(root *os.Root) (*os.File, string, error) {
+	var lastErr error
+	for range 100 {
+		name, err := randomRootTempName()
+		if err != nil {
+			return nil, "", err
+		}
+		file, err := root.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+		if err == nil {
+			return file, name, nil
+		}
+		if !os.IsExist(err) {
+			return nil, "", err
+		}
+		lastErr = err
+	}
+	return nil, "", fmt.Errorf("creating unique temporary file: %w", lastErr)
+}
+
+func randomRootTempName() (string, error) {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return tempFilePrefix + hex.EncodeToString(b[:]) + ".tmp", nil
 }

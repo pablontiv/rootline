@@ -21,9 +21,14 @@ import (
 // index files read them via the "children" variable.
 //
 // Results are stored in record.Derived alongside any derive results.
-func AggregateAll(ctx context.Context, records []*extract.Record, root string, resolver StemResolver) {
+func AggregateAll(ctx context.Context, records []*extract.Record, root string, resolver StemResolver) error {
 	if resolver == nil {
-		return
+		return nil
+	}
+
+	resolved, err := resolveBatch(ctx, records, root, resolver)
+	if err != nil {
+		return err
 	}
 
 	// Separate index files from non-index files.
@@ -39,7 +44,7 @@ func AggregateAll(ctx context.Context, records []*extract.Record, root string, r
 	}
 
 	if len(indexRecords) == 0 {
-		return
+		return nil
 	}
 
 	// Sort index records by path depth descending (deepest first → bottom-up).
@@ -49,15 +54,11 @@ func AggregateAll(ctx context.Context, records []*extract.Record, root string, r
 
 	for _, idx := range indexRecords {
 		// Check for context cancellation between records.
-		if ctx.Err() != nil {
-			return
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
-		absPath := filepath.Join(root, idx.Path)
-		dir := filepath.Dir(absPath)
-
-		eff := resolver(dir, idx.Path)
-
+		eff := resolved[idx]
 		if eff == nil || len(eff.Aggregate) == 0 {
 			continue
 		}
@@ -94,6 +95,7 @@ func AggregateAll(ctx context.Context, records []*extract.Record, root string, r
 
 		aggregateRecord(idx, eff, descendants, children)
 	}
+	return nil
 }
 
 // aggregateRecord evaluates aggregate expressions for a single index record.
@@ -151,6 +153,6 @@ func aggregateRecord(record *extract.Record, effective *rules.StemFile, descenda
 }
 
 // AggregateAllSimple runs aggregation using the default resolver.
-func AggregateAllSimple(ctx context.Context, records []*extract.Record, root string) {
-	AggregateAll(ctx, records, root, DefaultResolver())
+func AggregateAllSimple(ctx context.Context, records []*extract.Record, root string) error {
+	return AggregateAll(ctx, records, root, DefaultResolver())
 }

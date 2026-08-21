@@ -111,10 +111,19 @@ func runTree(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
+	if err := ensureRecordsResolve(ctx, records, absRoot); err != nil {
+		return fmt.Errorf("resolving .stem: %w", err)
+	}
 
-	derive.DeriveAllSimple(ctx, records, absRoot)
-	derive.EnrichBuiltinsSimple(ctx, records, absRoot)
-	derive.AggregateAllSimple(ctx, records, absRoot)
+	if err := derive.DeriveAllSimple(ctx, records, absRoot); err != nil {
+		return fmt.Errorf("deriving records: %w", err)
+	}
+	if err := derive.EnrichBuiltinsSimple(ctx, records, absRoot); err != nil {
+		return fmt.Errorf("enriching records: %w", err)
+	}
+	if err := derive.AggregateAllSimple(ctx, records, absRoot); err != nil {
+		return fmt.Errorf("aggregating records: %w", err)
+	}
 
 	// Apply --where filter.
 	records, err = filterRecords(ctx, records, treeWhere, knownWhereFields(records, absRoot), cmd.ErrOrStderr())
