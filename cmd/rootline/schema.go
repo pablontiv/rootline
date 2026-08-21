@@ -97,6 +97,9 @@ func newSchemaApplyResult(root string, dryRun bool) *SchemaApplyResult {
 // so Complete can never disagree with the fields it summarizes. schema apply
 // performs no post-validation rollback, so Errors is the whole story here.
 func (r *SchemaApplyResult) seal() {
+	if r.StemHealth == nil {
+		r.StemHealth = []rules.StemHealthDiagnostic{}
+	}
 	r.Complete = len(r.Errors) == 0
 }
 
@@ -959,6 +962,16 @@ func renderSchemaApplyTable(cmd *cobra.Command, result *SchemaApplyResult) error
 		for _, e := range result.Errors {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  ! %s\n", e)
 		}
+	}
+
+	if len(result.StemHealth) > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "\nStem Health:")
+		headers := []string{"Path", "Check", "Field", "Severity", "Message"}
+		rows := make([][]string, 0, len(result.StemHealth))
+		for _, diag := range result.StemHealth {
+			rows = append(rows, []string{diag.Path, diag.Check, diag.Field, string(diag.Severity), diag.Message})
+		}
+		renderTable(cmd.OutOrStdout(), headers, rows)
 	}
 
 	if result.ValidationSummary != nil {

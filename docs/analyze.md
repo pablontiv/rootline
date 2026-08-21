@@ -157,8 +157,11 @@ For identical inputs and flags, `analyze -o json` emits each category's `inferen
 ## Consuming the Report
 
 Analyze generates schema and diagnostic inferences. Feed supported schema
-inference types to `schema apply` to update `.stem` files. Document repairs use
-the versioned `rootline/proposals` report produced by `fix --all --dry-run`.
+inference types to `schema apply` to update `.stem` files. Analyze-derived
+changes are planned in memory and pass the same prospective hierarchy gate as
+schema proposal reports before dry-run actions or writes are published. Document
+repairs use the versioned `rootline/proposals` report produced by
+`fix --all --dry-run`.
 
 ### Workflow
 

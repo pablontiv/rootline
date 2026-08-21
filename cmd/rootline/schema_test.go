@@ -787,6 +787,198 @@ func decodeSchemaApplyResult(t *testing.T, out string) *SchemaApplyResult {
 	return &result
 }
 
+func writeSchemaApplyContractReport(t *testing.T, root string, proposals []SchemaProposal) string {
+	t.Helper()
+	report := SchemaProposalsReport{
+		Version:   1,
+		Kind:      "rootline/schema-proposals",
+		Path:      root,
+		Root:      root,
+		Proposals: proposals,
+	}
+	data, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshaling schema apply contract report: %v", err)
+	}
+	path := filepath.Join(root, "schema-apply-contract-report.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("writing schema apply contract report: %v", err)
+	}
+	return path
+}
+
+func TestSchemaApplyEnvelopePublishesEmptyStemHealth(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":  "version: 2\nroot: true\nschema:\n  title:\n    type: string\n",
+		"doc.md": "---\ntitle: Contract\n---\n# Contract\n",
+	})
+	reportPath := writeSchemaApplyContractReport(t, root, nil)
+
+	out, err := executeSchemaApply(t, "--report", reportPath, "--dry-run")
+	if err != nil {
+		t.Fatalf("schema apply empty contract run failed: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, `"stem_health":[]`) {
+		t.Fatalf("schema apply JSON must publish non-omitempty empty stem_health; output: %s", out)
+	}
+	result := decodeSchemaApplyResult(t, out)
+	if !result.Complete || len(result.StemHealth) != 0 || len(result.Errors) != 0 {
+		t.Fatalf("empty-diagnostic envelope = %+v, want complete success with stem_health:[]", result)
+	}
+}
+
+func TestSchemaApplyStemHealthEnvelopeKeepsWarningOnlyResultsNonBlocking(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":        "version: 2\nroot: true\nschema:\n  title:\n    type: string\n",
+		"docs/doc.md":  "---\ntitle: Test\n---\n# Record\n",
+		"docs/note.md": "---\ntitle: Note\n---\n# Note\n",
+	})
+	target := filepath.Join(root, "docs", ".stem")
+	reportPath := writeSchemaApplyContractReport(t, root, []SchemaProposal{{
+		ID:        "warning-only",
+		Operation: "create_stem",
+		Target:    target,
+		Patch:     "version: 2\nscope:\n  match: \"*.txt\"\nschema:\n  title:\n    type: string\n",
+	}})
+
+	out, err := executeSchemaApply(t, "--report", reportPath, "--dry-run")
+	if err != nil {
+		t.Fatalf("schema apply rejected warning-only stem health: %v\noutput: %s", err, out)
+	}
+	result := decodeSchemaApplyResult(t, out)
+	if !result.Complete || len(result.Errors) != 0 {
+		t.Fatalf("warning-only result = %+v, want complete:true and exit 0", result)
+	}
+	if len(result.StemHealth) == 0 {
+		t.Fatalf("stem_health = empty, want warning diagnostic in output: %s", out)
+	}
+	for _, diag := range result.StemHealth {
+		if diag.Severity == rules.SeverityError {
+			t.Fatalf("warning-only fixture produced blocking diagnostic: %+v", diag)
+		}
+	}
+}
+
+func TestSchemaApplyStemHealthEnvelopeBlocksErrorsBeforeActions(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":         "version: 2\nroot: true\nschema:\n  estado:\n    type: enum\n    values: [Pending, Done]\n",
+		"sub/record.md": "---\nestado: Pending\n---\n# Record\n",
+	})
+	target := filepath.Join(root, "sub", ".stem")
+	reportPath := writeSchemaApplyContractReport(t, root, []SchemaProposal{{
+		ID:        "child-string",
+		Operation: "create_stem",
+		Target:    target,
+		Patch:     "version: 2\nschema:\n  estado:\n    type: string\n",
+	}})
+
+	out, err := executeSchemaApply(t, "--report", reportPath)
+	if err == nil {
+		t.Fatalf("schema apply accepted blocking stem health: %s", out)
+	}
+	if !strings.Contains(out, `"applied":[]`) {
+		t.Fatalf("blocking JSON must publish applied:[] before any action; output: %s", out)
+	}
+	result := decodeSchemaApplyResult(t, out)
+	if result.Complete || len(result.Applied) != 0 {
+		t.Fatalf("blocking result = %+v, want complete:false and applied:[]", result)
+	}
+	if len(result.Errors) == 0 {
+		t.Fatalf("errors = empty, want blocking stem-health message")
+	}
+	foundStructured := false
+	for _, diag := range result.StemHealth {
+		if diag.Path == filepath.Join("sub", ".stem") && diag.Check == "type-consistency" && diag.Field == "estado" && diag.Severity == rules.SeverityError {
+			foundStructured = true
+		}
+	}
+	if !foundStructured {
+		t.Fatalf("stem_health missing structured blocking diagnostic: %+v", result.StemHealth)
+	}
+	for _, want := range []string{filepath.Join("sub", ".stem"), "type-consistency", "estado"} {
+		if !strings.Contains(result.Errors[0], want) {
+			t.Fatalf("errors[0] = %q, want fragment %q", result.Errors[0], want)
+		}
+	}
+	assertSchemaApplyAbsent(t, target)
+}
+
+func TestSchemaApplyProspectiveHealthDoesNotReclassifyInvalidDocuments(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		"docs/a.md": "---\nestado: Pending\n---\n# A\n",
+		"docs/b.md": "---\nestado: Bogus\n---\n# B\n",
+	})
+	docsDir := filepath.Join(root, "docs")
+	target := filepath.Join(docsDir, ".stem")
+	reportPath := writeSchemaApplyContractReport(t, docsDir, []SchemaProposal{{
+		ID:        "enum-governance-valid-document-invalid",
+		Operation: "create_stem",
+		Target:    target,
+		Patch:     "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: enum\n    required: true\n    values: [Pending, Done]\n",
+	}})
+
+	out, err := executeSchemaApply(t, "--report", reportPath)
+	if err != nil {
+		t.Fatalf("governance-valid apply should exit 0 even when post-apply documents are invalid: %v\noutput: %s", err, out)
+	}
+	result := decodeSchemaApplyResult(t, out)
+	if !result.Complete || len(result.Errors) != 0 {
+		t.Fatalf("result = %+v, want complete:true with no apply errors", result)
+	}
+	if len(result.StemHealth) != 0 {
+		t.Fatalf("stem_health = %+v, want empty for governance-valid patch", result.StemHealth)
+	}
+	if result.ValidationSummary == nil {
+		t.Fatalf("validation_summary is nil; output: %s", out)
+	}
+	if result.ValidationSummary.InvalidFiles != 1 || result.ValidationSummary.TotalErrors != 1 {
+		t.Fatalf("validation_summary = %+v, want exactly one invalid file/error", result.ValidationSummary)
+	}
+}
+
+func TestSchemaApplyTableStemHealthSectionFollowsDiagnostics(t *testing.T) {
+	t.Run("omits section when diagnostics are empty", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			".stem":  "version: 2\nroot: true\nschema:\n  title:\n    type: string\n",
+			"doc.md": "---\ntitle: Contract\n---\n# Contract\n",
+		})
+		reportPath := writeSchemaApplyContractReport(t, root, nil)
+
+		out, err := executeSchemaApply(t, "--report", reportPath, "--dry-run", "--output", "table")
+		if err != nil {
+			t.Fatalf("schema apply clean table failed: %v\noutput: %s", err, out)
+		}
+		if strings.Contains(out, "Stem Health") {
+			t.Fatalf("table rendered Stem Health section without diagnostics:\n%s", out)
+		}
+	})
+
+	t.Run("renders section with diagnostic columns when diagnostics are non-empty", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			".stem":        "version: 2\nroot: true\nschema:\n  title:\n    type: string\n",
+			"docs/doc.md":  "---\ntitle: Test\n---\n# Record\n",
+			"docs/note.md": "---\ntitle: Note\n---\n# Note\n",
+		})
+		target := filepath.Join(root, "docs", ".stem")
+		reportPath := writeSchemaApplyContractReport(t, root, []SchemaProposal{{
+			ID:        "warning-only",
+			Operation: "create_stem",
+			Target:    target,
+			Patch:     "version: 2\nscope:\n  match: \"*.txt\"\nschema:\n  title:\n    type: string\n",
+		}})
+
+		out, err := executeSchemaApply(t, "--report", reportPath, "--dry-run", "--output", "table")
+		if err != nil {
+			t.Fatalf("schema apply warning table failed: %v\noutput: %s", err, out)
+		}
+		for _, want := range []string{"Stem Health:", "Path", "Check", "Field", "Severity", "Message", filepath.Join("docs", ".stem"), "scope-match", string(rules.SeverityWarn)} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("table output missing %q:\n%s", want, out)
+			}
+		}
+	})
+}
+
 func TestSchemaApply_TargetContainment(t *testing.T) {
 	// Scenario 6: schema propose emits absolute targets, so an absolute target
 	// inside the scan root has to keep working — this is the regression guard on
