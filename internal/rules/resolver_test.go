@@ -3,6 +3,7 @@ package rules
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -937,4 +938,96 @@ schema:
 	if len(lr.Conflicts) != 0 {
 		t.Fatalf("expected no conflicts for three-level valid narrowing, got %d: %+v", len(lr.Conflicts), lr.Conflicts)
 	}
+}
+
+func TestResolveFromEntriesMatchesFilesystem(t *testing.T) {
+	root := setupResolverTest(t)
+	targetPath := filepath.Join(root, "docs", "roadmap", "plan.md")
+
+	entries, err := WalkUp(targetPath)
+	if err != nil {
+		t.Fatalf("WalkUp() error: %v", err)
+	}
+	filesystem, err := Resolve(targetPath, root)
+	if err != nil {
+		t.Fatalf("Resolve() error: %v", err)
+	}
+	explicit, err := resolveFromEntries(targetPath, entries)
+	if err != nil {
+		t.Fatalf("resolveFromEntries() error: %v", err)
+	}
+
+	assertResolutionEquivalent(t, explicit, filesystem)
+}
+
+func TestResolveLayeredFromEntriesMatchesFilesystem(t *testing.T) {
+	root := t.TempDir()
+	mustWriteStemTestFile(t, filepath.Join(root, ".stem"), []byte(`version: 2
+schema:
+  status:
+    type: enum
+    values: [pending, done]
+  title:
+    type: string
+    required: true
+`))
+	childDir := filepath.Join(root, "child")
+	mustWriteStemTestFile(t, filepath.Join(childDir, ".stem"), []byte(`version: 2
+schema:
+  status:
+    type: enum
+    values: [pending, blocked, done]
+  title:
+    type: string
+    required: false
+`))
+	targetPath := filepath.Join(childDir, "record.md")
+
+	entries, err := WalkUp(targetPath)
+	if err != nil {
+		t.Fatalf("WalkUp() error: %v", err)
+	}
+	filesystem, err := ResolveLayered(targetPath, root)
+	if err != nil {
+		t.Fatalf("ResolveLayered() error: %v", err)
+	}
+	explicit, err := resolveLayeredFromEntries(targetPath, entries)
+	if err != nil {
+		t.Fatalf("resolveLayeredFromEntries() error: %v", err)
+	}
+
+	assertResolutionEquivalent(t, explicit.Resolution, filesystem.Resolution)
+	if !reflect.DeepEqual(explicit.Layers, filesystem.Layers) {
+		t.Fatalf("layers mismatch\ngot:  %+v\nwant: %+v", explicit.Layers, filesystem.Layers)
+	}
+	if !reflect.DeepEqual(explicit.Conflicts, filesystem.Conflicts) {
+		t.Fatalf("conflicts mismatch\ngot:  %+v\nwant: %+v", explicit.Conflicts, filesystem.Conflicts)
+	}
+}
+
+func assertResolutionEquivalent(t *testing.T, got, want *Resolution) {
+	t.Helper()
+	if got.Path != want.Path {
+		t.Fatalf("path = %q, want %q", got.Path, want.Path)
+	}
+	if !reflect.DeepEqual(stemEntryPaths(got.Chain), stemEntryPaths(want.Chain)) {
+		t.Fatalf("chain paths = %+v, want %+v", stemEntryPaths(got.Chain), stemEntryPaths(want.Chain))
+	}
+	if !reflect.DeepEqual(got.EffectiveSchema, want.EffectiveSchema) {
+		t.Fatalf("effective schema mismatch\ngot:  %+v\nwant: %+v", got.EffectiveSchema, want.EffectiveSchema)
+	}
+	if !reflect.DeepEqual(got.Provenance, want.Provenance) {
+		t.Fatalf("provenance mismatch\ngot:  %+v\nwant: %+v", got.Provenance, want.Provenance)
+	}
+	if !reflect.DeepEqual(got.EffectiveStem, want.EffectiveStem) {
+		t.Fatalf("effective stem mismatch\ngot:  %+v\nwant: %+v", got.EffectiveStem, want.EffectiveStem)
+	}
+}
+
+func stemEntryPaths(entries []StemEntry) []string {
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		paths = append(paths, entry.Path)
+	}
+	return paths
 }

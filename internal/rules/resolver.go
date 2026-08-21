@@ -91,7 +91,10 @@ func Resolve(path string, root string) (*Resolution, error) {
 	if err != nil {
 		return nil, err
 	}
+	return resolveFromEntries(path, entries)
+}
 
+func resolveFromEntries(path string, entries []StemEntry) (*Resolution, error) {
 	// Merge all stems top-down to get the raw and effective stems.
 	mergedRaw := MergeStemFiles(entries)
 
@@ -175,8 +178,16 @@ type LayeredResolution struct {
 // violations such as type widening, required loosening, enum extension,
 // severity loosening, and structural loosening.
 func ResolveLayered(path string, root string) (*LayeredResolution, error) {
+	entries, err := WalkUp(path)
+	if err != nil {
+		return nil, err
+	}
+	return resolveLayeredFromEntries(path, entries)
+}
+
+func resolveLayeredFromEntries(path string, entries []StemEntry) (*LayeredResolution, error) {
 	// First, get the base resolution.
-	baseRes, err := Resolve(path, root)
+	baseRes, err := resolveFromEntries(path, entries)
 	if err != nil {
 		return nil, err
 	}
