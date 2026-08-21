@@ -12,6 +12,7 @@ import (
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/fix"
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/index"
 	"github.com/pablontiv/rootline/internal/infer"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -337,20 +338,33 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		return applyExitError(len(result.Errors), 0)
 	}
 
-	// Execute only after the whole report has been planned and prospectively
-	// validated. Actual IO failures still use the existing no-rollback run-level
-	// behavior below.
-	for _, op := range plan {
-		if !schemaApplyDryRun {
-			if err := os.WriteFile(op.target, []byte(op.patch), 0o644); err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("write %s: %v", op.reportTarget, err))
-			} else {
-				result.Applied = append(result.Applied, fmt.Sprintf("%s: %s", op.action, op.target))
-			}
-		} else {
-			result.Applied = append(result.Applied, fmt.Sprintf("%s: %s", op.action, op.target))
+	// Gate publication on the complete prospective hierarchy, not on each patch
+	// in isolation. Warnings and info diagnostics remain visible in the envelope;
+	// only error-severity diagnostics block publication and writes.
+	stemHealth, stemHealthErr := validateProspectiveStemWrites(ctx, scanRoot, plan)
+	if stemHealthErr != nil {
+		result.Errors = append(result.Errors, stemHealthErr.Error())
+	} else {
+		result.StemHealth = stemHealth
+		for _, diag := range blockingStemHealth(stemHealth) {
+			result.Errors = append(result.Errors, schemaApplyStemHealthError(diag))
 		}
 	}
+	if len(result.Errors) > 0 {
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
+	}
+
+	applied, writeErrors := executeStemWrites(ctx, plan, schemaApplyDryRun, fsx.WriteFileAtomic)
+	result.Applied = append(result.Applied, applied...)
+	result.Errors = append(result.Errors, writeErrors...)
 
 	// If not dry-run, run validation.
 	if !schemaApplyDryRun {
@@ -378,26 +392,23 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 	return applyExitError(len(result.Errors), 0)
 }
 
-type schemaProposalApplyPlan struct {
-	reportTarget string
-	target       string
-	patch        string
-	action       string
-}
-
 type schemaApplyStatFunc func(string) (os.FileInfo, error)
+
+func schemaApplyStemHealthError(diag rules.StemHealthDiagnostic) string {
+	return fmt.Sprintf("stem health error: path=%s check=%s field=%s message=%s", diag.Path, diag.Check, diag.Field, diag.Message)
+}
 
 type schemaApplyTargetObservation struct {
 	exists  bool
 	statErr error
 }
 
-func planSchemaProposalApply(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown) []schemaProposalApplyPlan {
+func planSchemaProposalApply(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown) schemaApplyBatchPlan {
 	return planSchemaProposalApplyWithStat(proposals, scanRoot, force, result, resolved, os.Stat)
 }
 
-func planSchemaProposalApplyWithStat(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown, stat schemaApplyStatFunc) []schemaProposalApplyPlan {
-	plan := []schemaProposalApplyPlan{}
+func planSchemaProposalApplyWithStat(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown, stat schemaApplyStatFunc) schemaApplyBatchPlan {
+	plan := schemaApplyBatchPlan{writes: []stemWritePlan{}, actionsByWrite: [][]string{}}
 	virtualTargets := map[string]schemaApplyTargetObservation{}
 	for _, proposal := range proposals {
 		// Skip proposals that require agent intervention.
@@ -462,12 +473,13 @@ func planSchemaProposalApplyWithStat(proposals []SchemaProposal, scanRoot string
 			action = "overwrite_stem"
 		}
 
-		plan = append(plan, schemaProposalApplyPlan{
+		plan.writes = append(plan.writes, stemWritePlan{
 			reportTarget: proposal.Target,
 			target:       target,
-			patch:        proposal.Patch,
+			content:      []byte(proposal.Patch),
 			action:       action,
 		})
+		plan.actionsByWrite = append(plan.actionsByWrite, []string{fmt.Sprintf("%s: %s", action, target)})
 		virtualTargets[target] = schemaApplyTargetObservation{exists: true}
 	}
 	return plan

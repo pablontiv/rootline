@@ -99,7 +99,7 @@ func TestPlanSchemaProposalApply_CachesCanonicalTargetStatErrorAcrossAliases(t *
 	if statCalls != 1 {
 		t.Fatalf("stat calls = %d, want exactly one canonical target observation", statCalls)
 	}
-	if len(plan) != 0 {
+	if len(plan.writes) != 0 || len(plan.actionsByWrite) != 0 {
 		t.Fatalf("plan = %+v, want no actions after fatal stat error", plan)
 	}
 	wantErrors := []string{
