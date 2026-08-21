@@ -64,17 +64,32 @@ type SchemaApplyResult struct {
 	// the command exits 0. It exists so a stored report artifact, read long after
 	// the exit status is gone, does not require its consumer to re-implement the
 	// rule. Rejections and skips do not make a run incomplete.
-	Complete          bool               `json:"complete"`
-	Applied           []string           `json:"applied"`
-	Skipped           []string           `json:"skipped"`
-	Rejected          []string           `json:"rejected,omitempty"`
-	DryRun            bool               `json:"dry_run,omitempty"`
-	Errors            []string           `json:"errors,omitempty"`
-	ValidationSummary *ValidationSummary `json:"validation_summary,omitempty"`
+	Complete          bool                         `json:"complete"`
+	Applied           []string                     `json:"applied"`
+	Skipped           []string                     `json:"skipped"`
+	Rejected          []string                     `json:"rejected,omitempty"`
+	DryRun            bool                         `json:"dry_run,omitempty"`
+	Errors            []string                     `json:"errors,omitempty"`
+	ValidationSummary *ValidationSummary           `json:"validation_summary,omitempty"`
+	StemHealth        []rules.StemHealthDiagnostic `json:"stem_health"`
 
 	// ResolvedTargets is populated in dry-run only, where the caller cannot
 	// inspect the outcome on disk and needs to see where each .stem would land.
 	ResolvedTargets *fix.ResolvedTargetsBreakdown `json:"resolved_targets,omitempty"`
+}
+
+func newSchemaApplyResult(root string, dryRun bool) *SchemaApplyResult {
+	return &SchemaApplyResult{
+		Version:    1,
+		Kind:       "rootline/schema-apply",
+		Root:       root,
+		DryRun:     dryRun,
+		Applied:    []string{},
+		Skipped:    []string{},
+		Rejected:   []string{},
+		Errors:     []string{},
+		StemHealth: []rules.StemHealthDiagnostic{},
+	}
 }
 
 // seal records the run's completeness verdict once every phase has had its say,
@@ -286,16 +301,7 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving report root: %w", err)
 	}
 
-	result := &SchemaApplyResult{
-		Version:  1,
-		Kind:     "rootline/schema-apply",
-		Root:     scanRoot,
-		DryRun:   schemaApplyDryRun,
-		Applied:  []string{},
-		Skipped:  []string{},
-		Rejected: []string{},
-		Errors:   []string{},
-	}
+	result := newSchemaApplyResult(scanRoot, schemaApplyDryRun)
 
 	resolved := &fix.ResolvedTargetsBreakdown{
 		Accepted: map[string]string{},
@@ -503,16 +509,7 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 		return fmt.Errorf("resolving report root: %w", err)
 	}
 
-	result := &SchemaApplyResult{
-		Version:  1,
-		Kind:     "rootline/schema-apply",
-		Root:     root,
-		DryRun:   schemaApplyDryRun,
-		Applied:  []string{},
-		Skipped:  []string{},
-		Rejected: []string{},
-		Errors:   []string{},
-	}
+	result := newSchemaApplyResult(root, schemaApplyDryRun)
 
 	if err := preflightSchemaApplyRecords(ctx, root); err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("resolving .stem: %v", err))
