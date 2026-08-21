@@ -9,7 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 ### Changed
 
 - `schema apply` now rejects invalid prospective `.stem` hierarchies before publishing actions or writing files, while preserving version-1 `stem_health[]` diagnostics and atomic per-file `.stem` replacement for accepted writes.
-- `schema apply` now converges proposal and analyze writes on a bound physical target: internal aliases are supported, escaping aliases are rejected, and malformed external governing ancestors surface as structured relative `yaml-valid` diagnostics in `stem_health[]`.
+- `schema apply` now converges proposal and analyze writes on a bound physical target: internal aliases are supported, escaping aliases are rejected, malformed external governing ancestors surface as structured relative `yaml-valid` diagnostics in `stem_health[]`, and schema proposal targets must use the literal basename `.stem` so case-insensitive basename aliases are rejected before resolution.
 - **Compatibility correction (unreleased):** active schemas and guidance use canonical strict types (`string`, `list`, `enum`, `sequence`, `link`, `boolean`, `integer`) with no coercion. Historical `type: section` plus `heading:`/`ordered:` declarations migrate to `type: string` plus `source: body.section["## Heading"]`; `type: bool` migrates to `type: boolean`; historical `enum:` keys migrate to `values:`. Empty-present sections satisfy presence, duplicate matching headings fail, inherited source bindings remain stable, and public validation error sources are governance-root-relative. See `docs/UPGRADE.md` for paired before/after examples; ancestor-qualified selectors remain deferred to #190.
 
 ### Added

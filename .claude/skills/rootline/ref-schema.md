@@ -81,6 +81,8 @@ rootline new <file.md> --force
 
 `new` requires a file path. It does not choose directories or prompt for names.
 
+Schema proposal targets must use the literal basename `.stem`; alternate casing is rejected before resolution.
+
 ### Deterministic Filename Rule
 
 If the user gives a directory instead of a file:

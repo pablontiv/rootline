@@ -323,6 +323,46 @@ func TestSchemaApplyAnalyzeEvaluatesExternalCandidateAgainstExternalAncestor(t *
 	}
 }
 
+func TestSchemaApplyProposalRejectsCaseAliasBasenameBeforeResolution(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		t.Run(map[bool]string{true: "dry_run", false: "write"}[dryRun], func(t *testing.T) {
+			root := setupValidateProject(t, map[string]string{
+				"docs/.stem":  "version: 2\nroot: true\nschema:\n  title:\n    type: string\n",
+				"docs/doc.md": "---\ntitle: Test\n---\n# Record\n",
+			})
+			skipIfCaseSensitiveSchemaApplyFixture(t, root)
+			before := snapshotSchemaApplyFile(t, filepath.Join(root, "docs", ".stem"))
+			report := SchemaProposalsReport{Version: 1, Kind: "rootline/schema-proposals", Path: root, Root: root, Proposals: []SchemaProposal{{ID: "case-alias", Operation: "create_stem", Target: filepath.Join(root, "Docs", ".STEM"), Patch: "version: 2\nschema:\n  title:\n    type: string\n"}}}
+			reportPath := filepath.Join(root, "report.json")
+			writeSchemaApplyPreflightReport(t, reportPath, report)
+			args := []string{"--report", reportPath}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			out, err := executeSchemaApply(t, args...)
+			if err != nil {
+				t.Fatalf("schema apply rejected case alias basename: %v\noutput: %s", err, out)
+			}
+			result := decodeSchemaApplyResult(t, out)
+			if !result.Complete || len(result.Applied) != 0 || len(result.Errors) != 0 || len(result.Skipped) != 0 {
+				t.Fatalf("unexpected envelope: %+v", result)
+			}
+			if len(result.Rejected) != 1 || !strings.Contains(result.Rejected[0], "target basename must be \".stem\"") {
+				t.Fatalf("rejected = %#v", result.Rejected)
+			}
+			if dryRun {
+				if result.ResolvedTargets == nil {
+					t.Fatalf("resolved_targets missing: %+v", result)
+				}
+				if got := result.ResolvedTargets.Rejected[filepath.Join(root, "Docs", ".STEM")]; got != "target basename must be \".stem\"" {
+					t.Fatalf("resolved rejected = %q", got)
+				}
+			}
+			assertSchemaApplyFileUnchanged(t, filepath.Join(root, "docs", ".stem"), before)
+		})
+	}
+}
+
 func TestSchemaApplyAnalyzeDryRunAndRealShareGovernanceVerdict(t *testing.T) {
 	dryRoot, dryStem, dryReport := setupSchemaApplyAnalyzeParentConflict(t)
 	dryBefore := snapshotSchemaApplyFile(t, dryStem)

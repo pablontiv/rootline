@@ -456,6 +456,11 @@ func planSchemaProposalApplyWithResolver(proposals []SchemaProposal, scanRoot st
 			resolved.Rejected[proposal.Target] = fix.ContainmentReason(err)
 			continue
 		}
+		if filepath.Base(targetPath) != ".stem" {
+			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: target basename must be \".stem\"", proposal.Target))
+			resolved.Rejected[proposal.Target] = "target basename must be \".stem\""
+			continue
+		}
 		resolved.Accepted[proposal.Target] = targetPath
 
 		// Check for empty patch before write attempt.
