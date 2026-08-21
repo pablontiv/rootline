@@ -2,9 +2,12 @@ package rules
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -52,6 +55,38 @@ func TestDiscoverStemStatePreservesMalformedRootParseError(t *testing.T) {
 	}
 	if state.Stems[rootStem] != nil {
 		t.Fatal("malformed root stem must not be retained as a parsed stem")
+	}
+}
+
+func TestDiscoverStemStateRejectsEscapingStemSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink semantics differ on windows")
+	}
+
+	parent := t.TempDir()
+	root := filepath.Join(parent, "root")
+	outsideStem := filepath.Join(parent, "outside", ".stem")
+	rootStem := filepath.Join(root, ".stem")
+	mustWriteStemStateFile(t, outsideStem, "version: 2\nroot: true\n")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideStem, rootStem); err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			t.Skipf("symlink creation unsupported: %v", err)
+		}
+		t.Fatal(err)
+	}
+
+	state, err := DiscoverStemState(context.Background(), root)
+	if err != nil {
+		if !strings.Contains(err.Error(), rootStem) {
+			t.Fatalf("discovery error %q does not identify escaping stem symlink %s", err, rootStem)
+		}
+		return
+	}
+	if state.Stems[rootStem] != nil {
+		t.Fatal("escaping .stem symlink must not ingest governance outside Root")
 	}
 }
 

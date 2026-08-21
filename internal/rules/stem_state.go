@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -45,6 +46,11 @@ func DiscoverStemState(ctx context.Context, root string) (*StemState, error) {
 		Entries:     make(map[string]StemStateEntry),
 	}
 
+	scanRoot, err := os.OpenRoot(absRoot)
+	if err != nil {
+		return nil, fmt.Errorf("opening stem state root %s: %w", absRoot, err)
+	}
+
 	walkErr := filepath.Walk(absRoot, func(path string, info os.FileInfo, walkErr error) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -61,17 +67,24 @@ func DiscoverStemState(ctx context.Context, root string) (*StemState, error) {
 		state.Entries[path] = StemStateEntry{IsDir: info.IsDir()}
 
 		if !info.IsDir() && info.Name() == stemFileName {
-			content, err := os.ReadFile(path)
+			content, err := readStemStateFileThroughRoot(scanRoot, absRoot, path)
 			if err != nil {
-				return fmt.Errorf("reading %s: %w", path, err)
+				return err
 			}
 			addStemToState(state, path, content)
 		}
 
 		return nil
 	})
+	closeErr := scanRoot.Close()
+	if walkErr != nil && closeErr != nil {
+		return nil, errors.Join(walkErr, fmt.Errorf("closing stem state root %s: %w", absRoot, closeErr))
+	}
 	if walkErr != nil {
 		return nil, walkErr
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("closing stem state root %s: %w", absRoot, closeErr)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -248,6 +261,33 @@ func addStemToState(state *StemState, path string, content []byte) {
 	}
 	state.Stems[path] = stem
 	delete(state.ParseErrors, path)
+}
+
+func readStemStateFileThroughRoot(root *os.Root, absRoot, path string) (content []byte, err error) {
+	path = filepath.Clean(path)
+	rel, err := filepath.Rel(absRoot, path)
+	if err != nil {
+		return nil, fmt.Errorf("resolving %s relative to stem state root %s: %w", path, absRoot, err)
+	}
+	if startsWithParentTraversal(rel) {
+		return nil, fmt.Errorf("reading %s: path escapes stem state root %s", path, absRoot)
+	}
+
+	file, err := root.Open(rel)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s through stem state root %s: %w", path, absRoot, err)
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("closing %s through stem state root %s: %w", path, absRoot, closeErr)
+		}
+	}()
+
+	content, err = io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s through stem state root %s: %w", path, absRoot, err)
+	}
+	return content, nil
 }
 
 func shouldSkipStemStateDir(name string) bool {
