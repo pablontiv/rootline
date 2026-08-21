@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/fsx"
@@ -68,7 +69,11 @@ func validateProspectiveStemWrites(ctx context.Context, root string, plan schema
 		if item.write.target == nil {
 			return nil, fmt.Errorf("validating target %s: target capability unavailable", item.write.reportTarget)
 		}
-		next, err := state.Overlay(item.write.target.PhysicalPath(), item.write.content)
+		overlayPath, err := prospectiveOverlayPathForTarget(state, item.write.target)
+		if err != nil {
+			return nil, fmt.Errorf("planning proposed .stem %s: %w", item.write.reportTarget, err)
+		}
+		next, err := state.Overlay(overlayPath, item.write.content)
 		if err != nil {
 			return nil, fmt.Errorf("planning proposed .stem %s: %w", item.write.reportTarget, err)
 		}
@@ -131,7 +136,6 @@ type schemaApplyBatchItem struct {
 
 func sortedSchemaApplyBatch(plan schemaApplyBatchPlan) []schemaApplyBatchItem {
 	items := make([]schemaApplyBatchItem, 0, len(plan.writes))
-	byTarget := map[string]int{}
 	for i, write := range plan.writes {
 		// The legacy per-write action label is retained on stemWritePlan for the
 		// planner shape, but publishing is intentionally driven only by the
@@ -142,8 +146,7 @@ func sortedSchemaApplyBatch(plan schemaApplyBatchPlan) []schemaApplyBatchItem {
 		if i < len(plan.actionsByWrite) {
 			actions = append([]string(nil), plan.actionsByWrite[i]...)
 		}
-		key := normalizedStemWriteTarget(write)
-		if existing, ok := byTarget[key]; ok {
+		if existing := matchingSchemaApplyBatchItem(items, write); existing >= 0 {
 			// Multiple approved public actions can describe one physical target. The
 			// filesystem must see only the final bytes, and the public actions are
 			// published only after that single final write succeeds.
@@ -151,7 +154,6 @@ func sortedSchemaApplyBatch(plan schemaApplyBatchPlan) []schemaApplyBatchItem {
 			items[existing].actions = append(items[existing].actions, actions...)
 			continue
 		}
-		byTarget[key] = len(items)
 		items = append(items, schemaApplyBatchItem{write: write, actions: actions})
 	}
 
@@ -159,6 +161,62 @@ func sortedSchemaApplyBatch(plan schemaApplyBatchPlan) []schemaApplyBatchItem {
 		return strings.Compare(normalizedStemWriteTarget(a.write), normalizedStemWriteTarget(b.write))
 	})
 	return items
+}
+
+func prospectiveOverlayPathForTarget(state *rules.StemState, target *fsx.AtomicTarget) (string, error) {
+	if target == nil {
+		return "", fmt.Errorf("target capability unavailable")
+	}
+	stemPaths := make([]string, 0, len(state.Stems)+len(state.ParseErrors))
+	for path := range state.Stems {
+		stemPaths = append(stemPaths, path)
+	}
+	for path := range state.ParseErrors {
+		stemPaths = append(stemPaths, path)
+	}
+	sort.Strings(stemPaths)
+	for _, path := range stemPaths {
+		matches, err := target.MatchesExistingTargetPath(path)
+		if err != nil {
+			return "", fmt.Errorf("matching target identity against %s: %w", path, err)
+		}
+		if matches {
+			return path, nil
+		}
+	}
+	dirs := make([]string, 0, len(state.Entries))
+	for path, entry := range state.Entries {
+		if entry.IsDir {
+			dirs = append(dirs, path)
+		}
+	}
+	sort.Strings(dirs)
+	for _, dir := range dirs {
+		matches, err := target.ParentMatchesDir(dir)
+		if err != nil {
+			return "", fmt.Errorf("matching target parent identity against %s: %w", dir, err)
+		}
+		if matches {
+			return filepath.Join(dir, target.TargetName()), nil
+		}
+	}
+	return target.PhysicalPath(), nil
+}
+
+func matchingSchemaApplyBatchItem(items []schemaApplyBatchItem, write stemWritePlan) int {
+	for i, item := range items {
+		if sameStemWriteTarget(item.write, write) {
+			return i
+		}
+	}
+	return -1
+}
+
+func sameStemWriteTarget(a, b stemWritePlan) bool {
+	if a.target != nil && b.target != nil {
+		return a.target.SameTarget(b.target)
+	}
+	return normalizedStemWriteTarget(a) == normalizedStemWriteTarget(b)
 }
 
 func isNotExist(err error) bool {

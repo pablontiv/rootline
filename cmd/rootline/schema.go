@@ -419,13 +419,18 @@ type schemaApplyTargetObservation struct {
 	statErr error
 }
 
+type schemaApplyObservedTarget struct {
+	target      *fsx.AtomicTarget
+	observation schemaApplyTargetObservation
+}
+
 func planSchemaProposalApply(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown) schemaApplyBatchPlan {
 	return planSchemaProposalApplyWithResolver(proposals, scanRoot, force, result, resolved, fsx.ResolveAtomicTarget)
 }
 
 func planSchemaProposalApplyWithResolver(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown, resolve schemaApplyTargetResolver) schemaApplyBatchPlan {
 	plan := schemaApplyBatchPlan{writes: []stemWritePlan{}, actionsByWrite: [][]string{}}
-	virtualTargets := map[string]schemaApplyTargetObservation{}
+	var virtualTargets []schemaApplyObservedTarget
 	for _, proposal := range proposals {
 		// Skip proposals that require agent intervention.
 		if proposal.RequiresAgent {
@@ -474,11 +479,11 @@ func planSchemaProposalApplyWithResolver(proposals []SchemaProposal, scanRoot st
 		// policy refusal unless the caller opted in with --force. The planner has to
 		// model earlier accepted operations in this same report because execution is
 		// intentionally deferred until all validation has completed.
-		physicalTarget := target.PhysicalPath()
-		observation, ok := virtualTargets[physicalTarget]
-		if !ok {
+		observation, observationIndex := schemaApplyObservationForTarget(virtualTargets, target)
+		if observationIndex < 0 {
 			observation = schemaApplyTargetObservationFromStat(target.Stat())
-			virtualTargets[physicalTarget] = observation
+			virtualTargets = append(virtualTargets, schemaApplyObservedTarget{target: target, observation: observation})
+			observationIndex = len(virtualTargets) - 1
 		}
 		if observation.statErr != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("stat %s: %v", proposal.Target, observation.statErr))
@@ -508,7 +513,7 @@ func planSchemaProposalApplyWithResolver(proposals []SchemaProposal, scanRoot st
 			action:       action,
 		})
 		plan.actionsByWrite = append(plan.actionsByWrite, []string{fmt.Sprintf("%s: %s", action, targetPath)})
-		virtualTargets[physicalTarget] = schemaApplyTargetObservation{exists: true}
+		virtualTargets[observationIndex].observation = schemaApplyTargetObservation{exists: true}
 	}
 	return plan
 }
@@ -566,6 +571,15 @@ func currentStemHealthForAnalyzeResolve(ctx context.Context, root string) ([]rul
 func isSchemaApplyExternalPath(root, path string) bool {
 	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
 	return err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func schemaApplyObservationForTarget(observed []schemaApplyObservedTarget, target *fsx.AtomicTarget) (schemaApplyTargetObservation, int) {
+	for i, item := range observed {
+		if item.target.SameTarget(target) {
+			return item.observation, i
+		}
+	}
+	return schemaApplyTargetObservation{}, -1
 }
 
 func schemaApplyTargetObservationFromStat(_ os.FileInfo, err error) schemaApplyTargetObservation {
@@ -645,6 +659,9 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	// this existing envelope to learn why no report operation was performed.
 	res, resolveErr := rules.Resolve(root, root)
 	if resolveErr != nil {
+		// rules.Resolve is intentionally fail-fast; this fallback promotes known
+		// governance parse failures into structured stem_health diagnostics so
+		// schema apply can explain why no analyze mutation was performed.
 		if emit, err := classifyCurrentStemHealthBeforeAnalyzeResolve(ctx, cmd, root, result); emit || err != nil {
 			return err
 		}
@@ -692,9 +709,7 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 
 	if inferencePlan.Modified {
 		writeAnchor := root
-		rel, relErr := filepath.Rel(filepath.Clean(root), filepath.Clean(stemPath))
-		external := relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
-		if external {
+		if isSchemaApplyExternalPath(root, stemPath) {
 			writeAnchor = filepath.Dir(stemPath)
 		}
 		target, err := fsx.ResolveAtomicTarget(writeAnchor, stemPath)

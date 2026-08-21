@@ -229,6 +229,126 @@ func TestValidateProspectiveStemWritesUsesPhysicalHierarchy(t *testing.T) {
 	t.Fatalf("missing physical-target type-consistency diagnostic: %+v", diags)
 }
 
+func skipIfCaseSensitiveSchemaApplyFixture(t *testing.T, root string) {
+	t.Helper()
+	docs := filepath.Join(root, "docs")
+	if err := os.MkdirAll(docs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lower, err := os.Stat(docs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upper, err := os.Stat(filepath.Join(root, "Docs"))
+	if os.IsNotExist(err) {
+		t.Skip("fixture filesystem is case-sensitive")
+	}
+	if err != nil {
+		t.Fatalf("stat case alias: %v", err)
+	}
+	if !os.SameFile(lower, upper) {
+		t.Skip("fixture filesystem treats case aliases as distinct files")
+	}
+}
+
+func TestValidateProspectiveStemWritesCaseAliasReplacesDiscoveredStemKey(t *testing.T) {
+	root := t.TempDir()
+	skipIfCaseSensitiveSchemaApplyFixture(t, root)
+	mustWriteFile(t, filepath.Join(root, ".stem"), []byte("version: 2\nroot: true\nschema:\n  estado:\n    type: enum\n    values: [Pending, Done]\n"), 0o644)
+	mustWriteFile(t, filepath.Join(root, "docs", ".stem"), []byte("version: 2\nschema:\n  estado:\n    type: string\n"), 0o644)
+
+	aliasTarget := filepath.Join(root, "Docs", ".stem")
+	plan := schemaApplyBatchPlan{
+		writes: []stemWritePlan{{
+			reportTarget: aliasTarget,
+			targetPath:   aliasTarget,
+			target:       mustAtomicStemTarget(t, root, aliasTarget),
+			content:      []byte("version: 2\nschema:\n  estado:\n    type: enum\n    values: [Pending]\n"),
+		}},
+		actionsByWrite: [][]string{{"overwrite_stem: " + aliasTarget}},
+	}
+
+	diags, err := validateProspectiveStemWrites(context.Background(), root, plan)
+	if err != nil {
+		t.Fatalf("validateProspectiveStemWrites returned error: %v", err)
+	}
+	for _, diag := range diags {
+		if diag.Path == filepath.Join("docs", ".stem") && diag.Check == "type-consistency" && diag.Field == "estado" && diag.Severity == rules.SeverityError {
+			t.Fatalf("case alias created a second state key instead of replacing discovered docs/.stem: %+v", diags)
+		}
+	}
+}
+
+func TestValidateProspectiveStemWritesCaseAliasUsesDiscoveredDirectorySpellingForNewStem(t *testing.T) {
+	root := t.TempDir()
+	skipIfCaseSensitiveSchemaApplyFixture(t, root)
+	mustWriteFile(t, filepath.Join(root, ".stem"), []byte("version: 2\nroot: true\nschema:\n  title:\n    type: string\n"), 0o644)
+
+	aliasTarget := filepath.Join(root, "Docs", ".stem")
+	plan := schemaApplyBatchPlan{
+		writes: []stemWritePlan{{
+			reportTarget: aliasTarget,
+			targetPath:   aliasTarget,
+			target:       mustAtomicStemTarget(t, root, aliasTarget),
+			content:      []byte("version: 2\nscope:\n  match: \"*.missing\"\nschema:\n  title:\n    type: string\n"),
+		}},
+		actionsByWrite: [][]string{{"create_stem: " + aliasTarget}},
+	}
+
+	diags, err := validateProspectiveStemWrites(context.Background(), root, plan)
+	if err != nil {
+		t.Fatalf("validateProspectiveStemWrites returned error: %v", err)
+	}
+	for _, diag := range diags {
+		if diag.Check == "scope-match" && diag.Path == filepath.Join("docs", ".stem") {
+			return
+		}
+		if diag.Check == "scope-match" && diag.Path == filepath.Join("Docs", ".stem") {
+			t.Fatalf("case alias used report spelling %q instead of discovered directory spelling: %+v", diag.Path, diags)
+		}
+	}
+	t.Fatalf("missing scope-match diagnostic for discovered docs/.stem spelling: %+v", diags)
+}
+
+func TestSortedSchemaApplyBatchCoalescesCaseAliasesByParentIdentity(t *testing.T) {
+	root := t.TempDir()
+	skipIfCaseSensitiveSchemaApplyFixture(t, root)
+	first := mustAtomicStemTarget(t, root, filepath.Join(root, "docs", ".stem"))
+	second := mustAtomicStemTarget(t, root, filepath.Join(root, "Docs", ".stem"))
+	plan := schemaApplyBatchPlan{
+		writes: []stemWritePlan{
+			{reportTarget: "docs/.stem", targetPath: filepath.Join(root, "docs", ".stem"), target: first, content: []byte("first")},
+			{reportTarget: "Docs/.stem", targetPath: filepath.Join(root, "Docs", ".stem"), target: second, content: []byte("final")},
+		},
+		actionsByWrite: [][]string{{"first action"}, {"second action"}},
+	}
+
+	items := sortedSchemaApplyBatch(plan)
+	if len(items) != 1 || string(items[0].write.content) != "final" {
+		t.Fatalf("items = %+v, want one coalesced final write", items)
+	}
+	if !reflect.DeepEqual(items[0].actions, []string{"first action", "second action"}) {
+		t.Fatalf("actions = %#v", items[0].actions)
+	}
+	var calls int
+	applied, errs := executeStemWrites(context.Background(), plan, false, func(target *fsx.AtomicTarget, content []byte, mode fs.FileMode) error {
+		calls++
+		return target.WriteFileAtomic(content, mode)
+	})
+	if len(errs) != 0 {
+		t.Fatalf("executeStemWrites errors = %#v", errs)
+	}
+	if calls != 1 {
+		t.Fatalf("writer calls = %d, want one physical write", calls)
+	}
+	if !reflect.DeepEqual(applied, []string{"first action", "second action"}) {
+		t.Fatalf("applied = %#v", applied)
+	}
+	if got := string(mustReadFile(t, filepath.Join(root, "docs", ".stem"))); got != "final" {
+		t.Fatalf("written bytes = %q, want final", got)
+	}
+}
+
 func TestSortedSchemaApplyBatchCoalescesAliasesByPhysicalTarget(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink semantics differ")

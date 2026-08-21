@@ -2,6 +2,7 @@ package fsx
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -57,6 +58,51 @@ func TestAtomicTargetFollowsInternalAliasOnce(t *testing.T) {
 	}
 }
 
+func TestResolveAtomicTargetRejectsParentSubstitutedOutsideAllowedRootBeforeAcquisition(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink setup requires Unix-compatible semantics")
+	}
+	base := t.TempDir()
+	root := filepath.Join(base, "root")
+	inside := filepath.Join(root, "docs")
+	outsideRoot := filepath.Join(base, "outside-root")
+	outsideDocs := filepath.Join(outsideRoot, "docs")
+	if err := os.MkdirAll(inside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outsideDocs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	movedRoot := filepath.Join(base, "moved-root")
+	wantParent, err := filepath.EvalSymlinks(inside)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	afterAtomicTargetParentResolved = func(_, physicalParent, _ string) error {
+		if physicalParent != wantParent {
+			return fmt.Errorf("physical parent = %q, want %q", physicalParent, wantParent)
+		}
+		if err := os.Rename(root, movedRoot); err != nil {
+			return err
+		}
+		return os.Rename(outsideRoot, root)
+	}
+	defer func() { afterAtomicTargetParentResolved = nil }()
+
+	target, err := ResolveAtomicTarget(root, filepath.Join(inside, ".stem"))
+	if err == nil {
+		defer func() { _ = target.Close() }()
+		err = target.WriteFileAtomic([]byte("version: 2\n"), 0o644)
+	}
+	if err == nil {
+		t.Fatal("substituted external parent was accepted")
+	}
+	if _, err := os.Stat(filepath.Join(inside, ".stem")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("outside .stem was created: %v", err)
+	}
+}
+
 func TestResolveAtomicTargetRejectsExistingPhysicalEscape(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink setup requires Unix-compatible semantics")
@@ -107,6 +153,79 @@ func TestAtomicTargetRejectsReplacedPhysicalParent(t *testing.T) {
 		if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("unexpected write at %s: %v", path, err)
 		}
+	}
+}
+
+func TestAtomicTargetIdentityOperations(t *testing.T) {
+	root := t.TempDir()
+	docs := filepath.Join(root, "docs")
+	other := filepath.Join(root, "other")
+	if err := os.MkdirAll(docs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	first, err := ResolveAtomicTarget(root, filepath.Join(docs, ".stem"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = first.Close() }()
+	second, err := ResolveAtomicTarget(root, filepath.Join(docs, ".stem"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = second.Close() }()
+	otherParent, err := ResolveAtomicTarget(root, filepath.Join(other, ".stem"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = otherParent.Close() }()
+	otherName, err := ResolveAtomicTarget(root, filepath.Join(docs, "schema.stem"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = otherName.Close() }()
+
+	if !first.SameTarget(second) {
+		t.Fatal("same parent/name target was not matched by identity")
+	}
+	if first.SameTarget(otherParent) {
+		t.Fatal("different parent matched as same target")
+	}
+	if first.SameTarget(otherName) {
+		t.Fatal("different basename matched as same target")
+	}
+	if first.SameTarget(nil) {
+		t.Fatal("nil target matched")
+	}
+	if got := first.TargetName(); got != ".stem" {
+		t.Fatalf("TargetName() = %q, want .stem", got)
+	}
+	matches, err := first.ParentMatchesDir(docs)
+	if err != nil || !matches {
+		t.Fatalf("ParentMatchesDir(docs) = %v, %v; want true, nil", matches, err)
+	}
+	matches, err = first.ParentMatchesDir(other)
+	if err != nil || matches {
+		t.Fatalf("ParentMatchesDir(other) = %v, %v; want false, nil", matches, err)
+	}
+	if _, err := first.ParentMatchesDir(filepath.Join(root, "missing")); err == nil {
+		t.Fatal("ParentMatchesDir accepted missing directory")
+	}
+	matches, err = first.MatchesExistingTargetPath(filepath.Join(docs, ".stem"))
+	if err != nil || !matches {
+		t.Fatalf("MatchesExistingTargetPath(docs/.stem) = %v, %v; want true, nil", matches, err)
+	}
+	matches, err = first.MatchesExistingTargetPath(filepath.Join(docs, "schema.stem"))
+	if err != nil || matches {
+		t.Fatalf("MatchesExistingTargetPath(schema.stem) = %v, %v; want false, nil", matches, err)
+	}
+	if ok, err := (*AtomicTarget)(nil).ParentMatchesDir(docs); err != nil || ok {
+		t.Fatalf("nil ParentMatchesDir = %v, %v; want false, nil", ok, err)
+	}
+	if ok, err := (*AtomicTarget)(nil).MatchesExistingTargetPath(filepath.Join(docs, ".stem")); err != nil || ok {
+		t.Fatalf("nil MatchesExistingTargetPath = %v, %v; want false, nil", ok, err)
 	}
 }
 

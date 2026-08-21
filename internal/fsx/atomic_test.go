@@ -3,7 +3,6 @@ package fsx
 import (
 	"errors"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -114,35 +113,22 @@ func TestWriteFileAtomicRejectsMissingParent(t *testing.T) {
 	}
 }
 
-func TestStatInRootReportsExistingAndMissingTargets(t *testing.T) {
+func TestWriteFileAtomicRootCreatesAndPreservesExistingMode(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "docs", ".stem")
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := StatInRoot(dir, target); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("StatInRoot missing error = %v, want fs.ErrNotExist", err)
-	}
-	if err := os.WriteFile(target, []byte("version: 2\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	info, err := StatInRoot(dir, target)
+	root, err := os.OpenRoot(dir)
 	if err != nil {
-		t.Fatalf("StatInRoot existing: %v", err)
-	}
-	if got := info.Mode().Perm(); got != 0o600 {
-		t.Fatalf("mode = %o, want 600", got)
-	}
-}
-
-func TestWriteFileAtomicInRootCreatesAndPreservesExistingMode(t *testing.T) {
-	dir := t.TempDir()
-	target := filepath.Join(dir, "docs", ".stem")
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteFileAtomicInRoot(dir, target, []byte("new\n"), 0o640); err != nil {
-		t.Fatalf("WriteFileAtomicInRoot create: %v", err)
+	defer func() { _ = root.Close() }()
+	if err := writeFileAtomicRoot(root, filepath.Join("docs", ".stem"), 0o640, func(dst io.Writer) error {
+		_, err := io.WriteString(dst, "new\n")
+		return err
+	}); err != nil {
+		t.Fatalf("writeFileAtomicRoot create: %v", err)
 	}
 	info, err := os.Stat(target)
 	if err != nil {
@@ -154,8 +140,11 @@ func TestWriteFileAtomicInRootCreatesAndPreservesExistingMode(t *testing.T) {
 	if err := os.Chmod(target, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteFileAtomicInRoot(dir, target, []byte("replaced\n"), 0o644); err != nil {
-		t.Fatalf("WriteFileAtomicInRoot replace: %v", err)
+	if err := writeFileAtomicRoot(root, filepath.Join("docs", ".stem"), 0o644, func(dst io.Writer) error {
+		_, err := io.WriteString(dst, "replaced\n")
+		return err
+	}); err != nil {
+		t.Fatalf("writeFileAtomicRoot replace: %v", err)
 	}
 	got, err := os.ReadFile(target)
 	if err != nil {
@@ -174,30 +163,60 @@ func TestWriteFileAtomicInRootCreatesAndPreservesExistingMode(t *testing.T) {
 	assertNoStagingFiles(t, filepath.Dir(target))
 }
 
-func TestWriteFileAtomicInRootRejectsEscapingSymlinkParent(t *testing.T) {
+func TestWriteFileAtomicRootRejectsEscapingSymlinkParent(t *testing.T) {
 	parent := t.TempDir()
-	root := filepath.Join(parent, "root")
+	rootDir := filepath.Join(parent, "root")
 	outside := filepath.Join(parent, "outside")
-	if err := os.MkdirAll(root, 0o755); err != nil {
+	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(outside, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	link := filepath.Join(root, "link")
+	link := filepath.Join(rootDir, "link")
 	if err := os.Symlink(outside, link); err != nil {
 		if errors.Is(err, os.ErrPermission) {
 			t.Skipf("symlink unsupported: %v", err)
 		}
 		t.Fatal(err)
 	}
-	target := filepath.Join(link, ".stem")
-	if err := WriteFileAtomicInRoot(root, target, []byte("escaped\n"), 0o644); err == nil {
-		t.Fatal("WriteFileAtomicInRoot accepted escaping symlink parent")
+	root, err := os.OpenRoot(rootDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	if err := writeFileAtomicRoot(root, filepath.Join("link", ".stem"), 0o644, func(dst io.Writer) error {
+		_, err := io.WriteString(dst, "escaped\n")
+		return err
+	}); err == nil {
+		t.Fatal("writeFileAtomicRoot accepted escaping symlink parent")
 	}
 	if _, err := os.Stat(filepath.Join(outside, ".stem")); !os.IsNotExist(err) {
 		t.Fatalf("outside target was created: %v", err)
 	}
+}
+
+func TestWriteFileAtomicRootCleansUpWhenRenameFails(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "keep"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	if err := writeFileAtomicRoot(root, "target", 0o644, func(dst io.Writer) error {
+		_, err := io.WriteString(dst, "new")
+		return err
+	}); err == nil {
+		t.Fatal("writeFileAtomicRoot replaced non-empty directory")
+	}
+	assertNoStagingFiles(t, dir)
 }
 
 func TestWriteFileAtomicRootLeavesOriginalAfterPartialWrite(t *testing.T) {
@@ -231,50 +250,7 @@ func TestWriteFileAtomicRootLeavesOriginalAfterPartialWrite(t *testing.T) {
 	assertNoStagingFiles(t, dir)
 }
 
-func TestWriteFileAtomicInRootCleansUpWhenRenameFails(t *testing.T) {
-	dir := t.TempDir()
-	target := filepath.Join(dir, "target")
-	if err := os.Mkdir(target, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(target, "keep"), []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := WriteFileAtomicInRoot(dir, target, []byte("new"), 0o644); err == nil {
-		t.Fatal("WriteFileAtomicInRoot replaced non-empty directory")
-	}
-	assertNoStagingFiles(t, dir)
-}
-
-func TestRootedHelpersReportMissingRoot(t *testing.T) {
-	missing := filepath.Join(t.TempDir(), "missing")
-	if _, err := StatInRoot(missing, filepath.Join(missing, ".stem")); err == nil {
-		t.Fatal("StatInRoot accepted missing root")
-	}
-	if err := WriteFileAtomicInRoot(missing, filepath.Join(missing, ".stem"), []byte("new"), 0o644); err == nil {
-		t.Fatal("WriteFileAtomicInRoot accepted missing root")
-	}
-}
-
-func TestWriteFileAtomicInRootRejectsMissingParentAndLexicalEscape(t *testing.T) {
-	dir := t.TempDir()
-	if err := WriteFileAtomicInRoot(dir, filepath.Join(dir, "missing", ".stem"), []byte("new"), 0o644); err == nil {
-		t.Fatal("WriteFileAtomicInRoot accepted missing parent")
-	}
-	if err := WriteFileAtomicInRoot(dir, filepath.Join(dir, "..", "escaped.stem"), []byte("new"), 0o644); err == nil {
-		t.Fatal("WriteFileAtomicInRoot accepted lexical escape")
-	}
-}
-
-func TestRootRelativePathAndRandomTempNameHelpers(t *testing.T) {
-	dir := t.TempDir()
-	rel, err := rootRelativePath(dir, filepath.Join(dir, "docs", ".stem"))
-	if err != nil {
-		t.Fatalf("rootRelativePath: %v", err)
-	}
-	if rel != filepath.Join("docs", ".stem") {
-		t.Fatalf("rel = %q", rel)
-	}
+func TestRandomTempNameHelper(t *testing.T) {
 	name, err := randomRootTempName()
 	if err != nil {
 		t.Fatalf("randomRootTempName: %v", err)
