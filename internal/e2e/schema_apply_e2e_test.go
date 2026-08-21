@@ -255,7 +255,7 @@ func runE2ESchemaApplyCLI(t *testing.T, reportPath string, dryRun bool) (*e2eSch
 	if dryRun {
 		args = append(args, "--dry-run")
 	}
-	cmd := exec.Command("go", args...) //nolint:gosec -- test invokes the local rootline CLI with fixture paths.
+	cmd := exec.Command("go", args...) //nolint:gosec // test invokes the local rootline CLI with fixture paths.
 	cmd.Dir = filepath.Join("..", "..")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
