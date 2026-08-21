@@ -1038,3 +1038,85 @@ func TestApplySchemaInferences_ValidatesComposedFinalDeclarationNotIntermediateS
 		})
 	}
 }
+
+func TestApplySchemaInferences_WrapperParityWithPlanForDryRunAndWrite(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		t.Run(map[bool]string{true: "dry_run", false: "write"}[dryRun], func(t *testing.T) {
+			dir := t.TempDir()
+			planPath := filepath.Join(dir, "plan.stem")
+			wrapperPath := filepath.Join(dir, "wrapper.stem")
+			original := []byte("version: 2\nschema:\n  status:\n    type: enum\n    values: [Pending]\n")
+			for _, path := range []string{planPath, wrapperPath} {
+				if err := os.WriteFile(path, original, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(path, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			inferences := []ReportInference{{Type: "enum_values", Field: "status", Value: "[Pending Done]"}}
+			plan, err := PlanSchemaInferences(planPath, inferences)
+			if err != nil {
+				t.Fatalf("PlanSchemaInferences: %v", err)
+			}
+			expected := plan.Result
+			expected.DryRun = dryRun
+			if !dryRun {
+				if err := ApplySchemaInferencePlan(plan); err != nil {
+					t.Fatalf("ApplySchemaInferencePlan: %v", err)
+				}
+			}
+
+			actual, err := ApplySchemaInferences(wrapperPath, inferences, dryRun)
+			if err != nil {
+				t.Fatalf("ApplySchemaInferences: %v", err)
+			}
+			assertApplyResultEqual(t, *actual, expected)
+
+			planBytes, err := os.ReadFile(planPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wrapperBytes, err := os.ReadFile(wrapperPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if dryRun {
+				if string(wrapperBytes) != string(original) {
+					t.Fatalf("wrapper dry-run changed target:\n%s", wrapperBytes)
+				}
+				return
+			}
+			if string(wrapperBytes) != string(planBytes) {
+				t.Fatalf("wrapper content differs from explicit plan/apply:\nwrapper:\n%s\nplan:\n%s", wrapperBytes, planBytes)
+			}
+			info, err := os.Stat(wrapperPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := info.Mode().Perm(); got != 0o600 {
+				t.Fatalf("wrapper mode = %v, want 0600", got)
+			}
+		})
+	}
+}
+
+func assertApplyResultEqual(t *testing.T, got, want ApplyResult) {
+	t.Helper()
+	if got.DryRun != want.DryRun || !equalStringSlices(got.Applied, want.Applied) || !equalStringSlices(got.Skipped, want.Skipped) || !equalStringSlices(got.Rejected, want.Rejected) {
+		t.Fatalf("ApplyResult = %+v, want %+v", got, want)
+	}
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

@@ -33,6 +33,9 @@ func TestApply_SchemaApply_EnumExtension(t *testing.T) {
 	if err != nil || len(entries) == 0 {
 		t.Fatalf("no stem found: %v", err)
 	}
+	if err := os.Chmod(entries[0].Path, 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := infer.ApplySchemaInferences(entries[0].Path, allInferences, false)
 	if err != nil {
@@ -43,6 +46,14 @@ func TestApply_SchemaApply_EnumExtension(t *testing.T) {
 	totalActions := len(result.Applied) + len(result.Skipped)
 	if totalActions == 0 && len(allInferences) > 0 {
 		t.Logf("warning: %d inferences produced no apply actions (schema may already cover them)", len(allInferences))
+	}
+
+	info, err := os.Stat(entries[0].Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("schema apply changed .stem mode: got %v want 0600", got)
 	}
 
 	// Validate: all documents should still pass after schema update.
