@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -95,17 +96,8 @@ func DiscoverStemState(ctx context.Context, root string) (*StemState, error) {
 		return nil, err
 	}
 
-	entries, err := WalkUp(filepath.Dir(absRoot))
-	if err != nil && !errors.Is(err, ErrNoSchemaFound) {
+	if err := collectExternalStemState(ctx, state, filepath.Dir(absRoot)); err != nil {
 		return nil, err
-	}
-	for _, entry := range entries {
-		stemPath := filepath.Clean(entry.Path)
-		if isStemStatePathAtOrBelow(absRoot, stemPath) {
-			continue
-		}
-		state.Stems[stemPath] = entry.Stem
-		delete(state.ParseErrors, stemPath)
 	}
 
 	return state, nil
@@ -138,6 +130,7 @@ func (s *StemState) Overlay(path string, content []byte) (*StemState, error) {
 		clone.Evaluated = make(map[string]bool)
 	}
 	clone.Evaluated[absPath] = true
+	clone.markCandidateChainEvaluated(absPath)
 	return clone, nil
 }
 
@@ -267,6 +260,55 @@ func (s *StemState) clone() *StemState {
 		clone.Evaluated[path] = evaluated
 	}
 	return clone
+}
+
+func collectExternalStemState(ctx context.Context, state *StemState, startDir string) error {
+	for dir := filepath.Clean(startDir); ; dir = filepath.Dir(dir) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		stemPath := filepath.Join(dir, stemFileName)
+		content, err := os.ReadFile(stemPath)
+		switch {
+		case err == nil:
+			stem, parseErr := ParseStem(stemPath, content)
+			if parseErr != nil {
+				state.ParseErrors[stemPath] = parseErr
+				delete(state.Stems, stemPath)
+			} else {
+				state.Stems[stemPath] = stem
+				delete(state.ParseErrors, stemPath)
+				if stem.Root {
+					return nil
+				}
+			}
+		case errors.Is(err, fs.ErrNotExist):
+		default:
+			return fmt.Errorf("reading external stem %s: %w", stemPath, err)
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return nil
+		}
+	}
+}
+
+func (s *StemState) markCandidateChainEvaluated(path string) {
+	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
+		stemPath := filepath.Join(dir, stemFileName)
+		if _, malformed := s.ParseErrors[stemPath]; malformed {
+			s.Evaluated[stemPath] = true
+		}
+		if stem := s.Stems[stemPath]; stem != nil && stem.Root {
+			return
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return
+		}
+	}
 }
 
 func addStemToState(state *StemState, path string, content []byte) {

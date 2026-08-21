@@ -110,6 +110,79 @@ func TestDiscoverStemStateIncludesExternalAncestorContext(t *testing.T) {
 	}
 }
 
+func TestDiscoverStemStatePreservesMalformedExternalAncestorAndContinuesToRoot(t *testing.T) {
+	grand := t.TempDir()
+	parent := filepath.Join(grand, "parent")
+	root := filepath.Join(parent, "child")
+	mustWriteStemStateFile(t, filepath.Join(grand, ".stem"), "version: 2\nroot: true\n")
+	malformed := filepath.Join(parent, ".stem")
+	mustWriteStemStateFile(t, malformed, "version: [broken\n")
+	mustWriteStemStateFile(t, filepath.Join(root, "record.md"), "# Record\n")
+
+	state, err := DiscoverStemState(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ParseErrors[malformed] == nil {
+		t.Fatal("external parse error was not retained")
+	}
+	if state.Stems[filepath.Join(grand, ".stem")] == nil {
+		t.Fatal("collector did not continue to valid root marker")
+	}
+	if containsStemStatePath(state.EvaluatedStemPaths(), malformed) {
+		t.Fatal("untouched external malformed ancestor became scan-owned")
+	}
+}
+
+func TestDiscoverStemStateHonorsCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := DiscoverStemState(ctx, t.TempDir())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("DiscoverStemState() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestDiscoverStemStateReturnsExternalStemReadError(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "child")
+	parentStem := filepath.Join(parent, ".stem")
+	mustWriteStemStateFile(t, filepath.Join(root, "record.md"), "# Record\n")
+	if err := os.Mkdir(parentStem, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := DiscoverStemState(context.Background(), root)
+	if err == nil {
+		t.Fatal("DiscoverStemState() error = nil, want read error")
+	}
+	if strings.Contains(err.Error(), "invalid YAML") {
+		t.Fatalf("operational read error was reported as a parse error: %v", err)
+	}
+}
+
+func TestDiscoverStemStateMalformedExternalRootTextDoesNotStopDiscovery(t *testing.T) {
+	grand := t.TempDir()
+	parent := filepath.Join(grand, "parent")
+	root := filepath.Join(parent, "child")
+	mustWriteStemStateFile(t, filepath.Join(grand, ".stem"), "version: 2\nroot: true\n")
+	malformed := filepath.Join(parent, ".stem")
+	mustWriteStemStateFile(t, malformed, "version: [broken\nroot: true\n")
+	mustWriteStemStateFile(t, filepath.Join(root, "record.md"), "# Record\n")
+
+	state, err := DiscoverStemState(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ParseErrors[malformed] == nil {
+		t.Fatal("external parse error was not retained")
+	}
+	if state.Stems[filepath.Join(grand, ".stem")] == nil {
+		t.Fatal("malformed external root text stopped discovery before the valid root marker")
+	}
+}
+
 func TestStemStateChainTraversesExternalAncestorUntilRootMarker(t *testing.T) {
 	grand := t.TempDir()
 	parent := filepath.Join(grand, "parent")

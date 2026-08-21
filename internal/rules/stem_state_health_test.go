@@ -135,6 +135,37 @@ schema:
 	}
 }
 
+func TestEvaluateStemStatePromotesMalformedExternalAncestorThroughOverlay(t *testing.T) {
+	grand := t.TempDir()
+	parent := filepath.Join(grand, "parent")
+	root := filepath.Join(parent, "child")
+	mustWriteStemTestFile(t, filepath.Join(grand, ".stem"), []byte("version: 2\nroot: true\n"))
+	mustWriteStemTestFile(t, filepath.Join(parent, ".stem"), []byte("version: [broken\n"))
+	mustWriteStemTestFile(t, filepath.Join(root, "record.md"), []byte("# Record\n"))
+
+	state, err := DiscoverStemState(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clone, err := state.Overlay(filepath.Join(root, ".stem"), []byte("version: 2\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := EvaluateStemState(context.Background(), clone)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := StemHealthDiagnostic{
+		Path:     "../.stem",
+		Check:    "yaml-valid",
+		Severity: "error",
+	}
+	if !containsStemHealthDiagnostic(StemHealthDiagnostics(result), want) {
+		t.Fatalf("diagnostics did not include %+v; got %+v", want, StemHealthDiagnostics(result))
+	}
+}
+
 func TestEvaluateStemStateRejectsEnumToStringWidening(t *testing.T) {
 	root := t.TempDir()
 	mustWriteStemTestFile(t, filepath.Join(root, ".stem"), []byte(`version: 2
@@ -292,4 +323,13 @@ func assertStemDiagnosticsDeepEqual(t *testing.T, got, want []StemHealthDiagnost
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("diagnostics mismatch\ngot:  %+v\nwant: %+v", got, want)
 	}
+}
+
+func containsStemHealthDiagnostic(diags []StemHealthDiagnostic, want StemHealthDiagnostic) bool {
+	for _, diag := range diags {
+		if diag.Path == want.Path && diag.Check == want.Check && diag.Severity == want.Severity && diag.Field == want.Field {
+			return true
+		}
+	}
+	return false
 }
