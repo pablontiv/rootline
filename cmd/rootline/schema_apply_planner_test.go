@@ -75,35 +75,50 @@ func assertSchemaApplyPlannerRejected(t *testing.T, got []string, want []string)
 
 func TestPlanSchemaProposalApply_RejectsNonLiteralStemBasenameBeforeResolution(t *testing.T) {
 	root := t.TempDir()
-	target := filepath.Join(root, "docs", ".STEM")
+	rejectedTarget := filepath.Join(root, "docs", ".STEM")
+	acceptedTarget := filepath.Join(root, "docs", ".stem")
+	if err := os.MkdirAll(filepath.Dir(acceptedTarget), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(acceptedTarget, []byte("version: 2\nschema:\n  title:\n    type: string\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	calls := 0
 	resolver := func(root, target string) (*fsx.AtomicTarget, error) {
 		calls++
-		t.Fatalf("resolver should not be called for rejected basename: root=%s target=%s", root, target)
-		return nil, nil
+		if target == rejectedTarget {
+			t.Fatalf("resolver should not be called for rejected basename: root=%s target=%s", root, target)
+		}
+		return fsx.ResolveAtomicTarget(root, target)
 	}
 	result := &SchemaApplyResult{Errors: []string{}, Rejected: []string{}, Skipped: []string{}}
 	resolved := &fix.ResolvedTargetsBreakdown{Accepted: map[string]string{}, Rejected: map[string]string{}}
 
-	plan := planSchemaProposalApplyWithResolver([]SchemaProposal{{ID: "case-alias", Operation: "create_stem", Target: target, Patch: schemaApplyPlannerPatchA}}, root, false, result, resolved, resolver)
+	plan := planSchemaProposalApplyWithResolver([]SchemaProposal{
+		{ID: "case-alias", Operation: "create_stem", Target: rejectedTarget, Patch: schemaApplyPlannerPatchA},
+		{ID: "literal", Operation: "create_stem", Target: acceptedTarget, Patch: schemaApplyPlannerPatchB},
+	}, root, true, result, resolved, resolver)
 	defer func() { _ = closeSchemaApplyBatch(plan) }()
 
-	if calls != 0 {
-		t.Fatalf("resolver calls = %d, want 0", calls)
+	if calls != 1 {
+		t.Fatalf("resolver calls = %d, want 1 for the later accepted proposal only", calls)
 	}
-	if len(plan.writes) != 0 || len(plan.actionsByWrite) != 0 {
-		t.Fatalf("plan = %+v, want no writes or actions", plan)
+	if len(plan.writes) != 1 || len(plan.actionsByWrite) != 1 {
+		t.Fatalf("plan = %+v, want exactly one accepted write and action", plan)
 	}
 	if len(result.Errors) != 0 || len(result.Skipped) != 0 {
 		t.Fatalf("result = %+v, want no errors or skips", result)
 	}
-	wantRejected := []string{fmt.Sprintf("%s: target basename must be \".stem\"", target)}
+	wantRejected := []string{fmt.Sprintf("%s: target basename must be \".stem\"", rejectedTarget)}
 	assertSchemaApplyPlannerRejected(t, result.Rejected, wantRejected)
-	if got := resolved.Rejected[target]; got != "target basename must be \".stem\"" {
+	if got := resolved.Rejected[rejectedTarget]; got != "target basename must be \".stem\"" {
 		t.Fatalf("resolved rejected = %q, want basename refusal", got)
 	}
-	if _, ok := resolved.Accepted[target]; ok {
-		t.Fatalf("resolved accepted unexpectedly contains %s", target)
+	if got := resolved.Accepted[acceptedTarget]; got != acceptedTarget {
+		t.Fatalf("resolved accepted = %q, want %q", got, acceptedTarget)
+	}
+	if _, ok := resolved.Accepted[rejectedTarget]; ok {
+		t.Fatalf("resolved accepted unexpectedly contains %s", rejectedTarget)
 	}
 }
 

@@ -81,8 +81,6 @@ rootline new <file.md> --force
 
 `new` requires a file path. It does not choose directories or prompt for names.
 
-Schema proposal targets must use the literal basename `.stem`; alternate casing is rejected before resolution.
-
 ### Deterministic Filename Rule
 
 If the user gives a directory instead of a file:
@@ -186,6 +184,7 @@ notes:
 - **Flag: `--force`** — Overwrites existing `.stem` files when applying `create_stem` proposals. Without `--force`, proposals targeting existing files are rejected (policy refusal).
 - `--dry-run`: no files written; reports the same accepted actions and `stem_health[]` governance verdicts the real write path would use
 - Scan root: `report.root` when present, else `report.path` resolved against the caller's CWD (legacy reports)
+- Schema proposal targets must use the literal basename `.stem`; alternate casing is rejected before resolution.
 - Before publishing `applied[]` actions or writing files, apply validates the complete virtual `.stem` hierarchy produced by the whole batch. Error-severity `stem_health[]` diagnostics block with `complete:false`, non-zero exit, and `applied:[]`; warning/info diagnostics remain visible and nonblocking
 - Writes use atomic per-file replacement. In a multi-file batch, each accepted file is replaced atomically on its own; if a write fails after earlier files succeeded, apply records the error and continues best-effort for remaining files rather than rolling back prior successful files
 - Accepted writes are validated and replaced through one bound physical target. Internal aliases are supported, including symlinked parents inside the scan root, but aliases that physically escape the scan root are rejected before any write is attempted

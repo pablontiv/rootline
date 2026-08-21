@@ -335,7 +335,7 @@ func TestSchemaApplyProposalRejectsCaseAliasBasenameBeforeResolution(t *testing.
 			report := SchemaProposalsReport{Version: 1, Kind: "rootline/schema-proposals", Path: root, Root: root, Proposals: []SchemaProposal{{ID: "case-alias", Operation: "create_stem", Target: filepath.Join(root, "Docs", ".STEM"), Patch: "version: 2\nschema:\n  title:\n    type: string\n"}}}
 			reportPath := filepath.Join(root, "report.json")
 			writeSchemaApplyPreflightReport(t, reportPath, report)
-			args := []string{"--report", reportPath}
+			args := []string{"--report", reportPath, "--force"}
 			if dryRun {
 				args = append(args, "--dry-run")
 			}
