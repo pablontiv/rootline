@@ -496,7 +496,7 @@ func schemaApplyTargetObservationFromStat(_ os.FileInfo, err error) schemaApplyT
 }
 
 // runSchemaApplyFromAnalyze processes an analyze report and applies schema-modifying inferences to .stem files.
-// Mirrors apply.go's schema half: resolves closest .stem, filters schema-modifying inferences, calls ApplySchemaInferences.
+// Mirrors apply.go's schema half: resolves closest .stem, filters schema-modifying inferences, plans candidate bytes, and applies them through the shared prospective gate.
 func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	ctx := cmd.Context()
 
@@ -579,8 +579,10 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 		}
 	}
 
-	// Apply schema modifications to .stem
-	schemaResult, err := infer.ApplySchemaInferences(stemPath, schemaInferences, schemaApplyDryRun)
+	// Plan schema modifications to .stem. Planning preserves analyze action strings
+	// but does not publish them: applied[] is gated on complete prospective
+	// hierarchy validation and executor success, exactly like proposal writes.
+	inferencePlan, err := infer.PlanSchemaInferences(stemPath, schemaInferences)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("applying schema: %v", err))
 		result.seal()
@@ -593,11 +595,48 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 		}
 		return applyExitError(len(result.Errors), 0)
 	}
-	result.Applied = schemaResult.Applied
-	result.Skipped = schemaResult.Skipped
-	result.Rejected = schemaResult.Rejected
+	result.Skipped = inferencePlan.Result.Skipped
+	result.Rejected = inferencePlan.Result.Rejected
 
-	// If not dry-run, run validation.
+	if inferencePlan.Modified {
+		plan := schemaApplyBatchPlan{
+			writes: []stemWritePlan{{
+				reportTarget: stemPath,
+				target:       inferencePlan.Target,
+				content:      inferencePlan.Content,
+				action:       "apply_schema_inferences",
+			}},
+			actionsByWrite: [][]string{append([]string(nil), inferencePlan.Result.Applied...)},
+		}
+
+		stemHealth, stemHealthErr := validateProspectiveStemWrites(ctx, root, plan)
+		if stemHealthErr != nil {
+			result.Errors = append(result.Errors, stemHealthErr.Error())
+		} else {
+			result.StemHealth = stemHealth
+			for _, diag := range blockingStemHealth(stemHealth) {
+				result.Errors = append(result.Errors, schemaApplyStemHealthError(diag))
+			}
+		}
+		if len(result.Errors) > 0 {
+			result.seal()
+			if outputFormat == "table" {
+				if err := renderSchemaApplyTable(cmd, result); err != nil {
+					return err
+				}
+			} else if err := outputJSON(cmd, result, false); err != nil {
+				return err
+			}
+			return applyExitError(len(result.Errors), 0)
+		}
+
+		applied, writeErrors := executeStemWrites(ctx, plan, schemaApplyDryRun, fsx.WriteFileAtomic)
+		result.Applied = append(result.Applied, applied...)
+		result.Errors = append(result.Errors, writeErrors...)
+	}
+
+	// If not dry-run, run validation. A no-op analyze plan retains the prior
+	// behavior here, but it skips the unnecessary prospective health scan above.
 	if !schemaApplyDryRun {
 		validationResult, validationErr := runPostApplyValidation(ctx, root)
 		if validationErr != nil {
@@ -608,8 +647,8 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	}
 
 	// Emit the payload first, then let the run's own outcome decide the exit
-	// status. The analyze path writes through ApplySchemaInferences, which has
-	// no rollback of its own, so there is no rolled_back[] to count.
+	// status. schema apply performs no post-validation rollback, so it has no
+	// rolled_back[] to count.
 	result.seal()
 
 	if outputFormat == "table" {
