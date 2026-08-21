@@ -65,7 +65,7 @@ empty index, and the scan-failure path. Never branch on the flags; the keys are 
       "valid": true, "errors": [], "warnings": [] }
   ],
   "stem_health": [
-    { "path": "sub/.stem", "check": "scope-match", "field": "",
+    { "path": "sub/.stem", "check": "scope-match",
       "severity": "warn", "message": "scope.match \"*.txt\" matches no files in directory" }
   ],
   "drift_warnings": [],

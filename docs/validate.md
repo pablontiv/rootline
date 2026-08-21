@@ -101,7 +101,7 @@ The skip is reported rather than silent, as a warning, so a run that checks noth
 ```console
 $ rootline validate scope/other.md --field "results[].warnings"
 [[{"rule":"skipped","field":"",
-   "message":"skipped: out of scope for this .stem (scope.match)","severity":"warn"}]]
+   "message":"skipped: out of scope for this .stem (scope.match)","severity":"warn","source":"scope"}]]
 ```
 
 ### Broken-target detection is always on
@@ -245,7 +245,6 @@ root.total` and `stats --field total` all reported 3 on the same path.
 {
   "path": "docs/sub/.stem",
   "check": "scope-match",
-  "field": "",
   "severity": "warn",
   "message": "scope.match \"*.txt\" matches no files in directory"
 }
