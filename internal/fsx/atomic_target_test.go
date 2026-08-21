@@ -195,8 +195,12 @@ func TestAtomicTargetWriteFileAtomicReportsMissingPhysicalParent(t *testing.T) {
 
 func TestResolveAtomicTargetRejectsMissingAllowedRoot(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
-	if _, err := ResolveAtomicTarget(missing, filepath.Join(missing, ".stem")); err == nil {
+	_, err := ResolveAtomicTarget(missing, filepath.Join(missing, ".stem"))
+	if err == nil {
 		t.Fatal("ResolveAtomicTarget accepted missing allowed root")
+	}
+	if !strings.Contains(err.Error(), "opening root "+missing) {
+		t.Fatalf("ResolveAtomicTarget error = %v", err)
 	}
 }
 
@@ -229,7 +233,12 @@ func TestResolveAtomicTargetHandlesSymlinkAllowedRoot(t *testing.T) {
 
 func TestResolveAtomicTargetRejectsMissingParent(t *testing.T) {
 	root := t.TempDir()
-	if _, err := ResolveAtomicTarget(root, filepath.Join(root, "missing", ".stem")); err == nil {
+	logicalTarget := filepath.Join(root, "missing", ".stem")
+	_, err := ResolveAtomicTarget(root, logicalTarget)
+	if err == nil {
 		t.Fatal("ResolveAtomicTarget accepted missing parent")
+	}
+	if !strings.Contains(err.Error(), "stat "+logicalTarget) {
+		t.Fatalf("ResolveAtomicTarget error = %v", err)
 	}
 }
