@@ -1732,14 +1732,14 @@ func TestPostApplyValidationErrorPropagation(t *testing.T) {
 		}
 		result := decodeSchemaApplyResult(t, out)
 
-		foundScanError := false
+		foundRootError := false
 		for _, e := range result.Errors {
-			if strings.Contains(e, "post-apply validation scan") {
-				foundScanError = true
+			if strings.Contains(e, missing) && (strings.Contains(e, "opening root") || strings.Contains(e, "opening stem state root") || strings.Contains(e, "post-apply validation scan")) {
+				foundRootError = true
 			}
 		}
-		if !foundScanError {
-			t.Errorf("errors = %v, want one naming the failed post-apply validation scan", result.Errors)
+		if !foundRootError {
+			t.Errorf("errors = %v, want one naming the unscannable root", result.Errors)
 		}
 		if result.ValidationSummary != nil {
 			t.Errorf("validation_summary = %+v, want it omitted when the scan failed", result.ValidationSummary)

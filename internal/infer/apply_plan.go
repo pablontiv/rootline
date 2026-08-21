@@ -41,6 +41,8 @@ func PlanSchemaInferences(stemPath string, inferences []ReportInference) (*Schem
 		return nil, fmt.Errorf("parsing yaml node: %w", err)
 	}
 
+	inferences = normalizeSchemaInferences(inferences)
+
 	sectionPlan, err := buildSectionApplyPlan(stem, inferences)
 	if err != nil {
 		return nil, err
@@ -170,7 +172,51 @@ func copyApplyResult(result ApplyResult) ApplyResult {
 	result.Applied = append([]string(nil), result.Applied...)
 	result.Skipped = append([]string(nil), result.Skipped...)
 	result.Rejected = append([]string(nil), result.Rejected...)
+	sort.Strings(result.Applied)
+	sort.Strings(result.Skipped)
+	sort.Strings(result.Rejected)
 	return result
+}
+
+func normalizeSchemaInferences(inferences []ReportInference) []ReportInference {
+	out := append([]ReportInference(nil), inferences...)
+	sort.SliceStable(out, func(i, j int) bool {
+		return compareSchemaInference(out[i], out[j]) < 0
+	})
+	return out
+}
+
+func compareSchemaInference(a, b ReportInference) int {
+	keysA := []string{a.Field, fmt.Sprintf("%02d", schemaInferenceTypeRank(a.Type)), a.Type, a.Value, a.Source, a.SourceDirective, a.Message, fmt.Sprint(a.RequiresAgent)}
+	keysB := []string{b.Field, fmt.Sprintf("%02d", schemaInferenceTypeRank(b.Type)), b.Type, b.Value, b.Source, b.SourceDirective, b.Message, fmt.Sprint(b.RequiresAgent)}
+	for i := range keysA {
+		if keysA[i] < keysB[i] {
+			return -1
+		}
+		if keysA[i] > keysB[i] {
+			return 1
+		}
+	}
+	return 0
+}
+
+func schemaInferenceTypeRank(inferenceType string) int {
+	switch inferenceType {
+	case "field_type", "untyped_field":
+		return 10
+	case "enum_values":
+		return 20
+	case "sequence_incomplete":
+		return 30
+	case "constant_field":
+		return 40
+	case "required_field":
+		return 50
+	case "required_section", "optional_section":
+		return 60
+	default:
+		return 90
+	}
 }
 
 func validateProspectiveChangedFields(stemPath string, content []byte, changedFields map[string]bool) error {

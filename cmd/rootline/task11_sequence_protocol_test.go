@@ -74,10 +74,14 @@ func TestTask11SchemaAndRepairApplyPreserveFailureEnvelopes(t *testing.T) {
 	t.Run("schema apply", func(t *testing.T) {
 		reportPath := filepath.Join(root, "analyze.json")
 		writeTask11Report(t, reportPath, map[string]any{
-			"version":    1,
-			"kind":       "rootline/analyze",
-			"root":       root,
-			"categories": []any{},
+			"version": 1,
+			"kind":    "rootline/analyze",
+			"root":    root,
+			"categories": []any{
+				map[string]any{"id": "schema", "inferences": []any{
+					map[string]any{"type": "required_field", "field": "id"},
+				}},
+			},
 		})
 		stdout, _, err := runTask11Command(t, "schema", "apply", "--report", reportPath, "-o", "json")
 		if err == nil {

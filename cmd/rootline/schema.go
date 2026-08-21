@@ -100,6 +100,8 @@ func (r *SchemaApplyResult) seal() {
 	if r.StemHealth == nil {
 		r.StemHealth = []rules.StemHealthDiagnostic{}
 	}
+	sort.Strings(r.Skipped)
+	sort.Strings(r.Rejected)
 	r.Complete = len(r.Errors) == 0
 }
 
@@ -312,19 +314,6 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		Rejected: map[string]string{},
 	}
 
-	if err := preflightSchemaApplyRecords(ctx, scanRoot); err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("resolving .stem: %v", err))
-		result.seal()
-		if outputFormat == "table" {
-			if err := renderSchemaApplyTable(cmd, result); err != nil {
-				return err
-			}
-		} else if err := outputJSON(cmd, result, false); err != nil {
-			return err
-		}
-		return applyExitError(len(result.Errors), 0)
-	}
-
 	plan := planSchemaProposalApply(report.Proposals, scanRoot, schemaApplyForce, result, resolved)
 	if schemaApplyDryRun {
 		result.ResolvedTargets = resolved
@@ -341,41 +330,56 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 		return applyExitError(len(result.Errors), 0)
 	}
 
-	// Gate publication on the complete prospective hierarchy, not on each patch
-	// in isolation. Warnings and info diagnostics remain visible in the envelope;
-	// only error-severity diagnostics block publication and writes.
-	stemHealth, stemHealthErr := validateProspectiveStemWrites(ctx, scanRoot, plan)
-	if stemHealthErr != nil {
-		result.Errors = append(result.Errors, stemHealthErr.Error())
-	} else {
-		result.StemHealth = stemHealth
-		for _, diag := range blockingStemHealth(stemHealth) {
-			result.Errors = append(result.Errors, schemaApplyStemHealthError(diag))
+	if len(plan.writes) > 0 {
+		// Gate publication on the complete prospective hierarchy, not on each patch
+		// in isolation. Warnings and info diagnostics remain visible in the envelope;
+		// only error-severity diagnostics block publication and writes.
+		stemHealth, stemHealthErr := validateProspectiveStemWrites(ctx, scanRoot, plan)
+		if stemHealthErr != nil {
+			result.Errors = append(result.Errors, stemHealthErr.Error())
+		} else {
+			result.StemHealth = stemHealth
+			for _, diag := range blockingStemHealth(stemHealth) {
+				result.Errors = append(result.Errors, schemaApplyStemHealthError(diag))
+			}
 		}
-	}
-	if len(result.Errors) > 0 {
-		result.seal()
-		if outputFormat == "table" {
-			if err := renderSchemaApplyTable(cmd, result); err != nil {
+		if len(result.Errors) > 0 {
+			result.seal()
+			if outputFormat == "table" {
+				if err := renderSchemaApplyTable(cmd, result); err != nil {
+					return err
+				}
+			} else if err := outputJSON(cmd, result, false); err != nil {
 				return err
 			}
-		} else if err := outputJSON(cmd, result, false); err != nil {
-			return err
+			return applyExitError(len(result.Errors), 0)
 		}
-		return applyExitError(len(result.Errors), 0)
-	}
 
-	applied, writeErrors := executeStemWrites(ctx, plan, schemaApplyDryRun, fsx.WriteFileAtomic)
-	result.Applied = append(result.Applied, applied...)
-	result.Errors = append(result.Errors, writeErrors...)
+		if err := preflightSchemaApplyRecords(ctx, scanRoot); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("resolving .stem: %v", err))
+			result.seal()
+			if outputFormat == "table" {
+				if err := renderSchemaApplyTable(cmd, result); err != nil {
+					return err
+				}
+			} else if err := outputJSON(cmd, result, false); err != nil {
+				return err
+			}
+			return applyExitError(len(result.Errors), 0)
+		}
 
-	// If not dry-run, run validation.
-	if !schemaApplyDryRun {
-		validationResult, validationErr := runPostApplyValidation(ctx, scanRoot)
-		if validationErr != nil {
-			result.Errors = append(result.Errors, validationErr.Error())
-		} else {
-			result.ValidationSummary = validationResult
+		applied, writeErrors := executeStemWrites(ctx, plan, schemaApplyDryRun, writeStemFileAtomicInRoot)
+		result.Applied = append(result.Applied, applied...)
+		result.Errors = append(result.Errors, writeErrors...)
+
+		// If not dry-run, run validation.
+		if !schemaApplyDryRun {
+			validationResult, validationErr := runPostApplyValidation(ctx, scanRoot)
+			if validationErr != nil {
+				result.Errors = append(result.Errors, validationErr.Error())
+			} else {
+				result.ValidationSummary = validationResult
+			}
 		}
 	}
 
@@ -397,6 +401,10 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 
 type schemaApplyStatFunc func(string) (os.FileInfo, error)
 
+func writeStemFileAtomicInRoot(root, target string, content []byte, mode os.FileMode) error {
+	return fsx.WriteFileAtomicInRoot(root, target, content, mode)
+}
+
 func schemaApplyStemHealthError(diag rules.StemHealthDiagnostic) string {
 	return fmt.Sprintf("stem health error: path=%s check=%s field=%s message=%s", diag.Path, diag.Check, diag.Field, diag.Message)
 }
@@ -407,7 +415,7 @@ type schemaApplyTargetObservation struct {
 }
 
 func planSchemaProposalApply(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown) schemaApplyBatchPlan {
-	return planSchemaProposalApplyWithStat(proposals, scanRoot, force, result, resolved, os.Stat)
+	return planSchemaProposalApplyWithStat(proposals, scanRoot, force, result, resolved, schemaApplyRootedStat(scanRoot))
 }
 
 func planSchemaProposalApplyWithStat(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown, stat schemaApplyStatFunc) schemaApplyBatchPlan {
@@ -478,6 +486,7 @@ func planSchemaProposalApplyWithStat(proposals []SchemaProposal, scanRoot string
 
 		plan.writes = append(plan.writes, stemWritePlan{
 			reportTarget: proposal.Target,
+			writeRoot:    scanRoot,
 			target:       target,
 			content:      []byte(proposal.Patch),
 			action:       action,
@@ -488,11 +497,41 @@ func planSchemaProposalApplyWithStat(proposals []SchemaProposal, scanRoot string
 	return plan
 }
 
+func schemaApplyRootedStat(root string) schemaApplyStatFunc {
+	return func(target string) (os.FileInfo, error) {
+		return fsx.StatInRoot(root, target)
+	}
+}
+
+func classifyCurrentStemHealthBeforeAnalyzeResolve(ctx context.Context, cmd *cobra.Command, root string, result *SchemaApplyResult) (bool, error) {
+	stemHealth, stemHealthErr := validateProspectiveStemWrites(ctx, root, schemaApplyBatchPlan{})
+	if stemHealthErr != nil {
+		return false, nil
+	}
+	blocking := blockingStemHealth(stemHealth)
+	if len(blocking) == 0 {
+		return false, nil
+	}
+	result.StemHealth = stemHealth
+	for _, diag := range blocking {
+		result.Errors = append(result.Errors, schemaApplyStemHealthError(diag))
+	}
+	result.seal()
+	if outputFormat == "table" {
+		if err := renderSchemaApplyTable(cmd, result); err != nil {
+			return true, err
+		}
+	} else if err := outputJSON(cmd, result, false); err != nil {
+		return true, err
+	}
+	return true, applyExitError(len(result.Errors), 0)
+}
+
 func schemaApplyTargetObservationFromStat(_ os.FileInfo, err error) schemaApplyTargetObservation {
 	if err == nil {
 		return schemaApplyTargetObservation{exists: true}
 	}
-	if os.IsNotExist(err) {
+	if isNotExist(err) {
 		return schemaApplyTargetObservation{exists: false}
 	}
 	return schemaApplyTargetObservation{statErr: err}
@@ -526,8 +565,29 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 
 	result := newSchemaApplyResult(root, schemaApplyDryRun)
 
-	if err := preflightSchemaApplyRecords(ctx, root); err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("resolving .stem: %v", err))
+	// Separate schema-modifying inferences from data-correction inferences before
+	// any filesystem resolution. Empty and requires-agent-only analyze reports are
+	// policy-only no-ops, so they must not be failed by unrelated existing stem
+	// health.
+	var schemaInferences []infer.ReportInference
+	var hasActionableSchemaInference bool
+	for _, cat := range report.Categories {
+		for _, inf := range cat.Inferences {
+			switch inf.Type {
+			case "enum_values", "required_field", "constant_field", "field_type", "untyped_field", "sequence_incomplete", "required_section", "optional_section":
+				schemaInferences = append(schemaInferences, inf)
+				if !inf.RequiresAgent {
+					hasActionableSchemaInference = true
+				}
+			}
+		}
+	}
+	if !hasActionableSchemaInference {
+		for _, inf := range schemaInferences {
+			if inf.RequiresAgent {
+				result.Skipped = append(result.Skipped, fmt.Sprintf("%s: %s (requires agent)", inf.Type, inf.Message))
+			}
+		}
 		result.seal()
 		if outputFormat == "table" {
 			if err := renderSchemaApplyTable(cmd, result); err != nil {
@@ -544,6 +604,9 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	// this existing envelope to learn why no report operation was performed.
 	res, resolveErr := rules.Resolve(root, root)
 	if resolveErr != nil {
+		if emit, err := classifyCurrentStemHealthBeforeAnalyzeResolve(ctx, cmd, root, result); emit || err != nil {
+			return err
+		}
 		result.Errors = append(result.Errors, fmt.Sprintf("resolving stems for %s: %v", report.Path, resolveErr))
 		result.seal()
 		if outputFormat == "table" {
@@ -566,21 +629,6 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 		return fmt.Errorf("no stem available for %s", report.Path)
 	}
 	stemPath := closestStem.Path
-
-	// Separate schema-modifying inferences from data-correction inferences.
-	// Schema-modifying: enum_values, required_field, constant_field, field_type, untyped_field, sequence_incomplete,
-	// required_section, optional_section.
-	// Data-correction: migrate_value, correct_value, add_field (these go to repair apply, not here)
-	// Routing filter: emits only schema-modifying types. Drift guard in apply.go:default catches divergence.
-	var schemaInferences []infer.ReportInference
-	for _, cat := range report.Categories {
-		for _, inf := range cat.Inferences {
-			switch inf.Type {
-			case "enum_values", "required_field", "constant_field", "field_type", "untyped_field", "sequence_incomplete", "required_section", "optional_section":
-				schemaInferences = append(schemaInferences, inf)
-			}
-		}
-	}
 
 	// Plan schema modifications to .stem. Planning preserves analyze action strings
 	// but does not publish them: applied[] is gated on complete prospective
@@ -605,6 +653,7 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 		plan := schemaApplyBatchPlan{
 			writes: []stemWritePlan{{
 				reportTarget: stemPath,
+				writeRoot:    filepath.Dir(inferencePlan.Target),
 				target:       inferencePlan.Target,
 				content:      inferencePlan.Content,
 				action:       "apply_schema_inferences",
@@ -633,19 +682,30 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 			return applyExitError(len(result.Errors), 0)
 		}
 
-		applied, writeErrors := executeStemWrites(ctx, plan, schemaApplyDryRun, fsx.WriteFileAtomic)
+		if err := preflightSchemaApplyRecords(ctx, root); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("resolving .stem: %v", err))
+			result.seal()
+			if outputFormat == "table" {
+				if err := renderSchemaApplyTable(cmd, result); err != nil {
+					return err
+				}
+			} else if err := outputJSON(cmd, result, false); err != nil {
+				return err
+			}
+			return applyExitError(len(result.Errors), 0)
+		}
+
+		applied, writeErrors := executeStemWrites(ctx, plan, schemaApplyDryRun, writeStemFileAtomicInRoot)
 		result.Applied = append(result.Applied, applied...)
 		result.Errors = append(result.Errors, writeErrors...)
-	}
 
-	// If not dry-run, run validation. A no-op analyze plan retains the prior
-	// behavior here, but it skips the unnecessary prospective health scan above.
-	if !schemaApplyDryRun {
-		validationResult, validationErr := runPostApplyValidation(ctx, root)
-		if validationErr != nil {
-			result.Errors = append(result.Errors, validationErr.Error())
-		} else {
-			result.ValidationSummary = validationResult
+		if !schemaApplyDryRun {
+			validationResult, validationErr := runPostApplyValidation(ctx, root)
+			if validationErr != nil {
+				result.Errors = append(result.Errors, validationErr.Error())
+			} else {
+				result.ValidationSummary = validationResult
+			}
 		}
 	}
 

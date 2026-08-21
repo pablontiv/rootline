@@ -158,6 +158,41 @@ func TestSchemaApplyAnalyzeRejectsProspectiveParentConflict(t *testing.T) {
 	}
 }
 
+func TestSchemaApplyAnalyzeEvaluatesExternalCandidateAgainstExternalAncestor(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		t.Run(map[bool]string{true: "dry_run", false: "write"}[dryRun], func(t *testing.T) {
+			grand := t.TempDir()
+			parent := filepath.Join(grand, "parent")
+			childRoot := filepath.Join(parent, "child")
+			if err := os.MkdirAll(childRoot, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			mustWriteFile(t, filepath.Join(grand, ".stem"), []byte("version: 2\nroot: true\nschema:\n  estado:\n    type: enum\n    values: [Pending, Done]\n"), 0o644)
+			parentStem := filepath.Join(parent, ".stem")
+			mustWriteFile(t, parentStem, []byte("version: 2\nschema:\n  title:\n    type: string\n"), 0o644)
+			mustWriteFile(t, filepath.Join(childRoot, "record.md"), []byte("---\ntitle: Test\nestado: Pending\n---\n# Record\n"), 0o644)
+			before := snapshotSchemaApplyFile(t, parentStem)
+			report := infer.AnalyzeReport{Version: 1, Kind: "rootline/analyze", Root: childRoot, Path: childRoot, Categories: []infer.CategoryResult{{ID: "type", Inferences: []infer.ReportInference{{Type: "field_type", Field: "estado", Value: "string"}}}}}
+			reportPath := filepath.Join(childRoot, "analyze.json")
+			writeSchemaApplyPreflightReport(t, reportPath, report)
+			args := []string{"--report", reportPath}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			out, err := executeSchemaApply(t, args...)
+			if err == nil {
+				t.Fatalf("analyze accepted external candidate conflicting with external ancestor: %s", out)
+			}
+			result := decodeSchemaApplyResult(t, out)
+			if result.Complete || len(result.Applied) != 0 {
+				t.Fatalf("unexpected result: %+v", result)
+			}
+			assertSchemaApplyHasStemHealth(t, result, filepath.Join("..", ".stem"), "type-consistency", "estado", rules.SeverityError)
+			assertSchemaApplyFileUnchanged(t, parentStem, before)
+		})
+	}
+}
+
 func TestSchemaApplyAnalyzeDryRunAndRealShareGovernanceVerdict(t *testing.T) {
 	dryRoot, dryStem, dryReport := setupSchemaApplyAnalyzeParentConflict(t)
 	dryBefore := snapshotSchemaApplyFile(t, dryStem)
@@ -270,6 +305,36 @@ func TestSchemaApplyAnalyzeAndProposalEmitEquivalentProspectiveDiagnostics(t *te
 	if !reflect.DeepEqual(proposalHealth, analyzeHealth) {
 		t.Fatalf("proposal/analyze prospective diagnostics differ:\nproposal=%+v\nanalyze=%+v", proposalHealth, analyzeHealth)
 	}
+}
+
+func TestSchemaApplyAnalyzeCategoryOrderDoesNotChangeDryRunEnvelope(t *testing.T) {
+	run := func(t *testing.T, categories []infer.CategoryResult) *SchemaApplyResult {
+		t.Helper()
+		root := setupValidateProject(t, map[string]string{
+			".stem":   "version: 2\nroot: true\nscope:\n  match: \"*.txt\"\nschema:\n  title:\n    type: string\n",
+			"doc.md":  "---\ntitle: Test\nstatus: Pending\npriority: High\n---\n# Record\n",
+			"note.md": "---\ntitle: Note\nstatus: Done\npriority: Low\n---\n# Note\n",
+		})
+		report := infer.AnalyzeReport{Version: 1, Kind: "rootline/analyze", Root: root, Path: root, Categories: categories}
+		reportPath := filepath.Join(root, "analyze.json")
+		writeSchemaApplyPreflightReport(t, reportPath, report)
+		out, err := executeSchemaApply(t, "--report", reportPath, "--dry-run")
+		if err != nil {
+			t.Fatalf("schema apply dry-run failed: %v\n%s", err, out)
+		}
+		return decodeSchemaApplyResult(t, out)
+	}
+	ascending := []infer.CategoryResult{
+		{ID: "priority", Inferences: []infer.ReportInference{{Type: "field_type", Field: "priority", Value: "enum"}, {Type: "enum_values", Field: "priority", Value: "[Low High]"}}},
+		{ID: "status", Inferences: []infer.ReportInference{{Type: "field_type", Field: "status", Value: "string"}, {Type: "required_field", Field: "status"}, {Type: "constant_field", Field: "status", Value: "Pending"}}},
+	}
+	reversed := []infer.CategoryResult{ascending[1], ascending[0]}
+	gotA := run(t, ascending)
+	gotB := run(t, reversed)
+	if gotA.Complete != gotB.Complete || !reflect.DeepEqual(gotA.Applied, gotB.Applied) || !reflect.DeepEqual(gotA.StemHealth, gotB.StemHealth) || !reflect.DeepEqual(gotA.Errors, gotB.Errors) {
+		t.Fatalf("category order changed envelope:\nA=%+v\nB=%+v", gotA, gotB)
+	}
+	assertSchemaApplyHasStemHealth(t, gotA, ".stem", "scope-match", "", rules.SeverityWarn)
 }
 
 func setupSchemaApplyAnalyzeParentConflict(t *testing.T) (childRoot, childStem, reportPath string) {

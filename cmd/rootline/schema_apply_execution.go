@@ -2,17 +2,21 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
 type stemWritePlan struct {
 	reportTarget string
+	writeRoot    string
 	target       string
 	content      []byte
 	action       string
@@ -23,7 +27,7 @@ type schemaApplyBatchPlan struct {
 	actionsByWrite [][]string
 }
 
-type stemWriteFunc func(string, []byte, fs.FileMode) error
+type stemWriteFunc func(string, string, []byte, fs.FileMode) error
 
 func validateProspectiveStemWrites(ctx context.Context, root string, plan schemaApplyBatchPlan) ([]rules.StemHealthDiagnostic, error) {
 	if err := ctx.Err(); err != nil {
@@ -38,6 +42,11 @@ func validateProspectiveStemWrites(ctx context.Context, root string, plan schema
 	for _, item := range sortedSchemaApplyBatch(plan) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
+		}
+		if item.write.writeRoot != "" {
+			if _, err := fsx.StatInRoot(item.write.writeRoot, item.write.target); err != nil && !isNotExist(err) {
+				return nil, fmt.Errorf("validating rooted target %s: %w", item.write.reportTarget, err)
+			}
 		}
 		next, err := state.Overlay(item.write.target, item.write.content)
 		if err != nil {
@@ -72,7 +81,11 @@ func executeStemWrites(ctx context.Context, plan schemaApplyBatchPlan, dryRun bo
 			errs = append(errs, fmt.Sprintf("write %s: writer unavailable", item.write.reportTarget))
 			continue
 		}
-		if err := write(item.write.target, item.write.content, 0o644); err != nil {
+		writeRoot := item.write.writeRoot
+		if writeRoot == "" {
+			writeRoot = filepath.Dir(item.write.target)
+		}
+		if err := write(writeRoot, item.write.target, item.write.content, 0o644); err != nil {
 			errs = append(errs, fmt.Sprintf("write %s: %v", item.write.reportTarget, err))
 			continue
 		}
@@ -98,6 +111,7 @@ type schemaApplyBatchItem struct {
 
 func sortedSchemaApplyBatch(plan schemaApplyBatchPlan) []schemaApplyBatchItem {
 	items := make([]schemaApplyBatchItem, 0, len(plan.writes))
+	byTarget := map[string]int{}
 	for i, write := range plan.writes {
 		// The legacy per-write action label is retained on stemWritePlan for the
 		// planner shape, but publishing is intentionally driven only by the
@@ -108,6 +122,16 @@ func sortedSchemaApplyBatch(plan schemaApplyBatchPlan) []schemaApplyBatchItem {
 		if i < len(plan.actionsByWrite) {
 			actions = append([]string(nil), plan.actionsByWrite[i]...)
 		}
+		key := normalizedStemWriteTarget(write.target)
+		if existing, ok := byTarget[key]; ok {
+			// Multiple approved public actions can describe one physical target. The
+			// filesystem must see only the final bytes, and the public actions are
+			// published only after that single final write succeeds.
+			items[existing].write = write
+			items[existing].actions = append(items[existing].actions, actions...)
+			continue
+		}
+		byTarget[key] = len(items)
 		items = append(items, schemaApplyBatchItem{write: write, actions: actions})
 	}
 
@@ -115,6 +139,10 @@ func sortedSchemaApplyBatch(plan schemaApplyBatchPlan) []schemaApplyBatchItem {
 		return strings.Compare(normalizedStemWriteTarget(a.write.target), normalizedStemWriteTarget(b.write.target))
 	})
 	return items
+}
+
+func isNotExist(err error) bool {
+	return errors.Is(err, fs.ErrNotExist) || os.IsNotExist(err)
 }
 
 func normalizedStemWriteTarget(target string) string {

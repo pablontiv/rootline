@@ -2,11 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/pablontiv/rootline/internal/infer"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pablontiv/rootline/internal/infer"
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 const schemaApplyMalformedOverlayStem = `version: 2
@@ -139,6 +141,43 @@ func TestSchemaApply_RejectsInvalidProposedOverlayBeforeWriteOrDryRun(t *testing
 		})
 	}
 }
+
+func TestSchemaApply_MalformedRealStemEmitsStructuredHealthBeforeRecordPreflight(t *testing.T) {
+	for _, reportKind := range []string{"schema-proposals", "analyze"} {
+		for _, dryRun := range []bool{true, false} {
+			t.Run(reportKind+"/dry_run="+map[bool]string{true: "true", false: "false"}[dryRun], func(t *testing.T) {
+				root := filepath.Join(t.TempDir(), "governed")
+				if err := os.MkdirAll(filepath.Join(root, "candidate"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				stemPath := filepath.Join(root, ".stem")
+				mustWriteFile(t, stemPath, []byte("version: [broken\n"), 0o644)
+				before := snapshotSchemaApplyFile(t, stemPath)
+				reportPath := filepath.Join(root, "report.json")
+				if reportKind == "schema-proposals" {
+					writeSchemaApplyPreflightReport(t, reportPath, SchemaProposalsReport{Version: 1, Kind: "rootline/schema-proposals", Root: root, Path: root, Proposals: []SchemaProposal{{ID: "candidate", Operation: "create_stem", Target: filepath.Join(root, "candidate", ".stem"), Patch: "version: 2\nschema:\n  title:\n    type: string\n"}}})
+				} else {
+					writeSchemaApplyPreflightReport(t, reportPath, infer.AnalyzeReport{Version: 1, Kind: "rootline/analyze", Root: root, Path: root, Categories: []infer.CategoryResult{{ID: "required", Inferences: []infer.ReportInference{{Type: "required_field", Field: "title"}}}}})
+				}
+				args := []string{"--report", reportPath}
+				if dryRun {
+					args = append(args, "--dry-run")
+				}
+				out, err := executeSchemaApply(t, args...)
+				if err == nil {
+					t.Fatalf("schema apply accepted malformed real stem: %s", out)
+				}
+				result := decodeSchemaApplyResult(t, out)
+				if result.Complete || len(result.Applied) != 0 {
+					t.Fatalf("unexpected result: %+v", result)
+				}
+				assertSchemaApplyHasStemHealth(t, result, ".stem", "yaml-valid", "", rules.SeverityError)
+				assertSchemaApplyFileUnchanged(t, stemPath, before)
+			})
+		}
+	}
+}
+
 func TestSchemaApply_PreflightsGovernedRecordsBeforeWriteOrDryRun(t *testing.T) {
 	for _, reportKind := range []string{"schema-proposals", "analyze"} {
 		for _, dryRun := range []bool{true, false} {
@@ -185,13 +224,14 @@ func TestSchemaApply_PreflightsGovernedRecordsBeforeWriteOrDryRun(t *testing.T) 
 					t.Fatalf("failure envelope changed contract: %+v", result)
 				}
 				if len(result.Errors) != 1 {
-					t.Fatalf("errors = %v, want one governed-record resolution failure", result.Errors)
+					t.Fatalf("errors = %v, want one structured governance failure", result.Errors)
 				}
-				for _, want := range []string{"QXBAD001-task.md", "id", "QXBAD*", "digits"} {
+				for _, want := range []string{"stem health error", ".stem", "field-declaration", "id", "QXBAD*", "digits"} {
 					if !strings.Contains(result.Errors[0], want) {
 						t.Fatalf("error %q does not retain %q", result.Errors[0], want)
 					}
 				}
+				assertSchemaApplyHasStemHealth(t, result, ".stem", "field-declaration", "id", rules.SeverityError)
 				if len(result.Applied) != 0 {
 					t.Fatalf("invalid governance published an operation: %+v", result)
 				}

@@ -201,6 +201,41 @@ func TestApplySchemaInferencePlanFailsWhenParentDirectoryIsMissing(t *testing.T)
 	}
 }
 
+func TestPlanSchemaInferencesNormalizesOrderBeforeMutation(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	original := []byte("version: 2\nschema:\n  title:\n    type: string\n")
+	if err := os.WriteFile(stemPath, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ascending := []ReportInference{
+		{Type: "field_type", Field: "priority", Value: "enum"},
+		{Type: "enum_values", Field: "priority", Value: "[Low High]"},
+		{Type: "field_type", Field: "status", Value: "string"},
+		{Type: "required_field", Field: "status"},
+		{Type: "constant_field", Field: "status", Value: "Pending"},
+	}
+	reversed := append([]ReportInference(nil), ascending...)
+	for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
+		reversed[i], reversed[j] = reversed[j], reversed[i]
+	}
+
+	planA, err := PlanSchemaInferences(stemPath, ascending)
+	if err != nil {
+		t.Fatalf("PlanSchemaInferences ascending: %v", err)
+	}
+	planB, err := PlanSchemaInferences(stemPath, reversed)
+	if err != nil {
+		t.Fatalf("PlanSchemaInferences reversed: %v", err)
+	}
+	if string(planA.Content) != string(planB.Content) {
+		t.Fatalf("candidate bytes differ by inference order:\nA:\n%s\nB:\n%s", planA.Content, planB.Content)
+	}
+	if strings.Join(planA.Result.Applied, "\n") != strings.Join(planB.Result.Applied, "\n") {
+		t.Fatalf("applied actions differ by inference order:\nA=%#v\nB=%#v", planA.Result.Applied, planB.Result.Applied)
+	}
+}
+
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

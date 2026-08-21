@@ -110,6 +110,32 @@ func TestDiscoverStemStateIncludesExternalAncestorContext(t *testing.T) {
 	}
 }
 
+func TestStemStateChainTraversesExternalAncestorUntilRootMarker(t *testing.T) {
+	grand := t.TempDir()
+	parent := filepath.Join(grand, "parent")
+	root := filepath.Join(parent, "child")
+	mustWriteStemStateFile(t, filepath.Join(grand, ".stem"), "version: 2\nroot: true\nschema:\n  estado:\n    type: enum\n    values: [Pending, Done]\n")
+	mustWriteStemStateFile(t, filepath.Join(parent, ".stem"), "version: 2\nschema:\n  title:\n    type: string\n")
+	mustWriteStemStateFile(t, filepath.Join(root, "record.md"), "# Record\n")
+
+	state, err := DiscoverStemState(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := state.Chain(filepath.Join(root, "record.md"))
+	got := make([]string, 0, len(chain))
+	for _, entry := range chain {
+		got = append(got, entry.Path)
+	}
+	requireStemStatePaths(t, got, []string{
+		filepath.Join(grand, ".stem"),
+		filepath.Join(parent, ".stem"),
+	})
+	if containsStemStatePath(state.EvaluatedStemPaths(), filepath.Join(parent, ".stem")) {
+		t.Fatal("untouched external ancestor must remain context-only")
+	}
+}
+
 func TestStemStateOverlayIsImmutableAndClearsParseError(t *testing.T) {
 	root := t.TempDir()
 	mustWriteStemStateFile(t, filepath.Join(root, ".stem"), "version: 2\nroot: true\n")

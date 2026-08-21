@@ -18,6 +18,11 @@ type StemState struct {
 	Stems       map[string]*StemFile
 	ParseErrors map[string]error
 	Entries     map[string]StemStateEntry
+	// Evaluated marks explicit candidate owners outside Root. Discovery keeps
+	// external ancestors context-only; overlays add write targets here so the
+	// evaluator checks the exact prospective target chain without owning every
+	// untouched external ancestor.
+	Evaluated map[string]bool
 }
 
 // StemStateEntry records the state-local inventory for a discovered path.
@@ -129,6 +134,10 @@ func (s *StemState) Overlay(path string, content []byte) (*StemState, error) {
 	delete(clone.ParseErrors, absPath)
 	clone.Entries[absPath] = StemStateEntry{IsDir: false}
 	clone.Entries[filepath.Dir(absPath)] = StemStateEntry{IsDir: true}
+	if clone.Evaluated == nil {
+		clone.Evaluated = make(map[string]bool)
+	}
+	clone.Evaluated[absPath] = true
 	return clone, nil
 }
 
@@ -192,6 +201,11 @@ func (s *StemState) EvaluatedStemPaths() []string {
 			seen[path] = struct{}{}
 		}
 	}
+	for path, evaluated := range s.Evaluated {
+		if evaluated {
+			seen[filepath.Clean(path)] = struct{}{}
+		}
+	}
 
 	paths := make([]string, 0, len(seen))
 	for path := range seen {
@@ -238,6 +252,7 @@ func (s *StemState) clone() *StemState {
 		Stems:       make(map[string]*StemFile, len(s.Stems)),
 		ParseErrors: make(map[string]error, len(s.ParseErrors)),
 		Entries:     make(map[string]StemStateEntry, len(s.Entries)),
+		Evaluated:   make(map[string]bool, len(s.Evaluated)),
 	}
 	for path, stem := range s.Stems {
 		clone.Stems[path] = stem
@@ -247,6 +262,9 @@ func (s *StemState) clone() *StemState {
 	}
 	for path, entry := range s.Entries {
 		clone.Entries[path] = entry
+	}
+	for path, evaluated := range s.Evaluated {
+		clone.Evaluated[path] = evaluated
 	}
 	return clone
 }

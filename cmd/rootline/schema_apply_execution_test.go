@@ -174,8 +174,8 @@ func TestExecuteStemWritesContinuesAfterAtomicWriteFailure(t *testing.T) {
 	targets := []string{filepath.Join(root, "a.stem"), filepath.Join(root, "b.stem"), filepath.Join(root, "c.stem")}
 	var calls []string
 	writeErr := errors.New("disk full")
-	writer := func(target string, content []byte, mode fs.FileMode) error {
-		calls = append(calls, fmt.Sprintf("%s:%s:%o", filepath.Base(target), string(content), mode.Perm()))
+	writer := func(root, target string, content []byte, mode fs.FileMode) error {
+		calls = append(calls, fmt.Sprintf("%s:%s:%s:%o", filepath.Base(root), filepath.Base(target), string(content), mode.Perm()))
 		if target == targets[1] {
 			return writeErr
 		}
@@ -199,7 +199,7 @@ func TestExecuteStemWritesContinuesAfterAtomicWriteFailure(t *testing.T) {
 	if len(errs) != 1 || !strings.Contains(errs[0], "write b") || !strings.Contains(errs[0], writeErr.Error()) {
 		t.Fatalf("errs = %#v, want one contextual middle-target error", errs)
 	}
-	wantCalls := []string{"a.stem:A:644", "b.stem:B:644", "c.stem:C:644"}
+	wantCalls := []string{fmt.Sprintf("%s:a.stem:A:644", filepath.Base(root)), fmt.Sprintf("%s:b.stem:B:644", filepath.Base(root)), fmt.Sprintf("%s:c.stem:C:644", filepath.Base(root))}
 	if !reflect.DeepEqual(calls, wantCalls) {
 		t.Fatalf("writer calls = %#v, want sorted best-effort calls %#v", calls, wantCalls)
 	}
@@ -209,7 +209,7 @@ func TestExecuteStemWritesStopsAfterContextCancellation(t *testing.T) {
 	root := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
 	var calls []string
-	writer := func(target string, content []byte, mode fs.FileMode) error {
+	writer := func(root, target string, content []byte, mode fs.FileMode) error {
 		calls = append(calls, filepath.Base(target))
 		cancel()
 		return nil
@@ -238,7 +238,7 @@ func TestExecuteStemWritesStopsAfterContextCancellation(t *testing.T) {
 func TestExecuteStemWritesDryRunDoesNotCallWriter(t *testing.T) {
 	root := t.TempDir()
 	called := false
-	writer := func(string, []byte, fs.FileMode) error {
+	writer := func(string, string, []byte, fs.FileMode) error {
 		called = true
 		return nil
 	}
@@ -264,6 +264,41 @@ func TestExecuteStemWritesDryRunDoesNotCallWriter(t *testing.T) {
 	}
 }
 
+func TestExecuteStemWritesCoalescesDuplicateTargetFailureToSingleAttempt(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, ".stem")
+	original := []byte("version: 2\nroot: true\n")
+	mustWriteFile(t, target, original, 0o644)
+	writeErr := errors.New("permission denied")
+	plan := schemaApplyBatchPlan{
+		writes: []stemWritePlan{
+			{reportTarget: "first", writeRoot: root, target: target, content: []byte("version: 2\nschema:\n  old:\n    type: string\n")},
+			{reportTarget: "second", writeRoot: root, target: target, content: []byte("version: 2\nschema:\n  final:\n    type: string\n")},
+		},
+		actionsByWrite: [][]string{{"create_stem: " + target}, {"overwrite_stem: " + target}},
+	}
+	var calls []string
+	writer := func(root, target string, content []byte, mode fs.FileMode) error {
+		calls = append(calls, string(content))
+		return writeErr
+	}
+
+	applied, errs := executeStemWrites(context.Background(), plan, false, writer)
+
+	if len(applied) != 0 {
+		t.Fatalf("applied = %#v, want no actions after failed single physical write", applied)
+	}
+	if len(errs) != 1 || !strings.Contains(errs[0], "second") || !strings.Contains(errs[0], writeErr.Error()) {
+		t.Fatalf("errs = %#v, want one final-target write failure", errs)
+	}
+	if !reflect.DeepEqual(calls, []string{"version: 2\nschema:\n  final:\n    type: string\n"}) {
+		t.Fatalf("writer calls = %#v, want one final-content attempt", calls)
+	}
+	if got := mustReadFile(t, target); string(got) != string(original) {
+		t.Fatalf("target changed after injected write failure:\n%s", got)
+	}
+}
+
 func TestExecuteStemWritesUsesStableTargetOrder(t *testing.T) {
 	root := t.TempDir()
 	a := filepath.Join(root, "a.stem")
@@ -277,7 +312,7 @@ func TestExecuteStemWritesUsesStableTargetOrder(t *testing.T) {
 		actionsByWrite: [][]string{{"write b"}, {"write a first"}, {"write a second"}},
 	}
 	var calls []string
-	writer := func(target string, content []byte, mode fs.FileMode) error {
+	writer := func(root, target string, content []byte, mode fs.FileMode) error {
 		calls = append(calls, fmt.Sprintf("%s:%s", filepath.Base(target), string(content)))
 		return nil
 	}
@@ -287,7 +322,7 @@ func TestExecuteStemWritesUsesStableTargetOrder(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatalf("errs = %#v, want none", errs)
 	}
-	wantCalls := []string{"a.stem:A1", "a.stem:A2", "b.stem:B"}
+	wantCalls := []string{"a.stem:A2", "b.stem:B"}
 	if !reflect.DeepEqual(calls, wantCalls) {
 		t.Fatalf("calls = %#v, want stable target order %#v", calls, wantCalls)
 	}

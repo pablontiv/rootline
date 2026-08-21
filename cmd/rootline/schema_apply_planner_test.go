@@ -117,6 +117,90 @@ func TestPlanSchemaProposalApply_CachesCanonicalTargetStatErrorAcrossAliases(t *
 	}
 }
 
+func TestSchemaApply_RejectsEscapingSymlinkParentBeforeDryRunOrWrite(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		t.Run(map[bool]string{true: "dry_run", false: "write"}[dryRun], func(t *testing.T) {
+			parent := t.TempDir()
+			root := filepath.Join(parent, "root")
+			outside := filepath.Join(parent, "outside")
+			if err := os.MkdirAll(root, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(outside, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			mustWriteFile(t, filepath.Join(root, ".stem"), []byte("version: 2\nroot: true\nschema:\n  title:\n    type: string\n"), 0o644)
+			mustWriteFile(t, filepath.Join(root, "record.md"), []byte("---\ntitle: Test\n---\n# Test\n"), 0o644)
+			link := filepath.Join(root, "link")
+			if err := os.Symlink(outside, link); err != nil {
+				if errors.Is(err, os.ErrPermission) {
+					t.Skipf("symlink unsupported: %v", err)
+				}
+				t.Fatal(err)
+			}
+			target := filepath.Join(link, ".stem")
+			reportPath := writeSchemaApplyPlannerReport(t, root, []SchemaProposal{{ID: "escape", Operation: "create_stem", Target: target, Patch: schemaApplyPlannerPatchA}})
+			args := []string{"--report", reportPath}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			out, err := executeSchemaApply(t, args...)
+			if err == nil {
+				t.Fatalf("schema apply accepted escaping symlink parent: %s", out)
+			}
+			result := decodeSchemaApplyResult(t, out)
+			if result.Complete || len(result.Applied) != 0 || len(result.Errors) == 0 {
+				t.Fatalf("unexpected envelope: %+v", result)
+			}
+			if _, statErr := os.Stat(filepath.Join(outside, ".stem")); !os.IsNotExist(statErr) {
+				t.Fatalf("outside .stem was created: %v", statErr)
+			}
+		})
+	}
+}
+
+func TestSchemaApply_ProposalNoOpsSkipProspectiveHealthOverInvalidHierarchy(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		proposals    func(root string) []SchemaProposal
+		wantSkipped  bool
+		wantRejected string
+	}{
+		{name: "empty", proposals: func(root string) []SchemaProposal { return nil }},
+		{name: "requires_agent_only", proposals: func(root string) []SchemaProposal {
+			return []SchemaProposal{{ID: "agent", Operation: "create_stem", Target: filepath.Join(root, "child", "agent.stem"), RequiresAgent: true}}
+		}, wantSkipped: true},
+		{name: "containment_rejected_only", proposals: func(root string) []SchemaProposal {
+			return []SchemaProposal{{ID: "outside", Operation: "create_stem", Target: filepath.Join(root, "..", "outside.stem"), Patch: schemaApplyPlannerPatchA}}
+		}, wantRejected: "escapes root"},
+		{name: "overwrite_refused_only", proposals: func(root string) []SchemaProposal {
+			return []SchemaProposal{{ID: "existing", Operation: "create_stem", Target: filepath.Join(root, "child", ".stem"), Patch: schemaApplyPlannerPatchA}}
+		}, wantRejected: "already exists"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := setupValidateProject(t, map[string]string{
+				".stem":       "version: 2\nroot: true\nschema:\n  estado:\n    type: enum\n    values: [Pending, Done]\n",
+				"child/.stem": "version: 2\nschema:\n  estado:\n    type: string\n",
+			})
+			reportPath := writeSchemaApplyPlannerReport(t, root, tc.proposals(root))
+			out, err := executeSchemaApply(t, "--report", reportPath, "--dry-run")
+			if err != nil {
+				t.Fatalf("policy-only proposal no-op evaluated invalid hierarchy: %v\n%s", err, out)
+			}
+			result := decodeSchemaApplyResult(t, out)
+			if !result.Complete || len(result.Applied) != 0 || len(result.StemHealth) != 0 {
+				t.Fatalf("unexpected no-op result: %+v", result)
+			}
+			if tc.wantSkipped && len(result.Skipped) == 0 {
+				t.Fatalf("skipped = %#v, want requires-agent classification", result.Skipped)
+			}
+			if tc.wantRejected != "" && (len(result.Rejected) == 0 || !strings.Contains(result.Rejected[0], tc.wantRejected)) {
+				t.Fatalf("rejected = %#v, want %q", result.Rejected, tc.wantRejected)
+			}
+		})
+	}
+}
+
 func TestSchemaApply_StatErrorAbortsBeforeActionsOrWrites(t *testing.T) {
 	for _, dryRun := range []bool{true, false} {
 		t.Run(map[bool]string{true: "dry_run", false: "write"}[dryRun], func(t *testing.T) {
@@ -151,9 +235,8 @@ func TestSchemaApply_StatErrorAbortsBeforeActionsOrWrites(t *testing.T) {
 			if result.Version != 1 || result.Kind != "rootline/schema-apply" || result.Complete {
 				t.Fatalf("failure envelope changed contract: %+v", result)
 			}
-			wantErrors := []string{fmt.Sprintf("stat %s: %v", target, statErr)}
-			if !reflect.DeepEqual(result.Errors, wantErrors) {
-				t.Fatalf("errors = %#v, want exact ordered stat failure %#v", result.Errors, wantErrors)
+			if len(result.Errors) != 1 || !strings.Contains(result.Errors[0], "stat "+target) || !strings.Contains(result.Errors[0], "not a directory") {
+				t.Fatalf("errors = %#v, want rooted stat failure naming %s and not-a-directory cause", result.Errors, target)
 			}
 			if len(result.Applied) != 0 || len(result.Skipped) != 0 || len(result.Rejected) != 0 {
 				t.Fatalf("actions changed before stat abort: applied=%#v skipped=%#v rejected=%#v", result.Applied, result.Skipped, result.Rejected)
