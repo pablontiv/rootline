@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/fix"
+	"github.com/pablontiv/rootline/internal/fsx"
 )
 
 const schemaApplyPlannerPatchA = "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"
@@ -72,48 +73,54 @@ func assertSchemaApplyPlannerRejected(t *testing.T, got []string, want []string)
 	}
 }
 
-func TestPlanSchemaProposalApply_CachesCanonicalTargetStatErrorAcrossAliases(t *testing.T) {
+func TestPlanSchemaProposalApply_CachesPhysicalTargetObservationAcrossAliases(t *testing.T) {
 	root := t.TempDir()
-	target := filepath.Join(root, "target", ".stem")
+	targetDir := filepath.Join(root, "target")
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(targetDir, ".stem")
 	aliasedTarget := root + string(filepath.Separator) + "target" + string(filepath.Separator) + ".." + string(filepath.Separator) + "target" + string(filepath.Separator) + ".stem"
-	statErr := errors.New("cached stat error")
-	statCalls := 0
-	stat := func(path string) (os.FileInfo, error) {
-		statCalls++
-		if statCalls == 1 {
-			if path != target {
-				t.Fatalf("stat path = %q, want canonical target %q", path, target)
-			}
-			return nil, statErr
-		}
-		return nil, nil
+	var resolvedTargets []string
+	resolver := func(root, target string) (*fsx.AtomicTarget, error) {
+		resolvedTargets = append(resolvedTargets, target)
+		return fsx.ResolveAtomicTarget(root, target)
 	}
 	result := &SchemaApplyResult{Errors: []string{}, Rejected: []string{}, Skipped: []string{}}
 	resolved := &fix.ResolvedTargetsBreakdown{Accepted: map[string]string{}, Rejected: map[string]string{}}
 
-	plan := planSchemaProposalApplyWithStat([]SchemaProposal{
+	plan := planSchemaProposalApplyWithResolver([]SchemaProposal{
 		{ID: "first", Operation: "create_stem", Target: target, Patch: schemaApplyPlannerPatchA},
 		{ID: "second", Operation: "create_stem", Target: aliasedTarget, Patch: schemaApplyPlannerPatchB},
-	}, root, false, result, resolved, stat)
+	}, root, false, result, resolved, resolver)
+	defer func() { _ = closeSchemaApplyBatch(plan) }()
 
-	if statCalls != 1 {
-		t.Fatalf("stat calls = %d, want exactly one canonical target observation", statCalls)
+	if !reflect.DeepEqual(resolvedTargets, []string{target, target}) {
+		t.Fatalf("resolved targets = %#v, want canonical lexical targets before physical classification", resolvedTargets)
 	}
-	if len(plan.writes) != 0 || len(plan.actionsByWrite) != 0 {
-		t.Fatalf("plan = %+v, want no actions after fatal stat error", plan)
+	if len(plan.writes) != 1 || len(plan.actionsByWrite) != 1 {
+		t.Fatalf("plan = %+v, want only first alias accepted without --force", plan)
 	}
-	wantErrors := []string{
-		fmt.Sprintf("stat %s: %v", target, statErr),
-		fmt.Sprintf("stat %s: %v", aliasedTarget, statErr),
+	if len(result.Errors) != 0 {
+		t.Fatalf("errors = %#v, want none", result.Errors)
 	}
-	if !reflect.DeepEqual(result.Errors, wantErrors) {
-		t.Fatalf("errors = %#v, want cached stat error reused in order %#v", result.Errors, wantErrors)
+	wantRejected := []string{fmt.Sprintf(".stem already exists in %s (use --force to overwrite)", targetDir)}
+	if !reflect.DeepEqual(result.Rejected, wantRejected) {
+		t.Fatalf("rejected = %#v, want physical duplicate overwrite refusal %#v", result.Rejected, wantRejected)
 	}
-	if len(result.Rejected) != 0 || len(result.Skipped) != 0 {
-		t.Fatalf("nonfatal lists changed after fatal stat error: rejected=%#v skipped=%#v", result.Rejected, result.Skipped)
+	if len(result.Skipped) != 0 {
+		t.Fatalf("skipped = %#v, want none", result.Skipped)
 	}
 	if got := resolved.Accepted[aliasedTarget]; got != target {
 		t.Fatalf("aliased target resolved to %q, want canonical %q", got, target)
+	}
+	physicalDir, err := filepath.EvalSymlinks(targetDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPhysicalTarget := filepath.Join(physicalDir, ".stem")
+	if got := plan.writes[0].target.PhysicalPath(); got != wantPhysicalTarget {
+		t.Fatalf("accepted physical target = %q, want %q", got, wantPhysicalTarget)
 	}
 }
 

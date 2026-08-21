@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/pablontiv/rootline/internal/derive"
 	"github.com/pablontiv/rootline/internal/extract"
@@ -315,6 +317,9 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 	}
 
 	plan := planSchemaProposalApply(report.Proposals, scanRoot, schemaApplyForce, result, resolved)
+	if len(plan.writes) > 0 {
+		defer func() { _ = closeSchemaApplyBatch(plan) }()
+	}
 	if schemaApplyDryRun {
 		result.ResolvedTargets = resolved
 	}
@@ -368,7 +373,7 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 			return applyExitError(len(result.Errors), 0)
 		}
 
-		applied, writeErrors := executeStemWrites(ctx, plan, schemaApplyDryRun, writeStemFileAtomicInRoot)
+		applied, writeErrors := executeStemWrites(ctx, plan, schemaApplyDryRun, writeStemFileAtomic)
 		result.Applied = append(result.Applied, applied...)
 		result.Errors = append(result.Errors, writeErrors...)
 
@@ -399,10 +404,10 @@ func runSchemaApply(cmd *cobra.Command, args []string) error {
 	return applyExitError(len(result.Errors), 0)
 }
 
-type schemaApplyStatFunc func(string) (os.FileInfo, error)
+type schemaApplyTargetResolver func(root, target string) (*fsx.AtomicTarget, error)
 
-func writeStemFileAtomicInRoot(root, target string, content []byte, mode os.FileMode) error {
-	return fsx.WriteFileAtomicInRoot(root, target, content, mode)
+func writeStemFileAtomic(target *fsx.AtomicTarget, content []byte, mode fs.FileMode) error {
+	return target.WriteFileAtomic(content, mode)
 }
 
 func schemaApplyStemHealthError(diag rules.StemHealthDiagnostic) string {
@@ -415,10 +420,10 @@ type schemaApplyTargetObservation struct {
 }
 
 func planSchemaProposalApply(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown) schemaApplyBatchPlan {
-	return planSchemaProposalApplyWithStat(proposals, scanRoot, force, result, resolved, schemaApplyRootedStat(scanRoot))
+	return planSchemaProposalApplyWithResolver(proposals, scanRoot, force, result, resolved, fsx.ResolveAtomicTarget)
 }
 
-func planSchemaProposalApplyWithStat(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown, stat schemaApplyStatFunc) schemaApplyBatchPlan {
+func planSchemaProposalApplyWithResolver(proposals []SchemaProposal, scanRoot string, force bool, result *SchemaApplyResult, resolved *fix.ResolvedTargetsBreakdown, resolve schemaApplyTargetResolver) schemaApplyBatchPlan {
 	plan := schemaApplyBatchPlan{writes: []stemWritePlan{}, actionsByWrite: [][]string{}}
 	virtualTargets := map[string]schemaApplyTargetObservation{}
 	for _, proposal := range proposals {
@@ -436,23 +441,31 @@ func planSchemaProposalApplyWithStat(proposals []SchemaProposal, scanRoot string
 
 		// `schema propose` emits absolute targets under the scan root, so the
 		// propose->apply contract depends on absolute paths staying valid — they
-		// are accepted, then confined.
-		target, err := fix.ContainPath(scanRoot, proposal.Target, fix.PolicyAcceptAbsolute)
+		// are accepted, then confined. Containment remains the lexical policy
+		// classifier; the resolved atomic target below becomes the physical write
+		// authority.
+		targetPath, err := fix.ContainPath(scanRoot, proposal.Target, fix.PolicyAcceptAbsolute)
 		if err != nil {
 			// A target outside the scan root is a policy refusal, not a failed write.
 			result.Rejected = append(result.Rejected, err.Error())
 			resolved.Rejected[proposal.Target] = fix.ContainmentReason(err)
 			continue
 		}
-		resolved.Accepted[proposal.Target] = target
+		resolved.Accepted[proposal.Target] = targetPath
 
 		// Check for empty patch before write attempt.
 		if proposal.Patch == "" {
 			result.Errors = append(result.Errors, fmt.Sprintf("create_stem: %s: patch content required; re-run 'schema propose' to generate it", proposal.Target))
 			continue
 		}
-		if err := validateProspectiveSchemaPatch(target, proposal.Patch); err != nil {
+		if err := validateProspectiveSchemaPatch(targetPath, proposal.Patch); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("validating proposed .stem %s: %v", proposal.Target, err))
+			continue
+		}
+
+		target, err := resolve(scanRoot, targetPath)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("resolving target %s: %v", proposal.Target, err))
 			continue
 		}
 
@@ -461,19 +474,22 @@ func planSchemaProposalApplyWithStat(proposals []SchemaProposal, scanRoot string
 		// policy refusal unless the caller opted in with --force. The planner has to
 		// model earlier accepted operations in this same report because execution is
 		// intentionally deferred until all validation has completed.
-		observation, ok := virtualTargets[target]
+		physicalTarget := target.PhysicalPath()
+		observation, ok := virtualTargets[physicalTarget]
 		if !ok {
-			observation = schemaApplyTargetObservationFromStat(stat(target))
-			virtualTargets[target] = observation
+			observation = schemaApplyTargetObservationFromStat(target.Stat())
+			virtualTargets[physicalTarget] = observation
 		}
 		if observation.statErr != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("stat %s: %v", proposal.Target, observation.statErr))
+			_ = target.Close()
 			continue
 		}
 		targetExists := observation.exists
 		if targetExists && !force {
 			result.Rejected = append(result.Rejected,
-				fmt.Sprintf(".stem already exists in %s (use --force to overwrite)", filepath.Dir(target)))
+				fmt.Sprintf(".stem already exists in %s (use --force to overwrite)", filepath.Dir(targetPath)))
+			_ = target.Close()
 			continue
 		}
 
@@ -486,21 +502,15 @@ func planSchemaProposalApplyWithStat(proposals []SchemaProposal, scanRoot string
 
 		plan.writes = append(plan.writes, stemWritePlan{
 			reportTarget: proposal.Target,
-			writeRoot:    scanRoot,
+			targetPath:   targetPath,
 			target:       target,
 			content:      []byte(proposal.Patch),
 			action:       action,
 		})
-		plan.actionsByWrite = append(plan.actionsByWrite, []string{fmt.Sprintf("%s: %s", action, target)})
-		virtualTargets[target] = schemaApplyTargetObservation{exists: true}
+		plan.actionsByWrite = append(plan.actionsByWrite, []string{fmt.Sprintf("%s: %s", action, targetPath)})
+		virtualTargets[physicalTarget] = schemaApplyTargetObservation{exists: true}
 	}
 	return plan
-}
-
-func schemaApplyRootedStat(root string) schemaApplyStatFunc {
-	return func(target string) (os.FileInfo, error) {
-		return fsx.StatInRoot(root, target)
-	}
 }
 
 func classifyCurrentStemHealthBeforeAnalyzeResolve(ctx context.Context, cmd *cobra.Command, root string, result *SchemaApplyResult) (bool, error) {
@@ -650,16 +660,36 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	result.Rejected = inferencePlan.Result.Rejected
 
 	if inferencePlan.Modified {
+		writeAnchor := root
+		rel, relErr := filepath.Rel(filepath.Clean(root), filepath.Clean(stemPath))
+		external := relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
+		if external {
+			writeAnchor = filepath.Dir(stemPath)
+		}
+		target, err := fsx.ResolveAtomicTarget(writeAnchor, stemPath)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("resolving target %s: %v", stemPath, err))
+			result.seal()
+			if outputFormat == "table" {
+				if err := renderSchemaApplyTable(cmd, result); err != nil {
+					return err
+				}
+			} else if err := outputJSON(cmd, result, false); err != nil {
+				return err
+			}
+			return applyExitError(len(result.Errors), 0)
+		}
 		plan := schemaApplyBatchPlan{
 			writes: []stemWritePlan{{
 				reportTarget: stemPath,
-				writeRoot:    filepath.Dir(inferencePlan.Target),
-				target:       inferencePlan.Target,
+				targetPath:   inferencePlan.Target,
+				target:       target,
 				content:      inferencePlan.Content,
 				action:       "apply_schema_inferences",
 			}},
 			actionsByWrite: [][]string{append([]string(nil), inferencePlan.Result.Applied...)},
 		}
+		defer func() { _ = closeSchemaApplyBatch(plan) }()
 
 		stemHealth, stemHealthErr := validateProspectiveStemWrites(ctx, root, plan)
 		if stemHealthErr != nil {
@@ -695,7 +725,7 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 			return applyExitError(len(result.Errors), 0)
 		}
 
-		applied, writeErrors := executeStemWrites(ctx, plan, schemaApplyDryRun, writeStemFileAtomicInRoot)
+		applied, writeErrors := executeStemWrites(ctx, plan, schemaApplyDryRun, writeStemFileAtomic)
 		result.Applied = append(result.Applied, applied...)
 		result.Errors = append(result.Errors, writeErrors...)
 

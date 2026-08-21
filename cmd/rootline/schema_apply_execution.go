@@ -16,8 +16,8 @@ import (
 
 type stemWritePlan struct {
 	reportTarget string
-	writeRoot    string
-	target       string
+	targetPath   string
+	target       *fsx.AtomicTarget
 	content      []byte
 	action       string
 }
@@ -27,14 +27,36 @@ type schemaApplyBatchPlan struct {
 	actionsByWrite [][]string
 }
 
-type stemWriteFunc func(string, string, []byte, fs.FileMode) error
+type stemWriteFunc func(*fsx.AtomicTarget, []byte, fs.FileMode) error
+
+func closeSchemaApplyBatch(plan schemaApplyBatchPlan) error {
+	seen := map[*fsx.AtomicTarget]struct{}{}
+	var errs []error
+	for _, write := range plan.writes {
+		if write.target == nil {
+			continue
+		}
+		if _, ok := seen[write.target]; ok {
+			continue
+		}
+		seen[write.target] = struct{}{}
+		if err := write.target.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
 
 func validateProspectiveStemWrites(ctx context.Context, root string, plan schemaApplyBatchPlan) ([]rules.StemHealthDiagnostic, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	state, err := rules.DiscoverStemState(ctx, root)
+	physicalRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, fmt.Errorf("resolving validation root %s: %w", root, err)
+	}
+	state, err := rules.DiscoverStemState(ctx, physicalRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -43,12 +65,10 @@ func validateProspectiveStemWrites(ctx context.Context, root string, plan schema
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if item.write.writeRoot != "" {
-			if _, err := fsx.StatInRoot(item.write.writeRoot, item.write.target); err != nil && !isNotExist(err) {
-				return nil, fmt.Errorf("validating rooted target %s: %w", item.write.reportTarget, err)
-			}
+		if item.write.target == nil {
+			return nil, fmt.Errorf("validating target %s: target capability unavailable", item.write.reportTarget)
 		}
-		next, err := state.Overlay(item.write.target, item.write.content)
+		next, err := state.Overlay(item.write.target.PhysicalPath(), item.write.content)
 		if err != nil {
 			return nil, fmt.Errorf("planning proposed .stem %s: %w", item.write.reportTarget, err)
 		}
@@ -77,15 +97,15 @@ func executeStemWrites(ctx context.Context, plan schemaApplyBatchPlan, dryRun bo
 			continue
 		}
 
+		if item.write.target == nil {
+			errs = append(errs, fmt.Sprintf("write %s: target capability unavailable", item.write.reportTarget))
+			continue
+		}
 		if write == nil {
 			errs = append(errs, fmt.Sprintf("write %s: writer unavailable", item.write.reportTarget))
 			continue
 		}
-		writeRoot := item.write.writeRoot
-		if writeRoot == "" {
-			writeRoot = filepath.Dir(item.write.target)
-		}
-		if err := write(writeRoot, item.write.target, item.write.content, 0o644); err != nil {
+		if err := write(item.write.target, item.write.content, 0o644); err != nil {
 			errs = append(errs, fmt.Sprintf("write %s: %v", item.write.reportTarget, err))
 			continue
 		}
@@ -122,7 +142,7 @@ func sortedSchemaApplyBatch(plan schemaApplyBatchPlan) []schemaApplyBatchItem {
 		if i < len(plan.actionsByWrite) {
 			actions = append([]string(nil), plan.actionsByWrite[i]...)
 		}
-		key := normalizedStemWriteTarget(write.target)
+		key := normalizedStemWriteTarget(write)
 		if existing, ok := byTarget[key]; ok {
 			// Multiple approved public actions can describe one physical target. The
 			// filesystem must see only the final bytes, and the public actions are
@@ -136,7 +156,7 @@ func sortedSchemaApplyBatch(plan schemaApplyBatchPlan) []schemaApplyBatchItem {
 	}
 
 	slices.SortStableFunc(items, func(a, b schemaApplyBatchItem) int {
-		return strings.Compare(normalizedStemWriteTarget(a.write.target), normalizedStemWriteTarget(b.write.target))
+		return strings.Compare(normalizedStemWriteTarget(a.write), normalizedStemWriteTarget(b.write))
 	})
 	return items
 }
@@ -145,12 +165,18 @@ func isNotExist(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || os.IsNotExist(err)
 }
 
-func normalizedStemWriteTarget(target string) string {
-	abs, err := filepath.Abs(target)
-	if err != nil {
-		return filepath.Clean(target)
+func normalizedStemWriteTarget(write stemWritePlan) string {
+	if write.target != nil {
+		return write.target.PhysicalPath()
 	}
-	return filepath.Clean(abs)
+	if write.targetPath != "" {
+		abs, err := filepath.Abs(write.targetPath)
+		if err != nil {
+			return filepath.Clean(write.targetPath)
+		}
+		return filepath.Clean(abs)
+	}
+	return filepath.Clean(write.reportTarget)
 }
 
 func sortStemHealthDiagnostics(diags []rules.StemHealthDiagnostic) {

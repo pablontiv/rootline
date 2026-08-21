@@ -9,11 +9,23 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/rules"
 )
+
+func mustAtomicStemTarget(t *testing.T, root, logical string) *fsx.AtomicTarget {
+	t.Helper()
+	target, err := fsx.ResolveAtomicTarget(root, logical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = target.Close() })
+	return target
+}
 
 func TestValidateProspectiveStemWritesRejectsJointlyInvalidHierarchy(t *testing.T) {
 	root := t.TempDir()
@@ -27,7 +39,8 @@ func TestValidateProspectiveStemWritesRejectsJointlyInvalidHierarchy(t *testing.
 	plan := schemaApplyBatchPlan{
 		writes: []stemWritePlan{{
 			reportTarget: "reported-child/.stem",
-			target:       childTarget,
+			targetPath:   childTarget,
+			target:       mustAtomicStemTarget(t, root, childTarget),
 			content:      []byte("version: 2\nschema:\n  estado:\n    type: string\n"),
 		}},
 		actionsByWrite: [][]string{{"create_stem: " + childTarget}},
@@ -58,7 +71,8 @@ func TestValidateProspectiveStemWritesAllowsWarningsAndInfo(t *testing.T) {
 	plan := schemaApplyBatchPlan{
 		writes: []stemWritePlan{{
 			reportTarget: childTarget,
-			target:       childTarget,
+			targetPath:   childTarget,
+			target:       mustAtomicStemTarget(t, root, childTarget),
 			content:      []byte("version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: string\n"),
 		}},
 		actionsByWrite: [][]string{{"create_stem: " + childTarget}},
@@ -97,8 +111,8 @@ func TestValidateProspectiveStemWritesUsesFinalDuplicateTargetContent(t *testing
 	childTarget := filepath.Join(childDir, ".stem")
 	plan := schemaApplyBatchPlan{
 		writes: []stemWritePlan{
-			{reportTarget: "first", target: childTarget, content: []byte("version: 2\nschema:\n  estado:\n    type: string\n")},
-			{reportTarget: "second", target: childTarget, content: []byte("version: 2\nschema:\n  estado:\n    type: enum\n    values: [Pending]\n")},
+			{reportTarget: "first", targetPath: childTarget, target: mustAtomicStemTarget(t, root, childTarget), content: []byte("version: 2\nschema:\n  estado:\n    type: string\n")},
+			{reportTarget: "second", targetPath: childTarget, target: mustAtomicStemTarget(t, root, childTarget), content: []byte("version: 2\nschema:\n  estado:\n    type: enum\n    values: [Pending]\n")},
 		},
 		actionsByWrite: [][]string{{"first action"}, {"second action"}},
 	}
@@ -123,10 +137,12 @@ func TestValidateProspectiveStemWritesSortsDiagnostics(t *testing.T) {
 		}
 	}
 
+	aTarget := filepath.Join(root, "a", ".stem")
+	bTarget := filepath.Join(root, "b", ".stem")
 	plan := schemaApplyBatchPlan{
 		writes: []stemWritePlan{
-			{reportTarget: "b/.stem", target: filepath.Join(root, "b", ".stem"), content: []byte("version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n")},
-			{reportTarget: "a/.stem", target: filepath.Join(root, "a", ".stem"), content: []byte("version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n")},
+			{reportTarget: "b/.stem", targetPath: bTarget, target: mustAtomicStemTarget(t, root, bTarget), content: []byte("version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n")},
+			{reportTarget: "a/.stem", targetPath: aTarget, target: mustAtomicStemTarget(t, root, aTarget), content: []byte("version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n")},
 		},
 		actionsByWrite: [][]string{{"b action"}, {"a action"}},
 	}
@@ -150,11 +166,16 @@ func TestValidateProspectiveStemWritesSortsDiagnostics(t *testing.T) {
 func TestValidateProspectiveStemWritesParseErrorNamesReportTarget(t *testing.T) {
 	root := t.TempDir()
 	mustWriteFile(t, filepath.Join(root, ".stem"), []byte("version: 2\nroot: true\n"), 0o644)
-	target := filepath.Join(root, "child", ".stem")
+	childDir := filepath.Join(root, "child")
+	if err := os.MkdirAll(childDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(childDir, ".stem")
 	plan := schemaApplyBatchPlan{
 		writes: []stemWritePlan{{
 			reportTarget: "from-report/.stem",
-			target:       target,
+			targetPath:   target,
+			target:       mustAtomicStemTarget(t, root, target),
 			content:      []byte("version: 2\nschema: [not-a-map]\n"),
 		}},
 		actionsByWrite: [][]string{{"create_stem: " + target}},
@@ -169,23 +190,95 @@ func TestValidateProspectiveStemWritesParseErrorNamesReportTarget(t *testing.T) 
 	}
 }
 
+func TestValidateProspectiveStemWritesUsesPhysicalHierarchy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink semantics differ")
+	}
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, ".stem"), []byte("version: 2\nroot: true\nschema:\n  estado:\n    type: string\n"), 0o644)
+	physicalParent := filepath.Join(root, "a")
+	physicalDir := filepath.Join(physicalParent, "deep")
+	if err := os.MkdirAll(physicalDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(physicalParent, ".stem"), []byte("version: 2\nschema:\n  estado:\n    type: enum\n    values: [Pending, Done]\n"), 0o644)
+	if err := os.Symlink(filepath.Join("a", "deep"), filepath.Join(root, "link")); err != nil {
+		t.Fatal(err)
+	}
+
+	logicalTarget := filepath.Join(root, "link", ".stem")
+	plan := schemaApplyBatchPlan{
+		writes: []stemWritePlan{{
+			reportTarget: "link/.stem",
+			targetPath:   logicalTarget,
+			target:       mustAtomicStemTarget(t, root, logicalTarget),
+			content:      []byte("version: 2\nschema:\n  estado:\n    type: string\n"),
+		}},
+		actionsByWrite: [][]string{{"create_stem: " + logicalTarget}},
+	}
+
+	diags, err := validateProspectiveStemWrites(context.Background(), root, plan)
+	if err != nil {
+		t.Fatalf("validateProspectiveStemWrites returned error: %v", err)
+	}
+	for _, diag := range diags {
+		if diag.Path == filepath.Join("a", "deep", ".stem") && diag.Check == "type-consistency" && diag.Field == "estado" && diag.Severity == rules.SeverityError {
+			return
+		}
+	}
+	t.Fatalf("missing physical-target type-consistency diagnostic: %+v", diags)
+}
+
+func TestSortedSchemaApplyBatchCoalescesAliasesByPhysicalTarget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink semantics differ")
+	}
+	root := t.TempDir()
+	physical := filepath.Join(root, "physical")
+	if err := os.Mkdir(physical, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, alias := range []string{"one", "two"} {
+		if err := os.Symlink("physical", filepath.Join(root, alias)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first := mustAtomicStemTarget(t, root, filepath.Join(root, "one", ".stem"))
+	second := mustAtomicStemTarget(t, root, filepath.Join(root, "two", ".stem"))
+	plan := schemaApplyBatchPlan{
+		writes: []stemWritePlan{
+			{reportTarget: "one/.stem", targetPath: filepath.Join(root, "one", ".stem"), target: first, content: []byte("first")},
+			{reportTarget: "two/.stem", targetPath: filepath.Join(root, "two", ".stem"), target: second, content: []byte("final")},
+		},
+		actionsByWrite: [][]string{{"first action"}, {"second action"}},
+	}
+	items := sortedSchemaApplyBatch(plan)
+	if len(items) != 1 || string(items[0].write.content) != "final" {
+		t.Fatalf("items = %+v", items)
+	}
+	if !reflect.DeepEqual(items[0].actions, []string{"first action", "second action"}) {
+		t.Fatalf("actions = %#v", items[0].actions)
+	}
+}
+
 func TestExecuteStemWritesContinuesAfterAtomicWriteFailure(t *testing.T) {
 	root := t.TempDir()
 	targets := []string{filepath.Join(root, "a.stem"), filepath.Join(root, "b.stem"), filepath.Join(root, "c.stem")}
 	var calls []string
 	writeErr := errors.New("disk full")
-	writer := func(root, target string, content []byte, mode fs.FileMode) error {
-		calls = append(calls, fmt.Sprintf("%s:%s:%s:%o", filepath.Base(root), filepath.Base(target), string(content), mode.Perm()))
-		if target == targets[1] {
+	writer := func(target *fsx.AtomicTarget, content []byte, mode fs.FileMode) error {
+		physicalPath := target.PhysicalPath()
+		calls = append(calls, fmt.Sprintf("%s:%s:%s:%o", filepath.Base(root), filepath.Base(physicalPath), string(content), mode.Perm()))
+		if filepath.Base(physicalPath) == "b.stem" {
 			return writeErr
 		}
 		return nil
 	}
 	plan := schemaApplyBatchPlan{
 		writes: []stemWritePlan{
-			{reportTarget: "c", target: targets[2], content: []byte("C")},
-			{reportTarget: "a", target: targets[0], content: []byte("A")},
-			{reportTarget: "b", target: targets[1], content: []byte("B")},
+			{reportTarget: "c", targetPath: targets[2], target: mustAtomicStemTarget(t, root, targets[2]), content: []byte("C")},
+			{reportTarget: "a", targetPath: targets[0], target: mustAtomicStemTarget(t, root, targets[0]), content: []byte("A")},
+			{reportTarget: "b", targetPath: targets[1], target: mustAtomicStemTarget(t, root, targets[1]), content: []byte("B")},
 		},
 		actionsByWrite: [][]string{{"create c"}, {"create a"}, {"create b"}},
 	}
@@ -209,15 +302,15 @@ func TestExecuteStemWritesStopsAfterContextCancellation(t *testing.T) {
 	root := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
 	var calls []string
-	writer := func(root, target string, content []byte, mode fs.FileMode) error {
-		calls = append(calls, filepath.Base(target))
+	writer := func(target *fsx.AtomicTarget, content []byte, mode fs.FileMode) error {
+		calls = append(calls, filepath.Base(target.PhysicalPath()))
 		cancel()
 		return nil
 	}
 	plan := schemaApplyBatchPlan{
 		writes: []stemWritePlan{
-			{reportTarget: "a", target: filepath.Join(root, "a.stem"), content: []byte("A")},
-			{reportTarget: "b", target: filepath.Join(root, "b.stem"), content: []byte("B")},
+			{reportTarget: "a", targetPath: filepath.Join(root, "a.stem"), target: mustAtomicStemTarget(t, root, filepath.Join(root, "a.stem")), content: []byte("A")},
+			{reportTarget: "b", targetPath: filepath.Join(root, "b.stem"), target: mustAtomicStemTarget(t, root, filepath.Join(root, "b.stem")), content: []byte("B")},
 		},
 		actionsByWrite: [][]string{{"create a"}, {"create b"}},
 	}
@@ -238,14 +331,14 @@ func TestExecuteStemWritesStopsAfterContextCancellation(t *testing.T) {
 func TestExecuteStemWritesDryRunDoesNotCallWriter(t *testing.T) {
 	root := t.TempDir()
 	called := false
-	writer := func(string, string, []byte, fs.FileMode) error {
+	writer := func(*fsx.AtomicTarget, []byte, fs.FileMode) error {
 		called = true
 		return nil
 	}
 	plan := schemaApplyBatchPlan{
 		writes: []stemWritePlan{
-			{reportTarget: "b", target: filepath.Join(root, "b.stem"), content: []byte("B")},
-			{reportTarget: "a", target: filepath.Join(root, "a.stem"), content: []byte("A")},
+			{reportTarget: "b", targetPath: filepath.Join(root, "b.stem"), target: mustAtomicStemTarget(t, root, filepath.Join(root, "b.stem")), content: []byte("B")},
+			{reportTarget: "a", targetPath: filepath.Join(root, "a.stem"), target: mustAtomicStemTarget(t, root, filepath.Join(root, "a.stem")), content: []byte("A")},
 		},
 		actionsByWrite: [][]string{{"create b"}, {"create a"}},
 	}
@@ -272,13 +365,13 @@ func TestExecuteStemWritesCoalescesDuplicateTargetFailureToSingleAttempt(t *test
 	writeErr := errors.New("permission denied")
 	plan := schemaApplyBatchPlan{
 		writes: []stemWritePlan{
-			{reportTarget: "first", writeRoot: root, target: target, content: []byte("version: 2\nschema:\n  old:\n    type: string\n")},
-			{reportTarget: "second", writeRoot: root, target: target, content: []byte("version: 2\nschema:\n  final:\n    type: string\n")},
+			{reportTarget: "first", targetPath: target, target: mustAtomicStemTarget(t, root, target), content: []byte("version: 2\nschema:\n  old:\n    type: string\n")},
+			{reportTarget: "second", targetPath: target, target: mustAtomicStemTarget(t, root, target), content: []byte("version: 2\nschema:\n  final:\n    type: string\n")},
 		},
 		actionsByWrite: [][]string{{"create_stem: " + target}, {"overwrite_stem: " + target}},
 	}
 	var calls []string
-	writer := func(root, target string, content []byte, mode fs.FileMode) error {
+	writer := func(target *fsx.AtomicTarget, content []byte, mode fs.FileMode) error {
 		calls = append(calls, string(content))
 		return writeErr
 	}
@@ -305,15 +398,15 @@ func TestExecuteStemWritesUsesStableTargetOrder(t *testing.T) {
 	b := filepath.Join(root, "b.stem")
 	plan := schemaApplyBatchPlan{
 		writes: []stemWritePlan{
-			{reportTarget: "b", target: b, content: []byte("B")},
-			{reportTarget: "a-first", target: a, content: []byte("A1")},
-			{reportTarget: "a-second", target: a, content: []byte("A2")},
+			{reportTarget: "b", targetPath: b, target: mustAtomicStemTarget(t, root, b), content: []byte("B")},
+			{reportTarget: "a-first", targetPath: a, target: mustAtomicStemTarget(t, root, a), content: []byte("A1")},
+			{reportTarget: "a-second", targetPath: a, target: mustAtomicStemTarget(t, root, a), content: []byte("A2")},
 		},
 		actionsByWrite: [][]string{{"write b"}, {"write a first"}, {"write a second"}},
 	}
 	var calls []string
-	writer := func(root, target string, content []byte, mode fs.FileMode) error {
-		calls = append(calls, fmt.Sprintf("%s:%s", filepath.Base(target), string(content)))
+	writer := func(target *fsx.AtomicTarget, content []byte, mode fs.FileMode) error {
+		calls = append(calls, fmt.Sprintf("%s:%s", filepath.Base(target.PhysicalPath()), string(content)))
 		return nil
 	}
 
