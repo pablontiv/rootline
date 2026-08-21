@@ -57,7 +57,7 @@ func TestAtomicTargetFollowsInternalAliasOnce(t *testing.T) {
 	}
 }
 
-func TestResolveAtomicTargetRejectsPhysicalEscape(t *testing.T) {
+func TestResolveAtomicTargetRejectsExistingPhysicalEscape(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink setup requires Unix-compatible semantics")
 	}
@@ -67,11 +67,15 @@ func TestResolveAtomicTargetRejectsPhysicalEscape(t *testing.T) {
 		t.Fatal(err)
 	}
 	alias := filepath.Join(root, "alias")
-	if err := os.Symlink("../outside", alias); err != nil {
+	if err := os.Symlink(outside, alias); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ResolveAtomicTarget(root, filepath.Join(alias, ".stem")); err == nil {
+	_, err := ResolveAtomicTarget(root, filepath.Join(alias, ".stem"))
+	if err == nil {
 		t.Fatal("ResolveAtomicTarget accepted escaping symlink parent")
+	}
+	if !strings.Contains(err.Error(), "escapes root") {
+		t.Fatalf("ResolveAtomicTarget error = %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(outside, ".stem")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("outside target was created: %v", err)
