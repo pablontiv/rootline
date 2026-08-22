@@ -263,6 +263,7 @@ type schemaFieldDeclarationMetadata struct {
 	SourceNull     bool
 	HeadingPresent bool
 	OrderedPresent bool
+	NullField      bool // entire field was set to null in YAML
 }
 
 // schemaFieldRaw is the intermediate type for YAML unmarshaling.
@@ -310,6 +311,7 @@ func (sf *SchemaField) UnmarshalYAML(value *yaml.Node) error {
 		SourceNull:     nodes["source"] != nil && nodes["source"].Tag == "!!null",
 		HeadingPresent: nodes["heading"] != nil,
 		OrderedPresent: nodes["ordered"] != nil,
+		NullField:      value.Tag == "!!null", // entire field was set to null
 	}
 	if node := nodes["type"]; node != nil && node.Tag != "!!null" {
 		sf.Type = raw.Type
@@ -371,6 +373,42 @@ var severityOrder = map[string]int{
 	"off":   0,
 	"warn":  1,
 	"error": 2,
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling for StemFile to detect
+// null schema fields and mark them for removal.
+func (s *StemFile) UnmarshalYAML(value *yaml.Node) error {
+	// Define an intermediate struct to match StemFile but without custom unmarshaling
+	type stemFileRaw StemFile
+
+	// First, do the normal unmarshaling
+	if err := value.Decode((*stemFileRaw)(s)); err != nil {
+		return err
+	}
+
+	// Then, walk the YAML nodes to detect null schema fields
+	if value.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			key := value.Content[i]
+			val := value.Content[i+1]
+			if key.Value == "schema" && val.Kind == yaml.MappingNode {
+				// Walk the schema map and detect null fields
+				for j := 0; j+1 < len(val.Content); j += 2 {
+					fieldKey := val.Content[j]
+					fieldVal := val.Content[j+1]
+					fieldName := fieldKey.Value
+					if fieldVal.Tag == "!!null" {
+						// Mark this field as null for removal during merge
+						field := s.Schema[fieldName]
+						field.declaration.NullField = true
+						s.Schema[fieldName] = field
+					}
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // ParseStem parses a .stem file from raw YAML content.
