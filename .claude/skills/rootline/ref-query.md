@@ -12,7 +12,7 @@ rootline query <dir> --where "body contains 'migration'"
 rootline query <dir> --where "tags != nil"
 ```
 
-Supported operators: `==`, `!=`, `in`, `contains`, `&&`, `||`. Use `field != nil` for existence checks. Built-in fields include `path`, `body`, `sections`, and `isIndex` where available.
+Supported operators: `==`, `!=`, `in`, `contains`, `&&`, `||`. Use `field != nil` for existence checks. Built-in fields include `path`, `body`, `type`, `sections`, and `isIndex` where available. The `type` field refers to the record type (e.g., `"markdown"`); it is not a function call.
 
 ## query
 

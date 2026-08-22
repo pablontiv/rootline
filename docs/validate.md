@@ -257,6 +257,11 @@ Health runs before the corpus scan and survives it. A tree with no `.stem` anywh
 one whose `.stem` does not parse, still emits the envelope — carrying `stem-files-exist`
 or `yaml-valid` — instead of a raw Go error on stderr and no JSON at all.
 
+A single-file target resolves no corpus, so it has no health phase to carry the finding.
+It reports the same condition as a `schema_resolution_failed` notice instead, and so does
+the boundary preflight on every invocation form. In both cases `stem_health` stays empty
+and the envelope is still written to stdout before the exit.
+
 ### `notices[]`
 
 ```json
@@ -266,7 +271,7 @@ or `yaml-valid` — instead of a raw Go error on stderr and no JSON at all.
 | Code | Severity | Meaning |
 |------|----------|---------|
 | `scan_failed` | error | The corpus could not be scanned. `stem_health` explains why. |
-| `schema_resolution_failed` | error | A `.stem` chain failed to resolve during structural or drift checks. |
+| `schema_resolution_failed` | error | A `.stem` chain failed to resolve: during structural or drift checks, for a file target whose `.stem` is missing or unparseable, or because no `.stem` in the chain declares the governance boundary. |
 | `stem_health_unavailable` | warn | Stem health itself could not run. |
 | `no_records` | warn | `--all` scanned the path and found no records. |
 
@@ -305,7 +310,7 @@ Switch on `code`; it is stable. `message` is for humans.
 | Directory structural verdicts appeared in `results[]` with a trailing-slash path | Read `.structural[]` |
 | `summary.total` counted records plus health findings | `summary.total` counts records |
 | `validate --staged` wrote nothing on an empty index | Emits the envelope with `summary.total: 0` |
-| A missing or unparseable `.stem` wrote a Go error to stderr | Emits the envelope with a `scan_failed` notice, still exit 1 |
+| A missing or unparseable `.stem` wrote a Go error to stderr | Emits the envelope, still exit 1: a `scan_failed` notice under `--all`, a `schema_resolution_failed` notice for a file target or an undeclared boundary |
 
 ## Source-Backed Field Validation
 

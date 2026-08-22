@@ -161,6 +161,11 @@ The heading key must match the heading text exactly, including the `#` prefix an
 
 The warning fires on every command that accepts `--where`: `query`, `stats`, `tree`, `graph` and `validate --all`. Without it a misspelled field is indistinguishable from "no records match" — zero results, empty stderr, exit 0 — which reads as a green check in CI.
 
+In an expression `type` always names the record field, never a function: the expression
+language ships a `type()` builtin of its own, which shadowed the field and made the
+documented name unusable, so it is disabled. `type(x)` is therefore not callable in a
+filter. No other builtin is affected.
+
 A field name is considered known when it is a query builtin (`path`, `body`, `type`, `sections`), a key any record in the scanned corpus carries, or a field the effective `.stem` chain declares — including `derive:` and `aggregate:` names. The union is deliberately generous: a false warning on a name that does work would teach callers to ignore the warning. On a corpus with neither records nor schema there is nothing to check against, and nothing is reported.
 
 It stays a warning, not an error. A field absent from every record is a legal filter that yields zero matches, and pipelines depend on that exit code.
