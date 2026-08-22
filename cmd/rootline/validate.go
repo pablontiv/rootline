@@ -307,6 +307,25 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		}))
 	}
 
+	// Phase 1.5: Check boundary declaration.
+	// If the .stem chain has been found but not declared as a governance boundary,
+	// the walk may have collected .stem files from outside the project.
+	entries, err := rules.WalkUp(root)
+	if err != nil {
+		// If WalkUp found no .stem, try downward scan to see if there are any .stems
+		// in the subtree (same as preflight does).
+		if errors.Is(err, rules.ErrNoSchemaFound) {
+			entries, _ = rules.DownwardScan(root)
+		}
+	}
+	if len(entries) > 0 && rules.ChainHasNoDeclaredBoundary(entries) {
+		notices = append(notices, rules.Notice{
+			Severity: rules.SeverityError,
+			Code:     "schema_resolution_failed",
+			Message:  fmt.Sprintf("undeclared governance boundary: add 'root: true' to %s/.stem", filepath.Dir(entries[len(entries)-1].Path)),
+		})
+	}
+
 	if len(records) == 0 {
 		// A path that was renamed or emptied used to report total: 1, valid: 1
 		// — the stem-files-exist pseudo-record — and a CI gate read it as green.

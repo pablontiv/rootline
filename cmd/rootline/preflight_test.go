@@ -212,8 +212,27 @@ func TestPreflight_TreeScopedDownscan_FindsUnmarkedStem(t *testing.T) {
 		if err == nil {
 			t.Fatalf("validate --all %s must report the undeclared boundary\noutput: %s", target, out)
 		}
-		if !strings.Contains(err.Error(), "declared boundary") {
-			t.Errorf("validate --all %s: expected the boundary error, got: %v", target, err)
+		// The boundary error is now in the JSON envelope, not the error message
+		var result map[string]interface{}
+		if err := json.Unmarshal([]byte(out), &result); err != nil {
+			t.Errorf("validate --all %s: expected JSON output, got non-JSON: %s", target, out)
+			continue
+		}
+		notices, ok := result["notices"].([]interface{})
+		if !ok {
+			t.Errorf("validate --all %s: notices not found in JSON", target)
+			continue
+		}
+		foundBoundaryError := false
+		for _, notice := range notices {
+			noticeMap := notice.(map[string]interface{})
+			if msg, ok := noticeMap["message"].(string); ok && strings.Contains(msg, "boundary") {
+				foundBoundaryError = true
+				break
+			}
+		}
+		if !foundBoundaryError {
+			t.Errorf("validate --all %s: expected boundary error in notices, got: %v", target, notices)
 		}
 	}
 }
