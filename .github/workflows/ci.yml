@@ -37,7 +37,7 @@ jobs:
       lint-version: v2.13.1
 
   gitleaks:
-    uses: pablontiv/crossbeam/.github/workflows/gitleaks.yml@v1
+    uses: pablontiv/crossbeam/.github/workflows/gitleaks.yml@v2
 
   docs-validate:
     runs-on: ubuntu-latest
