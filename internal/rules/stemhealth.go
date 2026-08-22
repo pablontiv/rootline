@@ -122,9 +122,13 @@ func EvaluateStemState(ctx context.Context, state *StemState) (*StemHealthResult
 		relPath := stemHealthRelPath(absRoot, sf)
 		if parseErr := state.ParseErrors[sf]; parseErr != nil {
 			checks = append(checks, StemHealthCheck{
-				Name:    "yaml-valid",
-				Status:  "fail",
-				Message: fmt.Sprintf("invalid YAML: %v", parseErr),
+				Name:   "yaml-valid",
+				Status: "fail",
+				// Not always a YAML syntax error: an unsupported version and a
+				// null schema field are refused by the same read. The wrapped
+				// error names the file and the reason, so asserting "invalid
+				// YAML" here would misdescribe both.
+				Message: parseErr.Error(),
 				Path:    relPath,
 			})
 			continue
@@ -186,10 +190,6 @@ func EvaluateStemState(ctx context.Context, state *StemState) (*StemHealthResult
 		}
 		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
 			childField := stem.Schema[fieldName]
-			// Skip null fields marked for removal.
-			if childField.declaration.NullField {
-				continue
-			}
 			parentField, exists := parentMerged.Schema[fieldName]
 			if !exists {
 				continue
@@ -521,10 +521,6 @@ func fieldDeclarationChecks(absRoot string, parsedStems map[string]*StemFile) []
 		relPath, _ := filepath.Rel(absRoot, stemPath)
 		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
 			field := stem.Schema[fieldName]
-			// Skip null fields marked for removal.
-			if field.declaration.NullField {
-				continue
-			}
 			for _, contractIssue := range ValidateFieldDeclaration(fieldName, field) {
 				checks = append(checks, StemHealthCheck{
 					Name:    "field-declaration",

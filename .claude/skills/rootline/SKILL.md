@@ -33,6 +33,22 @@ Schema discovery walks up from the target collecting `.stem` files and stops at 
   entire multi-file run.
 - Bootstrap commands (`schema propose`, `analyze`) work without any `.stem` — they derive one. `init` and `migrate` also run without a marker.
 
+## Inheritance: a child never removes
+
+A child `.stem` adds fields or narrows what a parent declared. It never removes
+anything, in any section — not `schema:`, not `derive:`, not `aggregate:`.
+
+- Setting a key to `null` in a child does not delete it. In `derive:` and
+  `aggregate:` the parent's value survives; a `null` field in `schema:` is
+  refused when the file is read, with one message naming the field.
+- Needing a field gone means the structure is wrong. Remove it from the `.stem`
+  that declares it, or move the records out from under that `.stem`. Never
+  propose a `null` override to make a validation error go away.
+- The reason is the guarantee: a parent `.stem` promises a floor to everything
+  beneath it. A child that drops a declaration lowers that floor silently for
+  every record in the subtree, which is what hierarchical governance exists to
+  prevent.
+
 ## Deterministic Execution Rules
 
 1. **Resolve target**: if a command reads or mutates an existing path, verify the path exists. If absent, stop and report the missing path; do not choose a substitute.

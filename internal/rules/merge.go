@@ -5,7 +5,11 @@ package rules
 //   - map + map → recursive key-level merge
 //   - array + array → child replaces (except validate, which accumulates)
 //   - scalar + scalar → child replaces
-//   - any + nil → key removed
+//
+// A child never removes an inherited key. Setting one to null does not delete
+// it: a child that drops a parent's declaration silently reduces the guarantee
+// the parent made to everything below it. Needing a field gone means the
+// structure is wrong, and the structure is where it gets fixed.
 func MergeStemFiles(entries []StemEntry) *StemFile {
 	result := &StemFile{}
 	if len(entries) == 0 {
@@ -59,13 +63,9 @@ func mergeSchemaFields(parent, child map[string]SchemaField, source string) map[
 		return parent
 	}
 	if len(parent) == 0 {
-		// Tag all child fields with source, filtering out null fields.
+		// Tag all child fields with source.
 		out := make(map[string]SchemaField, len(child))
 		for k, v := range child {
-			if v.declaration.NullField {
-				// Null field removal: skip entirely.
-				continue
-			}
 			v.Source = source
 			out[k] = v
 		}
@@ -77,11 +77,6 @@ func mergeSchemaFields(parent, child map[string]SchemaField, source string) map[
 		out[k] = v
 	}
 	for k, v := range child {
-		if v.declaration.NullField {
-			// Null field removal: delete the key.
-			delete(out, k)
-			continue
-		}
 		v.Source = source
 		if parentField, exists := out[k]; exists {
 			v = mergeFieldSource(parentField, v)
@@ -123,8 +118,10 @@ func mergeFieldSeverity(parent, child SchemaField) SchemaField {
 
 // mergeAnyMap performs a type-driven merge of two map[string]any values.
 // - Maps merge recursively at the key level.
-// - nil values in child remove the key.
 // - All other types (arrays, scalars): child replaces.
+//
+// A nil in the child does not remove the inherited key; nothing a child writes
+// can. See MergeStemFiles for why.
 func mergeAnyMap(parent, child map[string]any) map[string]any {
 	if len(child) == 0 {
 		return parent
@@ -139,7 +136,7 @@ func mergeAnyMap(parent, child map[string]any) map[string]any {
 	}
 	for k, v := range child {
 		if v == nil {
-			delete(out, k)
+			// A child cannot remove an inherited key; keep the parent's value.
 			continue
 		}
 		childMap, childIsMap := toStringMap(v)
@@ -165,7 +162,7 @@ func mergeAnyMapGeneric(parent, child map[string]any) map[string]any {
 	}
 	for k, v := range child {
 		if v == nil {
-			delete(out, k)
+			// A child cannot remove an inherited key; keep the parent's value.
 			continue
 		}
 		childMap, childIsMap := toStringMap(v)

@@ -109,7 +109,9 @@ Rootline discovers schemas by **walking up** your directory tree:
 2. Collect `.stem` files at each level, moving up until a `.stem` declares `root: true` — the governance boundary — or, if none does, until the filesystem root
 3. Merge collected schemas from root to leaf (parent → child)
 
-Each level can add new fields, override parent definitions, or remove inherited rules (with `null`). Type-driven merge rules ensure predictable inheritance (maps merge key-level; arrays and scalars replace entirely).
+Each level can add new fields or narrow parent definitions. Type-driven merge rules ensure predictable inheritance (maps merge key-level; arrays and scalars replace entirely).
+
+**A child never removes anything.** Not in `schema:`, not in `derive:`, not in `aggregate:`. Setting a key to `null` in a child does not delete it — a `.stem` that drops a parent's declaration silently reduces the guarantee that parent made to everything beneath it, which is the one thing hierarchical governance exists to prevent. If a field has to go, the structure is wrong: remove it from the `.stem` that declares it.
 
 A `.stem` file with `root: true` marks the governance boundary; walk-up discovery stops there. The marker is required, not optional: if the walk reaches the filesystem root without finding one, the chain may have collected `.stem` files from outside your project, so the boundary preflight refuses to run governed commands. On a terminal it offers to add `root: true` for you; in a pipeline or CI it is a hard error, and the fix is to add the marker to the `.stem` at the top of your project. **Git is optional** — Rootline works in any directory, with or without Git, and never uses `.git` as a boundary.
 
