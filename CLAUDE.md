@@ -135,7 +135,7 @@ The Justfile contains only development recipes (`check`, `test`, `fmt`, `validat
 ## CI Workflows
 
 CI/CD uses shared reusable workflows from `pablontiv/crossbeam@v1`:
-- `go-ci.yml` — build, test (with 85% coverage threshold), tidy, lint, vuln
+- `go-ci.yml` — build, test (with 85% coverage threshold and `-race`), tidy, lint, vuln. All of these need `profile: full`; crossbeam defaults to `light`, which runs build, test and the coverage gate only and skips the other three.
 - `gitleaks.yml` — secret scanning
 - `go-release.yml` — auto-tag + goreleaser release
 - `codeql.yml` — CodeQL security scanning (Go)

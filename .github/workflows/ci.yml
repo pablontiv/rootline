@@ -23,6 +23,12 @@ jobs:
     with:
       go-version-file: go.mod
       coverage-threshold: 85
+      # 'light' is crossbeam's default and runs build, test and the coverage
+      # gate only. Tidy, lint and govulncheck sit behind profile == 'full', and
+      # so does -race. Without this the three jobs report "skipping" on every
+      # run and the test job never exercises the race detector, while CLAUDE.md
+      # claims all three are part of CI.
+      profile: full
 
   gitleaks:
     uses: pablontiv/crossbeam/.github/workflows/gitleaks.yml@v1

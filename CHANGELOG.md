@@ -49,6 +49,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Fixed
 
+- CI ran on crossbeam's default `light` profile, so `Lint`, `Tidy` and `Vulnerability check` reported "skipping" on every run and the test job never used `-race`. `ci.yml` now passes `profile: full`, which is what `CLAUDE.md` already described.
 - `validate <file>` and the boundary preflight now emit the `rootline/validate-batch` v2 envelope carrying a `schema_resolution_failed` error notice, instead of writing a raw Go error to stderr and nothing to stdout. The guarantee already held for `validate --all`; a file target and the preflight were the two paths that broke it. Both still exit 1. A file target and `--all` also reach the same verdict on an undeclared boundary, so naming a file cannot relax governance.
 - Declining the interactive root-marker migration prompt now refuses to run the command, matching the non-interactive behavior. Both paths report `schema_resolution_failed` in the envelope and exit 1.
 - `stats` now applies `scope.match` filtering like `query`, `tree`, `graph`, and `validate --all`, so the four commands report consistent counts over the same directory.
