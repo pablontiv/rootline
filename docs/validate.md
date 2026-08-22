@@ -262,6 +262,11 @@ It reports the same condition as a `schema_resolution_failed` notice instead, an
 the boundary preflight on every invocation form. In both cases `stem_health` stays empty
 and the envelope is still written to stdout before the exit.
 
+Naming a file is not a way around governance. A file target and `--all` reach the same
+verdict on the same tree, undeclared boundary included, so a pre-commit hook that validates
+changed files and a CI job that validates the tree cannot disagree. With several files the
+notice is reported once per distinct `.stem` chain rather than once per file.
+
 ### `notices[]`
 
 ```json
