@@ -186,6 +186,10 @@ func EvaluateStemState(ctx context.Context, state *StemState) (*StemHealthResult
 		}
 		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
 			childField := stem.Schema[fieldName]
+			// Skip null fields marked for removal.
+			if childField.declaration.NullField {
+				continue
+			}
 			parentField, exists := parentMerged.Schema[fieldName]
 			if !exists {
 				continue
@@ -517,6 +521,10 @@ func fieldDeclarationChecks(absRoot string, parsedStems map[string]*StemFile) []
 		relPath, _ := filepath.Rel(absRoot, stemPath)
 		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
 			field := stem.Schema[fieldName]
+			// Skip null fields marked for removal.
+			if field.declaration.NullField {
+				continue
+			}
 			for _, contractIssue := range ValidateFieldDeclaration(fieldName, field) {
 				checks = append(checks, StemHealthCheck{
 					Name:    "field-declaration",

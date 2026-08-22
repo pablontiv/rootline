@@ -1138,3 +1138,138 @@ func stemHealthNamesFromDoc(t *testing.T, path string) map[string]bool {
 	}
 	return names
 }
+
+// TestValidateStemHealth_NullFieldRemovalE2E tests that schema: {field: null} removes fields
+// from the effective schema without triggering false stem-health errors. This is the
+// end-to-end validation test for issue #183, using the same fixture as the issue report.
+func TestValidateStemHealth_NullFieldRemovalE2E(t *testing.T) {
+	// Reproduce the issue's fixture:
+	// Root .stem: titulo and removed both required:true
+	// Child .stem: removes 'removed' field with null
+	// Child record: has only titulo
+
+	dir := t.TempDir()
+
+	// Root .stem
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+root: true
+scope:
+  match: "*.md"
+schema:
+  titulo:
+    type: string
+    required: true
+  removed:
+    type: string
+    required: true
+`))
+
+	// Parent record (satisfies both fields)
+	mustWriteStemTestFile(t, filepath.Join(dir, "p.md"), []byte(`---
+titulo: Hello World
+removed: x
+---
+
+# Parent
+`))
+
+	// Child directory with .stem that removes 'removed'
+	mustWriteStemTestFile(t, filepath.Join(dir, "child", ".stem"), []byte(`version: 2
+scope:
+  match: "*.md"
+schema:
+  removed: null
+`))
+
+	// Child record (has only titulo - valid because 'removed' is removed by null)
+	mustWriteStemTestFile(t, filepath.Join(dir, "child", "c.md"), []byte(`---
+titulo: Hello World
+---
+
+# Child
+`))
+
+	// Run validate --all (stem health check)
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify no stem-health errors for the null field removal
+	var fieldDeclErrors []string
+	var monoViolationErrors []string
+	var typeConsistencyErrors []string
+
+	for _, c := range result.Checks {
+		if c.Status != "fail" {
+			continue
+		}
+		if c.Name == "field-declaration" && c.Field == "removed" {
+			fieldDeclErrors = append(fieldDeclErrors, c.Message)
+		}
+		if c.Name == "monotonic-violations" && c.Field == "removed" {
+			monoViolationErrors = append(monoViolationErrors, c.Message)
+		}
+		if c.Name == "type-consistency" && c.Field == "removed" {
+			typeConsistencyErrors = append(typeConsistencyErrors, c.Message)
+		}
+	}
+
+	if len(fieldDeclErrors) > 0 {
+		t.Errorf("field-declaration errors for removed field (should be none): %v", fieldDeclErrors)
+	}
+	if len(monoViolationErrors) > 0 {
+		t.Errorf("monotonic-violations errors for removed field (should be none): %v", monoViolationErrors)
+	}
+	if len(typeConsistencyErrors) > 0 {
+		t.Errorf("type-consistency errors for removed field (should be none): %v", typeConsistencyErrors)
+	}
+}
+
+// TestValidateStemHealth_TypeWideningStillDetected is an adversarial control:
+// verify that real type widening (not null removal) still produces errors.
+func TestValidateStemHealth_TypeWideningStillDetected(t *testing.T) {
+	// Parent declares titulo: string, child widens to list
+	dir := t.TempDir()
+
+	// Root .stem
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+root: true
+scope:
+  match: "*.md"
+schema:
+  titulo:
+    type: string
+    required: true
+`))
+
+	// Child directory with .stem that widens tipo
+	mustWriteStemTestFile(t, filepath.Join(dir, "child", ".stem"), []byte(`version: 2
+scope:
+  match: "*.md"
+schema:
+  titulo:
+    type: list
+    required: true
+`))
+
+	// Run validate --all (stem health check)
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify type-consistency or monotonic-violations errors ARE reported for real widening
+	var foundTypeOrMonoError bool
+	for _, c := range result.Checks {
+		if c.Status == "fail" && c.Field == "titulo" &&
+			(c.Name == "type-consistency" || c.Name == "monotonic-violations") {
+			foundTypeOrMonoError = true
+			break
+		}
+	}
+
+	if !foundTypeOrMonoError {
+		t.Error("expected type-consistency or monotonic-violations error for real type widening, but got none")
+	}
+}
