@@ -555,3 +555,68 @@ func TestSchemaApplyResultEnvelopeInitializesStemHealth(t *testing.T) {
 		t.Fatalf("schema apply envelope = %s, want non-omitempty empty stem_health array", data)
 	}
 }
+
+func TestSchemaApplyFromAnalyzeEmitsEnvelopeOnResolutionError(t *testing.T) {
+	// Issue #179: schema apply --report <analyze.json> with actionable inferences
+	// should emit JSON envelope even when stem resolution fails
+	root := t.TempDir()
+
+	// Create an analyze report with actionable inference (requires.agent=false)
+	analyzeReport := `{
+		"version": 1,
+		"kind": "rootline/analyze",
+		"path": ".",
+		"categories": [{
+			"name": "inference",
+			"inferences": [{
+				"type": "enum_values",
+				"message": "test enum",
+				"requires_agent": false
+			}]
+		}]
+	}`
+
+	// Create report file
+	reportFile := filepath.Join(root, "analyze.json")
+	mustWriteFile(t, reportFile, []byte(analyzeReport), 0o644)
+
+	unresolvableRoot := filepath.Join(root, "nonexistent")
+
+	// Run schema apply with unresolvable root but WITH actionable inference
+	out, err := runCmd(t, "schema", "apply", "--report", reportFile, "--root", unresolvableRoot, "-o", "json")
+
+	// Should exit non-zero
+	if err == nil {
+		t.Error("expected non-zero exit, got success")
+	}
+
+	// Parse JSON to verify envelope IS emitted (this is the bug fix)
+	// runCmd combines stderr with stdout, so extract just the JSON part
+	lines := strings.Split(out, "\n")
+	var jsonLine string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "{") && strings.HasPrefix(strings.TrimSpace(line), "{") {
+			jsonLine = line
+			break
+		}
+	}
+	if jsonLine == "" {
+		t.Fatalf("no JSON envelope emitted; expected envelope with errors. Got raw output:\n%s", out)
+	}
+
+	var result SchemaApplyResult
+	if err := json.Unmarshal([]byte(jsonLine), &result); err != nil {
+		t.Fatalf("failed to parse JSON: %v. Got line:\n%s", err, jsonLine)
+	}
+
+	// Verify envelope structure
+	if result.Kind != "rootline/schema-apply" {
+		t.Errorf("kind = %q, want rootline/schema-apply", result.Kind)
+	}
+	if len(result.Errors) == 0 {
+		t.Error("expected errors[] to contain resolution error, got empty")
+	}
+	if result.Complete {
+		t.Error("expected complete=false for failed run, got true")
+	}
+}

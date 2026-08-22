@@ -50,7 +50,8 @@ func runStats(cmd *cobra.Command, args []string) error {
 	}
 
 	reg := extract.NewRegistry()
-	records, err := index.Scan(ctx, absRoot, reg)
+	resolver := stemScopeResolver()
+	records, err := index.Scan(ctx, absRoot, reg, index.WithScopeResolver(resolver))
 	if err != nil {
 		return fmt.Errorf("scanning %s: %w", scanRoot, err)
 	}
