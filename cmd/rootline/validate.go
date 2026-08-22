@@ -70,6 +70,12 @@ func runValidateFilesInScope(cmd *cobra.Command, files []string, commandScopeRoo
 	var notices []rules.Notice
 	linkCache := rules.NewHeadingCache()
 
+	// The preflight lets validate through on an undeclared boundary so the
+	// failure lands in the envelope. Naming a file must not be a way around
+	// that, so each target's own chain is checked here; one notice per chain,
+	// since several files usually share one.
+	boundaryChecked := make(map[string]bool)
+
 	for _, file := range files {
 		absPath, err := filepath.Abs(file)
 		if err != nil {
@@ -101,6 +107,13 @@ func runValidateFilesInScope(cmd *cobra.Command, files []string, commandScopeRoo
 				Severity: "warn",
 			}}))
 			continue
+		}
+
+		if dir := filepath.Dir(absPath); !boundaryChecked[dir] {
+			boundaryChecked[dir] = true
+			if n := undeclaredBoundaryNotice(dir); n != nil {
+				notices = append(notices, *n)
+			}
 		}
 
 		recCtx, err := resolveValidationRecordContext(absPath, file)
@@ -226,6 +239,31 @@ func emitValidateRunLevelSchemaEnvelope(cmd *cobra.Command, records []*extract.R
 	}))
 }
 
+// undeclaredBoundaryNotice reports the notice for a chain that reaches the
+// filesystem root without a declared boundary, or nil when one is declared.
+//
+// The boundary preflight lets `validate` through precisely so it can report
+// this in its own envelope instead of a bare Go error. That makes the check
+// this function performs the ONLY thing standing between a file target and a
+// chain the preflight already judged unsafe, so every validate entry point
+// must call it. It lives here, shared, because the first attempt re-armed the
+// check on the `--all` path alone and a file target silently exited 0.
+func undeclaredBoundaryNotice(dir string) *rules.Notice {
+	entries, err := rules.WalkUp(dir)
+	if err != nil && errors.Is(err, rules.ErrNoSchemaFound) {
+		// WalkUp found nothing above; look down the subtree, as the preflight does.
+		entries, _ = rules.DownwardScan(dir)
+	}
+	if len(entries) == 0 || !rules.ChainHasNoDeclaredBoundary(entries) {
+		return nil
+	}
+	return &rules.Notice{
+		Severity: rules.SeverityError,
+		Code:     "schema_resolution_failed",
+		Message:  fmt.Sprintf("undeclared governance boundary: add 'root: true' to %s/.stem", filepath.Dir(entries[len(entries)-1].Path)),
+	}
+}
+
 func appendSchemaResolutionNotice(notices []rules.Notice, message string) []rules.Notice {
 	return append(notices, rules.Notice{
 		Severity: rules.SeverityError,
@@ -307,23 +345,9 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		}))
 	}
 
-	// Phase 1.5: Check boundary declaration.
-	// If the .stem chain has been found but not declared as a governance boundary,
-	// the walk may have collected .stem files from outside the project.
-	entries, err := rules.WalkUp(root)
-	if err != nil {
-		// If WalkUp found no .stem, try downward scan to see if there are any .stems
-		// in the subtree (same as preflight does).
-		if errors.Is(err, rules.ErrNoSchemaFound) {
-			entries, _ = rules.DownwardScan(root)
-		}
-	}
-	if len(entries) > 0 && rules.ChainHasNoDeclaredBoundary(entries) {
-		notices = append(notices, rules.Notice{
-			Severity: rules.SeverityError,
-			Code:     "schema_resolution_failed",
-			Message:  fmt.Sprintf("undeclared governance boundary: add 'root: true' to %s/.stem", filepath.Dir(entries[len(entries)-1].Path)),
-		})
+	// Phase 1.5: the chain may have been collected from outside the project.
+	if n := undeclaredBoundaryNotice(root); n != nil {
+		notices = append(notices, *n)
 	}
 
 	if len(records) == 0 {
