@@ -620,7 +620,23 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	// --root reaches every one of them.
 	root, err := resolveReportRoot(schemaApplyRoot, report.Root, report.Path, schemaApplyReport)
 	if err != nil {
-		return fmt.Errorf("resolving report root: %w", err)
+		// Create a result with the best root guess (schemaApplyRoot or "." fallback)
+		// so we can emit the envelope even if root resolution fails.
+		guessedRoot := schemaApplyRoot
+		if guessedRoot == "" {
+			guessedRoot = "."
+		}
+		result := newSchemaApplyResult(guessedRoot, schemaApplyDryRun)
+		result.Errors = append(result.Errors, fmt.Sprintf("resolving report root: %v", err))
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
 	}
 
 	result := newSchemaApplyResult(root, schemaApplyDryRun)
@@ -683,13 +699,31 @@ func runSchemaApplyFromAnalyze(cmd *cobra.Command, data []byte) error {
 	}
 
 	if len(res.Chain) == 0 {
-		return fmt.Errorf("no .stem found for %s", report.Path)
+		result.Errors = append(result.Errors, fmt.Sprintf("no .stem found for %s", report.Path))
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
 	}
 
 	// Use the closest (leaf-most) stem file for schema modifications.
 	closestStem := res.ClosestStem()
 	if closestStem == nil {
-		return fmt.Errorf("no stem available for %s", report.Path)
+		result.Errors = append(result.Errors, fmt.Sprintf("no stem available for %s", report.Path))
+		result.seal()
+		if outputFormat == "table" {
+			if err := renderSchemaApplyTable(cmd, result); err != nil {
+				return err
+			}
+		} else if err := outputJSON(cmd, result, false); err != nil {
+			return err
+		}
+		return applyExitError(len(result.Errors), 0)
 	}
 	stemPath := closestStem.Path
 
