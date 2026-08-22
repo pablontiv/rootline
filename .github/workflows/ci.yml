@@ -29,6 +29,12 @@ jobs:
       # run and the test job never exercises the race detector, while CLAUDE.md
       # claims all three are part of CI.
       profile: full
+      # crossbeam pins v2.10.1, which is built with go1.26 and panics parsing
+      # go1.27 sources with "file requires newer Go version go1.27". The lint
+      # job resolves Go from `stable`, so the linter has to be built with at
+      # least that. Raise this whenever the runner's stable Go moves ahead of
+      # crossbeam's default again.
+      lint-version: v2.13.1
 
   gitleaks:
     uses: pablontiv/crossbeam/.github/workflows/gitleaks.yml@v1
