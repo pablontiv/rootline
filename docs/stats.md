@@ -3,7 +3,7 @@ estado: Completed
 ---
 # Statistics
 
-`rootline stats` counts records in a directory tree. Use `--where` to filter which records are included in the total.
+`rootline stats` counts records in a directory tree. Use `--where` to filter which records are included in the total. Like `query`, `tree`, `graph`, and `validate --all`, `stats` respects `scope.match` filtering defined in `.stem` files, so the count agrees with other governed commands on the same path.
 
 ## CLI Usage
 

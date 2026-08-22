@@ -92,6 +92,14 @@ Reading it:
   `schema_resolution_failed`, `stem_health_unavailable`, `no_records`.
 - A tree with no `.stem`, or one that does not parse, still emits this envelope —
   `stem-files-exist` / `yaml-valid` in `stem_health`, `scan_failed` in `notices`, exit 1.
+- A single file target whose `.stem` is missing or unparseable, and a chain where no
+  `.stem` declares the boundary, also emit the envelope: `schema_resolution_failed` in
+  `notices`, `stem_health` empty, exit 1. Parse stdout on these paths too.
+- A file target and `--all` reach the same verdict on the same tree. Naming a file never
+  relaxes governance, so validating changed files in a hook agrees with validating the
+  tree in CI.
+- Declining the interactive root-marker prompt refuses the command rather than running it,
+  so a terminal and CI reach the same verdict on the same tree.
 - `validate --staged` on an empty index emits the envelope with `summary.total: 0`, exit 0.
 
 Each issue in `results[]` includes `rule`, `field`, `message`, `source`, `severity`, and optional `suggestion`.

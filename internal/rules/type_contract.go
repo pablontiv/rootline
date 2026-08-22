@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/pablontiv/rootline/internal/extract"
 )
@@ -171,6 +172,11 @@ func representationName(value any) string {
 		return "integer"
 	case float32, float64:
 		return "number"
+	case time.Time:
+		// go-yaml resolves the YAML timestamp tag to time.Time. Naming it
+		// "mapping" — the reflect.Struct default below — points the author at
+		// a shape their document does not contain.
+		return "timestamp"
 	}
 	kind := reflect.TypeOf(value).Kind()
 	if kind == reflect.Slice || kind == reflect.Array {

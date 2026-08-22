@@ -132,7 +132,14 @@ func boundaryPreflight(cmd *cobra.Command, args []string) error {
 
 	result := rules.AttemptRootMarkerMigration(entries, target, rules.IsTerminal())
 	if result.Error != "" {
-		return errors.New(result.Error)
+		// Commands that report schema failures in their own contracts (like `validate`)
+		// should be allowed to run and emit their envelope, even when the boundary is
+		// undeclared. Other commands must fail with the preflight error.
+		if !reportsSchemaFailureItself(cmd) {
+			return errors.New(result.Error)
+		}
+		// `validate` will emit the error in its JSON envelope, so don't fail here.
+		return nil
 	}
 	if result.Applied {
 		_, _ = fmt.Fprintln(os.Stderr, "Boundary declared. Continuing.")

@@ -57,7 +57,7 @@ To establish one, add 'root: true' to <path>/.stem.
 Apply this change now? (y/n)
 ```
 
-Type `y` and rootline writes `root: true` into that `.stem`, preserving the rest of the file. Type `n` and nothing is changed.
+Type `y` and rootline writes `root: true` into that `.stem`, preserving the rest of the file. Type `n` and the command exits non-zero, refusing to run without an explicit boundary.
 
 Without a terminal (CI, hooks, scripts) rootline does not prompt — it fails with the error above so a pipeline never hangs waiting for input.
 

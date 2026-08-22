@@ -263,6 +263,7 @@ type schemaFieldDeclarationMetadata struct {
 	SourceNull     bool
 	HeadingPresent bool
 	OrderedPresent bool
+	NullField      bool // entire field was set to null in YAML
 }
 
 // schemaFieldRaw is the intermediate type for YAML unmarshaling.
@@ -310,6 +311,7 @@ func (sf *SchemaField) UnmarshalYAML(value *yaml.Node) error {
 		SourceNull:     nodes["source"] != nil && nodes["source"].Tag == "!!null",
 		HeadingPresent: nodes["heading"] != nil,
 		OrderedPresent: nodes["ordered"] != nil,
+		NullField:      value.Tag == "!!null", // entire field was set to null
 	}
 	if node := nodes["type"]; node != nil && node.Tag != "!!null" {
 		sf.Type = raw.Type
@@ -373,6 +375,47 @@ var severityOrder = map[string]int{
 	"error": 2,
 }
 
+// UnmarshalYAML implements custom YAML unmarshaling for StemFile to detect
+// null schema fields and mark them for removal.
+func (s *StemFile) UnmarshalYAML(value *yaml.Node) error {
+	// Define an intermediate struct to match StemFile but without custom unmarshaling
+	type stemFileRaw StemFile
+
+	// First, do the normal unmarshaling
+	if err := value.Decode((*stemFileRaw)(s)); err != nil {
+		return err
+	}
+
+	// Then, walk the YAML nodes to detect null schema fields
+	if value.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			key := value.Content[i]
+			val := value.Content[i+1]
+			if key.Value == "schema" && val.Kind == yaml.MappingNode {
+				// Walk the schema map and detect null fields
+				for j := 0; j+1 < len(val.Content); j += 2 {
+					fieldKey := val.Content[j]
+					fieldVal := val.Content[j+1]
+					fieldName := fieldKey.Value
+					if fieldVal.Tag == "!!null" {
+						// A child cannot remove an inherited field, so a null
+						// declaration has no meaning to honour. It is refused
+						// here rather than carried forward: a zero-valued field
+						// reaching the pipeline trips three unrelated checks
+						// (incomplete-type, a required loosening, a type change
+						// to "") and none of them names the real mistake.
+						field := s.Schema[fieldName]
+						field.declaration.NullField = true
+						s.Schema[fieldName] = field
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // ParseStem parses a .stem file from raw YAML content.
 // Unknown sections are silently ignored for forward compatibility.
 func ParseStem(path string, content []byte) (*StemFile, error) {
@@ -385,6 +428,15 @@ func ParseStem(path string, content []byte) (*StemFile, error) {
 	// Reject unsupported stem versions
 	if stem.Version == 0 || stem.Version == 1 {
 		return nil, fmt.Errorf("parsing %s: stem version %d is no longer supported — upgrade with rootline v0.x migrate --to-v2 first", path, stem.Version)
+	}
+
+	// Reject a schema field set to null. A child never removes what a parent
+	// declared, so there is nothing for null to mean here. Refusing it at the
+	// read keeps a zero-valued declaration out of the pipeline entirely.
+	for _, name := range sortedSchemaFieldNames(stem.Schema) {
+		if stem.Schema[name].declaration.NullField {
+			return nil, fmt.Errorf("parsing %s: schema field %q is null — a child .stem never removes an inherited field; if the field should not exist, remove it from the .stem that declares it", path, name)
+		}
 	}
 
 	// Tag source and default severity on schema fields

@@ -460,3 +460,56 @@ func TestMatchRecord_DomainAlias_NilAliases(t *testing.T) {
 		t.Error("expected match with nil aliases")
 	}
 }
+
+func TestMatchRecord_BuiltinTypeField(t *testing.T) {
+	rec := makeExprRecords()[0]
+	prog, err := CompileWhere("type == 'markdown'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !match {
+		t.Error("expected match for type == 'markdown'")
+	}
+}
+
+func TestMatchRecord_StringLiteralContains_DoesNotCorruptData(t *testing.T) {
+	// Regression test for #139: string literals containing "type" must match correctly
+	rec := &extract.Record{
+		Path: "a.md", Type: "markdown",
+		Frontmatter: map[string]any{"titulo": "prototype"},
+	}
+	prog, err := CompileWhere("titulo contains 'type'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !match {
+		t.Error("expected match: 'prototype' contains 'type'")
+	}
+}
+
+func TestMatchRecord_BothTypeAndStringLiteral(t *testing.T) {
+	// Verify both "type" field and string literals containing "type" work
+	rec := &extract.Record{
+		Path: "a.md", Type: "markdown",
+		Frontmatter: map[string]any{"titulo": "prototype"},
+	}
+	prog, err := CompileWhere("type == 'markdown' && titulo contains 'type'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	match, err := MatchRecord(context.Background(), prog, rec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !match {
+		t.Error("expected match for combined condition")
+	}
+}
