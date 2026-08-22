@@ -489,12 +489,18 @@ func AttemptRootMarkerMigration(entries []StemEntry, targetPath string, hasStdin
 	var response [1]byte
 	n, err := os.Stdin.Read(response[:])
 	if err != nil || n == 0 {
-		return MigrationResult{Applied: false}
+		return MigrationResult{
+			Applied: false,
+			Error:   ComposeNoDeclaredBoundaryError(strayPath, proposedDir),
+		}
 	}
 
 	if response[0] != 'y' && response[0] != 'Y' {
 		fmt.Fprintf(os.Stderr, "Skipped.\n")
-		return MigrationResult{Applied: false}
+		return MigrationResult{
+			Applied: false,
+			Error:   ComposeNoDeclaredBoundaryError(strayPath, proposedDir),
+		}
 	}
 
 	fmt.Fprintf(os.Stderr, "Applying root marker to %s/.stem...\n", proposedDir)
