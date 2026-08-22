@@ -59,9 +59,13 @@ func mergeSchemaFields(parent, child map[string]SchemaField, source string) map[
 		return parent
 	}
 	if len(parent) == 0 {
-		// Tag all child fields with source.
+		// Tag all child fields with source, filtering out null fields.
 		out := make(map[string]SchemaField, len(child))
 		for k, v := range child {
+			if v.declaration.NullField {
+				// Null field removal: skip entirely.
+				continue
+			}
 			v.Source = source
 			out[k] = v
 		}
@@ -73,6 +77,11 @@ func mergeSchemaFields(parent, child map[string]SchemaField, source string) map[
 		out[k] = v
 	}
 	for k, v := range child {
+		if v.declaration.NullField {
+			// Null field removal: delete the key.
+			delete(out, k)
+			continue
+		}
 		v.Source = source
 		if parentField, exists := out[k]; exists {
 			v = mergeFieldSource(parentField, v)

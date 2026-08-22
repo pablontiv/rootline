@@ -222,6 +222,10 @@ func resolveLayeredFromEntries(path string, entries []StemEntry) (*LayeredResolu
 func appendLayerConstraints(lr *LayeredResolution, entry StemEntry) {
 	for _, fieldName := range sortedSchemaFieldNames(entry.Stem.Schema) {
 		field := entry.Stem.Schema[fieldName]
+		// Skip null fields marked for removal.
+		if field.declaration.NullField {
+			continue
+		}
 		lr.Layers = append(lr.Layers, LayerConstraint{
 			StemPath:  entry.Path,
 			Field:     fieldName + ".type",
@@ -266,6 +270,10 @@ func validateMonotonicConstraints(parentStem, childStem *StemFile, childPath str
 	}
 	for _, fieldName := range sortedSchemaFieldNames(childStem.Schema) {
 		childField := childStem.Schema[fieldName]
+		// Skip null fields marked for removal.
+		if childField.declaration.NullField {
+			continue
+		}
 		parentField, exists := parentStem.Schema[fieldName]
 		if !exists {
 			continue

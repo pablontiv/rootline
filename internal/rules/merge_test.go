@@ -293,9 +293,8 @@ func TestMergeStemFiles_ChildOverridesRequired(t *testing.T) {
 
 func TestMerge_NullRemovesSchemaField(t *testing.T) {
 	// parent defines campo, child nullifies it via merge.
-	// Since Schema is map[string]SchemaField, null removal works via Derive/State maps.
-	// For Schema, child simply omits the field — it inherits from parent.
-	// This test verifies the Derive null-removal path with a Schema-style scenario.
+	// This test verifies the Derive null-removal path.
+	// Schema field null removal is tested separately in TestMergeStemFiles_SchemaFieldNullRemoval.
 	entries := []StemEntry{
 		stemEntry("parent/.stem", &StemFile{
 			Version: 1,
@@ -547,5 +546,89 @@ func TestMergeLinkSchema_ChildCanReenableResolve(t *testing.T) {
 
 	if !mergeLinkSchema(parent, child).ShouldResolve() {
 		t.Error("child's explicit resolve: true must win over the parent's opt-out")
+	}
+}
+
+// TestMergeStemFiles_SchemaFieldNullRemoval tests that schema: {field: null} removes the field.
+func TestMergeStemFiles_SchemaFieldNullRemoval(t *testing.T) {
+	// Parent defines 'removed' field, child nullifies it with NullField flag.
+	// The field should be deleted from the effective schema.
+	entries := []StemEntry{
+		stemEntry("parent/.stem", &StemFile{
+			Version: 2,
+			Schema: map[string]SchemaField{
+				"titulo":  {Type: "string", Required: true},
+				"removed": {Type: "string", Required: true},
+			},
+		}),
+		stemEntry("child/.stem", &StemFile{
+			Schema: map[string]SchemaField{
+				"removed": {declaration: schemaFieldDeclarationMetadata{NullField: true}},
+			},
+		}),
+	}
+
+	result := MergeStemFiles(entries)
+	if len(result.Schema) != 1 {
+		t.Fatalf("schema len = %d, want 1 (removed field should be deleted)", len(result.Schema))
+	}
+	if _, exists := result.Schema["removed"]; exists {
+		t.Error("removed field should have been deleted by null")
+	}
+	if _, exists := result.Schema["titulo"]; !exists {
+		t.Error("titulo field should still exist")
+	}
+}
+
+// TestMergeStemFiles_SchemaFieldNullRemovalWithYAMLParsing verifies end-to-end YAML parsing and null removal.
+func TestMergeStemFiles_SchemaFieldNullRemovalWithYAMLParsing(t *testing.T) {
+	// This test verifies the documented null-removal syntax works end-to-end.
+	// Parent .stem file
+	parentYAML := `version: 2
+root: true
+scope:
+  match: "*.md"
+schema:
+  titulo:
+    type: string
+    required: true
+  removed:
+    type: string
+    required: true
+`
+
+	// Child .stem file with null removal
+	childYAML := `version: 2
+scope:
+  match: "*.md"
+schema:
+  removed: null
+`
+
+	parentStem, err := ParseStem("parent/.stem", []byte(parentYAML))
+	if err != nil {
+		t.Fatalf("parsing parent stem: %v", err)
+	}
+
+	childStem, err := ParseStem("child/.stem", []byte(childYAML))
+	if err != nil {
+		t.Fatalf("parsing child stem: %v", err)
+	}
+
+	// Merge
+	result := MergeStemFiles([]StemEntry{
+		{Path: "parent/.stem", Stem: parentStem},
+		{Path: "child/.stem", Stem: childStem},
+	})
+
+	// Verify: only titulo should remain, removed should be gone.
+	if len(result.Schema) != 1 {
+		t.Fatalf("schema len = %d, want 1 (removed field should be deleted)", len(result.Schema))
+	}
+	if _, exists := result.Schema["removed"]; exists {
+		t.Error("removed field should have been deleted by null")
+	}
+	if _, exists := result.Schema["titulo"]; !exists {
+		t.Error("titulo field should still exist")
 	}
 }
