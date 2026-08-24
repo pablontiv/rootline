@@ -44,6 +44,10 @@ type BatchFixResult struct {
 	// data-repair contract, but staying silent about a defect validate does
 	// report made a clean fix followed by a failing validate read as a bug.
 	LinkFindings []proposal.LinkFinding `json:"link_findings,omitempty"`
+
+	// TypeFindings reports representation mismatches fix cannot repair safely.
+	// They are observations, not failed writes; validate owns corpus validity.
+	TypeFindings []proposal.TypeFinding `json:"type_findings,omitempty"`
 }
 
 // FixSummary holds aggregate counts for batch fix.
@@ -287,6 +291,7 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 		batch.Complete = &complete
 		batch.Errors = append(batch.Errors, resolutionErrors...)
 		batch.LinkFindings = linkFindings
+		batch.TypeFindings = report.TypeFindings
 		return emitFixResult(cmd, batch)
 	}
 
@@ -297,6 +302,7 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 				return err
 			}
 			renderLinkFindings(cmd, report.LinkFindings)
+			renderTypeFindings(cmd, report.TypeFindings)
 			return nil
 		}
 		return outputJSON(cmd, report, false)
@@ -323,6 +329,7 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 	}
 	batch.SkippedProposals = skippedProposals
 	batch.LinkFindings = linkFindings
+	batch.TypeFindings = report.TypeFindings
 
 	return emitFixResult(cmd, batch)
 }
@@ -539,6 +546,21 @@ func renderLinkFindings(cmd *cobra.Command, findings []proposal.LinkFinding) {
 	}
 }
 
+// renderTypeFindings prints representation problems fix reported but did not repair.
+// Shared by the dry-run preview and the applied run so operators can distinguish
+// successful repair execution from remaining corpus validity issues.
+func renderTypeFindings(cmd *cobra.Command, findings []proposal.TypeFinding) {
+	if len(findings) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Type findings: %d (reported, not repaired)\n", len(findings))
+	for _, finding := range findings {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s: %s (%s)\n",
+			finding.Path, finding.Field, finding.Message, finding.ActualRepresentation)
+	}
+}
+
 func renderProposalTable(cmd *cobra.Command, report *proposal.Report) error {
 	headers := []string{"Type", "Field", "Description", "Files"}
 	var rows [][]string
@@ -597,6 +619,7 @@ func renderFixTable(cmd *cobra.Command, batch *BatchFixResult) error {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "To apply schema changes, use 'rootline schema propose' or manually edit .stem files.")
 	}
 	renderLinkFindings(cmd, batch.LinkFindings)
+	renderTypeFindings(cmd, batch.TypeFindings)
 
 	if len(batch.Errors) > 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
