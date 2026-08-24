@@ -66,6 +66,9 @@ func TestMarkdownExtractorEmptyFrontmatterRemainsValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
 	}
+	if rec.Frontmatter == nil {
+		t.Fatal("empty frontmatter must remain a non-nil map")
+	}
 	if len(rec.Errors) != 0 || len(rec.Frontmatter) != 0 || len(rec.FrontmatterScalars) != 0 {
 		t.Fatalf("empty frontmatter changed contract: %#v", rec)
 	}

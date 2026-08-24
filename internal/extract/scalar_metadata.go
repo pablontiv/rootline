@@ -47,6 +47,9 @@ func decodeFrontmatter(content string) (map[string]any, map[string]FrontmatterSc
 	if err := doc.Decode(&frontmatter); err != nil {
 		return nil, nil, err
 	}
+	if frontmatter == nil {
+		frontmatter = make(map[string]any)
+	}
 
 	scalars, err := collectFrontmatterScalars(&doc)
 	if err != nil {
