@@ -65,7 +65,11 @@ func TestApplyRepairTypeGuardRejectsStaleOrUnknownEvidence(t *testing.T) {
 		{name: "changed lexeme", valueLine: "+42", from: "42", representation: "integer"},
 		{name: "changed representation", valueLine: "true", from: "true", representation: "integer"},
 		{name: "unknown marker", valueLine: "42", from: "42", representation: "number"},
-		{name: "quoted string", valueLine: `"42"`, from: "42", representation: "integer"},
+		{name: "quoted integer", valueLine: `"42"`, from: "42", representation: "integer"},
+		{name: "quoted signed integer", valueLine: `"+42"`, from: "+42", representation: "integer"},
+		{name: "quoted leading-zero integer", valueLine: `"042"`, from: "042", representation: "integer"},
+		{name: "quoted boolean", valueLine: `"TRUE"`, from: "TRUE", representation: "boolean"},
+		{name: "quoted timestamp", valueLine: `"2026-06-22T00:00:00Z"`, from: "2026-06-22T00:00:00Z", representation: "timestamp"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -107,20 +111,21 @@ func TestApplyRepairLegacyCorrectValueRemainsStrict(t *testing.T) {
 	}
 }
 
-func TestApplyRepairTypeRepresentationIsIdempotent(t *testing.T) {
+func TestApplyRepairTypeRepresentationReapplyRejectsAlreadyQuoted(t *testing.T) {
 	cases := []struct {
 		line, from, representation, quoted string
 	}{
 		{"2026-06-22T00:00:00Z", "2026-06-22T00:00:00Z", "timestamp", `"2026-06-22T00:00:00Z"`},
 		{"TRUE", "TRUE", "boolean", `"TRUE"`},
 		{"+42", "+42", "integer", `"+42"`},
+		{"042", "042", "integer", `"042"`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.representation+"/"+tc.from, func(t *testing.T) {
 			dir := writeTypeRepairFixture(t, tc.line)
 			p := typeRepairProposal(tc.from, tc.representation)
 			first, err := ApplyRepair([]proposal.Proposal{p}, false, dir, false)
-			if err != nil || len(first.Changed) != 1 {
+			if err != nil || len(first.Changed) != 1 || len(first.Skipped) != 0 || len(first.Rejected) != 0 {
 				t.Fatalf("first apply: result=%#v err=%v", first, err)
 			}
 			firstBytes, err := os.ReadFile(filepath.Join(dir, "a.md"))
@@ -131,7 +136,7 @@ func TestApplyRepairTypeRepresentationIsIdempotent(t *testing.T) {
 				t.Fatalf("exact quote missing:\n%s", firstBytes)
 			}
 			second, err := ApplyRepair([]proposal.Proposal{p}, false, dir, false)
-			if err != nil || len(second.Changed) != 0 || len(second.Skipped) != 1 {
+			if err != nil || len(second.Changed) != 0 || len(second.Skipped) != 0 || len(second.Rejected) != 1 {
 				t.Fatalf("second apply: result=%#v err=%v", second, err)
 			}
 			secondBytes, err := os.ReadFile(filepath.Join(dir, "a.md"))

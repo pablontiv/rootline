@@ -423,43 +423,6 @@ func proposalSourceMatches(record *extract.Record, current any, p *proposal.Prop
 		scalar.Lexeme == p.From
 }
 
-func proposalAlreadyApplied(record *extract.Record, current any, p *proposal.Proposal) bool {
-	if !proposalValueMatches(current, p.To) {
-		return false
-	}
-	if p.FromRepresentation == "" {
-		return true
-	}
-	if !extract.IsRepairableScalarRepresentation(p.FromRepresentation) {
-		return false
-	}
-	if _, ok := record.FrontmatterScalars[p.Field]; ok {
-		return false
-	}
-	return representationRepairHasDistinctQuotedState(p.FromRepresentation, p.From)
-}
-
-func representationRepairHasDistinctQuotedState(representation, lexeme string) bool {
-	switch representation {
-	case "timestamp", "boolean":
-		return true
-	case "integer":
-		return integerLexemeHasDistinctQuotedState(lexeme)
-	default:
-		return false
-	}
-}
-
-func integerLexemeHasDistinctQuotedState(lexeme string) bool {
-	if lexeme == "" {
-		return false
-	}
-	if lexeme[0] == '+' || lexeme[0] == '-' {
-		return true
-	}
-	return len(lexeme) > 1 && lexeme[0] == '0'
-}
-
 // applyRepairCorrectValue updates a field value in a record's frontmatter.
 func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTarget, result *RepairResult, dryRun bool) error {
 	for _, path := range p.Paths {
@@ -470,7 +433,7 @@ func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTar
 
 		current, exists := tgt.record.Frontmatter[p.Field]
 		switch {
-		case exists && proposalAlreadyApplied(tgt.record, current, p):
+		case exists && p.FromRepresentation == "" && proposalValueMatches(current, p.To):
 			result.Skipped = append(result.Skipped,
 				fmt.Sprintf("%s already %q in %s", p.Field, p.To, path))
 			continue
