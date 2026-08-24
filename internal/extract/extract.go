@@ -12,7 +12,6 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	gmtext "github.com/yuin/goldmark/text"
-	"gopkg.in/yaml.v3"
 )
 
 // Extractor extracts structured metadata and body text from file content.
@@ -27,16 +26,17 @@ type Extractor interface {
 // Record is the universal output of all extractors and the universal input
 // to validation, derivation, and query.
 type Record struct {
-	Path         string            `json:"path"`
-	Type         string            `json:"type"`
-	Frontmatter  map[string]any    `json:"frontmatter"`
-	Body         string            `json:"body"`
-	Sections     map[string]string `json:"sections,omitempty"`
-	BodySections []Section         `json:"body_sections,omitempty"`
-	AST          ast.Node          `json:"-"`
-	Links        []Link            `json:"links,omitempty"`
-	Derived      map[string]any    `json:"derived,omitempty"`
-	Errors       []ExtractionError `json:"errors,omitempty"`
+	Path               string                       `json:"path"`
+	Type               string                       `json:"type"`
+	Frontmatter        map[string]any               `json:"frontmatter"`
+	FrontmatterScalars map[string]FrontmatterScalar `json:"-"`
+	Body               string                       `json:"body"`
+	Sections           map[string]string            `json:"sections,omitempty"`
+	BodySections       []Section                    `json:"body_sections,omitempty"`
+	AST                ast.Node                     `json:"-"`
+	Links              []Link                       `json:"links,omitempty"`
+	Derived            map[string]any               `json:"derived,omitempty"`
+	Errors             []ExtractionError            `json:"errors,omitempty"`
 }
 
 // EffectiveField returns the effective value for a field name.
@@ -101,13 +101,18 @@ func (m *MarkdownExtractor) Extract(path string, content []byte) (*Record, error
 
 	// Parse YAML frontmatter.
 	fmContent := text[fmStart:fmEnd]
-	if err := yaml.Unmarshal([]byte(fmContent), &record.Frontmatter); err != nil {
+	frontmatter, scalars, err := decodeFrontmatter(fmContent)
+	if err != nil {
 		record.Errors = append(record.Errors, ExtractionError{
 			Line:    1,
 			Message: fmt.Sprintf("malformed YAML frontmatter: %v", err),
 		})
 		// Line-by-line fallback.
 		record.Frontmatter = fallbackParseFrontmatter(fmContent)
+		record.FrontmatterScalars = nil
+	} else {
+		record.Frontmatter = frontmatter
+		record.FrontmatterScalars = scalars
 	}
 
 	// Body is everything after closing delimiter.
