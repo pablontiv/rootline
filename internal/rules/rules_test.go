@@ -3,6 +3,7 @@ package rules
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -735,5 +736,56 @@ links:
 	}
 	if len(stem.Links.UnknownCheckKeys) != 0 {
 		t.Errorf("UnknownCheckKeys = %v, want empty", stem.Links.UnknownCheckKeys)
+	}
+}
+
+func TestLinkSchema_UnknownRuleKeysCapturedOrderedAndExcludingValidKeys(t *testing.T) {
+	src := `
+links:
+  blocks:
+    target: "../tasks/*.md"
+    targte: "../tasks/*.md"
+    field: blocked_by
+    valeu_field: blocked_by
+    value_field: blocked_by
+    custom: true
+  references:
+    field: refs
+    feld: refs
+`
+	var stem StemFile
+	if err := yaml.Unmarshal([]byte(src), &stem); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	meta := reflect.ValueOf(stem.Links).FieldByName("UnknownRuleKeys")
+	if !meta.IsValid() {
+		t.Fatal("LinkSchema must capture ordered unknown keys for links.<type> rules")
+	}
+
+	got := make([]string, 0, meta.Len())
+	for i := 0; i < meta.Len(); i++ {
+		entry := meta.Index(i)
+		ruleType := entry.FieldByName("RuleType")
+		key := entry.FieldByName("Key")
+		if !ruleType.IsValid() || !key.IsValid() {
+			t.Fatalf("unknown rule key metadata entry %d must expose RuleType and Key fields", i)
+		}
+		got = append(got, ruleType.String()+"."+key.String())
+	}
+
+	want := []string{
+		"blocks.targte",
+		"blocks.valeu_field",
+		"blocks.custom",
+		"references.feld",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("unknown rule key metadata length = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unknown rule key metadata[%d] = %q, want %q (full=%v)", i, got[i], want[i], got)
+		}
 	}
 }

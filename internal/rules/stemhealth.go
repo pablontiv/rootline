@@ -17,6 +17,8 @@ const (
 	SeverityError = "error"
 	SeverityWarn  = "warn"
 	SeverityInfo  = "info"
+
+	unknownLinkRuleKeysCheckName = "unknown-link-rule-keys"
 )
 
 // StemHealthCheck represents a single stem-health diagnostic result.
@@ -418,7 +420,25 @@ func EvaluateStemState(ctx context.Context, state *StemState) (*StemHealthResult
 		}
 	}
 
-	// Check 12: nested-root-marker (INFO level)
+	// Check 12: unknown keys under links.<type> rules (silently inert otherwise)
+	for _, sf := range sortedStemPaths(parsedStems) {
+		stem := parsedStems[sf]
+		for _, unknown := range stem.Links.UnknownRuleKeys {
+			msg := fmt.Sprintf("unknown key %q in links.%s", unknown.Key, unknown.RuleType)
+			if match := fuzzy.Match(unknown.Key, knownLinkRuleKeys); match != "" {
+				msg += fmt.Sprintf(" (did you mean %q?)", match)
+			}
+			checks = append(checks, StemHealthCheck{
+				Name:    unknownLinkRuleKeysCheckName,
+				Status:  "warn",
+				Message: msg,
+				Path:    stemHealthRelPath(absRoot, sf),
+				Field:   unknown.Key,
+			})
+		}
+	}
+
+	// Check 13: nested-root-marker (INFO level)
 	// Detect when a directory declares root: true and has an ancestor also with root: true
 	for _, sf := range sortedStemPaths(parsedStems) {
 		stem := parsedStems[sf]
