@@ -76,8 +76,7 @@ Hooks live in `.githooks/` and are activated with `git config core.hooksPath .gi
 |------|-------------|
 | `pre-commit` | gofmt check + golangci-lint + gitleaks secret scan |
 | `commit-msg` | Validates conventional commit format |
-| `pre-push` | Validates docs/epics, checks code-docs drift, syncs skills, rebuilds binary |
-| `post-merge` | Syncs skills, rebuilds binary, propagates doc aggregates |
+| `pre-push` | Validates docs/roadmap changes, code-docs drift/coverage gates, syncs skills; no binary installation |
 
 ## Quality Gates
 
