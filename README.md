@@ -450,7 +450,7 @@ go vet ./...                      # Static analysis
 golangci-lint run ./...           # Full lint
 ```
 
-Pre-commit hooks run `golangci-lint` and `gofmt` automatically. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): description`), enforced by a commit-msg hook. The post-merge hook syncs skills and rebuilds after pulling; pre-push keeps validation and skill synchronization without installing an unmerged branch build. Run `just install` when you explicitly want to install the current checkout.
+Pre-commit hooks run `golangci-lint` and `gofmt` automatically. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): description`), enforced by a commit-msg hook. Pre-push keeps validation and skill synchronization without installing an unmerged branch build. Run `just install` explicitly when you want to install the current checkout.
 
 **Note**: Git workflow is contributor-only; Rootline itself does not require Git.
 
