@@ -105,4 +105,4 @@ For `source: body.section["## Notes"]`, `set notes=override` writes a frontmatte
 
 ## Notes
 
-- YAML AST preservation: when writing frontmatter, Rootline uses the YAML AST parser to preserve existing comments and formatting.
+- YAML node rewriting preserves comments and key order where possible, but normalizes inter-token whitespace, inline-comment spacing, and nested indentation.

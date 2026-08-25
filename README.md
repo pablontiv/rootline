@@ -350,7 +350,7 @@ rootline fix doc.md --dry-run    # Preview proposed changes
 rootline fix --all               # Fix all files in scope
 ```
 
-Proposals include: correct misspelled enum values (Levenshtein matching), extend `.stem` enums for new valid values, migrate values with wiki-link insertion, and infer fields from child documents.
+Proposals include: correct misspelled enum values (Levenshtein matching), withheld `.stem` enum-extension suggestions for review, migrate values with wiki-link insertion, and aggregate propagation when configured.
 
 ### Explain
 

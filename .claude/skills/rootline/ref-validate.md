@@ -194,12 +194,37 @@ Use `fix` to apply Rootline proposals. Always preview first.
 {
   "version": 1,
   "kind": "rootline/proposals",
-  "proposals": [],
-  "summary": {}
+  "path": "docs/",
+  "root": "/abs/path/to/docs",
+  "proposals": null,
+  "schema_suggestions": [
+    { "type": "extend_enum", "field": "estado", "paths": ["a.md"], "value": "Blocked" }
+  ],
+  "summary": {
+    "total": 1,
+    "extend_enum": 1,
+    "migrate_value": 0,
+    "correct_value": 0,
+    "extract_body": 0,
+    "infer_from_children": 0,
+    "add_field": 0,
+    "infer_from_siblings": 0,
+    "correct_outlier": 0,
+    "correct_link": 0,
+    "add_aggregate": 0,
+    "remove_stem_field": 0,
+    "propagate_aggregate": 0,
+    "schema_evolution": 0,
+    "remove_field": 0,
+    "loosen_required": 0,
+    "change_type": 0,
+    "replace_enum_values": 0,
+    "loosen_severity": 0
+  }
 }
 ```
 
-`type_findings` is omitted when empty; when present, treat it as unresolved validation work.
+`proposals` is `null` when no data repairs are available. `schema_suggestions` is an array in dry-run JSON when schema work is withheld; apply JSON reports it as an integer count. `type_findings` is omitted when empty; when present, treat it as unresolved validation work.
 
 ### Batch Apply JSON
 
@@ -232,7 +257,7 @@ For a file target, replace each `--all <dir>` command with the file form shown a
 
 ### Mutation Scope
 
-`fix --all` may update documents and `.stem` files through proposals such as `add_field`, `correct_value`, `migrate_value`, `extend_enum`, `remove_stem_field`, `add_aggregate`, and `propagate_aggregate`. Report this scope before applying unless the user already authorized repairs.
+`fix --all` writes document frontmatter only through data-repair proposals such as `add_field`, `correct_value`, `migrate_value`, `extract_body`, `set_field`, `set_section`, and `propagate_aggregate`. It never writes `.stem` files; schema-surface work (`extend_enum`, `remove_stem_field`, `add_aggregate`) is withheld in `schema_suggestions` for `schema apply` or manual review. Report document-mutation scope before applying unless the user already authorized repairs.
 
 ### Missing required fields are reported, not invented
 

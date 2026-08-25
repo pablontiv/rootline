@@ -65,7 +65,7 @@ anything, in any section — not `schema:`, not `derive:`, not `aggregate:`.
 | Intent | Command | Canonical form |
 |---|---|---|
 | Validate files | `validate` | file: `rootline validate file.md -o json`; dir/all: `rootline validate --all <dir> -o json` |
-| Repair validation issues | `fix` | dir/all: `rootline fix --all <dir> --dry-run -o json > <dir>/repairs.json` (save inside `<dir>`: `repair apply` resolves record paths relative to the report's directory); file: `rootline fix file.md --dry-run` |
+| Repair validation issues | `fix` | dir/all: `rootline fix --all <dir> --dry-run -o json > repairs.json` (`repair apply` resolves paths by `--root`, then report `root`, then report `path`, then the report directory for legacy reports); file: `rootline fix file.md --dry-run` |
 | Inspect schema | `describe` | `rootline describe <path> -o json` |
 | Create document | `new` | `rootline new <file.md> --dry-run` then `rootline new <file.md>` |
 | Set fields | `set` | `rootline set --dry-run file.md field=value` then apply without `--dry-run` |

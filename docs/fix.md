@@ -60,13 +60,19 @@ Rootline categorizes issues into specific proposal types to preserve semantic me
 | **add_field** | Adds a missing required field with a default or inferred value | Adding `estado: Pending` to a file without it |
 | **infer_from_siblings** | Uses statistical majority of a directory to fill missing values | Setting `tipo: software` because 90% of files are software |
 | **correct_outlier** | Identifies values that differ from a strong consensus in a folder | Flagging a task as "manual" in a "deploy" folder |
-| **infer_from_children** | Rolls up status from child records to an index file | README becomes "Completed" if all tasks are done |
-| **correct_link** | Fixes broken wiki-links by resolving to the closest valid target | `[[T099]]` → `[[T001]]` |
-| **add_aggregate** | Generates aggregate expressions for index files missing them | Adding `estado: len(filter(...))` to README |
+| **infer_from_children** | Historical type retained in the JSON counters, but no detector currently emits it; configure parent rollups with `.stem` `aggregate:` expressions instead | Summary counter remains `0` |
+| **correct_link** | Historical proposal type; current `fix` reports link problems under `link_findings` and does not rewrite link bodies | Human reviews the `link_resolve` suggestion |
+| **add_aggregate** | Schema-surface suggestion to add an aggregate expression to a `.stem`; current generation uses a conservative quoted default, not semantic `len(filter(...))` logic | Adding `estado: "Completed"` to `.stem` for review |
 | **remove_stem_field** | Removes invalid fields from `.stem` detected by stem health checks | Removing a field that references a non-existent type |
 | **propagate_aggregate** | Detects stale aggregate values in index files and corrects them | Updating `completed` count after child status changes |
-| **set_field** | Sets a frontmatter field to a specific value via the `rootline set` pipeline | Setting `estado: Completed` after all children are done |
-| **set_section** | Sets or replaces a section body via the `rootline set` pipeline | Populating an empty `## Summary` section with inferred content |
+| **set_field** | Sets a frontmatter field to a specific value via the `rootline set` pipeline | Setting `estado: Completed` explicitly |
+| **set_section** | Sets, appends to, or creates a section body via the `rootline set` pipeline | Replacing `## Summary` with inferred content |
+| **schema_evolution** | Explicit migration marker for destructive schema evolution | Recording a reviewed incompatible schema change |
+| **remove_field** | Explicit field removal from schema during migration | Removing a deprecated schema field |
+| **loosen_required** | Explicit required→optional change during migration | Making `owner` optional |
+| **change_type** | Explicit incompatible type change during migration | Changing `priority` from string to integer |
+| **replace_enum_values** | Explicit replacement of an enum's value set during migration | Replacing legacy lifecycle values |
+| **loosen_severity** | Explicit validation-severity reduction during migration | Lowering a rule from error to warning |
 
 ## Proposal Struct
 
@@ -83,7 +89,7 @@ Each proposal in the output has the following fields:
 | `value_source` | string | Optional provenance for `add_field` values (`schema_default`, `enum_first`, or `empty`) |
 | `from_representation` | string | Optional evidence for type representation repairs (`timestamp`, `boolean`, or `integer`) |
 | `heading` | string | For `set_section` proposals: the Markdown heading to mutate |
-| `mode` | string | For `set_section` proposals: `set` (replace) or `append` |
+| `mode` | string | For `set_section` proposals: `replace` (default), `append`, or `create` |
 
 `heading` and `mode` are only populated on `set_section` proposals. `set_field` reuses the existing `applySetField` pipeline from `rootline set`.
 
@@ -96,11 +102,11 @@ Rootline provides **three separate commands** for different repair scenarios. Ch
 **Deprecated.** Use `rootline repair apply` instead (see below).
 
 ```bash
-rootline fix --all --dry-run   # Preview proposals (data-only)
-rootline fix --all             # Apply data-only repairs
+rootline fix --all --dry-run   # Preview data repairs and withheld schema suggestions
+rootline fix --all             # Apply data-only repairs to documents
 ```
 
-`fix` combines proposal generation and application in one step. It applies only **data-only repairs** to frontmatter and skips schema-surface proposals, which appear in the `schema_suggestions` field of the output.
+`fix` combines proposal generation and application in one step. It writes document frontmatter only. Schema-surface proposals such as `extend_enum`, `add_aggregate`, and `remove_stem_field` are withheld for review: in dry-run JSON they appear as a `schema_suggestions` array, while apply JSON reports a `schema_suggestions` integer count.
 
 ### 2. `rootline repair apply` — Data-Only Bulk Repair (Current)
 
@@ -173,7 +179,7 @@ failing run stays machine-readable; the short `Error: apply failed: ...` line go
 |---------|-------|------|-----|
 | Applied cleanly | `changed[]` | `0` | The command did what it was asked. |
 | Refused on policy | `rejected[]` | `0` | A deliberate refusal, already reported — a containment violation, a schema proposal handed to `repair apply`, an existing `.stem` without `--force`. |
-| Deferred | `skipped[]` | `0` | Nothing was attempted; `requires_agent` work is left for a human. |
+| Deferred | `skipped[]` | `0` | Nothing was attempted; for `schema apply` this includes `requires_agent` work, while for `repair apply` it includes engine-chosen missing-field values withheld unless `--fill-missing` is passed. |
 | Could not be done | `errors[]` | `1` | An unreadable path, a failed write, an unresolvable target. |
 | Written, then reverted | `rolled_back[]` | `1` | Post-validation rejected the result and the pre-write bytes were restored. The caller asked for a change that could not be made, so a tidy revert is still a failure. |
 
@@ -252,7 +258,7 @@ is already correct. Take a `--dry-run` first if you want to see what remains.
 - set_field
 - set_section
 
-Schema proposals (extend_enum, add_aggregate, remove_stem_field) are **silently rejected** — use `rootline schema apply` instead.
+Schema proposals (extend_enum, add_aggregate, remove_stem_field) are rejected visibly in `rejected[]` — use `rootline schema apply` instead.
 
 **Path containment.** A report is untrusted input, so every path it names is checked against
 the scan root before any file is opened. A path that escapes the root — `../../../etc/shadow`
@@ -289,7 +295,9 @@ write would have landed and why any were refused before committing to the run:
 
 Flags:
 - `--dry-run` — Preview changes without modifying files
+- `--fill-missing` — Also apply `add_field` proposals whose value was engine-chosen rather than schema-declared
 - `--report <file>` — Path to proposals JSON file (required)
+- `--root <dir>` — Absolute scan-root override; takes precedence over report `root`/`path`
 
 ### 3. `rootline schema apply` — Schema Mutation
 
@@ -316,7 +324,7 @@ rootline schema apply --report proposals.json
 - create_stem
 - extend_enum (analyze path only)
 
-Data-only repairs (correct_value, add_field, etc.) are **ignored** — use `rootline repair apply` instead.
+Data-only repairs (correct_value, add_field, etc.) are rejected visibly in `rejected[]` — use `rootline repair apply` instead.
 
 **What propose proposes is what apply writes.** Each `create_stem` proposal carries a `patch`
 field holding the complete inferred YAML, and `schema apply` writes those bytes verbatim. It does
@@ -341,17 +349,16 @@ target is checked against the scan root before a `.stem` is written, so a report
 staying valid — they are accepted and then confined, not refused outright. That is the one
 difference from `repair apply`, which rejects absolute paths as malformed input.
 
-The second difference is where refusals land. `schema apply` has a `rejected[]` field for policy refusals (overwrite without `--force`, unknown operations) and `errors[]` for operational failures (containment violations, scan errors):
+The second difference is where refusals land. `schema apply` reports policy refusals such as overwrite without `--force`, unknown operations, and containment violations in `rejected[]`; operational failures such as scan or write errors remain in `errors[]`:
 
 ```bash
 rootline schema apply --report proposals.json
 # rejected: ".stem already exists in /docs (use --force to overwrite)"
 # OR
-# errors: containment violation: path "/tmp/outside/.stem" escapes root (root "/abs/scan")
+# rejected: containment violation: path "/tmp/outside/.stem" escapes root (root "/abs/scan")
 ```
 
-With `--dry-run`, the output carries the same additive `resolved_targets` envelope that
-`repair apply` emits, so you can see where each `.stem` would land before writing:
+With schema-proposals reports, `--dry-run` carries an additive `resolved_targets` envelope so you can see where each `.stem` would land before writing. Analyze-report dry runs do not emit this key: they plan directly from in-memory inferences and report accepted/skipped actions instead.
 
 ```json
 {
@@ -366,7 +373,9 @@ With `--dry-run`, the output carries the same additive `resolved_targets` envelo
 
 Flags:
 - `--dry-run` — Preview changes without modifying files
-- `--report <file>` — Path to proposals JSON file (required)
+- `--force` — Overwrite existing `.stem` files when applying `create_stem` proposals
+- `--report <file>` — Path to schema proposals report JSON file (required)
+- `--root <dir>` — Absolute scan-root override; takes precedence over report `root`/`path`
 
 ## When to Use Each
 
@@ -380,7 +389,7 @@ Flags:
 
 ## YAML AST Preservation
 
-When Rootline modifies a `.stem` or a frontmatter block, it uses a YAML AST (Abstract Syntax Tree) parser. This **preserves your comments and formatting** while updating the data.
+When Rootline modifies a `.stem` or a frontmatter block, it rewrites through YAML nodes so comments and key order are preserved where possible. Inter-token whitespace, inline-comment spacing, and nested indentation are normalized by the YAML encoder; do not expect byte-identical formatting outside the edited value.
 
 ## Sibling Inference Logic
 
