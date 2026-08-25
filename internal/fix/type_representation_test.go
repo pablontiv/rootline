@@ -1,12 +1,15 @@
 package fix
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/proposal"
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 func writeTypeRepairFixture(t *testing.T, valueLine string) string {
@@ -27,6 +30,112 @@ func typeRepairProposal(from, representation string) proposal.Proposal {
 	return proposal.Proposal{
 		Type: proposal.CorrectValue, Field: "value", Paths: []string{"a.md"},
 		From: from, To: from, FromRepresentation: representation,
+	}
+}
+
+func assertTypeRepairFileValid(t *testing.T, dir string) {
+	t.Helper()
+	path := filepath.Join(dir, "a.md")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := (&extract.MarkdownExtractor{}).Extract("a.md", content)
+	if err != nil {
+		t.Fatalf("Extract after repair: %v", err)
+	}
+	effective, err := rules.ResolveForRecord(dir, "a.md")
+	if err != nil {
+		t.Fatalf("ResolveForRecord after repair: %v", err)
+	}
+	if errs := rules.Validate(context.Background(), record, effective); len(errs) != 0 {
+		t.Fatalf("post-repair validation errors = %#v", errs)
+	}
+}
+
+func TestApplyRepairDuplicateTypedProposalInvalidatesScalarEvidence(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		t.Run(map[bool]string{true: "dry-run", false: "real"}[dryRun], func(t *testing.T) {
+			dir := writeTypeRepairFixture(t, "042")
+			p := typeRepairProposal("042", "integer")
+			result, err := ApplyRepair([]proposal.Proposal{p, p}, dryRun, dir, false)
+			if err != nil {
+				t.Fatalf("ApplyRepair: %v", err)
+			}
+			if len(result.Changed) != 1 || len(result.Rejected) != 1 || len(result.Skipped) != 0 || len(result.RolledBack) != 0 {
+				t.Fatalf("result = %#v", result)
+			}
+
+			content, err := os.ReadFile(filepath.Join(dir, "a.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if dryRun {
+				want := "---\nvalue: 042\n---\n# Probe\n"
+				if string(content) != want {
+					t.Fatalf("dry-run changed bytes\nwant:\n%s\ngot:\n%s", want, content)
+				}
+				return
+			}
+
+			want := "---\nvalue: \"042\"\n---\n# Probe\n"
+			if string(content) != want {
+				t.Fatalf("real run bytes\nwant:\n%s\ngot:\n%s", want, content)
+			}
+			assertTypeRepairFileValid(t, dir)
+		})
+	}
+}
+
+func TestApplyRepairRejectsMalformedTypedProposalContracts(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(proposal.Proposal) proposal.Proposal
+	}{
+		{
+			name: "migrate value cannot carry representation marker",
+			mutate: func(p proposal.Proposal) proposal.Proposal {
+				p.Type = proposal.MigrateValue
+				return p
+			},
+		},
+		{
+			name: "correct value marker cannot change text",
+			mutate: func(p proposal.Proposal) proposal.Proposal {
+				p.To = "43"
+				return p
+			},
+		},
+		{
+			name: "unknown marker is not accepted",
+			mutate: func(p proposal.Proposal) proposal.Proposal {
+				p.FromRepresentation = "number"
+				return p
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := writeTypeRepairFixture(t, "42")
+			before, err := os.ReadFile(filepath.Join(dir, "a.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := ApplyRepair([]proposal.Proposal{tc.mutate(typeRepairProposal("42", "integer"))}, false, dir, false)
+			if err != nil {
+				t.Fatalf("ApplyRepair: %v", err)
+			}
+			if len(result.Rejected) != 1 || len(result.Changed) != 0 || len(result.Skipped) != 0 || len(result.RolledBack) != 0 {
+				t.Fatalf("result = %#v", result)
+			}
+			after, err := os.ReadFile(filepath.Join(dir, "a.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(after) != string(before) {
+				t.Fatalf("rejected malformed typed proposal modified bytes\nbefore:\n%s\nafter:\n%s", before, after)
+			}
+		})
 	}
 }
 

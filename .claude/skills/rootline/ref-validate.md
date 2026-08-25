@@ -195,10 +195,11 @@ Use `fix` to apply Rootline proposals. Always preview first.
   "version": 1,
   "kind": "rootline/proposals",
   "proposals": [],
-  "type_findings": [],
   "summary": {}
 }
 ```
+
+`type_findings` is omitted when empty; when present, treat it as unresolved validation work.
 
 ### Batch Apply JSON
 
@@ -207,7 +208,6 @@ Use `fix` to apply Rootline proposals. Always preview first.
   "version": 1,
   "kind": "rootline/fix-batch",
   "results": [],
-  "type_findings": [],
   "summary": { "total": 10, "fixed": 3, "skipped": 7 }
 }
 ```

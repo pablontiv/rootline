@@ -189,6 +189,10 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string, fillMi
 		if len(p.Paths) == 0 {
 			continue
 		}
+		if !typedProposalContractOK(&p) {
+			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: invalid typed repair contract", p.Field))
+			continue
+		}
 
 		// Apply based on proposal type.
 		switch p.Type {
@@ -410,6 +414,22 @@ func proposalValueMatches(current any, expected string) bool {
 	return reflect.DeepEqual(current, expected)
 }
 
+func typedProposalContractOK(p *proposal.Proposal) bool {
+	if p.FromRepresentation == "" {
+		return true
+	}
+	return p.Type == proposal.CorrectValue &&
+		p.To == p.From &&
+		extract.IsRepairableScalarRepresentation(p.FromRepresentation)
+}
+
+func invalidateFrontmatterScalar(record *extract.Record, field string) {
+	if record == nil || record.FrontmatterScalars == nil {
+		return
+	}
+	delete(record.FrontmatterScalars, field)
+}
+
 func proposalSourceMatches(record *extract.Record, current any, p *proposal.Proposal) bool {
 	if p.FromRepresentation == "" {
 		return proposalValueMatches(current, p.From)
@@ -450,6 +470,9 @@ func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTar
 			result.Changed = append(result.Changed,
 				fmt.Sprintf("correct %s: %q->%q in %s", p.Field, p.From, p.To, path))
 			tgt.record.Frontmatter = candidate
+			if p.FromRepresentation != "" {
+				invalidateFrontmatterScalar(tgt.record, p.Field)
+			}
 			continue
 		}
 
@@ -466,6 +489,9 @@ func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTar
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 		tgt.record.Frontmatter = candidate
+		if p.FromRepresentation != "" {
+			invalidateFrontmatterScalar(tgt.record, p.Field)
+		}
 		tgt.written = true
 
 		result.recordChange(path,
