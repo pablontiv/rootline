@@ -21,6 +21,31 @@ outside its data-repair contract — the suggestion is offered so a human can ma
 this, a record `validate` failed with `link_resolve` came back from `fix` as a clean run, which
 read as a tool bug.
 
+## Type representation repairs
+
+`fix --all` can repair a narrow class of YAML representation mismatches where the schema expects
+`type: string` but the frontmatter scalar was parsed by YAML as a native value. The repair preserves
+the exact scalar text and changes only the representation by letting the YAML writer quote the value.
+
+| Expected | Actual YAML representation | Result |
+|---|---|---|
+| string | timestamp | exact lexeme quoted automatically |
+| string | boolean | exact lexeme quoted automatically |
+| string | integer | exact lexeme quoted automatically |
+| string | mapping, sequence, null, number | `type_findings`, no mutation |
+| boolean/integer/other | string or another representation | `type_findings`, no coercion |
+
+Contract details:
+
+- `from` and `to` can be textually equal because the representation changes.
+- `from_representation` is set only for type repairs and omitted for historical proposal shapes.
+- `repair apply` requires exact lexeme and representation matches; unknown markers fail closed. A
+  typed stored report re-applied after the field has already been quoted is rejected, not skipped,
+  because the current representation is `string` and no longer matches `from_representation`.
+- Findings are reported in JSON/table but do not change exit `0`; callers run `validate` for a
+  validity verdict.
+- The YAML writer adds quoting; reports never embed quote characters in `to`.
+
 
 ## Proposal Types
 
@@ -53,10 +78,14 @@ Each proposal in the output has the following fields:
 | `field` | string | Field name the proposal targets |
 | `description` | string | Human-readable explanation |
 | `paths` | string[] | Affected file paths |
+| `from` | string | Exact scalar text expected before a `correct_value` repair applies |
+| `to` | string | Replacement scalar text; for representation-only repairs this matches `from` textually |
+| `value_source` | string | Optional provenance for `add_field` values (`schema_default`, `enum_first`, or `empty`) |
+| `from_representation` | string | Optional evidence for type representation repairs (`timestamp`, `boolean`, or `integer`) |
 | `heading` | string | For `set_section` proposals: the Markdown heading to mutate |
 | `mode` | string | For `set_section` proposals: `set` (replace) or `append` |
 
-`heading` and `mode` are only populated on `set_field` and `set_section` proposals. `set_field` reuses the existing `applySetField` pipeline from `rootline set`.
+`heading` and `mode` are only populated on `set_section` proposals. `set_field` reuses the existing `applySetField` pipeline from `rootline set`.
 
 ## Three Repair Paths
 

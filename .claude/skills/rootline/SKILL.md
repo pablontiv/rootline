@@ -135,6 +135,8 @@ links:
 
 **`fix --all` surfaces link findings**: link problems appear under `link_findings` (JSON) rather than being silently omitted, but `fix` never rewrites a link body — the fuzzy suggestion is reported for a human to apply.
 
+**`fix --all` surfaces type findings**: only timestamp, boolean, and integer YAML representations in governed string fields are auto-quoted with exact scalar text preserved. Other `rule: type` mismatches appear under `type_findings`; treat them as unresolved validation defects and run `validate` after repair. See `ref-validate.md` for the full safety boundary.
+
 **Per-record schema**: typed link rules and `links.checks.cycles` resolve per record, not from the invocation root, so a rule or cycle opt-in declared in a subdirectory still applies when the command runs from the parent. `query --select links` honors `links.styles` with or without a traversal flag, and `query` traversal applies typed-rule filtering exactly as `graph` does.
 
 **One record set**: `validate` (both modes), `graph`, `query` and `fix --all` apply the same `scope.match` and `.stemignore` filters. `validate <file>` on an excluded file reports a `skipped` warning instead of validating it, so the pre-commit hook and CI agree.

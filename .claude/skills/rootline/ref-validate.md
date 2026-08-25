@@ -195,6 +195,7 @@ Use `fix` to apply Rootline proposals. Always preview first.
   "version": 1,
   "kind": "rootline/proposals",
   "proposals": [],
+  "type_findings": [],
   "summary": {}
 }
 ```
@@ -206,9 +207,16 @@ Use `fix` to apply Rootline proposals. Always preview first.
   "version": 1,
   "kind": "rootline/fix-batch",
   "results": [],
+  "type_findings": [],
   "summary": { "total": 10, "fixed": 3, "skipped": 7 }
 }
 ```
+
+A `correct_value` proposal with `from_representation` is a representation-only repair.
+Its `from` and `to` preserve the same exact scalar text; applying it quotes the YAML value.
+Only timestamp, boolean and integer to string are automatic. Treat `type_findings` as
+unresolved validation defects and run `validate` after repair even though findings do not
+change the `fix` exit code.
 
 ### Required Repair Loop
 
