@@ -562,6 +562,7 @@ func applyRepairSetField(p *proposal.Proposal, targets map[string]*repairTarget,
 		}
 
 		tgt.record.Frontmatter[p.Field] = p.Value
+		invalidateFrontmatterScalar(tgt.record, p.Field)
 
 		if dryRun {
 			result.Changed = append(result.Changed,

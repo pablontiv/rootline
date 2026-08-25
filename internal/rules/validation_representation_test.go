@@ -20,6 +20,19 @@ func TestValidationErrorCarriesTypeRepresentationsInternally(t *testing.T) {
 	}
 }
 
+func TestValidationErrorUnrelatedContractIssuesCarryNoRepresentationEvidence(t *testing.T) {
+	for _, issue := range []FieldContractIssue{
+		{Code: "invalid-enum", Expected: "Pending, Done", Actual: "Blocked"},
+		{Code: "invalid-link", Expected: "wiki-link syntax", Actual: "plain text"},
+		{Code: "invalid-sequence", Expected: "T plus 3 digits", Actual: "bad"},
+	} {
+		err := validationErrorFromContract("value", SchemaField{Type: "string"}, &issue)
+		if err.ExpectedRepresentation != "" || err.ActualRepresentation != "" {
+			t.Errorf("%s issue leaked representation evidence: %#v", issue.Code, err)
+		}
+	}
+}
+
 func TestValidationErrorRepresentationEvidenceIsNotJSON(t *testing.T) {
 	err := ValidationError{
 		Rule:                   "type",

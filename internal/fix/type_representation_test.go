@@ -87,6 +87,38 @@ func TestApplyRepairDuplicateTypedProposalInvalidatesScalarEvidence(t *testing.T
 	}
 }
 
+func TestApplyRepairSetFieldInvalidatesTypedScalarEvidence(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		t.Run(map[bool]string{true: "dry-run", false: "real"}[dryRun], func(t *testing.T) {
+			dir := writeTypeRepairFixture(t, "042")
+			proposals := []proposal.Proposal{
+				{Type: proposal.SetField, Field: "value", Paths: []string{"a.md"}, Value: "intermediate"},
+				typeRepairProposal("042", "integer"),
+			}
+
+			result, err := ApplyRepair(proposals, dryRun, dir, false)
+			if err != nil {
+				t.Fatalf("ApplyRepair: %v", err)
+			}
+			if len(result.Changed) != 1 || len(result.Rejected) != 1 || len(result.Skipped) != 0 || len(result.RolledBack) != 0 {
+				t.Fatalf("stale typed evidence was accepted: %#v", result)
+			}
+
+			content, err := os.ReadFile(filepath.Join(dir, "a.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := "---\nvalue: 042\n---\n# Probe\n"
+			if !dryRun {
+				want = "---\nvalue: intermediate\n---\n# Probe\n"
+			}
+			if string(content) != want {
+				t.Fatalf("file content\nwant:\n%s\ngot:\n%s", want, content)
+			}
+		})
+	}
+}
+
 func TestApplyRepairRejectsMalformedTypedProposalContracts(t *testing.T) {
 	cases := []struct {
 		name   string

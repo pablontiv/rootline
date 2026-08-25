@@ -46,13 +46,15 @@ func validationErrorFromContract(fieldName string, field SchemaField, issue *Fie
 		severity = "error"
 	}
 	err := ValidationError{
-		Rule:                   "type",
-		Field:                  fieldName,
-		Message:                fmt.Sprintf("field %q expected %s, got %s", fieldName, issue.Expected, issue.Actual),
-		Source:                 field.Source,
-		Severity:               severity,
-		ExpectedRepresentation: issue.Expected,
-		ActualRepresentation:   issue.Actual,
+		Rule:     "type",
+		Field:    fieldName,
+		Message:  fmt.Sprintf("field %q expected %s, got %s", fieldName, issue.Expected, issue.Actual),
+		Source:   field.Source,
+		Severity: severity,
+	}
+	if issue.Code == "type-mismatch" {
+		err.ExpectedRepresentation = issue.Expected
+		err.ActualRepresentation = issue.Actual
 	}
 	switch issue.Code {
 	case "invalid-enum":
