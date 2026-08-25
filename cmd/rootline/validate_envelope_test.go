@@ -289,6 +289,66 @@ func TestValidateAll_CorruptStemStillEmitsEnvelope(t *testing.T) {
 	}
 }
 
+func TestValidateAll_UnknownLinkRuleKeysWarningStrictness(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem": "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nlinks:\n  blocks:\n    target: \"../tasks/*.md\"\n    targte: \"../tasks/*.md\"\n",
+		"a.md":  "---\ntitle: A\n---\n# A\n",
+	})
+	mustChdir(t, root)
+
+	normalOut, normalErr := executeValidate(t, "--all")
+	if normalErr != nil {
+		t.Fatalf("normal validate must not fail on warning-only unknown-link-rule-keys: %v\noutput: %s", normalErr, normalOut)
+	}
+	normalEnv := decodeEnvelope(t, normalOut)
+	if got := normalEnv["summary"].(map[string]any)["invalid"].(float64); got != 0 {
+		t.Fatalf("normal invalid count = %v, want 0; output: %s", got, normalOut)
+	}
+
+	foundNormal := false
+	for _, h := range stemHealthChecks(t, normalEnv) {
+		if h["check"] != "unknown-link-rule-keys" {
+			continue
+		}
+		foundNormal = true
+		if h["field"] != "targte" {
+			t.Errorf("normal unknown-link-rule-keys field = %v, want targte", h["field"])
+		}
+		if h["severity"] != "warn" {
+			t.Errorf("normal unknown-link-rule-keys severity = %v, want warn", h["severity"])
+		}
+		msg := h["message"].(string)
+		if !strings.Contains(msg, "links.blocks") {
+			t.Errorf("normal unknown-link-rule-keys message = %q, want links.blocks context", msg)
+		}
+		if !strings.Contains(msg, `did you mean "target"?`) {
+			t.Errorf("normal unknown-link-rule-keys message = %q, want fuzzy suggestion", msg)
+		}
+	}
+	if !foundNormal {
+		t.Fatalf("normal validate missing unknown-link-rule-keys warning: %v", normalEnv["stem_health"])
+	}
+
+	strictOut, strictErr := executeValidate(t, "--all", "--strict")
+	if strictErr != ErrValidationFailed {
+		t.Fatalf("--strict err = %v, want ErrValidationFailed\noutput: %s", strictErr, strictOut)
+	}
+	strictEnv := decodeEnvelope(t, strictOut)
+	if got := strictEnv["summary"].(map[string]any)["invalid"].(float64); got != 0 {
+		t.Fatalf("strict invalid count = %v, want 0; output: %s", got, strictOut)
+	}
+
+	foundStrict := false
+	for _, h := range stemHealthChecks(t, strictEnv) {
+		if h["check"] == "unknown-link-rule-keys" {
+			foundStrict = true
+		}
+	}
+	if !foundStrict {
+		t.Fatalf("strict validate missing unknown-link-rule-keys warning: %v", strictEnv["stem_health"])
+	}
+}
+
 func hasNotice(t *testing.T, env map[string]any, code string) bool {
 	t.Helper()
 	notices, ok := env["notices"].([]any)

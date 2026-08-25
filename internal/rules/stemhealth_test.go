@@ -967,6 +967,56 @@ links:
 	}
 }
 
+func TestValidateStemHealth_UnknownLinkRuleKeys(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+links:
+  blocks:
+    target: "../tasks/*.md"
+    targte: "../tasks/*.md"
+    field: blocked_by
+    valeu_field: blocked_by
+    value_field: blocked_by
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := map[string]StemHealthCheck{}
+	for _, c := range result.Checks {
+		if c.Name == "unknown-link-rule-keys" {
+			found[c.Field] = c
+		}
+		if c.Name == "unknown-link-rule-keys" && (c.Field == "target" || c.Field == "field" || c.Field == "value_field") {
+			t.Fatalf("valid link rule key unexpectedly reported as unknown: %+v", c)
+		}
+	}
+
+	if len(found) != 2 {
+		t.Fatalf("unknown-link-rule-keys count = %d, want 2; checks=%+v", len(found), result.Checks)
+	}
+
+	targte, ok := found["targte"]
+	if !ok {
+		t.Fatalf("missing unknown-link-rule-keys diagnostic for targte: %+v", found)
+	}
+	if targte.Status != "warn" {
+		t.Errorf("targte status = %q, want warn", targte.Status)
+	}
+	if !strings.Contains(targte.Message, `links.blocks`) {
+		t.Errorf("targte message = %q, want links.blocks context", targte.Message)
+	}
+	if !strings.Contains(targte.Message, `did you mean "target"?`) {
+		t.Errorf("targte message = %q, want target suggestion", targte.Message)
+	}
+
+	if got := found["valeu_field"].Message; !strings.Contains(got, `links.blocks`) {
+		t.Errorf("valeu_field message = %q, want links.blocks context", got)
+	}
+}
+
 // Slice 2: Nested-root-marker health check
 func TestValidateStemHealth_NestedRootMarker(t *testing.T) {
 	dir := t.TempDir()

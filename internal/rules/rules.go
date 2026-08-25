@@ -72,6 +72,10 @@ type LinkSchema struct {
 	// UnknownCheckKeys lists keys found under links.checks that no check
 	// consumes. Diagnostic only — surfaced by stem health, never serialized.
 	UnknownCheckKeys []string `json:"-"`
+
+	// UnknownRuleKeys lists unknown keys found under links.<type> rules.
+	// Diagnostic only — surfaced by stem health, never serialized.
+	UnknownRuleKeys []UnknownLinkRuleKey `json:"-"`
 }
 
 // LinkChecks enables filesystem-backed link checks (ADO code-wiki conventions).
@@ -100,6 +104,10 @@ func (ls LinkSchema) ShouldResolve() bool {
 // struct fields.
 var knownCheckKeys = []string{"resolve", "anchors", "encoding", "cycles"}
 
+// knownLinkRuleKeys lists the keys LinkRule consumes; keep in sync with its
+// struct fields.
+var knownLinkRuleKeys = []string{"target", "field", "value_field"}
+
 // EffectiveStyles returns the link styles governed by this schema.
 // An empty declaration defaults to wikilink-only for backward compatibility.
 func (ls LinkSchema) EffectiveStyles() []string {
@@ -114,6 +122,12 @@ type LinkRule struct {
 	Target     string `yaml:"target" json:"target,omitempty"`
 	Field      string `yaml:"field" json:"field,omitempty"`
 	ValueField string `yaml:"value_field" json:"value_field,omitempty"`
+}
+
+// UnknownLinkRuleKey identifies one unknown key under links.<type>.
+type UnknownLinkRuleKey struct {
+	RuleType string
+	Key      string
 }
 
 // UnmarshalYAML implements custom unmarshaling for LinkSchema.
@@ -167,6 +181,15 @@ func (ls *LinkSchema) UnmarshalYAML(value *yaml.Node) error {
 				}
 			}
 			continue
+		}
+
+		if val.Kind == yaml.MappingNode {
+			for j := 0; j+1 < len(val.Content); j += 2 {
+				ruleKey := val.Content[j].Value
+				if !slices.Contains(knownLinkRuleKeys, ruleKey) {
+					ls.UnknownRuleKeys = append(ls.UnknownRuleKeys, UnknownLinkRuleKey{RuleType: key, Key: ruleKey})
+				}
+			}
 		}
 
 		var rule LinkRule
