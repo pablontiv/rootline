@@ -46,11 +46,11 @@ When documents use wiki-links (`[[blocks:T003-task]]`), the derivation engine re
 # .stem links section defines field mapping
 links:
   blocks:
-    fields:
-      estado: estado  # inject linked record's "estado" into expression env
+    field: blocked_by       # variable injected into the expression env
+    value_field: estado     # target-record field collected into blocked_by
 ```
 
-This enables derived state from dependencies — e.g., a task is blocked if any linked blocker has `estado != "Completed"`.
+This enables derived state from dependencies — e.g., a task can evaluate `any(blocked_by, {# != "Completed"})` when `blocked_by` was injected from linked records.
 
 ## Built-in Derived Fields
 

@@ -117,7 +117,7 @@ rootline validate --all <dir> -o json
 
 ### Validate and Query Markdown Links (multi-style)
 
-Link extraction always parses both `[[wiki-links]]` and markdown links `[text](target)`. Each link carries `style` (`wikilink`/`markdown`) and optional `anchor`. The `.stem` governs which link styles participate in validation, graph, and query link-traversal operations:
+Rootline can parse both `[[wiki-links]]` and markdown links `[text](target)`. Each link carries `style` (`wikilink`/`markdown`) and optional `anchor`. The `.stem` `links.styles` replacement set governs which link styles participate in validation, graph, and query link-traversal operations; omitted means `[wikilink]`:
 
 ```yaml
 version: 2
@@ -147,9 +147,9 @@ links:
 
 **`graph --check` runs the declared checks too**: with `links.checks` set it reports `link_anchor` and `link_encoding` alongside cycles and broken links, matching `validate`. Resolution failures appear once, as broken links.
 
-**One resolver**: `validate`, `graph` and `query` traversal share one resolver, so they agree on which links are broken. Wikilinks infer `.md` (`[[b]]`→`b.md`, `[[sub/README]]`→`sub/README.md`), markdown targets resolve literally, `/x.md` resolves against the scan root, and a path-less target matches a uniquely-named record anywhere. A resolved target is never broken even when `scope.match`/`.stemignore` excludes it: the schema declares what is governed, not what exists.
+**One resolver**: `validate`, `graph` and `query` traversal share one resolver. Wikilinks infer `.md` (`[[b]]`→`b.md`, `[[sub/README]]`→`sub/README.md`), markdown targets resolve literally, and `/x.md` resolves against the scan root. A path-less target matches a uniquely named record anywhere only when `links.basename_fallback: true`; `graph` and query traversal can decide that with their full index, while `validate` reports `link_unverifiable` rather than guessing. A resolved target is never broken even when `scope.match`/`.stemignore` excludes it: the schema declares what is governed, not what exists.
 
-**Query link traversal**: `--has-inbound` and `--has-outbound` predicates search both wiki-link and markdown-link styles (governed by `.stem links.styles`). Combine with `--inbound-type` / `--outbound-type` to restrict to one link type.
+**Query link traversal**: `--has-inbound` and `--has-outbound` predicates search the styles governed by `.stem links.styles` (default `[wikilink]`; use `[wikilink, markdown]` for both). Combine with `--inbound-type` / `--outbound-type` to restrict to one link type.
 
 **Graph**: `graph` respects the governed link styles from `.stem`. For `graph --check`: `--fail-cycles` overrides the `.stem` cycle opt-in per run (both directions), and `--quiet-cycles` collapses informational cycles to a single summary line (ignored when cycles are failing; JSON output unaffected).
 

@@ -98,7 +98,7 @@ Most commands output JSON by default. Use `--output table` for human-readable ta
 - **Directory hierarchy**: Directories are tables; files are records.
 - **Inherited rules**: `.stem` files define schemas; rules flow from parent to child via top-down merge.
 - **Derived fields**: Expressions compute fields (slugify, concatenate, filter); aggregates roll up from children to parents.
-- **Links**: Documents reference each other via `[[wiki-links]]` and `[markdown](links)`, forming a queryable dependency graph.
+- **Links**: Documents reference each other via `[[wiki-links]]` by default and `[markdown](links)` when `links.styles` includes `markdown`, forming a queryable dependency graph.
 - **Queryable outputs**: Every command returns stable JSON; records can be filtered, sorted, and projected.
 
 ### How Schema Inheritance Works
@@ -330,7 +330,7 @@ Derived and aggregated fields appear alongside frontmatter in query results and 
 
 ### Dependency Graph
 
-Documents reference each other via `[[wiki-links]]` in their body. Rootline extracts these links and builds a directed graph:
+Documents reference each other via `[[wiki-links]]` by default, or via both wikilinks and markdown links when `.stem` sets `links.styles: [wikilink, markdown]`. Rootline extracts the governed styles and builds a directed graph:
 
 ```bash
 rootline graph docs/                            # Dependency graph as JSON (default)

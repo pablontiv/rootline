@@ -69,7 +69,7 @@ Flags:
 - `--outbound-type <type>` — Restrict `--has-outbound` to links of this type
 - `--graph-root <path>` — Set the root for edge scanning (default: the query path). The query path must lie inside the graph root.
 
-**Link styles**: By default, link traversal searches both wiki-link (`[[target]]`) and markdown-link (`[text](target)`) styles. Styles can be configured in `.stem` via `links.styles` to restrict which types are recognized.
+**Link styles**: By default, link traversal searches wiki-link (`[[target]]`) styles only. Configure `.stem` `links.styles` as a replacement set, for example `[wikilink, markdown]`, to include markdown links (`[text](target)`).
 
 ### Compact Projections with `--select`
 
