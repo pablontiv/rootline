@@ -39,9 +39,7 @@ optional parsing mode.
 types, back references, cross references, section patterns, invariants,
 formal dependencies, traceability links, structural rules.
 
-**Governance:** schema coverage (directories without a `.stem`), validation
-gaps (enum without values, untyped fields, incomplete sequences, required
-understatement).
+**Governance:** schema coverage (directories without a `.stem`) and validation gaps. Validation-gap reporting is de-duplicated against data-detector coverage: untyped fields are reported directly, enum-without-values gaps surface when no record value already produced enum-value coverage, sequence gaps mean missing `prefix`/`digits` in the `.stem` declaration rather than skipped observed numbers, and required-understatement is only reachable at the narrow boundary not already covered by required-field inference.
 
 ### Data Detectors
 
@@ -56,7 +54,7 @@ understatement).
 | Cross Reference Detection | Detect broken document-internal cross-references |
 | Body Section Patterns | Identify section headings in markdown bodies |
 | Invariant Extraction | Extract `INV\d+` identifiers from bodies |
-| Formal Dependency Extraction | Extract wiki-link dependencies from bodies |
+| Formal Dependency Extraction | Extract semantic wiki-link dependencies with the built-in prefixes `blocks`, `relates`, and `extends` |
 | Traceability Link Extraction | Identify traceability field claims (`Contribuye a`, `Cubre`, `Satisface`) |
 | Structural Rule Detection | Infer directory naming patterns and hierarchy rules |
 
@@ -65,7 +63,7 @@ understatement).
 | Detector | Description |
 |----------|-------------|
 | Schema Coverage | Directories without an owning `.stem` file |
-| Validation Gaps | Missing enum values, untyped fields, sequence incompleteness, required field understatement |
+| Validation Gaps | De-duplicated governance gaps: untyped fields, reachable enum-without-values cases, incomplete sequence declarations (`prefix`/`digits`), and the required-understatement boundary case |
 
 ## JSON Output
 
@@ -147,7 +145,7 @@ For identical inputs and flags, `analyze -o json` emits each category's `inferen
 - `kind` — `rootline/analyze` (distinguishes from other report kinds).
 - `path` — the scanned directory (as specified on the command line).
 - `categories[]` — one per detector: `id`, `name`, `inference_count`, `inferences[]`.
-  - Each inference carries: `type`, `field`, `value`, `message`, `requires_agent`.
+  - Each inference carries `type`, `message`, and `requires_agent`; `field`, `value`, and `source` are type-dependent and omitted when not meaningful.
   - `requires_agent: true` marks inferences needing human or agent disambiguation (not automatically applied by fix/schema commands).
 - `summary`:
   - `total_inferences` — count of all inferences across all detectors.

@@ -2,7 +2,7 @@
 
 ## graph
 
-Use `graph` for repository-level link topology, cycle checks, and broken-link checks. Edges come from `[[wiki-links]]` and, when the effective `.stem` declares `links.styles: [markdown]`, from markdown links `[text](target)`; without that declaration only wikilinks appear (backcompat default). Markdown targets resolve with the same semantics as `validate`'s link checks (v1.13.0+): `%20` decoding, case-sensitive path walk, directory targets → their `README.md`, root-anchored `/x.md` against the scan root; unresolvable targets surface as broken links in `--check` (no basename fallback for markdown, unlike wikilinks).
+Use `graph` for repository-level link topology, cycle checks, and broken-link checks. Edges come from the effective `.stem` `links.styles` replacement set: omitted means `[wikilink]`; use `[wikilink, markdown]` to include both wikilinks and markdown links. Markdown targets resolve literally with `%20` decoding, case-sensitive path walk, directory targets → their `README.md`, and root-anchored `/x.md` against the scan root. Path-less basename fallback is opt-in via `links.basename_fallback: true` and uses the graph/query index; unresolvable targets surface as broken links in `--check`.
 
 ### Usage
 
@@ -21,7 +21,9 @@ Default global output is JSON, so `--format dot|mermaid` only produces diagram t
 | Flag | Use |
 |---|---|
 | `--format dot|mermaid` | diagram syntax when output is table |
-| `--check` | report cycles and broken links, exit non-zero on problems |
+| `--check` | report cycles and broken links; broken links fail, cycles are informational unless hardened |
+| `--fail-cycles` | treat cycles as check failures for this run |
+| `--quiet-cycles` | suppress per-cycle enumeration when cycles are informational |
 | `--where "expr"` | filter records before graph construction |
 
 ### JSON Shape
@@ -193,11 +195,6 @@ comments survive and a one-field change produces a one-field diff. Inter-token
 whitespace and nested indentation are normalized by the encoder — do not expect a
 byte-identical block for untouched fields.
 
-**Legacy mixed apply** (preserved for backward compatibility):
-```bash
-rootline apply report.json
-```
-
 Always inspect proposals before applying and validate after:
 ```bash
 rootline validate --all <dir> -o json
@@ -215,5 +212,4 @@ rootline hooks uninstall
 rootline completion bash
 rootline completion zsh
 rootline completion fish
-rootline completion powershell
 ```

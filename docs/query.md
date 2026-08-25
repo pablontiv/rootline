@@ -69,26 +69,25 @@ Flags:
 - `--outbound-type <type>` — Restrict `--has-outbound` to links of this type
 - `--graph-root <path>` — Set the root for edge scanning (default: the query path). The query path must lie inside the graph root.
 
-**Link styles**: By default, link traversal searches both wiki-link (`[[target]]`) and markdown-link (`[text](target)`) styles. Styles can be configured in `.stem` via `links.styles` to restrict which types are recognized.
+**Link styles**: By default, link traversal searches wiki-link (`[[target]]`) styles only. Configure `.stem` `links.styles` as a replacement set, for example `[wikilink, markdown]`, to include markdown links (`[text](target)`).
 
 ### Compact Projections with `--select`
 
 The `--select` flag produces compact output containing only specified fields:
 
 ```bash
-rootline query --select path,estado,title
-rootline query --select path,estado,title,links --output jsonl
-rootline query --where 'estado == "Pending"' --select path,title --output csv
+rootline query --select path,estado
+rootline query --select path,estado,links --output jsonl
+rootline query --where 'estado == "Pending"' --select path,estado --output csv
 ```
 
 `--select` accepts a comma-separated list of field names. Supported field names include:
 - `path` — document file path
-- `title` — first Markdown heading or first non-empty body line
 - Any frontmatter field name (e.g., `estado`, `prioridad`, `owner`)
 - Any derived field (defined in `.stem` `derive:` section)
 - `links` — document links extracted from wiki-link references
 
-**Without `--select`**, query results include full records with `frontmatter`, `body`, `links`, and `derived`.
+**Without `--select`**, query results include full records with `frontmatter`, `body`, `sections`/`body_sections`, and `derived`; `links` is present only when the record has extracted links.
 
 **With `--select`**, only specified fields are included in each row, reducing noise and making output suitable for shell pipelines.
 
@@ -120,10 +119,10 @@ rootline query --select path,estado --output jsonl
 # {"path": "...", "estado": "In Progress"}
 
 # CSV: RFC 4180 with quoted fields and escaping
-rootline query --select path,estado,title --output csv
-# path,estado,title
-# "docs/api/auth.md","Pending","Authentication Guide"
-# "docs/api/endpoints.md","In Progress","Endpoint Reference"
+rootline query --select path,estado --output csv
+# path,estado
+# "docs/api/auth.md","Pending"
+# "docs/api/endpoints.md","In Progress"
 
 # CSV with nil values (rendered as empty)
 rootline query --select path,estado,owner --output csv
@@ -138,10 +137,10 @@ Column order in `jsonl` and `csv` output follows the order specified in `--selec
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `frontmatter.*` | any | Any frontmatter key |
+| `frontmatter.<field>` | any | Any frontmatter key, addressed by explicit field name |
 | `body` | string | Full document body text |
 | `sections` | map[string]string | Map of heading → section body (requires AST extraction) |
-| `derived.*` | any | Computed derived fields from `.stem` `derive:` |
+| `derived.<field>` | any | Computed derived field addressed by explicit field name |
 
 ### Section Queries
 
@@ -248,7 +247,7 @@ Rows include `derived` when the effective `.stem` defines `derive:` or `aggregat
 {
   "version": 1,
   "kind": "rootline/count",
-  "meta": {},
+  "meta": { "count": 12 },
   "count": 12
 }
 ```
@@ -279,10 +278,10 @@ Some AI coding agents (notably Claude Code's Bash tool) pre-escape the `!` chara
    rootline query -o json | jq '.rows[] | select(.estado != "draft")'
    ```
 
-**Field existence check** (`!= nil`): There is no `not in` equivalent for field existence. Use the JSON pipeline approach:
+**Field existence check** (`!= nil`): use `field not in [nil]` when an agent cannot send `!= nil` safely:
 
 ```bash
-rootline query -o json | jq '.rows[] | select(.tags != null)'
+rootline query --where 'tags not in [nil]'
 ```
 
 This issue is not specific to rootline — it affects any CLI tool whose query syntax uses `!` when invoked through agents with this escaping behavior.

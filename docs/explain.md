@@ -3,7 +3,7 @@ estado: Completed
 ---
 # Explain
 
-`rootline explain` traces the origin of every field in a document: which `.stem` defined it, whether it came from frontmatter, derivation, or aggregation, and what expressions produced the value.
+`rootline explain` traces each effective field in a document: whether it came from frontmatter, a schema default/source extraction, derivation, or aggregation, and what expression produced computed values. Current output reports `.stem` `defined_in` provenance for schema-backed fields; derive and aggregate fields expose their `expression` but not the `.stem` path that declared it.
 
 ## CLI Usage
 
@@ -86,7 +86,7 @@ For documents with derived and aggregated fields, each field shows its expressio
 }
 ```
 
-The `stem_chain` shows the walk-up discovery order from the target up to the `root: true` marker. A chain that reaches the filesystem root without one has no declared boundary; the preflight stops governed commands there and asks for the marker. The `origin` field is one of: `frontmatter`, `schema` (default value), `derived`, or `aggregate`.
+The `stem_chain` is emitted in resolution order, root-to-target/leaf. A chain that reaches the filesystem root without a `root: true` marker has no declared boundary; the preflight stops governed commands there and asks for the marker. The `origin` field is one of: `frontmatter`, `schema` (default value), `derived`, or `aggregate`.
 
 For a source-backed field, `source` is the logical directive and `defined_in` is the physical `.stem` declaration. Explain resolves the same effective value as validation and query; frontmatter remains an override, empty-present sections remain present, and duplicate matching headings are reported as errors.
 

@@ -201,13 +201,10 @@ Two deliberate differences from `repair apply`:
   emits absolute `.stem` targets, so the propose→apply contract needs them to keep working.
   `repair apply` uses `PolicyRejectAbsolute` because its report paths are root-relative by
   construction.
-- **Policy refusals go to `rejected[]`** (overwrite without `--force`, unknown operations).
-  Containment violations go to `errors[]` (operational failures).
+- **Schema policy refusals go to `rejected[]`** (overwrite without `--force`, unknown operations,
+  and containment violations); operational failures such as scan or write errors go to `errors[]`.
 
-`--dry-run` adds the same additive `resolved_targets: {accepted, rejected}` envelope that
-`repair apply` emits (`fix.ResolvedTargetsBreakdown`); omitted otherwise, contract stays
-version 1. `fix.ContainmentReason(err)` is exported so both apply commands unwrap
-`ContainmentError` through one implementation.
+For schema-proposals reports, `--dry-run` adds the additive `resolved_targets: {accepted, rejected}` envelope; analyze-report dry runs omit it. The key is omitted outside dry-run and the contract stays version 1. `fix.ContainmentReason(err)` is exported so both apply commands unwrap `ContainmentError` through one implementation.
 
 ## Fix All Schema Safety
 
@@ -223,7 +220,7 @@ version 1. `fix.ContainmentReason(err)` is exported so both apply commands unwra
 - Rejects schema proposals (extend_enum, add_aggregate, remove_stem_field, etc.); appear in output under Rejected
 - Never creates, deletes, or modifies `.stem` files
 - Supports `--dry-run` for preview without writes
-- Emits JSON: version 1, kind "rootline/repair", with Changed/Skipped/Rejected/Errors
+- Emits JSON: version 1, kind `"rootline/repair"`, with lowercase `changed`, `skipped`, `rejected`, `errors`, plus `complete`, `dry_run`, and `root`
 
 **Path containment.** Report paths are untrusted. Every path is checked against the scan root
 before any file is opened, so an escaping (`../..`) or absolute path is never read or written.

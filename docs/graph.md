@@ -23,8 +23,8 @@ Format: `[[type:target]]` or `[[target]]` (untyped). Links inside fenced code bl
 links:
   blocks:
     target: "^T\\d{3}-"           # target must match pattern
-    fields:
-      estado: estado              # inject linked field into derive expressions
+    field: blocked_by             # variable injected into derive expressions
+    value_field: estado           # target-record field collected for that variable
   reference:
     target: ".*"                  # any target allowed
 ```
@@ -52,14 +52,14 @@ rootline graph docs/epics/ --check                     # Validate only: cycles +
 
 ### Link Styles
 
-Rootline extracts both `[[wiki-links]]` and `[markdown](links)` reference styles. The links recognized in graph building are configured in `.stem` via the `links.styles` field (default: `[wikilink]`).
+Rootline can extract `[[wiki-links]]` and `[markdown](links)` reference styles. The styles recognized in graph building are configured in `.stem` via the `links.styles` field; when omitted, the effective set is `[wikilink]`.
 
 To control which link styles are processed in the graph:
 
 ```yaml
 # .stem file
 links:
-  styles: [wikilink, markdown]  # Recognize both wiki-links and markdown links
+  styles: [wikilink, markdown]  # Replacement set; include both to recognize both styles
   checks:
     resolve: true              # Check that targets resolve (case-sensitive)
     anchors: true              # Validate heading anchors
@@ -67,7 +67,7 @@ links:
     cycles: true               # Fail graph --check if cycles found (optional)
 ```
 
-With `links.styles`, only listed styles are extracted and validated. The graph command respects this setting.
+`links.styles` replaces the default set; it does not add to it. For example, `styles: [markdown]` recognizes markdown links only and stops recognizing wikilinks until `wikilink` is listed as well. The graph command respects this setting.
 
 ### With --where
 
@@ -91,12 +91,7 @@ that asked for it, leaving unrelated cycles in never-opted-in subtrees informati
 
 ### How a link target resolves
 
-`graph` resolves links through the same engine `validate` uses, so the two agree on which links
-are broken. Wikilinks infer `.md` (`[[b]]`→`b.md`, `[[sub/README]]`→`sub/README.md`), markdown
-targets resolve literally, `/x.md` resolves against the scan root, and a path-less target matches
-a uniquely-named record anywhere. A resolved target is never reported broken **even when the
-schema does not govern it** — `scope.match` and `.stemignore` declare what is *governed*, not
-what *exists*, so such a link is an edge to a non-node. Unresolved targets are reported verbatim.
+`graph` resolves links through the same engine `validate` uses, so they agree when basename fallback is off. Wikilinks infer `.md` (`[[b]]`→`b.md`, `[[sub/README]]`→`sub/README.md`), markdown targets resolve literally, and `/x.md` resolves against the scan root. A path-less target matches a uniquely named record anywhere only when `links.basename_fallback: true`; `graph` and query traversal have the full index needed for that lookup, while `validate` reports `link_unverifiable` instead of guessing. A resolved target is never reported broken **even when the schema does not govern it** — `scope.match` and `.stemignore` declare what is *governed*, not what *exists*, so such a link is an edge to a non-node. Unresolved targets are reported verbatim.
 
 When the effective `.stem` declares `links.checks`, `--check` also reports the anchor and
 encoding failures `validate` reports, so a green `graph --check` now means what it looks like it
@@ -171,5 +166,6 @@ The `--field` flag applies to graph JSON output and supports:
 ## Target Resolution
 
 Links resolve targets by:
-1. Relative path from source document's directory
-2. Basename fallback — unique match across the scanned tree
+1. Relative path from the source document's directory.
+2. Root-anchored path (`/x.md`) against the scan root.
+3. Optional basename fallback — when `links.basename_fallback: true`, `graph` and query traversal can match a path-less target to one unique record in the scanned tree. The default is off.
