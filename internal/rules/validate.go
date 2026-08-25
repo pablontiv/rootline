@@ -20,6 +20,11 @@ type ValidationError struct {
 	Source     string `json:"source"`
 	Severity   string `json:"severity"`
 	Suggestion string `json:"suggestion,omitempty"`
+	// ExpectedRepresentation and ActualRepresentation carry machine evidence
+	// from the field contract to internal consumers. Public validate envelopes
+	// keep their existing versioned shape.
+	ExpectedRepresentation string `json:"-"`
+	ActualRepresentation   string `json:"-"`
 }
 
 func sourceResolutionError(fieldName, source, severity string, err error) ValidationError {
@@ -46,6 +51,10 @@ func validationErrorFromContract(fieldName string, field SchemaField, issue *Fie
 		Message:  fmt.Sprintf("field %q expected %s, got %s", fieldName, issue.Expected, issue.Actual),
 		Source:   field.Source,
 		Severity: severity,
+	}
+	if issue.Code == "type-mismatch" {
+		err.ExpectedRepresentation = issue.Expected
+		err.ActualRepresentation = issue.Actual
 	}
 	switch issue.Code {
 	case "invalid-enum":

@@ -199,6 +199,8 @@ Use `fix` to apply Rootline proposals. Always preview first.
 }
 ```
 
+`type_findings` is omitted when empty; when present, treat it as unresolved validation work.
+
 ### Batch Apply JSON
 
 ```json
@@ -209,6 +211,12 @@ Use `fix` to apply Rootline proposals. Always preview first.
   "summary": { "total": 10, "fixed": 3, "skipped": 7 }
 }
 ```
+
+A `correct_value` proposal with `from_representation` is a representation-only repair.
+Its `from` and `to` preserve the same exact scalar text; applying it quotes the YAML value.
+Only timestamp, boolean and integer to string are automatic. Treat `type_findings` as
+unresolved validation defects and run `validate` after repair even though findings do not
+change the `fix` exit code.
 
 ### Required Repair Loop
 

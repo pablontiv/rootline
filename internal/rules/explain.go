@@ -30,12 +30,14 @@ type ExplainField struct {
 
 // ExplainError traces a validation error to its source rule.
 type ExplainError struct {
-	Rule       string `json:"rule"`
-	Field      string `json:"field"`
-	Message    string `json:"message"`
-	Source     string `json:"source"`
-	Severity   string `json:"severity"`
-	Suggestion string `json:"suggestion,omitempty"`
+	Rule                   string `json:"rule"`
+	Field                  string `json:"field"`
+	Message                string `json:"message"`
+	Source                 string `json:"source"`
+	Severity               string `json:"severity"`
+	Suggestion             string `json:"suggestion,omitempty"`
+	ExpectedRepresentation string `json:"-"`
+	ActualRepresentation   string `json:"-"`
 }
 
 // NewExplainResult builds an ExplainResult from walk-up entries, the effective

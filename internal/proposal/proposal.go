@@ -63,6 +63,10 @@ type Proposal struct {
 	// is set on every generated add_field proposal and omitted for proposal
 	// types where provenance carries no meaning.
 	ValueSource string `json:"value_source,omitempty"`
+	// FromRepresentation names the YAML representation expected on disk for a
+	// type-mismatch repair. From carries the exact scalar lexeme; this optional
+	// discriminator isolates representation-aware matching from legacy repairs.
+	FromRepresentation string `json:"from_representation,omitempty"`
 	// set_section fields
 	Heading string `json:"heading,omitempty"`
 	Mode    string `json:"mode,omitempty"` // "replace" (default) or "append"
@@ -81,6 +85,7 @@ type Report struct {
 	// repaired. Dry-run is the preview of what fix will do, so omitting them
 	// there would hide the same defect the field exists to expose.
 	LinkFindings []LinkFinding `json:"link_findings,omitempty"`
+	TypeFindings []TypeFinding `json:"type_findings,omitempty"`
 
 	Summary Summary `json:"summary"`
 }
@@ -95,6 +100,14 @@ type LinkFinding struct {
 	Rule       string `json:"rule"`
 	Message    string `json:"message"`
 	Suggestion string `json:"suggestion,omitempty"`
+}
+
+// TypeFinding reports a representation error fix cannot repair safely.
+type TypeFinding struct {
+	Path                 string `json:"path"`
+	Field                string `json:"field"`
+	Message              string `json:"message"`
+	ActualRepresentation string `json:"actual_representation,omitempty"`
 }
 
 // Summary holds aggregate counts for a report.
@@ -214,6 +227,9 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 		proposals = append(proposals, detectOutlierValue(records, effective, errs)...)
 	}
 
+	typeRepairs, typeFindings := detectTypeRepresentationRepairs(records, errs)
+	proposals = append(proposals, typeRepairs...)
+
 	summary := Summary{Total: len(proposals)}
 	for _, p := range proposals {
 		switch p.Type {
@@ -257,10 +273,11 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 	}
 
 	return &Report{
-		Version:   1,
-		Kind:      "rootline/proposals",
-		Proposals: proposals,
-		Summary:   summary,
+		Version:      1,
+		Kind:         "rootline/proposals",
+		Proposals:    proposals,
+		TypeFindings: typeFindings,
+		Summary:      summary,
 	}
 }
 
