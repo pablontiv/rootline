@@ -245,7 +245,7 @@ func collectLinkCheckIssues(records []*extract.Record, root string) ([]linkCheck
 			continue
 		}
 		for _, e := range rules.CheckLinks(rec.Links, effective.Links, absPath, root, cache) {
-			if e.Rule == "link_resolve" {
+			if e.Rule == "link_resolve" || e.Rule == "link_unverifiable" {
 				continue
 			}
 			issues = append(issues, linkCheckIssue{path: rec.Path, rule: e.Rule, message: e.Message})
