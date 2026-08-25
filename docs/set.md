@@ -74,29 +74,31 @@ rootline set docs/api/overview.md descripcion=@notes.txt
 rootline set docs/api/overview.md estado=Pending --dry-run
 ```
 
-### Skip validation (advanced)
+### Skip post-validation (advanced)
+
+`--no-validate` skips post-mutation validation only; enum/type pre-validation still runs. Use it only when you deliberately need to write a schema-valid value while leaving some other existing validation error unresolved.
 
 ```bash
-rootline set docs/api/overview.md estado=Custom --no-validate
+rootline set docs/api/overview.md estado=review --no-validate
 ```
 
 ## Error Messages
 
 | Situation | Message |
 |-----------|---------|
-| Invalid enum value | `pre-validation failed: field "estado": value "Custom" not in enum [draft, review, published]` |
-| Post-validation failure | `post-validation failed; changes rolled back: required field "tipo" is missing` |
-| File not found | `file not found: docs/api/missing.md (use 'rootline new' to scaffold a new document)` |
+| Invalid enum value | `Error: value "Custom" not in allowed values for estado: [draft, review, published]` |
+| Post-validation failure | `Error: post-mutation validation failed (rolled back): tipo: required field "tipo" is missing` |
+| File not found | `Error: file not found: /abs/path/docs/api/missing.md (use 'rootline new' to scaffold a new document)` |
 | Source-backed field | `set` writes a frontmatter override and does not edit the body section |
-| Source file not found (=@path) | `cannot read source file: @notes.txt: no such file` |
+| Source file not found (`=@path`) | `Error: resolving value for notes: reading notes.txt: open notes.txt: no such file or directory` |
 
 ## Dry Run Output
 
-With `--dry-run`, `rootline set` prints a diff-style preview without modifying any file:
+With `--dry-run`, `rootline set` prints the proposed assignment and exits before writing:
 
-```
-~ docs/api/overview.md
-  estado: "In Progress" → "Completed"
+```console
+$ rootline set docs/api/overview.md estado=Completed --dry-run
+would set estado = "Completed"
 ```
 
 ## Source-Backed Fields

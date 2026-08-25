@@ -114,7 +114,7 @@ the shape you get from `rootline migrate docs --dry-run -o json`:
 rootline migrate --rename status=estado
 ```
 
-Updates frontmatter in all affected markdown files and schema definitions in `.stem` files. Operations are logged to `.migration-log.json` (JSON Lines, append-only).
+Updates frontmatter in all affected markdown files and schema definitions in `.stem` files. Operations are logged to `.rootline-migrations` (JSON Lines, append-only).
 
 Each generated document or `.stem` is replaced atomically from a sibling staging
 file, so a failed write cannot leave that destination truncated. Migration runs

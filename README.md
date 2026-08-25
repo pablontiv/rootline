@@ -372,10 +372,9 @@ Git is optional. Rootline works in any directory, with or without version contro
 
 Rootline integrates with Git for continuous validation and collaborative workflows:
 
-- **Staged validation** — The `.githooks/pre-commit` hook runs `validate --staged` automatically, catching schema violations before commit
-- **CI validation** — GitHub Actions workflows in `.github/workflows/` run full validation and lint on every push
-- **Merge conflict detection** — Rootline's graph analyzer can detect when `.stem` file changes conflict with document mutations
-- **Diff-aware reviews** — Queries and validation support `--where` filters, making it easy to review only changed documents
+- **Manual staged validation** — `rootline validate --staged` is available when you want to check staged Markdown files
+- **CI validation** — GitHub Actions workflows in `.github/workflows/` run tests and repository checks
+- **Diff-aware reviews** — Queries and validation support `--where` filters, making it easy to review focused record subsets
 
 These workflows are optional enhancements, not product requirements. You can use Rootline without Git by running commands manually.
 
@@ -392,7 +391,7 @@ AI assistants and automation should call the Rootline CLI directly and consume s
 ### Engine vs. agent: division of labor
 
 Rootline's engine decides everything resolvable **from form** — frequency
-thresholds (a field present in ≥80% of records is `required`), unanimous or
+thresholds (a field present in >80% of records is inferred as `required`), unanimous or
 majority value agreement, and structural conventions (directory naming, type
 consistency). Decisions that need **meaning** — is this value semantically the
 same as that one? — are not guessed: `analyze` marks those proposals

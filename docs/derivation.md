@@ -29,7 +29,7 @@ aggregate:
 
 | Function | Description | Example |
 |----------|-------------|---------|
-| `slugify(s)` | URL-friendly slug | `slugify("Mi Título")` → `"mi-titulo"` |
+| `slugify(s)` | Lowercase ASCII slug; runs outside `[a-z0-9]` become hyphens, with no accent transliteration | `slugify("Mi Título")` → `"mi-t-tulo"` |
 | `lower(s)` | Lowercase | `lower("ABC")` → `"abc"` |
 | `upper(s)` | Uppercase | `upper("abc")` → `"ABC"` |
 | `trim(s)` | Trim whitespace | `trim("  hi  ")` → `"hi"` |
