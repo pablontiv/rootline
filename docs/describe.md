@@ -94,7 +94,7 @@ absolute; they are shortened here for readability.
 
 ## Field Extraction
 
-The `--field` flag extracts values by dot-path. Most commands support both simple object paths and array projection:
+The `--field` flag extracts values by dot-path from commands that emit JSON envelopes. It supports both simple object paths and array projection:
 
 ```bash
 # Simple dot-path
@@ -113,12 +113,14 @@ rootline graph docs/ --field 'edges[].source'
 # ["docs/api/auth.md", "docs/api/validate.md"]
 
 rootline graph docs/ --field 'broken_links'
-# [{"link": "[[NonExistent]]", "source": "docs/api/auth.md"}, ...]
+# [{"source": "docs/api/auth.md", "target": "NonExistent", "type": "reference", "line": 12}, ...]
 ```
 
-Array projection syntax `field[].subfield` works for:
-- Query results: `rows[].path`, `rows[].frontmatter.*`, `rows[].derived.*`
-- Graph results: `edges[]`, `broken_links[]`
+Array projection syntax `field[].subfield` works for explicit paths such as:
+- Query results: `rows[].path`, `rows[].frontmatter.estado`, `rows[].derived.slug`
+- Graph results: `edges[]`, `edges[].source`, `broken_links[]`, `broken_links[].target`
+
+Wildcard projections such as `rows[].frontmatter.*` are not supported; name the field explicitly.
 
 ### Repeating `--field`
 

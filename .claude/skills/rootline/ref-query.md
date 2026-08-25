@@ -12,7 +12,7 @@ rootline query <dir> --where "body contains 'migration'"
 rootline query <dir> --where "tags != nil"
 ```
 
-Supported operators: `==`, `!=`, `in`, `contains`, `&&`, `||`. Use `field != nil` for existence checks. Built-in fields include `path`, `body`, `type`, `sections`, and `isIndex` where available. The `type` field refers to the record type (e.g., `"markdown"`); it is not a function call.
+Supported operators: `==`, `!=`, `in`, `not in`, `contains`, `&&`, `||`. Use `field != nil` or `field not in [nil]` for existence checks. Built-in fields include `path`, `body`, `type`, `sections`, and `isIndex` where available. The `type` field refers to the record type (e.g., `"markdown"`); it is not a function call.
 
 ## query
 
@@ -62,8 +62,7 @@ Without `--select` (full records):
     {
       "path": "docs/T001-task.md",
       "frontmatter": { "estado": "Pending" },
-      "derived": {},
-      "aggregated": {}
+      "derived": {}
     }
   ],
   "meta": { "count": 1 }
@@ -172,7 +171,7 @@ Rules:
 
 ## tree
 
-Use `tree` to show hierarchy and completion counts.
+Use `tree` to show hierarchy and recursive record totals.
 
 ```bash
 rootline tree <dir> -o table
@@ -180,7 +179,7 @@ rootline tree <dir> --where "estado != 'Completed'" -o table
 rootline tree <dir> --where "isIndex == false" -o json
 ```
 
-Use table output for humans and JSON for programmatic handling. Table format (`-o table`) renders ASCII brackets with the lifecycle field value (e.g., `[Completed]`, `[In Progress]`). The field name is resolved from the stem schema — not hardcoded to `"estado"`. JSON output (`-o json`) is the default and returns version 2 with `frontmatter` and derived fields on each node.
+Use table output for humans and JSON for programmatic handling. Table format (`-o table`) renders ASCII brackets with the lifecycle field value (e.g., `[Completed]`, `[In Progress]`). The field name is resolved from the stem schema — not hardcoded to `"estado"`. JSON output (`-o json`) is the default and returns version 2. Leaf document nodes carry `frontmatter` with derived/aggregate values merged into it; directory nodes carry `children` and recursive `total`, not `frontmatter`.
 
 ## stats
 
@@ -195,7 +194,7 @@ JSON contains counts grouped by `estado`, `tipo`, and total records.
 
 ## explain
 
-Use `explain` when the user asks why a field has a value, where a field is defined, or how derived/aggregated values are computed.
+Use `explain` when the user asks why a field has a value, where a schema-backed field is defined, or how derived/aggregate values are computed.
 
 ```bash
 rootline explain <file.md> -o json
@@ -203,10 +202,10 @@ rootline explain <file.md> -o json
 
 Report:
 
-- `stem_chain`
+- `stem_chain` (root-to-leaf order)
 - each field name/value
 - origin: frontmatter, derived, aggregate, schema
-- logical `source` when present and defined_in `.stem`
-- expression when present
+- logical `source` and defined_in `.stem` provenance when present on schema-backed fields
+- expression when present on derive/aggregate fields; current output does not include `defined_in` for those computed fields
 - errors
 

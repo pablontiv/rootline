@@ -6,7 +6,7 @@
 
 Keep your Markdown consistent, connected, and queryable as it grows.
 
-Rootline treats your documentation as structured data. **`.stem` files define schemas** (what fields must exist, their types, allowed values). **Validation rules** enforce consistency. **Queries** retrieve relevant records without reading every file. **Field provenance** shows where every value came from and how it was computed. Humans, automation, and AI agents all consume the same governed outputs.
+Rootline treats your documentation as structured data. **`.stem` files define schemas** (what fields must exist, their types, allowed values). **Validation rules** enforce consistency. **Queries** retrieve relevant records without reading every file. **Field inspection** shows where frontmatter and source-backed values came from and how computed fields were produced. Humans, automation, and AI agents all consume the same governed outputs.
 
 ---
 
@@ -87,7 +87,7 @@ rootline new docs/task-001.md
 rootline explain docs/task-001.md
 ```
 
-Most commands output JSON by default. Use `--output table` for human-readable tables. (`graph --check` reports cycles and broken links as text plus an exit code.)
+Data and inspection commands output JSON by default when they have a machine-readable envelope. Use `--output table` for supported human-readable tables. (`graph --check` reports cycles and broken links as text plus an exit code.)
 
 ---
 
@@ -99,7 +99,7 @@ Most commands output JSON by default. Use `--output table` for human-readable ta
 - **Inherited rules**: `.stem` files define schemas; rules flow from parent to child via top-down merge.
 - **Derived fields**: Expressions compute fields (slugify, concatenate, filter); aggregates roll up from children to parents.
 - **Links**: Documents reference each other via `[[wiki-links]]` by default and `[markdown](links)` when `links.styles` includes `markdown`, forming a queryable dependency graph.
-- **Queryable outputs**: Every command returns stable JSON; records can be filtered, sorted, and projected.
+- **Queryable outputs**: Data and inspection commands return stable JSON; records can be filtered, sorted, and projected where the command supports those flags.
 
 ### How Schema Inheritance Works
 
@@ -156,7 +156,7 @@ Violations are reported as errors; the command exits with code 1. Use `--strict`
 Queries retrieve relevant records without scanning entire documents:
 
 - Declarative filtering: `--where 'estado == "published" && tipo == "epic"'`
-- Metadata projection: `--select path,estado,title` returns compact rows
+- Metadata projection: `--select path,estado` returns compact rows
 - Graph traversal: `--has-inbound` / `--has-outbound` with link predicates
 - Counted results: `--count` returns summary statistics
 
@@ -166,7 +166,7 @@ These outputs are JSON, suitable for piping to automation and AI consumers.
 
 ## Command Capabilities
 
-Rootline ships as a **single static Go binary** with no dependencies. Commands are grouped by use case. Most commands support `--where 'expr'` (expr-lang syntax) to filter records before processing.
+Rootline ships as a **single static Go binary** with no dependencies. Commands are grouped by use case. Traversal/data commands such as `query`, `stats`, `tree`, `graph`, and `validate --all` support `--where 'expr'` (expr-lang syntax) to filter records before processing.
 
 ### Validate & Govern
 
@@ -181,7 +181,7 @@ Check documents against inherited schemas and trace field origins.
   - `rootline describe <path>` — Merged schema with all inherited rules
 
 - **`explain`** — Trace field origins, derivations, and errors
-  - `rootline explain <file>` — See where every value came from
+  - `rootline explain <file>` — Inspect field origins and computed expressions
 
 ### Query & Traverse
 
@@ -190,14 +190,14 @@ Find records and visualize dependencies.
 - **`query`** — Search by metadata using declarative filters
   - `rootline query [path] --where 'expr'` — Filter records
   - `rootline query --where 'expr' --count` — Summary count
-  - `rootline query --where 'expr' --select path,estado,title` — Compact row output
+  - `rootline query --where 'expr' --select path,estado` — Compact row output
   - `rootline query --where 'expr' --has-inbound '<sub-expr>'` — Records with inbound links
   - `rootline query --where 'expr' --has-outbound '<sub-expr>'` — Records with outbound links
 
-- **`tree`** — Hierarchical view with completion counts
+- **`tree`** — Hierarchical view with recursive record totals
   - `rootline tree [path] [--where 'expr']` — Directory structure with metadata
 
-- **`graph`** — Dependency graph from wiki-links and markdown links
+- **`graph`** — Dependency graph from governed link styles
   - `rootline graph [path]` — Dependency graph as JSON (default)
   - `rootline graph [path] --format dot|mermaid -o table` — Render a diagram
   - `rootline graph [path] --check` — Validate cycles and broken links (text report + exit code)
@@ -261,16 +261,16 @@ Analyze patterns and manage schema evolution.
   - `rootline hooks status` — Check installation status
   - `rootline hooks uninstall` — Remove hook
 
-All commands support `--output json|table` and `--field` for dot-path extraction, including array projection:
+Commands with JSON envelopes support `--output json` and `--field` for dot-path extraction; `query` also supports `jsonl` and `csv` with `--select`. Commands that emit only human text or write files reject `--field`:
 
 ```bash
 # Dot-path extraction
 rootline describe docs/prd/ --field schema.id.next
 # "T004"
 
-# Simple field projection from query
-rootline query --where 'estado == "Pending"' --field path
-# docs/projects/P01/tasks/T005-deploy-grafana.md
+# Query field extraction uses the rows array
+rootline query --where 'estado == "Pending"' --field 'rows[].path'
+# ["docs/projects/P01/tasks/T005-deploy-grafana.md", ...]
 
 # Array projection: extract fields from arrays (rows, edges, etc.)
 rootline query --field 'rows[].path'
@@ -283,17 +283,17 @@ rootline graph docs/ --field 'edges[].source'
 # ["docs/api/auth.md", ...]
 
 # Compact query projections with --select (JSON, JSONL, CSV)
-rootline query --select path,estado,title
-# {"rows": [{"path": "...", "estado": "Pending", "title": "..."}, ...]}
+rootline query --select path,estado
+# {"rows": [{"path": "...", "estado": "Pending"}, ...]}
 
 rootline query --select path,estado --output jsonl
 # {"path": "...", "estado": "Pending"}
 # {"path": "...", "estado": "In Progress"}
 
-rootline query --select path,estado,title --output csv
-# path,estado,title
-# docs/api/auth.md,Pending,Authentication Guide
-# docs/api/endpoints.md,In Progress,Endpoint Reference
+rootline query --select path,estado --output csv
+# path,estado
+# docs/api/auth.md,Pending
+# docs/api/endpoints.md,In Progress
 
 # Filtering across commands
 rootline tree docs/epics/ --where 'estado != "Completed"'
@@ -326,7 +326,7 @@ aggregate:
   completed: 'len(filter(descendants, .estado == "Completed"))'
 ```
 
-Derived and aggregated fields appear alongside frontmatter in query results and tree output.
+Derived and aggregate fields appear in query results. In `tree` JSON they are merged into leaf nodes' `frontmatter`; directory nodes carry recursive `total` counts and child nodes, not frontmatter.
 
 ### Dependency Graph
 
@@ -360,7 +360,7 @@ Proposals include: correct misspelled enum values (Levenshtein matching), withhe
 rootline explain docs/projects/P01/F01/README.md
 ```
 
-Shows each field's origin (frontmatter, schema default, derived, or aggregate) with logical `source` directives, physical `defined_in` schema provenance, and expressions.
+Shows each field's origin (`frontmatter`, `schema`, `derived`, or `aggregate`). Frontmatter/source-backed schema fields carry `defined_in` and logical `source` directives when available; computed derive/aggregate fields carry expressions and currently do not report `.stem` provenance.
 
 ---
 
@@ -387,7 +387,7 @@ Rootline is designed as a **structured knowledge source for AI assistants**. Dat
 
 ### CLI-first automation
 
-AI assistants and automation should call the Rootline CLI directly and consume stable JSON output from commands such as `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix`, `graph`, `set`, and `new`.
+AI assistants and automation should call the Rootline CLI directly and consume stable JSON output from commands that emit envelopes, such as `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix --all --dry-run`, and `graph` JSON mode. Commands such as `set`, `new`, `init`, and `graph --check` emit human text or perform writes instead of a JSON envelope.
 
 ### Engine vs. agent: division of labor
 
@@ -417,7 +417,7 @@ same as that one? — are not guessed: `analyze` marks those proposals
 | [Fix & Proposals](docs/fix.md) | Auto-repair, enum correction, field inference |
 | [Analyze](docs/analyze.md) | Infer schemas and patterns from documents |
 | [Explain](docs/explain.md) | Field origin tracing, derivation chain, error diagnosis |
-| [Tree](docs/tree.md) | Hierarchical view with completion counts |
+| [Tree](docs/tree.md) | Hierarchical view with recursive record totals |
 | [Stats](docs/stats.md) | Total record counts, optionally filtered |
 | [Dependency Graph](docs/graph.md) | Wiki-links, link schema, cycle detection, DOT/Mermaid |
 | [Derivation Engine](docs/derivation.md) | Derive and aggregate expressions, builtins, linked fields |
