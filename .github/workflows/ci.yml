@@ -67,7 +67,7 @@ jobs:
         run: ./tests/installers/install-ps1-test.ps1
 
   release:
-    uses: pablontiv/crossbeam/.github/workflows/go-release.yml@v1
+    uses: pablontiv/crossbeam/.github/workflows/go-release.yml@v2
     needs: [ci, gitleaks, docs-validate, installer-tests]
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
     with:
