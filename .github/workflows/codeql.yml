@@ -6,7 +6,7 @@ on:
 
 jobs:
   codeql:
-    uses: pablontiv/crossbeam/.github/workflows/codeql.yml@v1
+    uses: pablontiv/crossbeam/.github/workflows/codeql.yml@v2
     with:
       language: go
     permissions:
