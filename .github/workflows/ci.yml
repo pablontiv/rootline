@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   ci:
-    uses: pablontiv/crossbeam/.github/workflows/go-ci.yml@v1
+    uses: pablontiv/crossbeam/.github/workflows/go-ci.yml@v2
     with:
       go-version-file: go.mod
       coverage-threshold: 85
