@@ -1348,6 +1348,48 @@ titulo: Hello World
 	}
 }
 
+func TestValidateStemHealth_EmptyMapSchemaFieldReportsOnlyFieldDeclaration(t *testing.T) {
+	dir := t.TempDir()
+
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+root: true
+schema:
+  removed:
+    type: string
+    required: true
+`))
+
+	mustWriteStemTestFile(t, filepath.Join(dir, "child", ".stem"), []byte(`version: 2
+schema:
+  removed: {}
+`))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var removedFailures []StemHealthCheck
+	for _, check := range result.Checks {
+		if check.Status == "fail" && check.Field == "removed" {
+			removedFailures = append(removedFailures, check)
+		}
+	}
+
+	if len(removedFailures) != 1 {
+		t.Fatalf("failures for field removed = %d, want 1: %+v", len(removedFailures), removedFailures)
+	}
+	if removedFailures[0].Name != "field-declaration" {
+		t.Fatalf("failure check = %q, want field-declaration", removedFailures[0].Name)
+	}
+	if !strings.Contains(removedFailures[0].Message, "incomplete-type") {
+		t.Fatalf("failure message = %q, want incomplete-type", removedFailures[0].Message)
+	}
+
+	assertNoStemHealthCheck(t, result, "type-consistency", "removed")
+	assertNoStemHealthCheck(t, result, "monotonic-violations", "removed")
+}
+
 // TestValidateStemHealth_TypeWideningStillDetected is an adversarial control:
 // verify that real type widening (not null removal) still produces errors.
 func TestValidateStemHealth_TypeWideningStillDetected(t *testing.T) {
