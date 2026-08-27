@@ -140,6 +140,29 @@ schema:
 	}
 }
 
+func TestParseStem_NullFieldMessageNamesScopedAndGlobalExits(t *testing.T) {
+	content := []byte(`
+version: 2
+schema:
+  removed: null
+`)
+
+	_, err := ParseStem("child/.stem", content)
+	if err == nil {
+		t.Fatal("expected null schema field to be rejected")
+	}
+
+	for _, want := range []string{
+		"narrow its scope.match",
+		"move the records outside its scope",
+		"remove it from the .stem that declares it",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not name exit %q", err, want)
+		}
+	}
+}
+
 func TestParseStem_UnknownSectionsIgnored(t *testing.T) {
 	content := []byte(`
 version: 2
