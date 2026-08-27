@@ -32,12 +32,13 @@ rootline validate --all --where 'estado != "Completed"'  # Filtered
 
 Batch validation runs four phases in order:
 
-1. **Stem Health** — 12 diagnostics on `.stem` files themselves, reported under
+1. **Stem Health** — 13 diagnostics on `.stem` files themselves, reported under
    `stem_health` (never as records). This phase runs before the corpus scan and its
    findings survive a scan failure, so a missing or unparseable `.stem` still produces
    the envelope:
    - `stem-files-exist` — the scanned tree contains at least one `.stem` file
    - `yaml-valid` — valid YAML syntax
+   - `schema-valid` — semantic `.stem` validity at parse time (for example unsupported version or null schema field refusal)
    - `scope-match` — scope patterns match at least one file
    - `type-consistency` — field types are consistent across hierarchy
    - `field-declaration` — schema fields use supported canonical types, values, and source declarations
@@ -254,8 +255,9 @@ root.total` and `stats --field total` all reported 3 on the same path.
 `nested-root-marker` describes a supported configuration and must not fail `--strict`.
 
 Health runs before the corpus scan and survives it. A tree with no `.stem` anywhere, or
-one whose `.stem` does not parse, still emits the envelope — carrying `stem-files-exist`
-or `yaml-valid` — instead of a raw Go error on stderr and no JSON at all.
+one whose `.stem` is malformed or semantically refused, still emits the envelope — carrying
+`stem-files-exist`, `yaml-valid`, or `schema-valid` — instead of a raw Go error on stderr
+and no JSON at all.
 
 A single-file target resolves no corpus, so it has no health phase to carry the finding.
 It reports the same condition as a `schema_resolution_failed` notice instead, and so does
@@ -315,7 +317,7 @@ Switch on `code`; it is stable. `message` is for humans.
 | Directory structural verdicts appeared in `results[]` with a trailing-slash path | Read `.structural[]` |
 | `summary.total` counted records plus health findings | `summary.total` counts records |
 | `validate --staged` wrote nothing on an empty index | Emits the envelope with `summary.total: 0` |
-| A missing or unparseable `.stem` wrote a Go error to stderr | Emits the envelope, still exit 1: a `scan_failed` notice under `--all`, a `schema_resolution_failed` notice for a file target or an undeclared boundary |
+| A missing, malformed, or semantically refused `.stem` wrote a Go error to stderr | Emits the envelope, still exit 1: a `scan_failed` notice under `--all`, a `schema_resolution_failed` notice for a file target or an undeclared boundary |
 
 ## Source-Backed Field Validation
 

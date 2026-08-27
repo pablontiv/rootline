@@ -646,11 +646,71 @@ schema:
 	}
 }
 
-func TestValidateStemHealth_V1RejectedAtParse(t *testing.T) {
+func TestValidateStemHealth_NullSchemaFieldClassifiedAsSchemaValid(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
-		t.Fatal(err)
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nroot: true\n"))
+	mustWriteStemTestFile(t, filepath.Join(dir, "child", ".stem"), []byte("version: 2\nschema:\n  removed: null\n"))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
+
+	var got *StemHealthDiagnostic
+	for _, diag := range StemHealthDiagnostics(result) {
+		if diag.Path == "child/.stem" {
+			d := diag
+			got = &d
+			break
+		}
+	}
+	if got == nil {
+		t.Fatalf("expected diagnostic for child/.stem, got %+v", StemHealthDiagnostics(result))
+	}
+	if got.Check != "schema-valid" {
+		t.Fatalf("check = %q, want %q", got.Check, "schema-valid")
+	}
+	if got.Field != "removed" {
+		t.Fatalf("field = %q, want %q", got.Field, "removed")
+	}
+	if !strings.Contains(got.Message, `schema field "removed" is null`) {
+		t.Fatalf("message = %q, want null-field reason", got.Message)
+	}
+	if strings.Contains(got.Message, dir) {
+		t.Fatalf("message leaks absolute path %q: %q", dir, got.Message)
+	}
+}
+
+func TestValidateStemHealth_MalformedYAMLRemainsYamlValid(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte("version: [broken\n"))
+
+	result, err := ValidateStemHealth(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got *StemHealthDiagnostic
+	for _, diag := range StemHealthDiagnostics(result) {
+		if diag.Path == ".stem" {
+			d := diag
+			got = &d
+			break
+		}
+	}
+	if got == nil {
+		t.Fatalf("expected diagnostic for .stem, got %+v", StemHealthDiagnostics(result))
+	}
+	if got.Check != "yaml-valid" {
+		t.Fatalf("check = %q, want %q", got.Check, "yaml-valid")
+	}
+	if got.Field != "" {
+		t.Fatalf("field = %q, want empty", got.Field)
+	}
+}
+
+func TestValidateStemHealth_V1RejectedAsSchemaValidWithoutField(t *testing.T) {
+	dir := t.TempDir()
 	mustWriteStemTestFile(t, filepath.Join(dir, ".stem"), []byte(`version: 1
 schema:
   titulo:
@@ -662,16 +722,28 @@ schema:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// v1 stems now fail at parse time (yaml-valid check)
-	found := false
-	for _, c := range result.Checks {
-		if c.Name == "yaml-valid" && c.Status == "fail" {
-			found = true
+	var got *StemHealthDiagnostic
+	for _, diag := range StemHealthDiagnostics(result) {
+		if diag.Path == ".stem" {
+			d := diag
+			got = &d
 			break
 		}
 	}
-	if !found {
-		t.Error("expected yaml-valid fail check for v1 stem")
+	if got == nil {
+		t.Fatalf("expected diagnostic for .stem, got %+v", StemHealthDiagnostics(result))
+	}
+	if got.Check != "schema-valid" {
+		t.Fatalf("check = %q, want %q", got.Check, "schema-valid")
+	}
+	if got.Field != "" {
+		t.Fatalf("field = %q, want empty", got.Field)
+	}
+	if !strings.Contains(got.Message, "stem version 1 is no longer supported") {
+		t.Fatalf("message = %q, want unsupported-version reason", got.Message)
+	}
+	if strings.Contains(got.Message, dir) {
+		t.Fatalf("message leaks absolute path %q: %q", dir, got.Message)
 	}
 }
 
