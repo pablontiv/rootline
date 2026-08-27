@@ -444,13 +444,14 @@ func (s *StemFile) UnmarshalYAML(value *yaml.Node) error {
 func ParseStem(path string, content []byte) (*StemFile, error) {
 	var stem StemFile
 	if err := yaml.Unmarshal(content, &stem); err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", path, err)
+		return nil, newStemParseError(path, stemParseCheckYAMLValid, "", err.Error(), err)
 	}
 	stem.Path = path
 
-	// Reject unsupported stem versions
+	// Reject unsupported stem versions.
 	if stem.Version == 0 || stem.Version == 1 {
-		return nil, fmt.Errorf("parsing %s: stem version %d is no longer supported — upgrade with rootline v0.x migrate --to-v2 first", path, stem.Version)
+		reason := fmt.Sprintf("stem version %d is no longer supported — upgrade with rootline v0.x migrate --to-v2 first", stem.Version)
+		return nil, newStemParseError(path, stemParseCheckSchemaValid, "", reason, nil)
 	}
 
 	// Reject a schema field set to null. A child never removes what a parent
@@ -458,7 +459,8 @@ func ParseStem(path string, content []byte) (*StemFile, error) {
 	// read keeps a zero-valued declaration out of the pipeline entirely.
 	for _, name := range sortedSchemaFieldNames(stem.Schema) {
 		if stem.Schema[name].declaration.NullField {
-			return nil, fmt.Errorf("parsing %s: schema field %q is null — a child .stem never removes an inherited field; to stop governing these records with that .stem, narrow its scope.match or move the records outside its scope; to remove the field everywhere, remove it from the .stem that declares it", path, name)
+			reason := fmt.Sprintf("schema field %q is null — a child .stem never removes an inherited field; to stop governing these records with that .stem, narrow its scope.match or move the records outside its scope; to remove the field everywhere, remove it from the .stem that declares it", name)
+			return nil, newStemParseError(path, stemParseCheckSchemaValid, name, reason, nil)
 		}
 	}
 

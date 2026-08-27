@@ -2,6 +2,7 @@ package rules
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -123,15 +124,38 @@ func EvaluateStemState(ctx context.Context, state *StemState) (*StemHealthResult
 	for _, sf := range stemPaths {
 		relPath := stemHealthRelPath(absRoot, sf)
 		if parseErr := state.ParseErrors[sf]; parseErr != nil {
+			checkName := stemParseCheckYAMLValid
+			field := ""
+			message := parseErr.Error()
+
+			var classified *stemParseError
+			if errors.As(parseErr, &classified) {
+				diag := classified.Diagnostic()
+				if diag.Check != "" {
+					checkName = diag.Check
+				}
+				field = diag.Field
+				if diag.Reason != "" {
+					message = diag.Reason
+				}
+			}
+
+			if checkName == stemParseCheckSchemaValid {
+				checks = append(checks, StemHealthCheck{
+					Name:    "schema-valid",
+					Status:  "fail",
+					Message: message,
+					Path:    relPath,
+					Field:   field,
+				})
+				continue
+			}
 			checks = append(checks, StemHealthCheck{
-				Name:   "yaml-valid",
-				Status: "fail",
-				// Not always a YAML syntax error: an unsupported version and a
-				// null schema field are refused by the same read. The wrapped
-				// error names the file and the reason, so asserting "invalid
-				// YAML" here would misdescribe both.
-				Message: parseErr.Error(),
+				Name:    "yaml-valid",
+				Status:  "fail",
+				Message: message,
 				Path:    relPath,
+				Field:   field,
 			})
 			continue
 		}

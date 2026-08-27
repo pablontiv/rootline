@@ -90,8 +90,8 @@ Reading it:
   `warn` or `info`. `info` (e.g. `nested-root-marker`) never fails `--strict`.
 - `notices` carries run-level diagnostics by stable `code`: `scan_failed`,
   `schema_resolution_failed`, `stem_health_unavailable`, `no_records`.
-- A tree with no `.stem`, or one that does not parse, still emits this envelope —
-  `stem-files-exist` / `yaml-valid` in `stem_health`, `scan_failed` in `notices`, exit 1.
+- A tree with no `.stem`, or one that is malformed or semantically refused, still emits this envelope —
+  `stem-files-exist` / `yaml-valid` / `schema-valid` in `stem_health`, `scan_failed` in `notices`, exit 1.
 - A single file target whose `.stem` is missing or unparseable, and a chain where no
   `.stem` declares the boundary, also emit the envelope: `schema_resolution_failed` in
   `notices`, `stem_health` empty, exit 1. Parse stdout on these paths too.
