@@ -458,7 +458,7 @@ func ParseStem(path string, content []byte) (*StemFile, error) {
 	// read keeps a zero-valued declaration out of the pipeline entirely.
 	for _, name := range sortedSchemaFieldNames(stem.Schema) {
 		if stem.Schema[name].declaration.NullField {
-			return nil, fmt.Errorf("parsing %s: schema field %q is null — a child .stem never removes an inherited field; if the field should not exist, remove it from the .stem that declares it", path, name)
+			return nil, fmt.Errorf("parsing %s: schema field %q is null — a child .stem never removes an inherited field; to stop governing these records with that .stem, narrow its scope.match or move the records outside its scope; to remove the field everywhere, remove it from the .stem that declares it", path, name)
 		}
 	}
 

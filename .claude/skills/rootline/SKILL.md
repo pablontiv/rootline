@@ -41,9 +41,11 @@ anything, in any section — not `schema:`, not `derive:`, not `aggregate:`.
 - Setting a key to `null` in a child does not delete it. In `derive:` and
   `aggregate:` the parent's value survives; a `null` field in `schema:` is
   refused when the file is read, with one message naming the field.
-- Needing a field gone means the structure is wrong. Remove it from the `.stem`
-  that declares it, or move the records out from under that `.stem`. Never
-  propose a `null` override to make a validation error go away.
+- If a field should not apply to some records, stop governing those records
+  with the `.stem` that declares it: narrow that stem's `scope.match` or move
+  the records outside its scope. Remove the declaration only when the field
+  should disappear everywhere that `.stem` governs. Never propose a `null`
+  override to make a validation error go away.
 - The reason is the guarantee: a parent `.stem` promises a floor to everything
   beneath it. A child that drops a declaration lowers that floor silently for
   every record in the subtree, which is what hierarchical governance exists to
