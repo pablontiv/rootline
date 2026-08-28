@@ -3,7 +3,6 @@ package skilldist
 import (
 	"os"
 	"path/filepath"
-	"syscall"
 	"testing"
 )
 
@@ -125,9 +124,7 @@ func TestInventoryDestinationsClassifiesDestinationKinds(t *testing.T) {
 		if err := os.MkdirAll(filepath.Dir(claude), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := syscall.Mkfifo(claude, 0o644); err != nil {
-			t.Skipf("fifo unavailable: %v", err)
-		}
+		makeInventoryTestFIFO(t, claude)
 		states, err := InventoryDestinations(home, source)
 		if err != nil {
 			t.Fatalf("InventoryDestinations: %v", err)
