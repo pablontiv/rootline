@@ -118,6 +118,50 @@ func TestStoreBackupsAreExclusivePerReceiptDestination(t *testing.T) {
 	}
 }
 
+func TestStoreDuplicateDirectoryBackupPreservesExistingBackup(t *testing.T) {
+	stateRoot := t.TempDir()
+	original := filepath.Join(t.TempDir(), "rootline")
+	mustWriteSkillFile(t, original, "SKILL.md", "preimage")
+	mustWriteSkillFile(t, original, "nested/original.md", "original")
+	digest, err := DigestTree(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	store := NewStore(stateRoot)
+	if err := store.Reserve("r1"); err != nil {
+		t.Fatal(err)
+	}
+	backup, err := store.Backup("r1", DestinationState{ID: DestinationClaude, Path: original, Kind: KindDirectory, Digest: digest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.VerifyBackup(backup); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.Backup("r1", DestinationState{ID: DestinationClaude, Path: original, Kind: KindDirectory, Digest: digest}); err == nil {
+		t.Fatal("duplicate destination backup succeeded")
+	}
+	if err := store.VerifyBackup(backup); err != nil {
+		t.Fatalf("first backup was not preserved after duplicate backup attempt: %v", err)
+	}
+	preservedDigest, err := DigestTree(backup.StoredPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preservedDigest != digest {
+		t.Fatalf("preserved backup digest = %q, want %q", preservedDigest, digest)
+	}
+	content, err := os.ReadFile(filepath.Join(backup.StoredPath, "nested", "original.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "original" {
+		t.Fatalf("preserved backup content = %q, want original", content)
+	}
+}
+
 func TestStoreBackupRequiresReservedReceipt(t *testing.T) {
 	original := filepath.Join(t.TempDir(), "rootline")
 	mustWriteSkillFile(t, original, "SKILL.md", "preimage")

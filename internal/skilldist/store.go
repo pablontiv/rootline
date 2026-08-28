@@ -278,7 +278,9 @@ func (s *Store) backupDirectory(receiptID string, state DestinationState, backup
 	backup.Digest = observedDigest
 	backup.StoredPath = s.destinationBackupPath(receiptID, state.ID)
 	if err := copyDirectory(state.Path, backup.StoredPath); err != nil {
-		_ = os.RemoveAll(backup.StoredPath)
+		if copyDirectoryCreatedDestination(err) {
+			_ = os.RemoveAll(backup.StoredPath)
+		}
 		return Backup{}, err
 	}
 	if err := s.VerifyBackup(backup); err != nil {
@@ -359,11 +361,11 @@ func copyDirectory(source, destination string) error {
 
 	sourceRoot, err := os.OpenRoot(source)
 	if err != nil {
-		return err
+		return copyDirectoryFailure{err: err, createdDestination: true}
 	}
 	destinationRoot, err := os.OpenRoot(destination)
 	if err != nil {
-		return errors.Join(err, sourceRoot.Close())
+		return copyDirectoryFailure{err: errors.Join(err, sourceRoot.Close()), createdDestination: true}
 	}
 
 	type dirMode struct {
@@ -418,7 +420,28 @@ func copyDirectory(source, destination string) error {
 	}
 	closeDestinationErr := destinationRoot.Close()
 	closeSourceErr := sourceRoot.Close()
-	return errors.Join(walkErr, chmodErr, closeDestinationErr, closeSourceErr)
+	if err := errors.Join(walkErr, chmodErr, closeDestinationErr, closeSourceErr); err != nil {
+		return copyDirectoryFailure{err: err, createdDestination: true}
+	}
+	return nil
+}
+
+type copyDirectoryFailure struct {
+	err                error
+	createdDestination bool
+}
+
+func (e copyDirectoryFailure) Error() string {
+	return e.err.Error()
+}
+
+func (e copyDirectoryFailure) Unwrap() error {
+	return e.err
+}
+
+func copyDirectoryCreatedDestination(err error) bool {
+	var failure copyDirectoryFailure
+	return errors.As(err, &failure) && failure.createdDestination
 }
 
 func copyRegularFile(sourceRoot, destinationRoot *os.Root, rel string, mode fs.FileMode) error {
