@@ -43,3 +43,65 @@ type Source struct {
 	Commit    string `json:"commit"`
 	Digest    Digest `json:"digest"`
 }
+
+type DestinationID string
+
+const (
+	DestinationClaude DestinationID = "claude"
+	DestinationAgents DestinationID = "agents"
+)
+
+type EntryKind string
+
+const (
+	KindAbsent           EntryKind = "absent"
+	KindDirectory        EntryKind = "directory"
+	KindCorrectSymlink   EntryKind = "correct_symlink"
+	KindDivergentSymlink EntryKind = "divergent_symlink"
+	KindUnsupported      EntryKind = "unsupported"
+)
+
+type Operation string
+
+const (
+	OperationInstall   Operation = "install"
+	OperationStatus    Operation = "status"
+	OperationUninstall Operation = "uninstall"
+	OperationRestore   Operation = "restore"
+)
+
+type ActionKind string
+
+const (
+	ActionCreateSymlink        ActionKind = "create_symlink"
+	ActionReplaceWithSymlink   ActionKind = "replace_with_symlink"
+	ActionRemoveManagedSymlink ActionKind = "remove_managed_symlink"
+	ActionRestorePreimage      ActionKind = "restore_preimage"
+	ActionNoOp                 ActionKind = "no_op"
+)
+
+type Destination struct {
+	ID   DestinationID `json:"id"`
+	Path string        `json:"path"`
+}
+
+type DestinationState struct {
+	ID              DestinationID `json:"id"`
+	Path            string        `json:"path"`
+	Kind            EntryKind     `json:"kind"`
+	Digest          Digest        `json:"digest,omitempty"`
+	LexicalTarget   string        `json:"lexical_target,omitempty"`
+	CanonicalTarget string        `json:"canonical_target,omitempty"`
+}
+
+type Action struct {
+	Kind        ActionKind       `json:"kind"`
+	Destination DestinationState `json:"destination"`
+}
+
+type Plan struct {
+	Operation Operation `json:"operation"`
+	Source    *Source   `json:"source,omitempty"`
+	Actions   []Action  `json:"actions"`
+	Digest    Digest    `json:"digest"`
+}
