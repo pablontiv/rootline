@@ -175,6 +175,8 @@ func EvaluateStemState(ctx context.Context, state *StemState) (*StemHealthResult
 		return nil, ctx.Err()
 	}
 
+	invalidFieldsByStem := invalidSchemaFieldsByStem(parsedStems)
+
 	// Check 2: Orphan scopes (scope.match doesn't match any file in directory)
 	for _, sf := range sortedStemPaths(parsedStems) {
 		stem := parsedStems[sf]
@@ -215,6 +217,9 @@ func EvaluateStemState(ctx context.Context, state *StemState) (*StemHealthResult
 			continue
 		}
 		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
+			if stemFieldIsInvalid(invalidFieldsByStem, sf, fieldName) {
+				continue
+			}
 			childField := stem.Schema[fieldName]
 			parentField, exists := parentMerged.Schema[fieldName]
 			if !exists {
@@ -404,6 +409,10 @@ func EvaluateStemState(ctx context.Context, state *StemState) (*StemHealthResult
 			if conflict.StemPath != sf || monotonicConflictIsType(conflict) {
 				continue
 			}
+			fieldName, _ := monotonicField(conflict.Field)
+			if stemFieldIsInvalid(invalidFieldsByStem, conflict.StemPath, fieldName) {
+				continue
+			}
 			identity := layerConflictIdentity{StemPath: conflict.StemPath, Field: conflict.Field, Operation: conflict.Operation}
 			if _, exists := emittedMonotonic[identity]; exists {
 				continue
@@ -577,6 +586,32 @@ func fieldDeclarationChecks(absRoot string, parsedStems map[string]*StemFile) []
 		}
 	}
 	return checks
+}
+
+func invalidSchemaFieldsByStem(parsedStems map[string]*StemFile) map[string]map[string]struct{} {
+	invalid := make(map[string]map[string]struct{}, len(parsedStems))
+	for _, stemPath := range sortedStemPaths(parsedStems) {
+		stem := parsedStems[stemPath]
+		for _, fieldName := range sortedSchemaFieldNames(stem.Schema) {
+			if len(ValidateFieldDeclaration(fieldName, stem.Schema[fieldName])) == 0 {
+				continue
+			}
+			if invalid[stemPath] == nil {
+				invalid[stemPath] = make(map[string]struct{})
+			}
+			invalid[stemPath][fieldName] = struct{}{}
+		}
+	}
+	return invalid
+}
+
+func stemFieldIsInvalid(invalidByStem map[string]map[string]struct{}, stemPath, fieldName string) bool {
+	fields := invalidByStem[stemPath]
+	if len(fields) == 0 {
+		return false
+	}
+	_, exists := fields[fieldName]
+	return exists
 }
 
 func sortedStemPaths(parsedStems map[string]*StemFile) []string {
