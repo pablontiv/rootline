@@ -7,6 +7,13 @@ import (
 
 type Digest string
 
+type Options struct {
+	HomeDir      string
+	StateDir     string
+	Now          func() time.Time
+	NewReceiptID func() string
+}
+
 type ErrorCode string
 
 const (
@@ -108,6 +115,21 @@ type Plan struct {
 	Actions   []Action  `json:"actions"`
 	Digest    Digest    `json:"digest"`
 }
+
+type Result struct {
+	Operation    Operation          `json:"operation"`
+	Attempted    bool               `json:"attempted"`
+	Complete     bool               `json:"complete"`
+	Source       *Source            `json:"source,omitempty"`
+	Plan         *Plan              `json:"plan,omitempty"`
+	Destinations []DestinationState `json:"destinations"`
+	Backups      []Backup           `json:"backups"`
+	Receipt      *Receipt           `json:"receipt,omitempty"`
+	ReceiptDrift bool               `json:"receipt_drift"`
+	Errors       []OperationError   `json:"errors"`
+}
+
+func (r Result) Failed() bool { return len(r.Errors) > 0 }
 
 type Backup struct {
 	Destination  DestinationID `json:"destination"`
