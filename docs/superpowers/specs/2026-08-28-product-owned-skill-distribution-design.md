@@ -99,7 +99,8 @@ The package contains these units:
 - Requires `.claude/skills/rootline/SKILL.md`.
 - Requires the source repository's `.git` entry to be a directory.
 - Rejects linked worktrees, whose `.git` entry is a file.
-- Computes the source commit when available and the deterministic tree digest.
+- Rejects staged, unstaged, or untracked changes inside the canonical skill tree so commit and digest describe one committed source.
+- Computes the source commit and deterministic tree digest.
 
 The linked-worktree rule ensures installed symlinks never target an implementation worktree that may later be removed. A normal primary checkout is the supported source identity.
 
@@ -152,13 +153,14 @@ Executor applies an approved plan one destination at a time:
 1. Re-inventory source and destination.
 2. Refuse if the recomputed plan digest differs.
 3. Create the destination's backup without overwriting existing state.
-4. Move the current destination out of the way when present.
-5. Create a temporary symlink in the destination's own parent directory.
-6. Rename the temporary symlink into place.
+4. Move the current destination to a unique sibling staging path when present.
+5. Re-inventory the moved preimage and refuse if it no longer matches the approved evidence.
+6. Create the symlink directly at the now-absent destination; creation fails instead of overwriting an entry recreated concurrently.
 7. Verify lexical target, canonical target, and source digest.
-8. Mark the destination action successful in the receipt.
+8. Remove the staged preimage only after successful verification.
+9. Mark the destination action successful in the receipt.
 
-If steps 4–7 fail, Executor restores that destination's preimage immediately. Earlier verified destinations remain installed. The run is sealed incomplete and reports exactly which destination failed.
+If steps 4–8 fail, Executor restores that destination's preimage when the final path remains available. If another actor recreated the final path, Executor preserves that external state, retains the independent backup, reports rollback as incomplete, and never overwrites the new entry. Earlier verified destinations remain installed. The run is sealed incomplete and reports exactly which destination failed.
 
 Rootline uses `os.Symlink`; it never shells out to `ln`, `cp`, or platform checksum commands.
 
@@ -208,7 +210,7 @@ Installing from a different primary checkout is a replacement, not a silent reta
 
 ### Status
 
-`status` is read-only. It reports source validity, destination classifications, convergence, drift from the latest receipt, and available restoration evidence. It never creates the state directory merely to report that no receipt exists.
+`status` is read-only. It reports source validity, destination classifications, convergence, `receipt_drift` from the latest receipt, and available restoration evidence. A committed source update may leave both symlinks converged while setting `receipt_drift: true`; approving the resulting idempotent install plan records the new evidence. Status never creates the state directory merely to report that no receipt exists.
 
 ### Uninstall
 
@@ -235,6 +237,7 @@ Each verb emits one versioned envelope. Install uses this shape; sibling verbs u
     "digest": "sha256:<digest>"
   },
   "plan_digest": "sha256:<digest>",
+  "receipt_drift": false,
   "destinations": [],
   "backups": [],
   "receipt": null,
