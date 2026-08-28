@@ -70,11 +70,3 @@ while read local_ref local_sha remote_ref remote_sha; do
   fi
 
 done
-
-# Install the project Rootline skill to the Claude user scope.
-SKILLS_DEST="$HOME/.claude/skills"
-mkdir -p "$SKILLS_DEST"
-skill="rootline"
-rm -rf "${SKILLS_DEST:?}/$skill"
-cp -r "$REPO_ROOT/.claude/skills/$skill" "$SKILLS_DEST/$skill"
-echo "rootline: installed $skill skill → $SKILLS_DEST/$skill"

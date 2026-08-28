@@ -388,6 +388,10 @@ Rootline is designed as a **structured knowledge source for AI assistants**. Dat
 
 AI assistants and automation should call the Rootline CLI directly and consume stable JSON output from commands that emit envelopes, such as `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix --all --dry-run`, and `graph` JSON mode. Commands such as `set`, `new`, `init`, and `graph --check` emit human text or perform writes instead of a JSON envelope.
 
+### Agent skill distribution
+
+Rootline owns the agent skill distribution lifecycle through the explicit `rootline skill install` plan-and-approve command family. Git hooks do not mutate user skill directories. Agents and operators should follow [docs/skill.md](docs/skill.md) for install, status, uninstall, and restore workflows.
+
 ### Engine vs. agent: division of labor
 
 Rootline's engine decides everything resolvable **from form** — frequency
@@ -419,6 +423,7 @@ same as that one? — are not guessed: `analyze` marks those proposals
 | [Tree](docs/tree.md) | Hierarchical view with recursive record totals |
 | [Stats](docs/stats.md) | Total record counts, optionally filtered |
 | [Dependency Graph](docs/graph.md) | Wiki-links, link schema, cycle detection, DOT/Mermaid |
+| [Agent Skill Distribution](docs/skill.md) | `rootline skill install`, status, uninstall, restore, receipts, and backups |
 | [Derivation Engine](docs/derivation.md) | Derive and aggregate expressions, builtins, linked fields |
 | [Schema Migration](docs/migrate.md) | Breaking change detection, field rename, v2 upgrade |
 | [Levels & Match](docs/levels.md) | Hierarchical field scoping with match patterns |
