@@ -25,7 +25,7 @@ type SkillEnvelope struct {
 	PlanDigest   skilldist.Digest             `json:"plan_digest,omitempty"`
 	Destinations []skilldist.DestinationState `json:"destinations"`
 	Backups      []skilldist.Backup           `json:"backups"`
-	Receipt      *skilldist.Receipt           `json:"receipt,omitempty"`
+	Receipt      *skilldist.Receipt           `json:"receipt"`
 	ReceiptDrift bool                         `json:"receipt_drift"`
 	Errors       []skilldist.OperationError   `json:"errors"`
 }
@@ -42,11 +42,11 @@ var skillInstallCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		source, err := resolveSkillSource(skillSource)
 		if err != nil {
-			return err
+			return outputSkillSetupError(cmd, "rootline/skill-install", skilldist.OperationInstall, skilldist.ErrSourceNotCanonical, err)
 		}
 		service, err := skillServiceFactory()
 		if err != nil {
-			return err
+			return outputSkillSetupError(cmd, "rootline/skill-install", skilldist.OperationInstall, skilldist.ErrBackupFailed, err)
 		}
 		result := service.Install(commandContext(cmd), source, skilldist.Digest(skillApproval))
 		return outputSkillResult(cmd, "rootline/skill-install", result)
@@ -60,11 +60,11 @@ var skillStatusCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		source, err := resolveSkillSource(skillSource)
 		if err != nil {
-			return err
+			return outputSkillSetupError(cmd, "rootline/skill-status", skilldist.OperationStatus, skilldist.ErrSourceNotCanonical, err)
 		}
 		service, err := skillServiceFactory()
 		if err != nil {
-			return err
+			return outputSkillSetupError(cmd, "rootline/skill-status", skilldist.OperationStatus, skilldist.ErrBackupFailed, err)
 		}
 		result := service.Status(commandContext(cmd), source)
 		return outputSkillResult(cmd, "rootline/skill-status", result)
@@ -78,7 +78,7 @@ var skillUninstallCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		service, err := skillServiceFactory()
 		if err != nil {
-			return err
+			return outputSkillSetupError(cmd, "rootline/skill-uninstall", skilldist.OperationUninstall, skilldist.ErrBackupFailed, err)
 		}
 		result := service.Uninstall(commandContext(cmd), skilldist.Digest(skillApproval))
 		return outputSkillResult(cmd, "rootline/skill-uninstall", result)
@@ -90,9 +90,12 @@ var skillRestoreCmd = &cobra.Command{
 	Short: "Plan or restore from a rootline skill receipt",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if skillReceipt == "" {
+			return outputSkillSetupError(cmd, "rootline/skill-restore", skilldist.OperationRestore, skilldist.ErrRestoreConflict, fmt.Errorf("receipt ID is required"))
+		}
 		service, err := skillServiceFactory()
 		if err != nil {
-			return err
+			return outputSkillSetupError(cmd, "rootline/skill-restore", skilldist.OperationRestore, skilldist.ErrBackupFailed, err)
 		}
 		result := service.Restore(commandContext(cmd), skillReceipt, skilldist.Digest(skillApproval))
 		return outputSkillResult(cmd, "rootline/skill-restore", result)
@@ -109,7 +112,6 @@ func init() {
 
 	skillRestoreCmd.Flags().StringVar(&skillApproval, "approve", "", "approved plan digest to apply")
 	skillRestoreCmd.Flags().StringVar(&skillReceipt, "receipt", "", "receipt ID to restore")
-	_ = skillRestoreCmd.MarkFlagRequired("receipt")
 
 	skillCmd.AddCommand(skillInstallCmd, skillStatusCmd, skillUninstallCmd, skillRestoreCmd)
 	rootCmd.AddCommand(skillCmd)
@@ -146,14 +148,18 @@ func newSkillService() (*skilldist.Service, error) {
 }
 
 func defaultSkillStateRoot(home string) (string, error) {
-	if runtime.GOOS == "windows" {
-		configDir, err := os.UserConfigDir()
+	return defaultSkillStateRootForOS(runtime.GOOS, home, os.Getenv, os.UserConfigDir)
+}
+
+func defaultSkillStateRootForOS(goos, home string, getenv func(string) string, userConfigDir func() (string, error)) (string, error) {
+	if goos == "windows" {
+		configDir, err := userConfigDir()
 		if err != nil {
 			return "", fmt.Errorf("resolve config directory: %w", err)
 		}
 		return filepath.Clean(configDir), nil
 	}
-	if xdgStateHome := os.Getenv("XDG_STATE_HOME"); xdgStateHome != "" {
+	if xdgStateHome := getenv("XDG_STATE_HOME"); xdgStateHome != "" {
 		return filepath.Clean(xdgStateHome), nil
 	}
 	return filepath.Join(home, ".local", "state"), nil
@@ -161,6 +167,11 @@ func defaultSkillStateRoot(home string) (string, error) {
 
 func outputSkillResult(cmd *cobra.Command, kind string, result skilldist.Result) error {
 	return outputJSON(cmd, skillEnvelopeFromResult(kind, result), result.Failed())
+}
+
+func outputSkillSetupError(cmd *cobra.Command, kind string, operation skilldist.Operation, code skilldist.ErrorCode, err error) error {
+	result := skilldist.Result{Operation: operation, Errors: []skilldist.OperationError{{Code: code, Message: err.Error(), Err: err}}}
+	return outputSkillResult(cmd, kind, result)
 }
 
 func skillEnvelopeFromResult(kind string, result skilldist.Result) SkillEnvelope {

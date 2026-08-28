@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -425,6 +426,202 @@ func TestRestorePreservesUnobservedDestinationState(t *testing.T) {
 	}
 }
 
+func TestRestoreAllNoOpReceiptNoOpsWhenLinksStillMatchAndRecreatesAfterUninstall(t *testing.T) {
+	fixture := newServiceFixture(t)
+	installPlan := fixture.service.Install(context.Background(), fixture.repo, "")
+	installed := fixture.service.Install(context.Background(), fixture.repo, installPlan.Plan.Digest)
+	if installed.Failed() {
+		t.Fatalf("initial install: %#v", installed)
+	}
+
+	noopPlan := fixture.service.Install(context.Background(), fixture.repo, "")
+	for _, action := range noopPlan.Plan.Actions {
+		if action.Kind != ActionNoOp {
+			t.Fatalf("noop plan action = %#v, want no-op", action)
+		}
+	}
+	noopInstalled := fixture.service.Install(context.Background(), fixture.repo, noopPlan.Plan.Digest)
+	if noopInstalled.Failed() || !noopInstalled.Complete || len(noopInstalled.Receipt.Backups) != 0 {
+		t.Fatalf("noop install receipt = %#v", noopInstalled)
+	}
+
+	restorePlan := fixture.service.Restore(context.Background(), noopInstalled.Receipt.ID, "")
+	if restorePlan.Failed() || restorePlan.Plan == nil {
+		t.Fatalf("restore plan for intact no-op receipt = %#v", restorePlan)
+	}
+	for _, action := range restorePlan.Plan.Actions {
+		if action.Kind != ActionNoOp {
+			t.Fatalf("intact no-op restore action = %#v, want no-op", action)
+		}
+	}
+	restored := fixture.service.Restore(context.Background(), noopInstalled.Receipt.ID, restorePlan.Plan.Digest)
+	if restored.Failed() || !restored.Complete || len(restored.Receipt.Backups) != 0 {
+		t.Fatalf("intact no-op restore = %#v", restored)
+	}
+	assertSymlinkTo(t, fixture.claudePath(), fixture.skillPath())
+	assertSymlinkTo(t, fixture.agentsPath(), fixture.skillPath())
+
+	uninstallPlan := fixture.service.Uninstall(context.Background(), "")
+	uninstalled := fixture.service.Uninstall(context.Background(), uninstallPlan.Plan.Digest)
+	if uninstalled.Failed() {
+		t.Fatalf("uninstall: %#v", uninstalled)
+	}
+
+	recreatePlan := fixture.service.Restore(context.Background(), noopInstalled.Receipt.ID, "")
+	if recreatePlan.Failed() || recreatePlan.Plan == nil {
+		t.Fatalf("restore plan after uninstall = %#v", recreatePlan)
+	}
+	recreated := fixture.service.Restore(context.Background(), noopInstalled.Receipt.ID, recreatePlan.Plan.Digest)
+	if recreated.Failed() || !recreated.Complete {
+		t.Fatalf("recreate no-op receipt = %#v", recreated)
+	}
+	assertSymlinkTo(t, fixture.claudePath(), fixture.skillPath())
+	assertSymlinkTo(t, fixture.agentsPath(), fixture.skillPath())
+}
+
+func TestRestoreMixedNoOpAndCreateReceiptRecreatesOnlyReceiptedSymlinkPreimage(t *testing.T) {
+	fixture := newServiceFixture(t)
+	if err := os.MkdirAll(filepath.Dir(fixture.claudePath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(fixture.skillPath(), fixture.claudePath()); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	plan := fixture.service.Install(context.Background(), fixture.repo, "")
+	if plan.Failed() || plan.Plan == nil {
+		t.Fatalf("mixed plan = %#v", plan)
+	}
+	installed := fixture.service.Install(context.Background(), fixture.repo, plan.Plan.Digest)
+	if installed.Failed() || !installed.Complete || len(installed.Receipt.Backups) != 0 {
+		t.Fatalf("mixed install receipt = %#v", installed)
+	}
+
+	uninstallPlan := fixture.service.Uninstall(context.Background(), "")
+	uninstalled := fixture.service.Uninstall(context.Background(), uninstallPlan.Plan.Digest)
+	if uninstalled.Failed() {
+		t.Fatalf("uninstall: %#v", uninstalled)
+	}
+
+	restorePlan := fixture.service.Restore(context.Background(), installed.Receipt.ID, "")
+	if restorePlan.Failed() || restorePlan.Plan == nil {
+		t.Fatalf("mixed restore plan = %#v", restorePlan)
+	}
+	restored := fixture.service.Restore(context.Background(), installed.Receipt.ID, restorePlan.Plan.Digest)
+	if restored.Failed() || !restored.Complete {
+		t.Fatalf("mixed restore = %#v", restored)
+	}
+	assertSymlinkTo(t, fixture.claudePath(), fixture.skillPath())
+	assertPathAbsent(t, fixture.agentsPath())
+}
+
+func TestRestoreDirectoryVerificationFailureKeepsCurrentSymlinkAndRemovesCandidate(t *testing.T) {
+	fixture := newServiceFixture(t)
+	mustWriteSkillFile(t, fixture.claudePath(), "SKILL.md", "original")
+	plan := fixture.service.Install(context.Background(), fixture.repo, "")
+	installed := fixture.service.Install(context.Background(), fixture.repo, plan.Plan.Digest)
+	if installed.Failed() {
+		t.Fatalf("install: %#v", installed)
+	}
+	restorePlan := fixture.service.Restore(context.Background(), installed.Receipt.ID, "")
+	if restorePlan.Failed() || restorePlan.Plan == nil {
+		t.Fatalf("restore plan = %#v", restorePlan)
+	}
+
+	fixture.service.store.copyDirectory = func(source, destination string) error {
+		if err := copyDirectory(source, destination); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(destination, "SKILL.md"), []byte("corrupt"), 0o600)
+	}
+	result := fixture.service.Restore(context.Background(), installed.Receipt.ID, restorePlan.Plan.Digest)
+	if !result.Failed() || !result.Attempted || result.Complete {
+		t.Fatalf("restore verification failure = %#v", result)
+	}
+	assertResultErrorCode(t, result, ErrVerificationFailed)
+	assertSymlinkTo(t, fixture.claudePath(), fixture.skillPath())
+	assertNoRootlineStageSiblings(t, fixture.claudePath())
+}
+
+func TestRestoreSymlinkPermissionErrorIsClassified(t *testing.T) {
+	fixture := newServiceFixture(t)
+	outside := filepath.Join(t.TempDir(), "outside")
+	mustWriteSkillFile(t, outside, "SKILL.md", "external")
+	if err := os.MkdirAll(filepath.Dir(fixture.claudePath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, fixture.claudePath()); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	plan := fixture.service.Install(context.Background(), fixture.repo, "")
+	installed := fixture.service.Install(context.Background(), fixture.repo, plan.Plan.Digest)
+	if installed.Failed() {
+		t.Fatalf("install: %#v", installed)
+	}
+	if err := os.Remove(fixture.claudePath()); err != nil {
+		t.Fatal(err)
+	}
+	assertPathAbsent(t, fixture.claudePath())
+
+	restorePlan := fixture.service.Restore(context.Background(), installed.Receipt.ID, "")
+	if restorePlan.Failed() || restorePlan.Plan == nil {
+		t.Fatalf("restore plan = %#v", restorePlan)
+	}
+	fixture.service.store.symlink = func(_, _ string) error { return os.ErrPermission }
+	result := fixture.service.Restore(context.Background(), installed.Receipt.ID, restorePlan.Plan.Digest)
+	if !result.Failed() {
+		t.Fatalf("restore symlink permission succeeded: %#v", result)
+	}
+	assertResultErrorCode(t, result, ErrSymlinkPermission)
+	assertPathAbsent(t, fixture.claudePath())
+}
+
+func TestInstallCleanupFailureRollsBackPublishedSymlink(t *testing.T) {
+	fixture := newServiceFixture(t)
+	mustWriteSkillFile(t, fixture.claudePath(), "SKILL.md", "old backup")
+	planned := fixture.service.Install(context.Background(), fixture.repo, "")
+	fixture.service.executor.removeAll = func(path string) error {
+		if strings.Contains(path, ".rootline-stage.") {
+			return errors.New("injected staged cleanup failure")
+		}
+		return os.RemoveAll(path)
+	}
+
+	result := fixture.service.Install(context.Background(), fixture.repo, planned.Plan.Digest)
+	if !result.Failed() || result.Complete || result.Receipt == nil {
+		t.Fatalf("cleanup failure result = %#v", result)
+	}
+	if len(result.Receipt.Actions) == 0 || !result.Receipt.Actions[0].RolledBack {
+		t.Fatalf("cleanup failure did not report rollback: %#v", result.Receipt.Actions)
+	}
+	data, err := os.ReadFile(filepath.Join(fixture.claudePath(), "SKILL.md"))
+	if err != nil || string(data) != "old backup" {
+		t.Fatalf("staged preimage not restored: data=%q err=%v", data, err)
+	}
+}
+
+func TestInstallAbsentRollbackReportsFalseWhenFinalPathStillExists(t *testing.T) {
+	fixture := newServiceFixture(t)
+	planned := fixture.service.Install(context.Background(), fixture.repo, "")
+	fixture.service.executor.symlink = func(oldname, newname string) error {
+		if err := os.Symlink(oldname, newname); err != nil {
+			return err
+		}
+		mustWriteSkillFile(t, fixture.skillPath(), "SKILL.md", "drift after publish")
+		return nil
+	}
+	fixture.service.executor.remove = func(string) error { return nil }
+
+	result := fixture.service.Install(context.Background(), fixture.repo, planned.Plan.Digest)
+	if !result.Failed() || result.Complete || result.Receipt == nil {
+		t.Fatalf("absent rollback race result = %#v", result)
+	}
+	if len(result.Receipt.Actions) == 0 || result.Receipt.Actions[0].RolledBack {
+		t.Fatalf("absent rollback incorrectly reported success: %#v", result.Receipt.Actions)
+	}
+	assertSymlinkTo(t, fixture.claudePath(), fixture.skillPath())
+}
+
 type serviceFixture struct {
 	repo    string
 	home    string
@@ -489,6 +686,17 @@ func assertPathAbsent(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Lstat(path); !os.IsNotExist(err) {
 		t.Fatalf("Lstat(%q) err = %v, want not exist", path, err)
+	}
+}
+
+func assertNoRootlineStageSiblings(t *testing.T, path string) {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".rootline-stage.*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("operation-owned staging siblings remain: %v", matches)
 	}
 }
 

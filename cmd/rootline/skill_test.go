@@ -132,9 +132,54 @@ func TestSkillStaleApprovalEmitsEnvelopeBeforeNonZeroExit(t *testing.T) {
 }
 
 func TestSkillRestoreRequiresReceipt(t *testing.T) {
-	_, err := runCmd(t, "skill", "restore")
-	if err == nil || !strings.Contains(err.Error(), "required flag") || !strings.Contains(err.Error(), "receipt") {
-		t.Fatalf("restore without receipt error = %v", err)
+	out, err := runCmd(t, "skill", "restore")
+	if err == nil {
+		t.Fatalf("restore without receipt succeeded: %s", out)
+	}
+	result := decodeSkillEnvelope(t, out)
+	if result.Kind != "rootline/skill-restore" || len(result.Errors) == 0 || result.Errors[0].Code != skilldist.ErrRestoreConflict {
+		t.Fatalf("restore without receipt envelope = %#v", result)
+	}
+	assertRawSkillEnvelopeHasExplicitNullReceipt(t, out)
+}
+
+func TestSkillSetupFailureEmitsEnvelopeBeforeNonZeroExit(t *testing.T) {
+	fixture := newSkillCommandFixture(t)
+	previousFactory := skillServiceFactory
+	skillServiceFactory = func() (*skilldist.Service, error) {
+		return nil, fmt.Errorf("injected setup failure")
+	}
+	t.Cleanup(func() { skillServiceFactory = previousFactory })
+
+	out, err := runCmd(t, "skill", "status", "--source", fixture.repo)
+	if err == nil {
+		t.Fatalf("setup failure succeeded: %s", out)
+	}
+	result := decodeSkillEnvelope(t, out)
+	if result.Kind != "rootline/skill-status" || len(result.Errors) == 0 || !strings.Contains(result.Errors[0].Message, "injected setup failure") {
+		t.Fatalf("setup failure envelope = %#v", result)
+	}
+	assertRawSkillEnvelopeHasExplicitNullReceipt(t, out)
+}
+
+func TestSkillPlanEnvelopeIncludesExplicitNullReceipt(t *testing.T) {
+	fixture := newSkillCommandFixture(t)
+	out, err := runCmd(t, "skill", "install", "--source", fixture.repo)
+	if err != nil {
+		t.Fatalf("install plan: %v\n%s", err, out)
+	}
+	assertRawSkillEnvelopeHasExplicitNullReceipt(t, out)
+}
+
+func TestDefaultSkillStateRootUsesInjectedWindowsUserConfigDir(t *testing.T) {
+	got, err := defaultSkillStateRootForOS("windows", `C:\\Users\\agent`, func(string) string { return "" }, func() (string, error) {
+		return `C:\\Users\\agent\\AppData\\Roaming`, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != filepath.Clean(`C:\\Users\\agent\\AppData\\Roaming`) {
+		t.Fatalf("windows state root = %q", got)
 	}
 }
 
@@ -251,6 +296,21 @@ func decodeSkillEnvelope(t *testing.T, out string) SkillEnvelope {
 		t.Fatalf("invalid skill envelope: %v\n%s", err, out)
 	}
 	return result
+}
+
+func assertRawSkillEnvelopeHasExplicitNullReceipt(t *testing.T, out string) {
+	t.Helper()
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(out), &raw); err != nil {
+		t.Fatalf("invalid skill envelope: %v\n%s", err, out)
+	}
+	receipt, ok := raw["receipt"]
+	if !ok {
+		t.Fatalf("receipt field omitted from raw envelope: %s", out)
+	}
+	if string(receipt) != "null" {
+		t.Fatalf("receipt field = %s, want null", receipt)
+	}
 }
 
 func assertSkillKind(t *testing.T, result SkillEnvelope, want string) {

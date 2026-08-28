@@ -88,6 +88,9 @@ func BuildRestorePlan(receipt Receipt, states []DestinationState) (Plan, error) 
 		if err != nil {
 			return Plan{}, err
 		}
+		if recorded.Action == ActionNoOp && sameDestinationEvidence(recorded.Before, state) && filepathClean(recorded.Before.Path) == filepathClean(state.Path) {
+			kind = ActionNoOp
+		}
 		actions = append(actions, Action{Kind: kind, Destination: state})
 		preimages = append(preimages, recorded.Before)
 	}

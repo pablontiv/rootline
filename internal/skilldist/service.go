@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 )
 
@@ -27,6 +26,9 @@ type Service struct {
 type installExecutor struct {
 	symlink       func(oldname, newname string) error
 	beforeSymlink func(DestinationState) error
+	rename        func(oldpath, newpath string) error
+	remove        func(name string) error
+	removeAll     func(path string) error
 }
 
 type publishOutcome struct {
@@ -64,7 +66,7 @@ func New(options Options) (*Service, error) {
 		newReceiptID = randomReceiptID
 	}
 
-	executor := &installExecutor{symlink: os.Symlink}
+	executor := &installExecutor{symlink: os.Symlink, rename: os.Rename, remove: os.Remove, removeAll: os.RemoveAll}
 	return &Service{
 		homeDir:      homeDir,
 		stateDir:     stateDir,
@@ -314,7 +316,15 @@ func (s *Service) Restore(ctx context.Context, receiptID string, approval Digest
 	for _, action := range plan.Actions {
 		current := action.Destination
 		actionResult := ActionResult{Destination: current.ID, Action: action.Kind, Before: current}
-		currentBackup, err := s.store.Backup(receipt.ID, current)
+		currentBackup := Backup{Destination: current.ID, OriginalPath: current.Path, Kind: KindAbsent}
+		if action.Kind == ActionNoOp {
+			actionResult.After = current
+			actionResult.Complete = true
+			receipt.Actions = append(receipt.Actions, actionResult)
+			continue
+		}
+		var err error
+		currentBackup, err = s.store.Backup(receipt.ID, current)
 		if err != nil {
 			opErr := coerceOperationError(ErrBackupFailed, current.Path, string(current.ID), err)
 			actionResult.Error = opErr
@@ -501,6 +511,10 @@ func (s *Service) verifyReceiptPreimageBackups(receipt Receipt) (map[Destination
 		}
 		backup, ok := backupsByDestination[action.Destination]
 		if !ok {
+			if action.Action == ActionNoOp && preimage.Kind == KindCorrectSymlink && preimage.LexicalTarget != "" {
+				verifiedBackups[action.Destination] = Backup{Destination: action.Destination, OriginalPath: preimage.Path, Kind: preimage.Kind, Digest: preimage.Digest, LinkTarget: preimage.LexicalTarget}
+				continue
+			}
 			return nil, nil, operationError(ErrVerificationFailed, preimage.Path, string(action.Destination), fmt.Errorf("missing backup for receipt %q destination %q", receipt.ID, action.Destination))
 		}
 		if backup.Kind != preimage.Kind {
@@ -540,28 +554,95 @@ func removeReceiptedSymlink(state DestinationState) (DestinationState, error) {
 	return state, operationError(ErrVerificationFailed, state.Path, string(state.ID), fmt.Errorf("destination still exists after symlink removal"))
 }
 
+func stageReceiptedSymlink(state DestinationState) (string, DestinationState, error) {
+	info, err := os.Lstat(state.Path)
+	if err != nil {
+		return "", state, operationError(ErrRestoreConflict, state.Path, string(state.ID), err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return "", state, operationError(ErrRestoreConflict, state.Path, string(state.ID), fmt.Errorf("destination is not a symlink"))
+	}
+	target, err := os.Readlink(state.Path)
+	if err != nil {
+		return "", state, err
+	}
+	if filepath.Clean(target) != filepath.Clean(state.LexicalTarget) {
+		return "", state, operationError(ErrRestoreConflict, state.Path, string(state.ID), fmt.Errorf("destination symlink target changed"))
+	}
+	stagedPath, err := uniqueSiblingPath(state.Path)
+	if err != nil {
+		return "", state, err
+	}
+	if err := os.Rename(state.Path, stagedPath); err != nil {
+		return "", state, operationError(ErrRestoreConflict, state.Path, string(state.ID), err)
+	}
+	if _, err := os.Lstat(state.Path); os.IsNotExist(err) {
+		return stagedPath, DestinationState{ID: state.ID, Path: state.Path, Kind: KindAbsent}, nil
+	} else if err != nil {
+		return stagedPath, state, err
+	}
+	return stagedPath, state, operationError(ErrVerificationFailed, state.Path, string(state.ID), fmt.Errorf("destination still exists after symlink staging"))
+}
+
+func restoreStagedCurrent(stagedPath, destination string) bool {
+	if stagedPath == "" {
+		return false
+	}
+	if _, err := os.Lstat(destination); err == nil {
+		return false
+	} else if !os.IsNotExist(err) {
+		return false
+	}
+	if err := os.Rename(stagedPath, destination); err != nil {
+		return false
+	}
+	return true
+}
+
 func (s *Service) restoreDestination(action Action, preimage DestinationState, preimageBackup Backup, currentBackup Backup) (DestinationState, bool, error) {
 	current := action.Destination
+	if action.Kind == ActionNoOp {
+		return current, false, nil
+	}
+
 	removed := current
+	stagedCurrent := ""
 	if current.Kind != KindAbsent {
 		var err error
-		removed, err = removeReceiptedSymlink(current)
+		stagedCurrent, removed, err = stageReceiptedSymlink(current)
 		if err != nil {
 			return removed, false, err
 		}
 	}
 	if action.Kind == ActionRemoveManagedSymlink {
+		if stagedCurrent != "" {
+			if err := os.Remove(stagedCurrent); err != nil {
+				return inventoryStateBestEffort(current, preimage, currentBackup), restoreStagedCurrent(stagedCurrent, current.Path), err
+			}
+		}
 		return removed, false, nil
 	}
 
 	if err := s.store.RestoreBackup(preimageBackup, current.Path); err != nil {
-		rolledBack := s.rollbackCurrentDestination(currentBackup, current.Path)
+		rolledBack := restoreStagedCurrent(stagedCurrent, current.Path)
+		if stagedCurrent == "" {
+			rolledBack = s.rollbackCurrentDestination(currentBackup, current.Path)
+		}
 		return inventoryStateBestEffort(current, preimage, currentBackup), rolledBack, err
 	}
 	after, err := verifyRestoredPreimage(preimage, preimageBackup, current.Path)
 	if err != nil {
-		rolledBack := s.rollbackCurrentDestination(currentBackup, current.Path)
+		_ = os.RemoveAll(current.Path)
+		rolledBack := restoreStagedCurrent(stagedCurrent, current.Path)
+		if stagedCurrent == "" {
+			rolledBack = s.rollbackCurrentDestination(currentBackup, current.Path)
+		}
 		return after, rolledBack, err
+	}
+	if stagedCurrent != "" {
+		if err := os.Remove(stagedCurrent); err != nil {
+			return after, false, err
+		}
 	}
 	return after, false, nil
 }
@@ -572,7 +653,15 @@ func (s *Service) rollbackCurrentDestination(backup Backup, destination string) 
 	} else if !os.IsNotExist(err) {
 		return false
 	}
-	return s.store.RestoreBackup(backup, destination) == nil
+	if err := s.store.RestoreBackup(backup, destination); err != nil {
+		return false
+	}
+	if backup.Kind == KindAbsent {
+		_, err := os.Lstat(destination)
+		return os.IsNotExist(err)
+	}
+	_, err := verifyRestoredPreimage(DestinationState{ID: backup.Destination, Path: destination, Kind: backup.Kind, Digest: backup.Digest, LexicalTarget: backup.LinkTarget}, backup, destination)
+	return err == nil
 }
 
 func verifyRestoredPreimage(preimage DestinationState, backup Backup, destination string) (DestinationState, error) {
@@ -663,7 +752,7 @@ func (e *installExecutor) publishSymlink(destination DestinationState, source So
 		if err != nil {
 			return outcome, err
 		}
-		if err := os.Rename(destination.Path, stagedPath); err != nil {
+		if err := e.renameFn()(destination.Path, stagedPath); err != nil {
 			return outcome, coerceOperationError(ErrPreimageDigestChanged, destination.Path, string(destination.ID), err)
 		}
 		stagedState, err := inventoryDestination(Destination{ID: destination.ID, Path: stagedPath}, source, sourceCanonical)
@@ -699,16 +788,16 @@ func (e *installExecutor) publishSymlink(destination DestinationState, source So
 		outcome.rolledBack = rolledBack
 		return outcome, err
 	}
-	if err := e.symlink(source.SkillPath, destination.Path); err != nil {
+	if err := e.symlinkFn()(source.SkillPath, destination.Path); err != nil {
 		rolledBack := e.rollbackAfterFailure(destination, stagedPath, backup, symlinkCreated)
 		outcome.rolledBack = rolledBack
 		outcome.after = inventoryAfterFailure(destination, source, sourceCanonical)
-		return outcome, mapSymlinkError(err, destination)
+		return outcome, normalizeSymlinkCreationError(err, destination.Path, string(destination.ID))
 	}
 	symlinkCreated = true
 
 	if err := verifySourceDigest(source); err != nil {
-		_ = os.Remove(destination.Path)
+		_ = e.removeFn()(destination.Path)
 		rolledBack := e.rollbackAfterFailure(destination, stagedPath, backup, symlinkCreated)
 		outcome.rolledBack = rolledBack
 		outcome.after = inventoryAfterFailure(destination, source, sourceCanonical)
@@ -716,14 +805,14 @@ func (e *installExecutor) publishSymlink(destination DestinationState, source So
 	}
 	after, err := inventoryDestination(Destination{ID: destination.ID, Path: destination.Path}, source, sourceCanonical)
 	if err != nil {
-		_ = os.Remove(destination.Path)
+		_ = e.removeFn()(destination.Path)
 		rolledBack := e.rollbackAfterFailure(destination, stagedPath, backup, symlinkCreated)
 		outcome.rolledBack = rolledBack
 		return outcome, coerceOperationError(ErrVerificationFailed, destination.Path, string(destination.ID), err)
 	}
 	outcome.after = after
 	if after.Kind != KindCorrectSymlink {
-		_ = os.Remove(destination.Path)
+		_ = e.removeFn()(destination.Path)
 		rolledBack := e.rollbackAfterFailure(destination, stagedPath, backup, symlinkCreated)
 		outcome.rolledBack = rolledBack
 		outcome.after = inventoryAfterFailure(destination, source, sourceCanonical)
@@ -731,7 +820,10 @@ func (e *installExecutor) publishSymlink(destination DestinationState, source So
 	}
 
 	if stagedPath != "" {
-		if err := os.RemoveAll(stagedPath); err != nil {
+		if err := e.removeAllFn()(stagedPath); err != nil {
+			rolledBack := e.rollbackAfterFailure(destination, stagedPath, backup, symlinkCreated)
+			outcome.rolledBack = rolledBack
+			outcome.after = inventoryAfterFailure(destination, source, sourceCanonical)
 			return outcome, coerceOperationError(ErrVerificationFailed, stagedPath, string(destination.ID), err)
 		}
 	}
@@ -740,10 +832,13 @@ func (e *installExecutor) publishSymlink(destination DestinationState, source So
 
 func (e *installExecutor) rollbackAfterFailure(destination DestinationState, stagedPath string, backup Backup, symlinkCreated bool) bool {
 	if symlinkCreated {
-		_ = os.Remove(destination.Path)
+		if err := e.removeFn()(destination.Path); err != nil && !os.IsNotExist(err) {
+			return false
+		}
 	}
 	if stagedPath == "" {
-		return true
+		_, err := os.Lstat(destination.Path)
+		return os.IsNotExist(err)
 	}
 	return e.restoreStaged(destination, stagedPath, backup)
 }
@@ -755,12 +850,16 @@ func (e *installExecutor) restoreStaged(destination DestinationState, stagedPath
 				return false
 			}
 		}
-		_ = os.RemoveAll(stagedPath)
+		_ = e.removeAllFn()(stagedPath)
 		return false
 	} else if !os.IsNotExist(err) {
 		return false
 	}
-	return os.Rename(stagedPath, destination.Path) == nil
+	if err := e.renameFn()(stagedPath, destination.Path); err != nil {
+		return false
+	}
+	_, err := verifyRestoredPreimage(destination, backup, destination.Path)
+	return err == nil
 }
 
 func verifyStoredBackup(backup Backup) error {
@@ -779,14 +878,32 @@ func verifySourceDigest(source Source) error {
 	return nil
 }
 
-func mapSymlinkError(err error, destination DestinationState) error {
-	if errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EACCES) {
-		return operationError(ErrSymlinkPermission, destination.Path, string(destination.ID), err)
+func (e *installExecutor) symlinkFn() func(oldname, newname string) error {
+	if e.symlink != nil {
+		return e.symlink
 	}
-	if errors.Is(err, os.ErrExist) {
-		return operationError(ErrRestoreConflict, destination.Path, string(destination.ID), err)
+	return os.Symlink
+}
+
+func (e *installExecutor) renameFn() func(oldpath, newpath string) error {
+	if e.rename != nil {
+		return e.rename
 	}
-	return operationError(ErrVerificationFailed, destination.Path, string(destination.ID), err)
+	return os.Rename
+}
+
+func (e *installExecutor) removeFn() func(name string) error {
+	if e.remove != nil {
+		return e.remove
+	}
+	return os.Remove
+}
+
+func (e *installExecutor) removeAllFn() func(path string) error {
+	if e.removeAll != nil {
+		return e.removeAll
+	}
+	return os.RemoveAll
 }
 
 func uniqueSiblingPath(path string) (string, error) {

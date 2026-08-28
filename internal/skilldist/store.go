@@ -19,11 +19,17 @@ const (
 )
 
 type Store struct {
-	root string
+	root          string
+	copyDirectory func(source, destination string) error
+	symlink       func(oldname, newname string) error
 }
 
 func NewStore(stateRoot string) *Store {
-	return &Store{root: filepath.Join(stateRoot, "rootline", "skill")}
+	return &Store{
+		root:          filepath.Join(stateRoot, "rootline", "skill"),
+		copyDirectory: copyDirectory,
+		symlink:       os.Symlink,
+	}
 }
 
 func (s *Store) Reserve(receiptID string) error {
@@ -157,36 +163,91 @@ func (s *Store) RestoreBackup(backup Backup, destination string) error {
 	switch backup.Kind {
 	case KindAbsent:
 		return nil
-	case KindDirectory:
-		if err := copyDirectory(backup.StoredPath, destination); err != nil {
-			return err
-		}
-		digest, err := DigestTree(destination)
+	case KindDirectory, KindCorrectSymlink, KindDivergentSymlink:
+		candidate, err := uniqueSiblingPath(destination)
 		if err != nil {
 			return err
 		}
-		if digest != backup.Digest {
-			return operationError(ErrVerificationFailed, destination, string(backup.Destination), fmt.Errorf("restored digest %q does not match backup digest %q", digest, backup.Digest))
-		}
-		return nil
-	case KindCorrectSymlink, KindDivergentSymlink:
-		if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+		published := false
+		defer func() {
+			if !published {
+				_ = os.RemoveAll(candidate)
+			}
+		}()
+
+		if err := s.restoreBackupCandidate(backup, candidate); err != nil {
 			return err
 		}
-		if err := os.Symlink(backup.LinkTarget, destination); err != nil {
+		if err := verifyBackupCandidate(backup, candidate); err != nil {
 			return err
 		}
-		linkTarget, err := os.Readlink(destination)
-		if err != nil {
+		if err := ensureDestinationAbsent(destination, backup.Destination); err != nil {
 			return err
 		}
-		if linkTarget != backup.LinkTarget {
-			return operationError(ErrVerificationFailed, destination, string(backup.Destination), fmt.Errorf("restored symlink target %q does not match backup target %q", linkTarget, backup.LinkTarget))
+		if err := os.Rename(candidate, destination); err != nil {
+			return err
 		}
+		published = true
 		return nil
 	default:
 		return operationError(ErrUnsupportedFileType, destination, string(backup.Destination), fmt.Errorf("unsupported restore kind %q", backup.Kind))
 	}
+}
+
+func (s *Store) restoreBackupCandidate(backup Backup, candidate string) error {
+	switch backup.Kind {
+	case KindDirectory:
+		return s.copyDirectoryFn()(backup.StoredPath, candidate)
+	case KindCorrectSymlink, KindDivergentSymlink:
+		if err := os.MkdirAll(filepath.Dir(candidate), 0o700); err != nil {
+			return err
+		}
+		if err := s.symlinkFn()(backup.LinkTarget, candidate); err != nil {
+			return normalizeSymlinkCreationError(err, candidate, string(backup.Destination))
+		}
+		return nil
+	default:
+		return operationError(ErrUnsupportedFileType, candidate, string(backup.Destination), fmt.Errorf("unsupported restore kind %q", backup.Kind))
+	}
+}
+
+func verifyBackupCandidate(backup Backup, candidate string) error {
+	switch backup.Kind {
+	case KindDirectory:
+		digest, err := DigestTree(candidate)
+		if err != nil {
+			return err
+		}
+		if digest != backup.Digest {
+			return operationError(ErrVerificationFailed, candidate, string(backup.Destination), fmt.Errorf("restored digest %q does not match backup digest %q", digest, backup.Digest))
+		}
+		return nil
+	case KindCorrectSymlink, KindDivergentSymlink:
+		linkTarget, err := os.Readlink(candidate)
+		if err != nil {
+			return err
+		}
+		if linkTarget != backup.LinkTarget {
+			return operationError(ErrVerificationFailed, candidate, string(backup.Destination), fmt.Errorf("restored symlink target %q does not match backup target %q", linkTarget, backup.LinkTarget))
+		}
+		return nil
+	default:
+		return operationError(ErrUnsupportedFileType, candidate, string(backup.Destination), fmt.Errorf("unsupported restore kind %q", backup.Kind))
+	}
+}
+
+func (s *Store) copyDirectoryFn() func(source, destination string) error {
+	if s.copyDirectory != nil {
+		return s.copyDirectory
+	}
+	return copyDirectory
+}
+
+func (s *Store) symlinkFn() func(oldname, newname string) error {
+	if s.symlink != nil {
+		return s.symlink
+	}
+	return os.Symlink
 }
 
 func (s *Store) receiptsPath() string {
@@ -246,6 +307,9 @@ func (s *Store) scanReceipts() ([]Receipt, error) {
 		if receipt.ID == "" {
 			return nil, fmt.Errorf("malformed receipt JSONL at line %d: missing receipt ID", lineNumber)
 		}
+		if err := validateReceiptSemantics(receipt); err != nil {
+			return nil, fmt.Errorf("malformed receipt JSONL at line %d: %w", lineNumber, err)
+		}
 		if _, ok := seen[receipt.ID]; ok {
 			return nil, fmt.Errorf("duplicate receipt ID %q", receipt.ID)
 		}
@@ -277,7 +341,7 @@ func (s *Store) backupDirectory(receiptID string, state DestinationState, backup
 	}
 	backup.Digest = observedDigest
 	backup.StoredPath = s.destinationBackupPath(receiptID, state.ID)
-	if err := copyDirectory(state.Path, backup.StoredPath); err != nil {
+	if err := s.copyDirectoryFn()(state.Path, backup.StoredPath); err != nil {
 		if copyDirectoryCreatedDestination(err) {
 			_ = os.RemoveAll(backup.StoredPath)
 		}
@@ -320,6 +384,179 @@ func normalizeReceipt(receipt Receipt) Receipt {
 		receipt.Errors = []OperationError{}
 	}
 	return receipt
+}
+
+func validateReceiptSemantics(receipt Receipt) error {
+	if receipt.Version != 1 {
+		return fmt.Errorf("unsupported receipt version %d", receipt.Version)
+	}
+	if receipt.Kind != receiptKind {
+		return fmt.Errorf("unsupported receipt kind %q", receipt.Kind)
+	}
+	if err := validateStoreChildName(receipt.ID, "receipt ID"); err != nil {
+		return err
+	}
+	if !knownReceiptOperation(receipt.Operation) {
+		return fmt.Errorf("unsupported receipt operation %q", receipt.Operation)
+	}
+	if receipt.PlanDigest == "" {
+		return fmt.Errorf("receipt plan digest is required")
+	}
+	if receipt.Source == nil {
+		return fmt.Errorf("receipt source evidence is required")
+	}
+	if receipt.Source.SkillPath == "" || receipt.Source.Digest == "" {
+		return fmt.Errorf("receipt source path and digest are required")
+	}
+
+	backupsByDestination := make(map[DestinationID]Backup, len(receipt.Backups))
+	for _, backup := range receipt.Backups {
+		if !isSupportedDestinationID(backup.Destination) {
+			return fmt.Errorf("unsupported destination %q in backup", backup.Destination)
+		}
+		if _, exists := backupsByDestination[backup.Destination]; exists {
+			return fmt.Errorf("duplicate destination %q in backups", backup.Destination)
+		}
+		if err := validateBackupSemantics(backup); err != nil {
+			return err
+		}
+		backupsByDestination[backup.Destination] = backup
+	}
+
+	seenActions := make(map[DestinationID]struct{}, len(receipt.Actions))
+	for _, action := range receipt.Actions {
+		if !isSupportedDestinationID(action.Destination) {
+			return fmt.Errorf("unsupported destination %q in action", action.Destination)
+		}
+		if _, exists := seenActions[action.Destination]; exists {
+			return fmt.Errorf("duplicate destination %q in actions", action.Destination)
+		}
+		seenActions[action.Destination] = struct{}{}
+		if err := validateActionResultSemantics(receipt.Operation, action, backupsByDestination); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func knownReceiptOperation(operation Operation) bool {
+	return operation == OperationInstall || operation == OperationUninstall || operation == OperationRestore
+}
+
+func validateBackupSemantics(backup Backup) error {
+	if backup.OriginalPath == "" {
+		return fmt.Errorf("backup for destination %q has no original path", backup.Destination)
+	}
+	if !knownEntryKind(backup.Kind) || backup.Kind == KindUnsupported {
+		return fmt.Errorf("backup for destination %q has unsupported kind %q", backup.Destination, backup.Kind)
+	}
+	if backup.Kind == KindDirectory && backup.StoredPath == "" {
+		return fmt.Errorf("directory backup for destination %q has no stored path", backup.Destination)
+	}
+	if (backup.Kind == KindCorrectSymlink || backup.Kind == KindDivergentSymlink) && backup.LinkTarget == "" {
+		return fmt.Errorf("symlink backup for destination %q has no link target", backup.Destination)
+	}
+	return nil
+}
+
+func validateActionResultSemantics(operation Operation, action ActionResult, backups map[DestinationID]Backup) error {
+	if !knownActionKind(action.Action) {
+		return fmt.Errorf("unsupported action %q for destination %q", action.Action, action.Destination)
+	}
+	if action.Before.ID != action.Destination {
+		return fmt.Errorf("before evidence destination %q does not match action destination %q", action.Before.ID, action.Destination)
+	}
+	if action.Before.Path == "" || action.Before.Kind == "" {
+		return fmt.Errorf("before evidence for destination %q is incomplete", action.Destination)
+	}
+	if action.Complete {
+		if action.After.ID != action.Destination {
+			return fmt.Errorf("after evidence destination %q does not match action destination %q", action.After.ID, action.Destination)
+		}
+		if action.After.Path == "" || action.After.Kind == "" {
+			return fmt.Errorf("after evidence for destination %q is incomplete", action.Destination)
+		}
+	} else if action.Error == nil {
+		return fmt.Errorf("incomplete action for destination %q has no error evidence", action.Destination)
+	}
+	if err := validateOperationActionInvariant(operation, action); err != nil {
+		return err
+	}
+	if receiptActionRequiresBackup(operation, action) {
+		backup, ok := backups[action.Destination]
+		if !ok {
+			return fmt.Errorf("missing backup for destination %q", action.Destination)
+		}
+		if backup.Kind != action.Before.Kind {
+			return fmt.Errorf("backup kind %q does not match before kind %q for destination %q", backup.Kind, action.Before.Kind, action.Destination)
+		}
+	}
+	return nil
+}
+
+func validateOperationActionInvariant(operation Operation, action ActionResult) error {
+	switch operation {
+	case OperationInstall:
+		switch action.Action {
+		case ActionNoOp:
+			if action.Before.Kind != KindCorrectSymlink {
+				return fmt.Errorf("install no_op destination %q requires correct symlink before evidence", action.Destination)
+			}
+		case ActionCreateSymlink:
+			if action.Before.Kind != KindAbsent {
+				return fmt.Errorf("install create_symlink destination %q requires absent before evidence", action.Destination)
+			}
+		case ActionReplaceWithSymlink:
+			if action.Before.Kind != KindDirectory && action.Before.Kind != KindDivergentSymlink {
+				return fmt.Errorf("install replace_with_symlink destination %q requires replaceable before evidence", action.Destination)
+			}
+		default:
+			return fmt.Errorf("action %q is not valid for install receipt", action.Action)
+		}
+		if action.Complete && action.Action != ActionNoOp && action.After.Kind != KindCorrectSymlink {
+			return fmt.Errorf("install action %q destination %q must finish as correct symlink", action.Action, action.Destination)
+		}
+	case OperationUninstall:
+		if action.Action != ActionRemoveManagedSymlink {
+			return fmt.Errorf("action %q is not valid for uninstall receipt", action.Action)
+		}
+		if action.Before.Kind != KindCorrectSymlink {
+			return fmt.Errorf("uninstall destination %q requires correct symlink before evidence", action.Destination)
+		}
+		if action.Complete && action.After.Kind != KindAbsent {
+			return fmt.Errorf("uninstall destination %q must finish absent", action.Destination)
+		}
+	case OperationRestore:
+		if action.Action != ActionNoOp && action.Action != ActionRemoveManagedSymlink && action.Action != ActionRestorePreimage {
+			return fmt.Errorf("action %q is not valid for restore receipt", action.Action)
+		}
+	}
+	return nil
+}
+
+func receiptActionRequiresBackup(operation Operation, action ActionResult) bool {
+	if operation == OperationUninstall || !action.Complete {
+		return false
+	}
+	return action.Before.Kind != KindAbsent && (action.Action != ActionNoOp || action.Before.Kind != KindCorrectSymlink)
+}
+
+func knownActionKind(kind ActionKind) bool {
+	switch kind {
+	case ActionCreateSymlink, ActionReplaceWithSymlink, ActionRemoveManagedSymlink, ActionRestorePreimage, ActionNoOp:
+		return true
+	default:
+		return false
+	}
+}
+
+func knownEntryKind(kind EntryKind) bool {
+	switch kind {
+	case KindAbsent, KindDirectory, KindCorrectSymlink, KindDivergentSymlink, KindUnsupported:
+		return true
+	default:
+		return false
+	}
 }
 
 func validateStoreChildName(name, label string) error {
@@ -396,7 +633,10 @@ func copyDirectory(source, destination string) error {
 			if err != nil {
 				return err
 			}
-			return destinationRoot.Symlink(target, rel)
+			if err := destinationRoot.Symlink(target, rel); err != nil {
+				return normalizeSymlinkCreationError(err, filepath.Join(destination, rel), "")
+			}
+			return nil
 		case entry.IsDir():
 			if err := destinationRoot.Mkdir(rel, 0o700); err != nil {
 				return err

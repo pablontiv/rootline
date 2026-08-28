@@ -2,15 +2,19 @@ package skilldist
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestStoreAppendsReceiptsWithoutRewritingHistory(t *testing.T) {
 	store := NewStore(t.TempDir())
-	first := Receipt{Version: 1, Kind: "rootline/skill-receipt", ID: "r1", Operation: OperationInstall, Complete: true}
-	second := Receipt{Version: 1, Kind: "rootline/skill-receipt", ID: "r2", Operation: OperationUninstall, Complete: false}
+	first := semanticallyValidInstallReceipt()
+	second := semanticallyValidInstallReceipt()
+	second.ID = "r2"
 	if err := store.Append(first); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +68,7 @@ func TestStoreBackupAndRestoreDirectoryExactly(t *testing.T) {
 
 func TestStoreAppendRejectsDuplicateReceiptID(t *testing.T) {
 	store := NewStore(t.TempDir())
-	receipt := Receipt{Version: 1, Kind: "rootline/skill-receipt", ID: "r1", Operation: OperationInstall}
+	receipt := semanticallyValidInstallReceipt()
 	if err := store.Append(receipt); err != nil {
 		t.Fatal(err)
 	}
@@ -343,6 +347,201 @@ func TestStoreLatestEmptyDoesNotCreateStateDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(stateRoot, "rootline", "skill")); !os.IsNotExist(err) {
 		t.Fatalf("Latest created state directory or unexpected stat error: %v", err)
+	}
+}
+
+func TestStoreRejectsSemanticallyMalformedReceipts(t *testing.T) {
+	valid := semanticallyValidInstallReceipt()
+	tests := []struct {
+		name   string
+		mutate func(*Receipt)
+		want   string
+	}{
+		{name: "wrong version", mutate: func(r *Receipt) { r.Version = 2 }, want: "version"},
+		{name: "wrong kind", mutate: func(r *Receipt) { r.Kind = "rootline/other" }, want: "kind"},
+		{name: "unknown operation", mutate: func(r *Receipt) { r.Operation = Operation("repair") }, want: "operation"},
+		{name: "duplicate destination", mutate: func(r *Receipt) {
+			r.Actions[1].Destination = r.Actions[0].Destination
+			r.Actions[1].Before.ID = r.Actions[0].Before.ID
+			r.Actions[1].After.ID = r.Actions[0].After.ID
+		}, want: "duplicate destination"},
+		{name: "unsupported destination", mutate: func(r *Receipt) {
+			r.Actions[0].Destination = DestinationID("opencode")
+			r.Actions[0].Before.ID = DestinationID("opencode")
+			r.Actions[0].After.ID = DestinationID("opencode")
+		}, want: "unsupported destination"},
+		{name: "missing backup for replaced preimage", mutate: func(r *Receipt) { r.Backups = nil }, want: "missing backup"},
+		{name: "install create has non-absent before", mutate: func(r *Receipt) { r.Actions[1].Before.Kind = KindDirectory }, want: "create_symlink"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewStore(t.TempDir())
+			receipt := valid
+			receipt.Actions = append([]ActionResult(nil), valid.Actions...)
+			receipt.Backups = append([]Backup(nil), valid.Backups...)
+			tt.mutate(&receipt)
+			writeReceiptJSONL(t, store, receipt)
+			_, err := store.Load(receipt.ID)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Load error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestStoreAcceptsInstallNoOpReceiptWithoutBackup(t *testing.T) {
+	store := NewStore(t.TempDir())
+	receipt := semanticallyValidInstallReceipt()
+	receipt.Actions = []ActionResult{
+		{
+			Destination: DestinationClaude,
+			Action:      ActionNoOp,
+			Before:      DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.claude/skills/rootline", CanonicalTarget: "/repo/.claude/skills/rootline", Digest: "sha256:source"},
+			After:       DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.claude/skills/rootline", CanonicalTarget: "/repo/.claude/skills/rootline", Digest: "sha256:source"},
+			Complete:    true,
+		},
+	}
+	receipt.Backups = nil
+	writeReceiptJSONL(t, store, receipt)
+	loaded, err := store.Load(receipt.ID)
+	if err != nil {
+		t.Fatalf("Load valid no-op receipt: %v", err)
+	}
+	if len(loaded.Backups) != 0 || loaded.Actions[0].Action != ActionNoOp {
+		t.Fatalf("loaded no-op receipt = %#v", loaded)
+	}
+}
+
+func TestReceiptSemanticValidationBranches(t *testing.T) {
+	valid := semanticallyValidInstallReceipt()
+	incomplete := cloneReceipt(valid)
+	incomplete.Complete = false
+	incomplete.Actions[0].Complete = false
+	incomplete.Actions[0].After = DestinationState{}
+	incomplete.Actions[0].Error = operationError(ErrBackupFailed, incomplete.Actions[0].Before.Path, string(incomplete.Actions[0].Destination), os.ErrPermission)
+	incomplete.Backups = nil
+	if err := validateReceiptSemantics(incomplete); err != nil {
+		t.Fatalf("incomplete failed receipt should remain loadable: %v", err)
+	}
+	tests := []struct {
+		name   string
+		mutate func(*Receipt)
+		want   string
+	}{
+		{name: "missing plan digest", mutate: func(r *Receipt) { r.PlanDigest = "" }, want: "plan digest"},
+		{name: "missing source", mutate: func(r *Receipt) { r.Source = nil }, want: "source evidence"},
+		{name: "incomplete source", mutate: func(r *Receipt) { r.Source.SkillPath = "" }, want: "source path"},
+		{name: "backup missing original", mutate: func(r *Receipt) { r.Backups[0].OriginalPath = "" }, want: "original path"},
+		{name: "directory backup missing stored path", mutate: func(r *Receipt) { r.Backups[0].StoredPath = "" }, want: "stored path"},
+		{name: "symlink backup missing target", mutate: func(r *Receipt) {
+			r.Backups[0] = Backup{Destination: DestinationClaude, OriginalPath: "/x", Kind: KindCorrectSymlink}
+		}, want: "link target"},
+		{name: "unsupported backup kind", mutate: func(r *Receipt) { r.Backups[0].Kind = KindUnsupported }, want: "unsupported kind"},
+		{name: "unsupported action", mutate: func(r *Receipt) { r.Actions[0].Action = ActionKind("copy_tree") }, want: "unsupported action"},
+		{name: "before destination mismatch", mutate: func(r *Receipt) { r.Actions[0].Before.ID = DestinationAgents }, want: "before evidence"},
+		{name: "after destination mismatch", mutate: func(r *Receipt) { r.Actions[0].After.ID = DestinationAgents }, want: "after evidence"},
+		{name: "missing before path", mutate: func(r *Receipt) { r.Actions[0].Before.Path = "" }, want: "before evidence"},
+		{name: "missing complete after path", mutate: func(r *Receipt) { r.Actions[0].After.Path = "" }, want: "after evidence"},
+		{name: "incomplete action missing error", mutate: func(r *Receipt) {
+			r.Complete = false
+			r.Actions[0].Complete = false
+			r.Actions[0].After = DestinationState{}
+			r.Actions[0].Error = nil
+		}, want: "no error evidence"},
+		{name: "install no-op invalid before", mutate: func(r *Receipt) {
+			r.Actions = []ActionResult{{Destination: DestinationClaude, Action: ActionNoOp, Before: DestinationState{ID: DestinationClaude, Path: "/x", Kind: KindDirectory}, After: DestinationState{ID: DestinationClaude, Path: "/x", Kind: KindDirectory}, Complete: true}}
+			r.Backups = []Backup{{Destination: DestinationClaude, OriginalPath: "/x", StoredPath: "/b", Kind: KindDirectory}}
+		}, want: "no_op"},
+		{name: "install replace invalid before", mutate: func(r *Receipt) {
+			r.Actions[0].Before.Kind = KindCorrectSymlink
+			r.Actions[0].Action = ActionReplaceWithSymlink
+			r.Backups[0] = Backup{Destination: DestinationClaude, OriginalPath: "/x", Kind: KindCorrectSymlink, LinkTarget: "/repo/.claude/skills/rootline"}
+		}, want: "replace_with_symlink"},
+		{name: "install after not symlink", mutate: func(r *Receipt) { r.Actions[1].After.Kind = KindDirectory }, want: "must finish"},
+		{name: "uninstall invalid action", mutate: func(r *Receipt) { makeUninstallReceipt(r); r.Actions[0].Action = ActionCreateSymlink }, want: "not valid for uninstall"},
+		{name: "uninstall invalid before", mutate: func(r *Receipt) { makeUninstallReceipt(r); r.Actions[0].Before.Kind = KindDirectory }, want: "requires correct symlink"},
+		{name: "uninstall invalid after", mutate: func(r *Receipt) { makeUninstallReceipt(r); r.Actions[0].After.Kind = KindCorrectSymlink }, want: "must finish absent"},
+		{name: "restore invalid action", mutate: func(r *Receipt) { r.Operation = OperationRestore; r.Actions[0].Action = ActionCreateSymlink }, want: "not valid for restore"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			receipt := cloneReceipt(valid)
+			tt.mutate(&receipt)
+			err := validateReceiptSemantics(receipt)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("validateReceiptSemantics error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func writeReceiptJSONL(t *testing.T, store *Store, receipt Receipt) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(store.receiptsPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(store.receiptsPath(), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func cloneReceipt(receipt Receipt) Receipt {
+	clone := receipt
+	if receipt.Source != nil {
+		source := *receipt.Source
+		clone.Source = &source
+	}
+	clone.Actions = append([]ActionResult(nil), receipt.Actions...)
+	clone.Backups = append([]Backup(nil), receipt.Backups...)
+	clone.Errors = append([]OperationError(nil), receipt.Errors...)
+	return clone
+}
+
+func makeUninstallReceipt(receipt *Receipt) {
+	receipt.Operation = OperationUninstall
+	receipt.Backups = nil
+	receipt.Actions = []ActionResult{{
+		Destination: DestinationClaude,
+		Action:      ActionRemoveManagedSymlink,
+		Before:      DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.claude/skills/rootline", CanonicalTarget: "/repo/.claude/skills/rootline", Digest: "sha256:source"},
+		After:       DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindAbsent},
+		Complete:    true,
+	}}
+}
+
+func semanticallyValidInstallReceipt() Receipt {
+	return Receipt{
+		Version:    1,
+		Kind:       receiptKind,
+		ID:         "r1",
+		Timestamp:  time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC),
+		Operation:  OperationInstall,
+		Complete:   true,
+		Source:     &Source{RepoRoot: "/repo", SkillPath: "/repo/.claude/skills/rootline", Commit: "abc123", Digest: "sha256:source"},
+		PlanDigest: "sha256:plan",
+		Actions: []ActionResult{
+			{
+				Destination: DestinationClaude,
+				Action:      ActionReplaceWithSymlink,
+				Before:      DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindDirectory, Digest: "sha256:old"},
+				After:       DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.claude/skills/rootline", CanonicalTarget: "/repo/.claude/skills/rootline", Digest: "sha256:source"},
+				Complete:    true,
+			},
+			{
+				Destination: DestinationAgents,
+				Action:      ActionCreateSymlink,
+				Before:      DestinationState{ID: DestinationAgents, Path: "/home/agent/.agents/skills/rootline", Kind: KindAbsent},
+				After:       DestinationState{ID: DestinationAgents, Path: "/home/agent/.agents/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.claude/skills/rootline", CanonicalTarget: "/repo/.claude/skills/rootline", Digest: "sha256:source"},
+				Complete:    true,
+			},
+		},
+		Backups: []Backup{{Destination: DestinationClaude, OriginalPath: "/home/agent/.claude/skills/rootline", StoredPath: "/state/backups/r1/claude", Kind: KindDirectory, Digest: "sha256:old"}},
+		Errors:  []OperationError{},
 	}
 }
 

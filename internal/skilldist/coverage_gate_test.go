@@ -611,8 +611,8 @@ func TestPublishSymlinkAndSourceGuardBranches(t *testing.T) {
 		t.Fatal("publishSymlink accepted drifted source digest")
 	}
 
-	assertOperationErrorCode(t, mapSymlinkError(errors.New("plain"), DestinationState{ID: DestinationClaude, Path: driftPath}), ErrVerificationFailed)
-	assertOperationErrorCode(t, mapSymlinkError(os.ErrExist, DestinationState{ID: DestinationClaude, Path: driftPath}), ErrRestoreConflict)
+	assertOperationErrorCode(t, normalizeSymlinkCreationError(errors.New("plain"), driftPath, string(DestinationClaude)), ErrVerificationFailed)
+	assertOperationErrorCode(t, normalizeSymlinkCreationError(os.ErrExist, driftPath, string(DestinationClaude)), ErrRestoreConflict)
 	if _, err := uniqueSiblingPath(filepath.Join(t.TempDir(), "rootline")); err != nil {
 		t.Fatal(err)
 	}

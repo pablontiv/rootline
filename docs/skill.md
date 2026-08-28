@@ -38,8 +38,6 @@ Example preview shape:
 {
   "version": 1,
   "kind": "rootline/skill-install",
-  "operation": "install",
-  "attempted": false,
   "complete": false,
   "source": {
     "repo_root": "/stable/rootline",
@@ -52,6 +50,8 @@ Example preview shape:
     {"id": "claude", "path": "/home/agent/.claude/skills/rootline", "kind": "absent"},
     {"id": "agents", "path": "/home/agent/.agents/skills/rootline", "kind": "absent"}
   ],
+  "backups": [],
+  "receipt": null,
   "receipt_drift": false,
   "errors": []
 }
@@ -63,8 +63,6 @@ Example applied result shape:
 {
   "version": 1,
   "kind": "rootline/skill-install",
-  "operation": "install",
-  "attempted": true,
   "complete": true,
   "plan_digest": "sha256:plan",
   "receipt": {
@@ -117,8 +115,6 @@ Example restore preview shape:
 {
   "version": 1,
   "kind": "rootline/skill-restore",
-  "operation": "restore",
-  "attempted": false,
   "complete": false,
   "plan_digest": "sha256:restore-plan",
   "receipt": {"id": "0123456789abcdef", "operation": "install", "complete": true},
@@ -131,8 +127,9 @@ Example restore preview shape:
 
 Rootline stores skill distribution state under the user state root:
 
-- `$XDG_STATE_HOME/rootline/skill` when `XDG_STATE_HOME` is set;
-- otherwise `~/.local/state/rootline/skill`.
+- `$XDG_STATE_HOME/rootline/skill` on non-Windows systems when `XDG_STATE_HOME` is set;
+- otherwise `~/.local/state/rootline/skill` on non-Windows systems;
+- `%USERPROFILE%` is not used for state on Windows; Rootline uses `os.UserConfigDir()` and stores receipts under `<UserConfigDir>\\rootline\\skill`.
 
 `receipts.jsonl` is append-only JSON Lines evidence for install, uninstall, and restore operations. Backups live below `backups/<receipt-id>/` in the same state root. The user owns those backups; Rootline writes and verifies them, but agents must preserve the state directory if they want uninstall or restore to remain possible.
 
