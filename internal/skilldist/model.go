@@ -1,6 +1,9 @@
 package skilldist
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type Digest string
 
@@ -104,4 +107,37 @@ type Plan struct {
 	Source    *Source   `json:"source,omitempty"`
 	Actions   []Action  `json:"actions"`
 	Digest    Digest    `json:"digest"`
+}
+
+type Backup struct {
+	Destination  DestinationID `json:"destination"`
+	OriginalPath string        `json:"original_path"`
+	StoredPath   string        `json:"stored_path,omitempty"`
+	Kind         EntryKind     `json:"kind"`
+	Digest       Digest        `json:"digest,omitempty"`
+	LinkTarget   string        `json:"link_target,omitempty"`
+}
+
+type ActionResult struct {
+	Destination DestinationID    `json:"destination"`
+	Action      ActionKind       `json:"action"`
+	Before      DestinationState `json:"before"`
+	After       DestinationState `json:"after"`
+	Complete    bool             `json:"complete"`
+	RolledBack  bool             `json:"rolled_back,omitempty"`
+	Error       *OperationError  `json:"error,omitempty"`
+}
+
+type Receipt struct {
+	Version    int              `json:"version"`
+	Kind       string           `json:"kind"`
+	ID         string           `json:"id"`
+	Timestamp  time.Time        `json:"timestamp"`
+	Operation  Operation        `json:"operation"`
+	Complete   bool             `json:"complete"`
+	Source     *Source          `json:"source,omitempty"`
+	PlanDigest Digest           `json:"plan_digest"`
+	Actions    []ActionResult   `json:"actions"`
+	Backups    []Backup         `json:"backups"`
+	Errors     []OperationError `json:"errors"`
 }
