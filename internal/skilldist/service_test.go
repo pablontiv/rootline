@@ -543,6 +543,75 @@ func TestRestoreDirectoryVerificationFailureKeepsCurrentSymlinkAndRemovesCandida
 	assertNoRootlineStageSiblings(t, fixture.claudePath())
 }
 
+func TestRestorePublicationConflictPreservesExternalDestinationAndCurrentStage(t *testing.T) {
+	fixture := newServiceFixture(t)
+	mustWriteSkillFile(t, fixture.claudePath(), "SKILL.md", "original")
+	plan := fixture.service.Install(context.Background(), fixture.repo, "")
+	installed := fixture.service.Install(context.Background(), fixture.repo, plan.Plan.Digest)
+	if installed.Failed() {
+		t.Fatalf("install: %#v", installed)
+	}
+	restorePlan := fixture.service.Restore(context.Background(), installed.Receipt.ID, "")
+	if restorePlan.Failed() || restorePlan.Plan == nil {
+		t.Fatalf("restore plan = %#v", restorePlan)
+	}
+	fixture.service.store.publishCandidate = func(candidate, destination string) error {
+		if destination == fixture.claudePath() {
+			mustWriteSkillFile(t, destination, "SKILL.md", "external")
+		}
+		return atomicPublishNoReplace(candidate, destination)
+	}
+
+	result := fixture.service.Restore(context.Background(), installed.Receipt.ID, restorePlan.Plan.Digest)
+	if !result.Failed() || !result.Attempted || result.Complete || result.Receipt == nil {
+		t.Fatalf("publication conflict result = %#v", result)
+	}
+	assertResultErrorCode(t, result, ErrRestoreConflict)
+	if len(result.Receipt.Actions) == 0 || result.Receipt.Actions[0].RolledBack {
+		t.Fatalf("publication conflict rollback = %#v, want false", result.Receipt.Actions)
+	}
+	assertSkillFileContent(t, fixture.claudePath(), "external")
+	assertSingleRootlineStageSymlink(t, fixture.claudePath(), fixture.skillPath())
+	assertBackupsValid(t, fixture.service.store, installed.Backups)
+	assertBackupsValid(t, fixture.service.store, result.Backups)
+}
+
+func TestRestorePostPublicationVerificationFailurePreservesExternalDestination(t *testing.T) {
+	fixture := newServiceFixture(t)
+	mustWriteSkillFile(t, fixture.claudePath(), "SKILL.md", "original")
+	plan := fixture.service.Install(context.Background(), fixture.repo, "")
+	installed := fixture.service.Install(context.Background(), fixture.repo, plan.Plan.Digest)
+	if installed.Failed() {
+		t.Fatalf("install: %#v", installed)
+	}
+	restorePlan := fixture.service.Restore(context.Background(), installed.Receipt.ID, "")
+	if restorePlan.Failed() || restorePlan.Plan == nil {
+		t.Fatalf("restore plan = %#v", restorePlan)
+	}
+	fixture.service.afterRestoreBackup = func(action Action) {
+		if action.Destination.ID != DestinationClaude {
+			return
+		}
+		if err := os.RemoveAll(action.Destination.Path); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteSkillFile(t, action.Destination.Path, "SKILL.md", "external-after-publish")
+	}
+
+	result := fixture.service.Restore(context.Background(), installed.Receipt.ID, restorePlan.Plan.Digest)
+	if !result.Failed() || !result.Attempted || result.Complete || result.Receipt == nil {
+		t.Fatalf("post-publication verification result = %#v", result)
+	}
+	assertResultErrorCode(t, result, ErrVerificationFailed)
+	if len(result.Receipt.Actions) == 0 || result.Receipt.Actions[0].RolledBack {
+		t.Fatalf("post-publication rollback = %#v, want false", result.Receipt.Actions)
+	}
+	assertSkillFileContent(t, fixture.claudePath(), "external-after-publish")
+	assertSingleRootlineStageSymlink(t, fixture.claudePath(), fixture.skillPath())
+	assertBackupsValid(t, fixture.service.store, installed.Backups)
+	assertBackupsValid(t, fixture.service.store, result.Backups)
+}
+
 func TestRestoreSymlinkPermissionErrorIsClassified(t *testing.T) {
 	fixture := newServiceFixture(t)
 	outside := filepath.Join(t.TempDir(), "outside")
@@ -689,14 +758,49 @@ func assertPathAbsent(t *testing.T, path string) {
 	}
 }
 
-func assertNoRootlineStageSiblings(t *testing.T, path string) {
+func assertSkillFileContent(t *testing.T, root, want string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, "SKILL.md"))
+	if err != nil || string(data) != want {
+		t.Fatalf("%s/SKILL.md = %q, err=%v, want %q", root, data, err, want)
+	}
+}
+
+func rootlineStageSiblings(t *testing.T, path string) []string {
 	t.Helper()
 	matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".rootline-stage.*"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	return matches
+}
+
+func assertNoRootlineStageSiblings(t *testing.T, path string) {
+	t.Helper()
+	matches := rootlineStageSiblings(t, path)
 	if len(matches) != 0 {
 		t.Fatalf("operation-owned staging siblings remain: %v", matches)
+	}
+}
+
+func assertSingleRootlineStageSymlink(t *testing.T, path, target string) {
+	t.Helper()
+	matches := rootlineStageSiblings(t, path)
+	if len(matches) != 1 {
+		t.Fatalf("staging siblings = %v, want exactly one preserved current preimage", matches)
+	}
+	assertSymlinkTo(t, matches[0], target)
+}
+
+func assertBackupsValid(t *testing.T, store *Store, backups []Backup) {
+	t.Helper()
+	if len(backups) == 0 {
+		t.Fatal("expected at least one backup")
+	}
+	for _, backup := range backups {
+		if err := store.VerifyBackup(backup); err != nil {
+			t.Fatalf("backup %#v was not preserved: %v", backup, err)
+		}
 	}
 }
 

@@ -66,6 +66,42 @@ func TestStoreBackupAndRestoreDirectoryExactly(t *testing.T) {
 	}
 }
 
+func TestStoreRestorePublicationConflictPreservesExternalDestinationAndBackup(t *testing.T) {
+	stateRoot := t.TempDir()
+	original := filepath.Join(t.TempDir(), "rootline")
+	mustWriteSkillFile(t, original, "SKILL.md", "preimage")
+	digest, err := DigestTree(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(stateRoot)
+	if err := store.Reserve("r1"); err != nil {
+		t.Fatal(err)
+	}
+	backup, err := store.Backup("r1", DestinationState{ID: DestinationClaude, Path: original, Kind: KindDirectory, Digest: digest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(original); err != nil {
+		t.Fatal(err)
+	}
+	store.publishCandidate = func(candidate, destination string) error {
+		mustWriteSkillFile(t, destination, "SKILL.md", "external")
+		return atomicPublishNoReplace(candidate, destination)
+	}
+
+	err = store.RestoreBackup(backup, original)
+	assertOperationErrorCode(t, err, ErrRestoreConflict)
+	data, readErr := os.ReadFile(filepath.Join(original, "SKILL.md"))
+	if readErr != nil || string(data) != "external" {
+		t.Fatalf("external destination data = %q, err=%v", data, readErr)
+	}
+	if err := store.VerifyBackup(backup); err != nil {
+		t.Fatalf("stored backup was not preserved: %v", err)
+	}
+	assertNoRootlineStageSiblings(t, original)
+}
+
 func TestStoreAppendRejectsDuplicateReceiptID(t *testing.T) {
 	store := NewStore(t.TempDir())
 	receipt := semanticallyValidInstallReceipt()

@@ -14,13 +14,14 @@ import (
 const receiptKind = "rootline/skill-receipt"
 
 type Service struct {
-	homeDir      string
-	stateDir     string
-	now          func() time.Time
-	newReceiptID func() string
-	store        *Store
-	destinations []Destination
-	executor     *installExecutor
+	homeDir            string
+	stateDir           string
+	now                func() time.Time
+	newReceiptID       func() string
+	store              *Store
+	destinations       []Destination
+	executor           *installExecutor
+	afterRestoreBackup func(Action)
 }
 
 type installExecutor struct {
@@ -588,12 +589,7 @@ func restoreStagedCurrent(stagedPath, destination string) bool {
 	if stagedPath == "" {
 		return false
 	}
-	if _, err := os.Lstat(destination); err == nil {
-		return false
-	} else if !os.IsNotExist(err) {
-		return false
-	}
-	if err := os.Rename(stagedPath, destination); err != nil {
+	if err := atomicPublishNoReplace(stagedPath, destination); err != nil {
 		return false
 	}
 	return true
@@ -630,9 +626,11 @@ func (s *Service) restoreDestination(action Action, preimage DestinationState, p
 		}
 		return inventoryStateBestEffort(current, preimage, currentBackup), rolledBack, err
 	}
+	if s.afterRestoreBackup != nil {
+		s.afterRestoreBackup(action)
+	}
 	after, err := verifyRestoredPreimage(preimage, preimageBackup, current.Path)
 	if err != nil {
-		_ = os.RemoveAll(current.Path)
 		rolledBack := restoreStagedCurrent(stagedCurrent, current.Path)
 		if stagedCurrent == "" {
 			rolledBack = s.rollbackCurrentDestination(currentBackup, current.Path)

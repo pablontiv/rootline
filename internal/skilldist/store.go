@@ -19,16 +19,18 @@ const (
 )
 
 type Store struct {
-	root          string
-	copyDirectory func(source, destination string) error
-	symlink       func(oldname, newname string) error
+	root             string
+	copyDirectory    func(source, destination string) error
+	symlink          func(oldname, newname string) error
+	publishCandidate func(candidate, destination string) error
 }
 
 func NewStore(stateRoot string) *Store {
 	return &Store{
-		root:          filepath.Join(stateRoot, "rootline", "skill"),
-		copyDirectory: copyDirectory,
-		symlink:       os.Symlink,
+		root:             filepath.Join(stateRoot, "rootline", "skill"),
+		copyDirectory:    copyDirectory,
+		symlink:          os.Symlink,
+		publishCandidate: atomicPublishNoReplace,
 	}
 }
 
@@ -181,11 +183,8 @@ func (s *Store) RestoreBackup(backup Backup, destination string) error {
 		if err := verifyBackupCandidate(backup, candidate); err != nil {
 			return err
 		}
-		if err := ensureDestinationAbsent(destination, backup.Destination); err != nil {
-			return err
-		}
-		if err := os.Rename(candidate, destination); err != nil {
-			return err
+		if err := s.publishCandidateFn()(candidate, destination); err != nil {
+			return normalizeAtomicPublishNoReplaceError(err, destination, backup.Destination)
 		}
 		published = true
 		return nil
@@ -248,6 +247,13 @@ func (s *Store) symlinkFn() func(oldname, newname string) error {
 		return s.symlink
 	}
 	return os.Symlink
+}
+
+func (s *Store) publishCandidateFn() func(candidate, destination string) error {
+	if s.publishCandidate != nil {
+		return s.publishCandidate
+	}
+	return atomicPublishNoReplace
 }
 
 func (s *Store) receiptsPath() string {
