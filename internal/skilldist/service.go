@@ -542,9 +542,13 @@ func removeReceiptedSymlink(state DestinationState) (DestinationState, error) {
 
 func (s *Service) restoreDestination(action Action, preimage DestinationState, preimageBackup Backup, currentBackup Backup) (DestinationState, bool, error) {
 	current := action.Destination
-	removed, err := removeReceiptedSymlink(current)
-	if err != nil {
-		return removed, false, err
+	removed := current
+	if current.Kind != KindAbsent {
+		var err error
+		removed, err = removeReceiptedSymlink(current)
+		if err != nil {
+			return removed, false, err
+		}
 	}
 	if action.Kind == ActionRemoveManagedSymlink {
 		return removed, false, nil

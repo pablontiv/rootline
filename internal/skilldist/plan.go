@@ -81,7 +81,7 @@ func BuildRestorePlan(receipt Receipt, states []DestinationState) (Plan, error) 
 			return Plan{}, operationError(ErrUnsupportedFileType, state.Path, string(state.ID), fmt.Errorf("unsupported destination %q", state.ID))
 		}
 		recorded, ok := actionsByDestination[state.ID]
-		if !ok || !recorded.Complete || filepathClean(recorded.After.Path) != filepathClean(state.Path) || !currentReceiptedLinkMatches(recorded.After, state) {
+		if !ok || !recorded.Complete || filepathClean(recorded.After.Path) != filepathClean(state.Path) || !currentRestorableStateMatches(recorded.After, state) {
 			return Plan{}, operationError(ErrRestoreConflict, state.Path, string(state.ID), fmt.Errorf("destination does not match receipt evidence"))
 		}
 		kind, err := restoreActionKind(recorded.Before)
@@ -183,17 +183,31 @@ func receiptActionsByDestination(receipt Receipt) map[DestinationID]ActionResult
 	return actions
 }
 
+func currentRestorableStateMatches(recorded, current DestinationState) bool {
+	if currentReceiptedLinkMatches(recorded, current) {
+		return true
+	}
+	return current.Kind == KindAbsent &&
+		receiptRecordedManagedLink(recorded) &&
+		recorded.ID == current.ID &&
+		filepathClean(recorded.Path) == filepathClean(current.Path)
+}
+
 func currentReceiptedLinkMatches(recorded, current DestinationState) bool {
 	if current.Kind != KindCorrectSymlink && current.Kind != KindDivergentSymlink {
 		return false
 	}
-	if recorded.Kind != KindCorrectSymlink && recorded.Kind != KindDivergentSymlink {
+	if !receiptRecordedManagedLink(recorded) {
 		return false
 	}
 	return recorded.ID == current.ID &&
 		filepathClean(recorded.Path) == filepathClean(current.Path) &&
 		filepathClean(recorded.LexicalTarget) == filepathClean(current.LexicalTarget) &&
 		filepathClean(recorded.CanonicalTarget) == filepathClean(current.CanonicalTarget)
+}
+
+func receiptRecordedManagedLink(recorded DestinationState) bool {
+	return recorded.Kind == KindCorrectSymlink || recorded.Kind == KindDivergentSymlink
 }
 
 func filepathClean(path string) string {

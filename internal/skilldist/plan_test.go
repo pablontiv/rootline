@@ -70,7 +70,7 @@ func TestInstallPlanRejectsUnsupportedDestinationBeforeApproval(t *testing.T) {
 func TestInstallPlanRejectsUnsupportedDestinationID(t *testing.T) {
 	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.claude/skills/rootline", Commit: "abc", Digest: "sha256:source"}
 	states := []DestinationState{
-		{ID: DestinationID("legacy"), Path: "/home/.config/opencode/skills/rootline", Kind: KindAbsent},
+		{ID: DestinationID("legacy"), Path: "/home/unsupported/rootline", Kind: KindAbsent},
 	}
 	_, err := BuildInstallPlan(source, states)
 	assertOperationErrorCode(t, err, ErrUnsupportedFileType)
