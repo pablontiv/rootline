@@ -220,6 +220,211 @@ func TestStatusReportsReceiptDriftAfterCanonicalSkillUpdate(t *testing.T) {
 	}
 }
 
+func TestUninstallRemovesOnlyIntactReceiptedSymlinks(t *testing.T) {
+	fixture := newServiceFixture(t)
+	plan := fixture.service.Install(context.Background(), fixture.repo, "")
+	installed := fixture.service.Install(context.Background(), fixture.repo, plan.Plan.Digest)
+	if installed.Failed() {
+		t.Fatalf("install: %#v", installed)
+	}
+
+	uninstallPlan := fixture.service.Uninstall(context.Background(), "")
+	if uninstallPlan.Attempted || uninstallPlan.Plan == nil {
+		t.Fatalf("uninstall plan = %#v", uninstallPlan)
+	}
+	removed := fixture.service.Uninstall(context.Background(), uninstallPlan.Plan.Digest)
+	if removed.Failed() || !removed.Complete {
+		t.Fatalf("uninstall = %#v", removed)
+	}
+	for _, path := range []string{fixture.claudePath(), fixture.agentsPath()} {
+		if _, err := os.Lstat(path); !os.IsNotExist(err) {
+			t.Fatalf("%s still exists: %v", path, err)
+		}
+	}
+}
+
+func TestUninstallRefusesUnreceiptedOrRetargetedSymlink(t *testing.T) {
+	t.Run("unreceipted", func(t *testing.T) {
+		fixture := newServiceFixture(t)
+		if err := os.MkdirAll(filepath.Dir(fixture.claudePath()), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(fixture.skillPath(), fixture.claudePath()); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+
+		result := fixture.service.Uninstall(context.Background(), "")
+		if !result.Failed() || result.Plan != nil || result.Attempted {
+			t.Fatalf("unreceipted uninstall = %#v", result)
+		}
+		assertResultErrorCode(t, result, ErrRestoreConflict)
+		assertSymlinkTo(t, fixture.claudePath(), fixture.skillPath())
+	})
+
+	t.Run("retargeted", func(t *testing.T) {
+		fixture := newServiceFixture(t)
+		plan := fixture.service.Install(context.Background(), fixture.repo, "")
+		installed := fixture.service.Install(context.Background(), fixture.repo, plan.Plan.Digest)
+		if installed.Failed() {
+			t.Fatalf("install: %#v", installed)
+		}
+		wrong := filepath.Join(t.TempDir(), "wrong")
+		mustWriteSkillFile(t, wrong, "SKILL.md", "wrong")
+		if err := os.Remove(fixture.claudePath()); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(wrong, fixture.claudePath()); err != nil {
+			t.Fatal(err)
+		}
+
+		result := fixture.service.Uninstall(context.Background(), "")
+		if !result.Failed() || result.Plan != nil || result.Attempted {
+			t.Fatalf("retargeted uninstall = %#v", result)
+		}
+		assertResultErrorCode(t, result, ErrRestoreConflict)
+		assertSymlinkTo(t, fixture.claudePath(), wrong)
+	})
+}
+
+func TestUninstallDoesNotRestoreOldDirectoriesAutomatically(t *testing.T) {
+	fixture := newServiceFixture(t)
+	mustWriteSkillFile(t, fixture.claudePath(), "SKILL.md", "claude original")
+	mustWriteSkillFile(t, fixture.agentsPath(), "SKILL.md", "agents original")
+	plan := fixture.service.Install(context.Background(), fixture.repo, "")
+	installed := fixture.service.Install(context.Background(), fixture.repo, plan.Plan.Digest)
+	if installed.Failed() {
+		t.Fatalf("install: %#v", installed)
+	}
+
+	uninstallPlan := fixture.service.Uninstall(context.Background(), "")
+	removed := fixture.service.Uninstall(context.Background(), uninstallPlan.Plan.Digest)
+	if removed.Failed() || !removed.Complete {
+		t.Fatalf("uninstall = %#v", removed)
+	}
+	assertPathAbsent(t, fixture.claudePath())
+	assertPathAbsent(t, fixture.agentsPath())
+}
+
+func TestRestoreRecreatesRecordedDirectoryPreimage(t *testing.T) {
+	fixture := newServiceFixture(t)
+	mustWriteSkillFile(t, fixture.claudePath(), "SKILL.md", "original")
+	plan := fixture.service.Install(context.Background(), fixture.repo, "")
+	installed := fixture.service.Install(context.Background(), fixture.repo, plan.Plan.Digest)
+	if installed.Failed() {
+		t.Fatalf("install: %#v", installed)
+	}
+	restorePlan := fixture.service.Restore(context.Background(), installed.Receipt.ID, "")
+	if restorePlan.Failed() || restorePlan.Plan == nil || restorePlan.Attempted {
+		t.Fatalf("restore plan = %#v", restorePlan)
+	}
+	restored := fixture.service.Restore(context.Background(), installed.Receipt.ID, restorePlan.Plan.Digest)
+	if restored.Failed() || !restored.Complete {
+		t.Fatalf("restore = %#v", restored)
+	}
+	data, err := os.ReadFile(filepath.Join(fixture.claudePath(), "SKILL.md"))
+	if err != nil || string(data) != "original" {
+		t.Fatalf("restored preimage data=%q err=%v", data, err)
+	}
+	assertPathAbsent(t, fixture.agentsPath())
+	if restored.Receipt == nil || restored.Receipt.Operation != OperationRestore || restored.Receipt.ID == installed.Receipt.ID || len(restored.Receipt.Backups) != 2 {
+		t.Fatalf("restore receipt = %#v", restored.Receipt)
+	}
+}
+
+func TestRestoreRefusesMissingOrCorruptBackup(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		damage func(*testing.T, Backup)
+	}{
+		{
+			name: "missing",
+			damage: func(t *testing.T, backup Backup) {
+				t.Helper()
+				if err := os.RemoveAll(backup.StoredPath); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "corrupt",
+			damage: func(t *testing.T, backup Backup) {
+				t.Helper()
+				if err := os.WriteFile(filepath.Join(backup.StoredPath, "SKILL.md"), []byte("corrupt"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			fixture := newServiceFixture(t)
+			mustWriteSkillFile(t, fixture.claudePath(), "SKILL.md", "original")
+			plan := fixture.service.Install(context.Background(), fixture.repo, "")
+			installed := fixture.service.Install(context.Background(), fixture.repo, plan.Plan.Digest)
+			if installed.Failed() || len(installed.Receipt.Backups) == 0 {
+				t.Fatalf("install = %#v", installed)
+			}
+			tt.damage(t, installed.Receipt.Backups[0])
+
+			result := fixture.service.Restore(context.Background(), installed.Receipt.ID, "")
+			if !result.Failed() || result.Plan != nil || result.Attempted {
+				t.Fatalf("restore with %s backup = %#v", tt.name, result)
+			}
+			assertResultErrorCode(t, result, ErrVerificationFailed)
+			assertSymlinkTo(t, fixture.claudePath(), fixture.skillPath())
+		})
+	}
+}
+
+func TestRestoreApprovalChangesWhenCurrentStateDrifts(t *testing.T) {
+	fixture := newServiceFixture(t)
+	mustWriteSkillFile(t, fixture.claudePath(), "SKILL.md", "original")
+	plan := fixture.service.Install(context.Background(), fixture.repo, "")
+	installed := fixture.service.Install(context.Background(), fixture.repo, plan.Plan.Digest)
+	if installed.Failed() {
+		t.Fatalf("install: %#v", installed)
+	}
+	restorePlan := fixture.service.Restore(context.Background(), installed.Receipt.ID, "")
+	if restorePlan.Failed() || restorePlan.Plan == nil {
+		t.Fatalf("restore plan = %#v", restorePlan)
+	}
+
+	mustWriteSkillFile(t, fixture.skillPath(), "SKILL.md", "drift")
+	result := fixture.service.Restore(context.Background(), installed.Receipt.ID, restorePlan.Plan.Digest)
+	if !result.Failed() || result.Attempted {
+		t.Fatalf("stale restore approval = %#v", result)
+	}
+	assertResultErrorCode(t, result, ErrPreimageDigestChanged)
+	assertSymlinkTo(t, fixture.claudePath(), fixture.skillPath())
+}
+
+func TestRestorePreservesUnobservedDestinationState(t *testing.T) {
+	fixture := newServiceFixture(t)
+	mustWriteSkillFile(t, fixture.claudePath(), "SKILL.md", "original")
+	plan := fixture.service.Install(context.Background(), fixture.repo, "")
+	installed := fixture.service.Install(context.Background(), fixture.repo, plan.Plan.Digest)
+	if installed.Failed() {
+		t.Fatalf("install: %#v", installed)
+	}
+	restorePlan := fixture.service.Restore(context.Background(), installed.Receipt.ID, "")
+	if restorePlan.Failed() || restorePlan.Plan == nil {
+		t.Fatalf("restore plan = %#v", restorePlan)
+	}
+	if err := os.Remove(fixture.claudePath()); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteSkillFile(t, fixture.claudePath(), "SKILL.md", "external")
+
+	result := fixture.service.Restore(context.Background(), installed.Receipt.ID, restorePlan.Plan.Digest)
+	if !result.Failed() || result.Attempted {
+		t.Fatalf("restore over unobserved state = %#v", result)
+	}
+	assertResultErrorCode(t, result, ErrRestoreConflict)
+	data, err := os.ReadFile(filepath.Join(fixture.claudePath(), "SKILL.md"))
+	if err != nil || string(data) != "external" {
+		t.Fatalf("unobserved state was not preserved: data=%q err=%v", data, err)
+	}
+}
+
 type serviceFixture struct {
 	repo    string
 	home    string
