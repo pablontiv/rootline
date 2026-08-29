@@ -129,9 +129,18 @@ func TestValidateStemHealth_ScopeMatchUsesEffectiveGovernedSubtree(t *testing.T)
 			wantPaths: nil,
 		},
 		{
+			name: "ignored descendant does not satisfy ancestor scope",
+			files: map[string]string{
+				".stem":               "version: 2\nroot: true\nscope:\n  match: \"CONTRACT.md\"\n",
+				".stemignore":         "ignored/CONTRACT.md\n",
+				"ignored/CONTRACT.md": "# Ignored\n",
+			},
+			wantPaths: []string{".stem"},
+		},
+		{
 			name: "child scope override does not satisfy ancestor scope",
 			files: map[string]string{
-				".stem":                   "version: 2\nroot: true\nscope:\n  match: \"CONTRACT.md\"\n",
+				".stem":                   "version: 2\nroot: true\nscope:\n  match: \"*.md\"\n",
 				"component/.stem":         "version: 2\nscope:\n  match: \"README.md\"\n",
 				"component/api/README.md": "# Component\n",
 			},

@@ -87,7 +87,9 @@ Reading it:
   `query --count` on the same path. Directory verdicts from `structural:` rules are in
   `structural[]` (trailing-slash paths; the scan root is `"/"`).
 - `.stem` diagnostics are in `stem_health`, keyed by `check`, with `severity` `error`,
-  `warn` or `info`. `info` (e.g. `nested-root-marker`) never fails `--strict`.
+  `warn` or `info`. Ancestor scopes include inheriting descendants but exclude files
+  filtered by `.stemignore`; overrides and nested roots own their matches. `info` (e.g.
+  `nested-root-marker`) never fails `--strict`.
 - `notices` carries run-level diagnostics by stable `code`: `scan_failed`,
   `schema_resolution_failed`, `stem_health_unavailable`, `no_records`.
 - A tree with no `.stem`, or one that is malformed or semantically refused, still emits this envelope —

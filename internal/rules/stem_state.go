@@ -28,7 +28,8 @@ type StemState struct {
 
 // StemStateEntry records the state-local inventory for a discovered path.
 type StemStateEntry struct {
-	IsDir bool
+	IsDir   bool
+	Ignored bool
 }
 
 // DiscoverStemState walks root once, preserving both parseable .stem files and
@@ -51,6 +52,7 @@ func DiscoverStemState(ctx context.Context, root string) (*StemState, error) {
 		ParseErrors: make(map[string]error),
 		Entries:     make(map[string]StemStateEntry),
 	}
+	var ignores []stemIgnoreScope
 
 	scanRoot, err := os.OpenRoot(absRoot)
 	if err != nil {
@@ -70,9 +72,17 @@ func DiscoverStemState(ctx context.Context, root string) (*StemState, error) {
 			return filepath.SkipDir
 		}
 
-		state.Entries[path] = StemStateEntry{IsDir: info.IsDir()}
+		if info.IsDir() {
+			state.Entries[path] = StemStateEntry{IsDir: true}
+			if patterns, loadErr := parseStemIgnore(filepath.Join(path, ".stemignore")); loadErr == nil {
+				ignores = append(ignores, stemIgnoreScope{dir: path, patterns: patterns})
+			}
+			return nil
+		}
 
-		if !info.IsDir() && info.Name() == stemFileName {
+		state.Entries[path] = StemStateEntry{Ignored: stemIsIgnored(path, ignores)}
+
+		if info.Name() == stemFileName {
 			content, err := readStemStateFileThroughRoot(scanRoot, absRoot, path)
 			if err != nil {
 				return err
@@ -219,7 +229,7 @@ func (s *StemState) EffectiveScopeMatches() map[string]bool {
 	}
 
 	for path, entry := range s.Entries {
-		if entry.IsDir || filepath.Base(path) == stemFileName {
+		if entry.IsDir || entry.Ignored || filepath.Base(path) == stemFileName {
 			continue
 		}
 
