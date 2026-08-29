@@ -759,7 +759,7 @@ func (e *installExecutor) publishSymlink(destination DestinationState, source So
 			outcome.rolledBack = rolledBack
 			return outcome, coerceOperationError(ErrVerificationFailed, destination.Path, string(destination.ID), err)
 		}
-		if !sameDestinationEvidence(destination, stagedState) {
+		if !sameStagedPreimageEvidence(destination, stagedState, backup) {
 			rolledBack := e.restoreStaged(destination, stagedPath, backup)
 			outcome.rolledBack = rolledBack
 			return outcome, operationError(ErrVerificationFailed, destination.Path, string(destination.ID), fmt.Errorf("staged preimage evidence changed"))
@@ -924,6 +924,18 @@ func inventoryAfterFailure(destination DestinationState, source Source, sourceCa
 		return DestinationState{ID: destination.ID, Path: destination.Path, Kind: KindUnsupported}
 	}
 	return state
+}
+
+func sameStagedPreimageEvidence(expected, observed DestinationState, backup Backup) bool {
+	if expected.Kind == KindCorrectSymlink || expected.Kind == KindDivergentSymlink {
+		return expected.ID == observed.ID &&
+			expected.Kind == observed.Kind &&
+			backup.Destination == expected.ID &&
+			backup.Kind == expected.Kind &&
+			filepath.Clean(expected.LexicalTarget) == filepath.Clean(backup.LinkTarget) &&
+			filepath.Clean(expected.LexicalTarget) == filepath.Clean(observed.LexicalTarget)
+	}
+	return sameDestinationEvidence(expected, observed)
 }
 
 func sameDestinationEvidence(expected, observed DestinationState) bool {
