@@ -1,7 +1,7 @@
 ---
 name: rootline
 description: Use when working with Markdown records governed by .stem schemas or when the user asks to validate, fix, query, inspect, scaffold, mutate, analyze, apply, or graph Rootline data, even if they do not name Rootline. Do not use for roadmap decomposition or Go debugging.
-updated: 2026-07-21
+updated: 2026-08-28
 ---
 
 # Rootline CLI Operations
@@ -20,6 +20,12 @@ rg -n "Use:|Flags\(\)" cmd/rootline/<command>.go
 Use `Read` only for body content the CLI does not expose, a small error context, or editing review.
 
 Local coverage check: `just coverage-check` (requires `.coverage-floors.toml`).
+
+## Skill Distribution Contract
+
+Rootline owns agent skill distribution through the `rootline skill` CLI. Before correcting an installation created under an older Rootline release, read the relevant breaking entry in `CHANGELOG.md`; then use only the currently documented destinations: `~/.claude/skills/rootline` for Claude and `~/.agents/skills/rootline` for OpenCode and Pi. Do not infer or mutate any destination that is not documented by the current release.
+
+Use `rootline skill status --source <primary-rootline-checkout>` before remediation. If a committed source update leaves status with `receipt_drift: true`, approve an idempotent `rootline skill install --source <primary-rootline-checkout>` plan first; this refreshes receipt evidence before uninstall or restore. See `docs/skill.md` for install, uninstall, restore, state, receipt, and backup rules.
 
 ## Governance Boundary (root marker)
 

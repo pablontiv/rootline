@@ -83,23 +83,26 @@ func TestOutput_RejectsUnknownValue(t *testing.T) {
 // The four commands that fell through to JSON for jsonl/csv (issue #63 §2).
 func TestOutput_RejectsUnsupportedFormatPerCommand(t *testing.T) {
 	docs := setupFormatProject(t)
+	skillFixture := newSkillCommandFixture(t)
 
 	cases := []struct {
-		name string
-		args []string
+		name          string
+		args          []string
+		wantSupported []string
 	}{
-		{"stats csv", []string{"stats", docs, "-o", "csv"}},
-		{"stats jsonl", []string{"stats", docs, "-o", "jsonl"}},
-		{"describe jsonl", []string{"describe", docs, "-o", "jsonl"}},
-		{"describe csv", []string{"describe", docs, "-o", "csv"}},
-		{"explain csv", []string{"explain", filepath.Join(docs, "r1.md"), "-o", "csv"}},
-		{"validate csv", []string{"validate", "--all", docs, "-o", "csv"}},
-		{"validate jsonl", []string{"validate", "--all", docs, "-o", "jsonl"}},
+		{"stats csv", []string{"stats", docs, "-o", "csv"}, []string{"json", "table"}},
+		{"stats jsonl", []string{"stats", docs, "-o", "jsonl"}, []string{"json", "table"}},
+		{"describe jsonl", []string{"describe", docs, "-o", "jsonl"}, []string{"json", "table"}},
+		{"describe csv", []string{"describe", docs, "-o", "csv"}, []string{"json", "table"}},
+		{"explain csv", []string{"explain", filepath.Join(docs, "r1.md"), "-o", "csv"}, []string{"json", "table"}},
+		{"validate csv", []string{"validate", "--all", docs, "-o", "csv"}, []string{"json", "table"}},
+		{"validate jsonl", []string{"validate", "--all", docs, "-o", "jsonl"}, []string{"json", "table"}},
 		// The two with an inverted test that fell through to a diagram (§3).
-		{"tree csv", []string{"tree", docs, "-o", "csv"}},
-		{"tree jsonl", []string{"tree", docs, "-o", "jsonl"}},
-		{"graph jsonl", []string{"graph", docs, "-o", "jsonl"}},
-		{"graph csv", []string{"graph", docs, "-o", "csv"}},
+		{"tree csv", []string{"tree", docs, "-o", "csv"}, []string{"json", "table"}},
+		{"tree jsonl", []string{"tree", docs, "-o", "jsonl"}, []string{"json", "table"}},
+		{"graph jsonl", []string{"graph", docs, "-o", "jsonl"}, []string{"json", "table"}},
+		{"graph csv", []string{"graph", docs, "-o", "csv"}, []string{"json", "table"}},
+		{"skill status table", []string{"skill", "status", "--source", skillFixture.repo, "-o", "table"}, []string{"json"}},
 	}
 
 	for _, tc := range cases {
@@ -111,8 +114,10 @@ func TestOutput_RejectsUnsupportedFormatPerCommand(t *testing.T) {
 			if !strings.Contains(err.Error(), "does not support output format") {
 				t.Errorf("error = %v, want it to say the command does not support the format", err)
 			}
-			if !strings.Contains(err.Error(), "json") || !strings.Contains(err.Error(), "table") {
-				t.Errorf("error = %v, want it to list json and table as the supported values", err)
+			for _, supported := range tc.wantSupported {
+				if !strings.Contains(err.Error(), supported) {
+					t.Errorf("error = %v, want it to list %s as a supported value", err, supported)
+				}
 			}
 		})
 	}

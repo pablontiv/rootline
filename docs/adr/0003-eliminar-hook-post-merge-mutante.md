@@ -1,10 +1,11 @@
 ---
 tipo: adr
-estado: accepted
+estado: superseded
 fecha: "2026-08-25"
 contexto: "El hook post-merge versionado ejecutaba instalación local y reparación de roadmap durante merges, produciendo cambios persistentes sin acción explícita del usuario."
 decision: "Eliminar el hook post-merge mutante y mantener la instalación del checkout actual como una acción explícita mediante just install."
 consecuencias: "Los merges y checkouts no reinstalarán binarios ni modificarán docs versionados; quienes necesiten instalar una build local deberán ejecutar just install manualmente."
+superseded_by: 0005-distribuir-skills-mediante-comando-explicito
 ---
 
 # ADR 0003: Eliminar hook post-merge mutante

@@ -9,41 +9,32 @@ import (
 	"testing"
 )
 
-func TestPrePushSyncsSkillWithoutInstallingBinary(t *testing.T) {
+func TestPrePushDoesNotMutateHome(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("pre-push is a Bash hook")
 	}
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
-		t.Fatalf("resolve repository root: %v", err)
+		t.Fatal(err)
 	}
 	testHome := t.TempDir()
-	testBin := t.TempDir()
-	installMarker := filepath.Join(testHome, "just-install-called")
-
-	justPath := filepath.Join(testBin, "just")
-	justScript := "#!/bin/sh\n: > \"$INSTALL_MARKER\"\n"
-	mustWriteFile(t, justPath, []byte(justScript), 0755)
+	sentinel := filepath.Join(testHome, ".claude", "skills", "rootline", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(sentinel), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, sentinel, []byte("do not replace\n"), 0o600)
 
 	cmd := exec.Command(filepath.Join(repoRoot, ".githooks", "pre-push"), "origin", "unused") //nolint:gosec // fixed repository hook under test
 	cmd.Dir = repoRoot
 	cmd.Stdin = strings.NewReader("")
-	cmd.Env = append(os.Environ(),
-		"HOME="+testHome,
-		"INSTALL_MARKER="+installMarker,
-		"PATH="+testBin+string(os.PathListSeparator)+os.Getenv("PATH"),
-	)
+	cmd.Env = append(os.Environ(), "HOME="+testHome)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("pre-push failed: %v\n%s", err, output)
 	}
-
-	installedSkill := filepath.Join(testHome, ".claude", "skills", "rootline", "SKILL.md")
-	if _, err := os.Stat(installedSkill); err != nil {
-		t.Fatalf("expected pre-push to synchronize the rootline skill: %v", err)
-	}
-	if _, err := os.Stat(installMarker); !os.IsNotExist(err) {
-		t.Fatalf("pre-push must not invoke just install; stat error: %v", err)
+	data, err := os.ReadFile(sentinel)
+	if err != nil || string(data) != "do not replace\n" {
+		t.Fatalf("pre-push mutated home: data=%q err=%v", data, err)
 	}
 }
 

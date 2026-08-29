@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Changed
 
+- **BREAKING**: Rootline no longer installs or supports the former OpenCode-specific `~/.config/opencode/skills/rootline` destination. OpenCode and Pi consume the shared `~/.agents/skills/rootline` symlink; Claude consumes `~/.claude/skills/rootline`. Agents upgrading an older environment must inspect and preserve the former destination themselves, retire it deliberately, run `rootline skill install` from the primary Rootline checkout, apply the emitted `plan_digest` with `--approve`, and verify with `rootline skill status`. Rootline does not discover or mutate obsolete runtime paths.
 - `schema apply` now rejects invalid prospective `.stem` hierarchies before publishing actions or writing files, while preserving version-1 `stem_health[]` diagnostics and atomic per-file `.stem` replacement for accepted writes.
 - `schema apply` now converges proposal and analyze writes on a bound physical target: internal aliases are supported, escaping aliases are rejected, malformed external governing ancestors surface as structured relative `yaml-valid` diagnostics in `stem_health[]`, and schema proposal targets must use the literal basename `.stem` so case-insensitive basename aliases are rejected before resolution.
 

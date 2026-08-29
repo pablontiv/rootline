@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 // setupTestDir creates a temp directory with .stem and markdown files for CLI testing.
@@ -106,6 +108,9 @@ func resetFlags() {
 	repairDryRun = false
 	repairFillMissing = false
 	repairRoot = ""
+	skillSource = ""
+	skillApproval = ""
+	skillReceipt = ""
 
 	// Reset slice flags at the cobra level too (StringSliceVar appends internally)
 	if f := treeCmd.Flags().Lookup("where"); f != nil {
@@ -179,6 +184,22 @@ func resetFlags() {
 	if f := schemaProposeCmd.Flags().Lookup("incremental"); f != nil {
 		_ = f.Value.Set("false")
 		f.Changed = false
+	}
+	for _, flag := range []struct {
+		cmd  *cobra.Command
+		name string
+	}{
+		{skillInstallCmd, "source"},
+		{skillInstallCmd, "approve"},
+		{skillStatusCmd, "source"},
+		{skillUninstallCmd, "approve"},
+		{skillRestoreCmd, "approve"},
+		{skillRestoreCmd, "receipt"},
+	} {
+		if f := flag.cmd.Flags().Lookup(flag.name); f != nil {
+			_ = f.Value.Set("")
+			f.Changed = false
+		}
 	}
 }
 
