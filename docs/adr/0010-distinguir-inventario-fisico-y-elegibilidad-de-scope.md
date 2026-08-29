@@ -1,6 +1,6 @@
 ---
 tipo: adr
-estado: proposed
+estado: accepted
 fecha: '2026-08-29'
 contexto: 'La revisión adversarial demostró que un descendiente excluido por .stemignore podía satisfacer el scope ancestro porque StemState no distinguía presencia física de pertenencia gobernada.'
 decision: 'Conservar todas las entradas físicas en StemState, marcar su elegibilidad mediante StemStateEntry.Ignored con la semántica existente de .stemignore y excluir las ignoradas al atribuir scope.match por Chain.'
