@@ -208,34 +208,38 @@ func (s *StemState) EvaluatedStemPaths() []string {
 	return paths
 }
 
-// MatchingFiles returns immediate, non-directory entries in dir whose basename
-// matches pattern. Results are state-local and deterministic.
-func (s *StemState) MatchingFiles(dir, pattern string) []string {
+// EffectiveScopeMatches reports which .stem declaration owns at least one
+// matching file in the state inventory. The closest non-empty scope.match in a
+// file's governing chain owns that match, so inheritance, overrides, and nested
+// root boundaries follow the same resolution semantics as record discovery.
+func (s *StemState) EffectiveScopeMatches() map[string]bool {
+	matches := make(map[string]bool)
 	if s == nil {
-		return nil
+		return matches
 	}
 
-	absDir, err := filepath.Abs(dir)
-	if err != nil {
-		absDir = filepath.Clean(dir)
-	} else {
-		absDir = filepath.Clean(absDir)
-	}
-
-	var matches []string
 	for path, entry := range s.Entries {
-		if entry.IsDir || filepath.Dir(path) != absDir {
+		if entry.IsDir || filepath.Base(path) == stemFileName {
 			continue
 		}
-		ok, err := filepath.Match(pattern, filepath.Base(path))
-		if err != nil {
-			return nil
+
+		owner := ""
+		pattern := ""
+		for _, stemEntry := range s.Chain(path) {
+			if stemEntry.Stem != nil && stemEntry.Stem.Scope.Match != "" {
+				owner = stemEntry.Path
+				pattern = stemEntry.Stem.Scope.Match
+			}
 		}
-		if ok {
-			matches = append(matches, path)
+		if owner == "" {
+			continue
+		}
+
+		matched, err := filepath.Match(pattern, filepath.Base(path))
+		if err == nil && matched {
+			matches[owner] = true
 		}
 	}
-	sort.Strings(matches)
 	return matches
 }
 

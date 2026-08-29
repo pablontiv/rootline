@@ -286,26 +286,6 @@ func TestStemStateEvaluatedPathsAreSorted(t *testing.T) {
 	})
 }
 
-func TestStemStateMatchingFilesUsesImmediateNonDirectoryEntries(t *testing.T) {
-	root := t.TempDir()
-	dir := filepath.Join(root, "docs")
-	state := &StemState{
-		Root: filepath.Clean(root),
-		Entries: map[string]StemStateEntry{
-			filepath.Join(dir, "a.md"):           {IsDir: false},
-			filepath.Join(dir, "b.txt"):          {IsDir: false},
-			filepath.Join(dir, "nested", "c.md"): {IsDir: false},
-			filepath.Join(dir, "draft.md"):       {IsDir: true},
-			filepath.Join(dir, "z.md"):           {IsDir: false},
-		},
-	}
-
-	requireStemStatePaths(t, state.MatchingFiles(dir, "*.md"), []string{
-		filepath.Join(dir, "a.md"),
-		filepath.Join(dir, "z.md"),
-	})
-}
-
 func mustWriteStemStateFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
