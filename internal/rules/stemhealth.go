@@ -177,25 +177,18 @@ func EvaluateStemState(ctx context.Context, state *StemState) (*StemHealthResult
 
 	invalidFieldsByStem := invalidSchemaFieldsByStem(parsedStems)
 
-	// Check 2: Orphan scopes (scope.match doesn't match any file in directory)
+	// Check 2: Orphan scopes (scope.match doesn't match any file in its governed subtree)
+	effectiveScopeMatches := state.EffectiveScopeMatches()
 	for _, sf := range sortedStemPaths(parsedStems) {
 		stem := parsedStems[sf]
 		if stem.Scope.Match == "" {
 			continue
 		}
-		hasMatch := false
-		for _, match := range state.MatchingFiles(filepath.Dir(sf), stem.Scope.Match) {
-			if filepath.Base(match) == stemFileName {
-				continue
-			}
-			hasMatch = true
-			break
-		}
-		if !hasMatch {
+		if !effectiveScopeMatches[sf] {
 			checks = append(checks, StemHealthCheck{
 				Name:    "scope-match",
 				Status:  "warn",
-				Message: fmt.Sprintf("scope.match %q matches no files in directory", stem.Scope.Match),
+				Message: fmt.Sprintf("scope.match %q matches no files in governed subtree", stem.Scope.Match),
 				Path:    stemHealthRelPath(absRoot, sf),
 			})
 		}

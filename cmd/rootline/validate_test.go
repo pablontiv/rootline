@@ -533,6 +533,57 @@ func TestValidateAll_StemHealthWarnings(t *testing.T) {
 	}
 }
 
+func TestValidateAllStrict_DescendantScopeMatchesAreHealthy(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":               "version: 2\nroot: true\nscope:\n  match: \"CONTRACT.md\"\nschema:\n  id:\n    type: string\n    required: true\n",
+		"proxmox/CONTRACT.md": "---\nid: proxmox\n---\n# Proxmox\n",
+		"runtime/CONTRACT.md": "---\nid: runtime\n---\n# Runtime\n",
+	})
+	mustChdir(t, root)
+
+	stdout, err := executeValidate(t, "--all", "--strict")
+	if err != nil {
+		t.Fatalf("validate --all --strict error = %v, want nil\noutput: %s", err, stdout)
+	}
+
+	env := decodeEnvelope(t, stdout)
+	if got := env["summary"].(map[string]any)["total"].(float64); got != 2 {
+		t.Fatalf("summary.total = %v, want 2", got)
+	}
+	for _, diagnostic := range stemHealthChecks(t, env) {
+		if diagnostic["check"] == "scope-match" {
+			t.Fatalf("unexpected scope-match diagnostic: %#v", diagnostic)
+		}
+	}
+}
+
+func TestValidateAllStrict_IgnoredDescendantDoesNotSatisfyAncestorScope(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":               "version: 2\nroot: true\nscope:\n  match: \"CONTRACT.md\"\n",
+		".stemignore":         "ignored/CONTRACT.md\n",
+		"ignored/CONTRACT.md": "# Ignored\n",
+		"nested/.stem":        "version: 2\nroot: true\nscope:\n  match: \"README.md\"\nschema:\n  id:\n    type: string\n    required: true\n",
+		"nested/README.md":    "---\nid: nested\n---\n# Nested\n",
+	})
+	mustChdir(t, root)
+
+	stdout, err := executeValidate(t, "--all", "--strict")
+	if err != ErrValidationFailed {
+		t.Fatalf("validate --all --strict error = %v, want ErrValidationFailed\noutput: %s", err, stdout)
+	}
+
+	env := decodeEnvelope(t, stdout)
+	var found bool
+	for _, diagnostic := range stemHealthChecks(t, env) {
+		if diagnostic["check"] == "scope-match" && diagnostic["path"] == ".stem" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing outer scope-match diagnostic: %s", stdout)
+	}
+}
+
 // TestValidateAll_NoSchemaAnywhere tests that validate --all exits non-zero
 // when no .stem files exist in the tree.
 func TestValidateAll_NoSchemaAnywhere(t *testing.T) {

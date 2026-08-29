@@ -247,9 +247,14 @@ root.total` and `stats --field total` all reported 3 on the same path.
   "path": "docs/sub/.stem",
   "check": "scope-match",
   "severity": "warn",
-  "message": "scope.match \"*.txt\" matches no files in directory"
+  "message": "scope.match \"*.txt\" matches no files in governed subtree"
 }
 ```
+
+A scope declared by an ancestor is healthy when it matches a descendant file that
+inherits that declaration. A nested `root: true` boundary or a descendant `scope.match`
+override owns its own matches and does not satisfy the ancestor's scope. Files excluded
+by `.stemignore` do not participate and therefore cannot satisfy any scope.
 
 `severity` is `error`, `warn` or `info`. `info` is a real level, not a demoted warning:
 `nested-root-marker` describes a supported configuration and must not fail `--strict`.

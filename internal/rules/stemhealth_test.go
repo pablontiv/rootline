@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -109,6 +110,74 @@ scope:
 		if c.Name == "scope-match" {
 			t.Error("unexpected scope-match check when files match")
 		}
+	}
+}
+
+func TestValidateStemHealth_ScopeMatchUsesEffectiveGovernedSubtree(t *testing.T) {
+	tests := []struct {
+		name      string
+		files     map[string]string
+		wantPaths []string
+	}{
+		{
+			name: "ancestor scope is inherited by descendant records",
+			files: map[string]string{
+				".stem":                     "version: 2\nroot: true\nscope:\n  match: \"CONTRACT.md\"\n",
+				"component/.stem":           "version: 2\n",
+				"component/api/CONTRACT.md": "# Contract\n",
+			},
+			wantPaths: nil,
+		},
+		{
+			name: "ignored descendant does not satisfy ancestor scope",
+			files: map[string]string{
+				".stem":               "version: 2\nroot: true\nscope:\n  match: \"CONTRACT.md\"\n",
+				".stemignore":         "ignored/CONTRACT.md\n",
+				"ignored/CONTRACT.md": "# Ignored\n",
+			},
+			wantPaths: []string{".stem"},
+		},
+		{
+			name: "child scope override does not satisfy ancestor scope",
+			files: map[string]string{
+				".stem":                   "version: 2\nroot: true\nscope:\n  match: \"*.md\"\n",
+				"component/.stem":         "version: 2\nscope:\n  match: \"README.md\"\n",
+				"component/api/README.md": "# Component\n",
+			},
+			wantPaths: []string{".stem"},
+		},
+		{
+			name: "nested root does not satisfy outer scope",
+			files: map[string]string{
+				".stem":                     "version: 2\nroot: true\nscope:\n  match: \"CONTRACT.md\"\n",
+				"component/.stem":           "version: 2\nroot: true\nscope:\n  match: \"CONTRACT.md\"\n",
+				"component/api/CONTRACT.md": "# Contract\n",
+			},
+			wantPaths: []string{".stem"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for path, content := range tt.files {
+				mustWriteStemTestFile(t, filepath.Join(dir, path), []byte(content))
+			}
+
+			result, err := ValidateStemHealth(context.Background(), dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var gotPaths []string
+			for _, diagnostic := range StemHealthDiagnostics(result) {
+				if diagnostic.Check == "scope-match" {
+					gotPaths = append(gotPaths, diagnostic.Path)
+				}
+			}
+			if !reflect.DeepEqual(gotPaths, tt.wantPaths) {
+				t.Fatalf("scope-match diagnostic paths = %v, want %v", gotPaths, tt.wantPaths)
+			}
+		})
 	}
 }
 
