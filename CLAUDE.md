@@ -98,6 +98,20 @@ All transversal commands (`tree`, `stats`, `graph`, `validate --all`) support `-
 
 Only fall back to `Read` when you need raw markdown body content that rootline doesn't expose.
 
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues for `pablontiv/rootline`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Triage uses the five canonical role names as GitHub labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repository uses a single-context domain documentation layout. See `docs/agents/domain.md`.
+
 ## Commit Convention
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/). The `.githooks/commit-msg` hook enforces this format.
