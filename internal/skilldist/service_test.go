@@ -39,6 +39,32 @@ func TestInstallRequiresExactPlanThenConvergesIdempotently(t *testing.T) {
 	}
 }
 
+func TestInstallConvergesWhenAgentsPreimageTargetsClaudeDestination(t *testing.T) {
+	fixture := newServiceFixture(t)
+	mustWriteSkillFile(t, fixture.claudePath(), "SKILL.md", "old")
+	if err := os.MkdirAll(filepath.Dir(fixture.agentsPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(fixture.claudePath(), fixture.agentsPath()); err != nil {
+		t.Fatal(err)
+	}
+
+	planned := fixture.service.Install(context.Background(), fixture.repo, "")
+	if planned.Plan == nil || planned.Plan.Digest == "" {
+		t.Fatalf("unexpected plan result: %#v", planned)
+	}
+
+	applied := fixture.service.Install(context.Background(), fixture.repo, planned.Plan.Digest)
+	if applied.Failed() || !applied.Complete || applied.Receipt == nil || !applied.Receipt.Complete {
+		t.Fatalf("apply result: %#v", applied)
+	}
+	assertSymlinkTo(t, fixture.claudePath(), fixture.skillPath())
+	assertSymlinkTo(t, fixture.agentsPath(), fixture.skillPath())
+	if len(applied.Backups) != 2 {
+		t.Fatalf("backups = %#v, want directory and symlink preimages", applied.Backups)
+	}
+}
+
 func TestInstallRejectsStalePreimageApprovalBeforeMutation(t *testing.T) {
 	fixture := newServiceFixture(t)
 	mustWriteSkillFile(t, fixture.claudePath(), "SKILL.md", "first")

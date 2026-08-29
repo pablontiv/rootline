@@ -49,6 +49,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Fixed
 
+- `rootline skill install` now verifies staged symlink preimages by the link identity recorded in the plan and backup, so an Agents/Pi link pointing at the Claude destination is not falsely rejected after the same installation replaces Claude first.
 - `fix` now detects native YAML timestamp, boolean and integer values in governed string fields, preserves their exact scalar text while quoting them, and reports unsupported `rule: type` mismatches under `type_findings`. Stored repair reports carry optional `from_representation` evidence and reject stale lexeme or representation changes without weakening historical `correct_value` guards. Fix findings remain informational; `validate` remains the corpus-validity command. Closes #196.
 - CI ran on crossbeam's default `light` profile, so `Lint`, `Tidy` and `Vulnerability check` reported "skipping" on every run and the test job never used `-race`. `ci.yml` now passes `profile: full`, which is what `CLAUDE.md` already described.
 - The lint job could not have passed even once it was enabled: crossbeam pins `lint-version` `v2.10.1`, built with go1.26, while the job resolves Go from `stable` — now 1.27 — so the linter panicked with `file requires newer Go version go1.27`. `ci.yml` now pins `v2.13.1`. Raise it again whenever the runner's stable Go moves ahead of crossbeam's default.
