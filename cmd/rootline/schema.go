@@ -1010,7 +1010,12 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 	if incremental && resolve != nil && generatedStem != nil {
 		// Convert schema fields to inferences for filtering
 		inferences := schemaToInferences(generatedStem)
-		if len(inferences) > 0 {
+		if len(inferences) == 0 && existingStem != nil {
+			// An empty generated schema has nothing to add to an already
+			// governed tree. Keep the bootstrap proposal only when no stem
+			// exists yet.
+			proposals = nil
+		} else if len(inferences) > 0 {
 			// Filter inferences using per-scope resolver
 			filtered := infer.FilterCoveredInferences(inferences, records, root, resolve)
 			// If all inferences are covered, don't propose
