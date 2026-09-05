@@ -186,6 +186,10 @@ failing run stays machine-readable; the short `Error: apply failed: ...` line go
 `rolled_back[]` is a separate condition, not a subset of `errors[]`: a successful revert leaves
 `errors[]` empty, so a script testing only `errors[]` would read that run as a success.
 
+With `repair apply -o table`, reverted files appear in a separate `Rolled back (N)`
+section with each path and all recorded validation reasons. They are not counted as
+successful changes, and a rollback-only result does not print `No repairs applied`.
+
 `--dry-run` is not an exception. A preview that cannot resolve a path reports it in `errors[]`
 and exits `1`, which makes `repair apply --report r.json --dry-run` usable as a CI precondition
 check. A dry run performs no writes, so it can never populate `rolled_back[]`.

@@ -182,6 +182,10 @@ exit, and the short failure line goes to stderr, so `repair apply ... && deploy`
 failure while still giving you a parseable result. `--dry-run` follows the same rule: a preview
 that cannot resolve a path exits `1`, which makes it usable as a CI precondition check.
 
+`repair apply -o table` lists reverted files separately under `Rolled back (N)`,
+including each path and every validation reason. A rollback-only result is not a
+no-op and does not print `No repairs applied`. Dry runs do not report actual rollbacks.
+
 `repair apply` post-validates each file it writes, on its own, and restores the
 pre-write bytes when validation rejects the result. Reverted files come back in
 `rolled_back` (`{path, errors}`) and are withdrawn from `changed`, so a document is
