@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -47,6 +48,53 @@ func TestRenderRepairTable_AllSections(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("expected %q in output, got: %s", want, out)
 		}
+	}
+}
+
+func TestRenderRepairTable_RejectionsUseNeutralHeading(t *testing.T) {
+	tests := []struct {
+		name     string
+		rejected []string
+	}{
+		{
+			name:     "containment only",
+			rejected: []string{`containment violation: path "../outside.md" escapes root`},
+		},
+		{
+			name:     "schema only",
+			rejected: []string{"estado: add Obsolete (surface=schema)"},
+		},
+		{
+			name: "mixed",
+			rejected: []string{
+				`containment violation: path "../outside.md" escapes root`,
+				"estado: add Obsolete (surface=schema)",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, buf := newRenderTestCmd()
+			result := &fix.RepairResult{Rejected: tt.rejected}
+			if err := renderRepairTable(cmd, result); err != nil {
+				t.Fatalf("err: %v", err)
+			}
+
+			out := buf.String()
+			wantHeading := fmt.Sprintf("Rejected (%d):", len(tt.rejected))
+			if !strings.Contains(out, wantHeading) {
+				t.Errorf("expected neutral heading %q, got: %s", wantHeading, out)
+			}
+			if strings.Contains(out, "Rejected (schema proposals") {
+				t.Errorf("heading misclassifies rejection list: %s", out)
+			}
+			for _, rejection := range tt.rejected {
+				if !strings.Contains(out, rejection) {
+					t.Errorf("expected rejection %q in output, got: %s", rejection, out)
+				}
+			}
+		})
 	}
 }
 

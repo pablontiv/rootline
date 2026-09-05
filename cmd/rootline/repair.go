@@ -127,7 +127,7 @@ func renderRepairTable(cmd *cobra.Command, result *fix.RepairResult) error {
 	}
 
 	if len(result.Rejected) > 0 {
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nRejected (schema proposals, %d):\n", len(result.Rejected))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nRejected (%d):\n", len(result.Rejected))
 		for _, r := range result.Rejected {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", r)
 		}
