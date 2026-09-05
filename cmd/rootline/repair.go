@@ -119,6 +119,16 @@ func renderRepairTable(cmd *cobra.Command, result *fix.RepairResult) error {
 		}
 	}
 
+	if len(result.RolledBack) > 0 {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nRolled back (%d):\n", len(result.RolledBack))
+		for _, file := range result.RolledBack {
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", file.Path)
+			for _, reason := range file.Errors {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "    %s\n", reason)
+			}
+		}
+	}
+
 	if len(result.Skipped) > 0 {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nSkipped (%d):\n", len(result.Skipped))
 		for _, s := range result.Skipped {
@@ -140,7 +150,7 @@ func renderRepairTable(cmd *cobra.Command, result *fix.RepairResult) error {
 		}
 	}
 
-	if len(result.Changed) == 0 && len(result.Errors) == 0 && len(result.Rejected) == 0 {
+	if len(result.Changed) == 0 && len(result.RolledBack) == 0 && len(result.Errors) == 0 && len(result.Rejected) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No repairs applied")
 	}
 
