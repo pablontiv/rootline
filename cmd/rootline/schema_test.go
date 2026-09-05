@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -143,6 +144,81 @@ func TestSchemaProposeIncremental(t *testing.T) {
 				t.Error("in incremental mode with existing .stem, bootstrap create_stem should be filtered")
 			}
 		}
+	}
+}
+
+// TestSchemaProposeIncrementalSkipsGovernedZeroInferenceBootstrap catches a
+// redundant create_stem proposal when records contain no inferable fields but
+// an existing stem already governs the tree.
+func TestSchemaProposeIncrementalSkipsGovernedZeroInferenceBootstrap(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem": "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  kind:\n    type: enum\n    required: false\n    values: [note, memo]\n",
+		"a.md":  "# Alpha\n\nBody only.\n",
+		"b.md":  "# Beta\n\nBody only.\n",
+	})
+
+	initialFiles := listFilesWithContent(t, root)
+	stemPath := filepath.Join(root, ".stem")
+	initialStem, err := os.Stat(stemPath)
+	if err != nil {
+		t.Fatalf("stat .stem before proposal: %v", err)
+	}
+
+	stdout, err := executeSchemaPropose(t, "--incremental", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report SchemaProposalsReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	if !report.Incremental {
+		t.Error("expected incremental flag to be true")
+	}
+	if len(report.Proposals) != 0 {
+		t.Fatalf("expected no proposals for governed zero-inference tree, got %#v", report.Proposals)
+	}
+	if report.Summary != (ProposalsSummary{}) {
+		t.Errorf("expected empty summary, got %#v", report.Summary)
+	}
+
+	finalFiles := listFilesWithContent(t, root)
+	if !reflect.DeepEqual(finalFiles, initialFiles) {
+		t.Errorf("schema propose modified fixture files\nbefore: %#v\nafter:  %#v", initialFiles, finalFiles)
+	}
+	finalStem, err := os.Stat(stemPath)
+	if err != nil {
+		t.Fatalf("stat .stem after proposal: %v", err)
+	}
+	if !finalStem.ModTime().Equal(initialStem.ModTime()) {
+		t.Error("schema propose changed .stem timestamp")
+	}
+}
+
+func TestSchemaProposeIncrementalKeepsZeroInferenceBootstrapWithoutStem(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		"a.md": "# Alpha\n\nBody only.\n",
+		"b.md": "# Beta\n\nBody only.\n",
+	})
+
+	stdout, err := executeSchemaPropose(t, "--incremental", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report SchemaProposalsReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+	}
+	if len(report.Proposals) != 1 {
+		t.Fatalf("expected one bootstrap proposal for ungoverned zero-inference tree, got %#v", report.Proposals)
+	}
+	if report.Proposals[0].ID != "bootstrap-flat" || report.Proposals[0].Operation != "create_stem" {
+		t.Errorf("expected bootstrap-flat create_stem proposal, got %#v", report.Proposals[0])
+	}
+	if report.Summary.Total != 1 || report.Summary.EngineResolved != 1 || report.Summary.RequiresAgent != 0 {
+		t.Errorf("unexpected summary: %#v", report.Summary)
 	}
 }
 
