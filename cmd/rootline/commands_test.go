@@ -1344,28 +1344,68 @@ func TestQueryOutputCSVNoSelect(t *testing.T) {
 
 func TestQueryOutputJSONLColumnOrder(t *testing.T) {
 	dir := setupTestDir(t)
-	out, err := runCmd(t, "query", "--from", dir, "--select", "estado,path", "--output", "jsonl")
+	for _, tc := range []struct {
+		selectFields string
+		want         string
+	}{
+		{
+			selectFields: "path,estado,tipo",
+			want: "{\"path\":\"doc1.md\",\"estado\":\"Pending\",\"tipo\":\"test\"}\n" +
+				"{\"path\":\"doc2.md\",\"estado\":\"Completed\",\"tipo\":\"prod\"}\n",
+		},
+		{
+			selectFields: "tipo,path,estado",
+			want: "{\"tipo\":\"test\",\"path\":\"doc1.md\",\"estado\":\"Pending\"}\n" +
+				"{\"tipo\":\"prod\",\"path\":\"doc2.md\",\"estado\":\"Completed\"}\n",
+		},
+		{
+			selectFields: "tipo,missing,path,tipo,links,estado",
+			want: "{\"tipo\":\"test\",\"path\":\"doc1.md\",\"estado\":\"Pending\"}\n" +
+				"{\"tipo\":\"prod\",\"path\":\"doc2.md\",\"estado\":\"Completed\"}\n",
+		},
+		{selectFields: "missing,links", want: "{}\n{}\n"},
+	} {
+		t.Run(tc.selectFields, func(t *testing.T) {
+			out, err := runCmd(t, "query", dir, "--select", tc.selectFields, "--sort", "path:asc", "-o", "jsonl")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if out != tc.want {
+				t.Errorf("JSONL output = %q, want %q", out, tc.want)
+			}
+			for _, line := range strings.Split(strings.TrimSuffix(out, "\n"), "\n") {
+				if !json.Valid([]byte(line)) {
+					t.Errorf("invalid JSONL line: %q", line)
+				}
+			}
+		})
+	}
+}
+
+func TestQueryOutputJSONLPreservesValuesAndEscaping(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nroot: true\nscope:\n  match: '*.md'\nschema: {}\n"), 0o644)
+	mustWriteFile(t, filepath.Join(dir, "doc.md"), []byte(`---
+text: "line one\n\"quoted\" \\ café <tag>"
+'quoted"key': value
+empty: null
+enabled: false
+count: 0
+items: [one, two]
+object: {nested: true}
+---
+# Document
+`), 0o644)
+	out, err := runCmd(t, "query", dir, "--select", `text,quoted"key,empty,enabled,count,items,object,path,missing,links`, "-o", "jsonl")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	if len(lines) == 0 {
-		t.Fatal("expected JSONL output lines")
+	want := `{"text":"line one\n\"quoted\" \\ café \u003ctag\u003e","quoted\"key":"value","empty":null,"enabled":false,"count":0,"items":["one","two"],"object":{"nested":true},"path":"doc.md"}` + "\n"
+	if out != want {
+		t.Errorf("JSONL output = %q, want %q", out, want)
 	}
-
-	// Parse first line and check field order is preserved in the JSON object
-	var obj map[string]any
-	if err := json.Unmarshal([]byte(lines[0]), &obj); err != nil {
-		t.Fatalf("first line not valid JSON: %v", err)
-	}
-
-	// Both fields should exist in the projected row
-	if _, ok := obj["estado"]; !ok {
-		t.Errorf("expected 'estado' field in JSONL object")
-	}
-	if _, ok := obj["path"]; !ok {
-		t.Errorf("expected 'path' field in JSONL object")
+	if !json.Valid([]byte(out)) {
+		t.Errorf("invalid JSONL output: %q", out)
 	}
 }
 

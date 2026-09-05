@@ -216,7 +216,7 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		if querySelect == "" {
 			return fmt.Errorf("jsonl output requires --select flag")
 		}
-		return outputQueryJSONL(cmd, result)
+		return outputQueryJSONL(cmd, result, parseSelectFields(querySelect))
 	}
 	if outputFormat == "csv" {
 		if querySelect == "" {
@@ -392,18 +392,38 @@ func projectQueryResult(result any, fields []string) (any, error) {
 }
 
 // outputQueryJSONL outputs a ProjectedQueryResult as JSON Lines (one JSON object per line).
-func outputQueryJSONL(cmd *cobra.Command, result any) error {
+// Present keys follow --select order instead of encoding/json's map-key order.
+func outputQueryJSONL(cmd *cobra.Command, result any, fields []string) error {
 	pqr, ok := result.(*query.ProjectedQueryResult)
 	if !ok {
 		return fmt.Errorf("expected ProjectedQueryResult for jsonl output")
 	}
 
 	for _, row := range pqr.Rows {
-		b, err := json.Marshal(row)
-		if err != nil {
-			return fmt.Errorf("marshaling row to JSON: %w", err)
+		var b strings.Builder
+		b.WriteByte('{')
+		seen := make(map[string]bool, len(fields))
+		for _, field := range fields {
+			value, present := row[field]
+			if !present || seen[field] {
+				continue
+			}
+			encodedValue, err := json.Marshal(value)
+			if err != nil {
+				return fmt.Errorf("marshaling row to JSON: %w", err)
+			}
+			// A string key always marshals successfully; preserve JSON escaping.
+			encodedKey, _ := json.Marshal(field)
+			if len(seen) > 0 {
+				b.WriteByte(',')
+			}
+			b.Write(encodedKey)
+			b.WriteByte(':')
+			b.Write(encodedValue)
+			seen[field] = true
 		}
-		if _, err := fmt.Fprintln(cmd.OutOrStdout(), string(b)); err != nil {
+		b.WriteByte('}')
+		if _, err := fmt.Fprintln(cmd.OutOrStdout(), b.String()); err != nil {
 			return fmt.Errorf("writing JSONL line: %w", err)
 		}
 	}
