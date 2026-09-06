@@ -568,6 +568,12 @@ func applyRepairSetField(p *proposal.Proposal, targets map[string]*repairTarget,
 			continue
 		}
 
+		if current, exists := tgt.record.Frontmatter[p.Field]; exists && proposalValueMatches(current, p.Value) {
+			result.Skipped = append(result.Skipped,
+				fmt.Sprintf("%s already %q in %s", p.Field, p.Value, path))
+			continue
+		}
+
 		tgt.record.Frontmatter[p.Field] = p.Value
 		invalidateFrontmatterScalar(tgt.record, p.Field)
 
