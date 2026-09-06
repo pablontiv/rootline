@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -137,6 +138,41 @@ func TestOutput_QueryAcceptsEveryAdvertisedFormat(t *testing.T) {
 		if _, err := runCmd(t, "query", docs, "--select", "path,estado", "-o", f); err != nil {
 			t.Errorf("query --select -o %s: unexpected error: %v", f, err)
 		}
+	}
+}
+
+func TestOutput_QueryCountSelectRejectsBeforeScanningForEveryFormat(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	const want = "--select cannot be used with --count"
+
+	for _, format := range []string{"json", "table", "jsonl", "csv"} {
+		t.Run(format, func(t *testing.T) {
+			resetFlags()
+			stdout := new(bytes.Buffer)
+			stderr := new(bytes.Buffer)
+			rootCmd.SetOut(stdout)
+			rootCmd.SetErr(stderr)
+			rootCmd.SetArgs([]string{
+				"query", missing,
+				"--count",
+				"--select", "path,estado",
+				"--output", format,
+			})
+
+			err := rootCmd.Execute()
+			if err == nil {
+				t.Fatal("expected conflicting flags to be rejected")
+			}
+			if err.Error() != want {
+				t.Fatalf("error = %q, want %q", err, want)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout = %q, want empty output", stdout.String())
+			}
+			if !strings.Contains(stderr.String(), want) {
+				t.Fatalf("stderr = %q, want diagnostic %q", stderr.String(), want)
+			}
+		})
 	}
 }
 

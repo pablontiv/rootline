@@ -63,6 +63,10 @@ func init() {
 }
 
 func runQuery(cmd *cobra.Command, args []string) error {
+	if queryCount && querySelect != "" {
+		return fmt.Errorf("--select cannot be used with --count")
+	}
+
 	ctx := cmd.Context()
 
 	// Determine scan root
