@@ -132,7 +132,7 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string, fillMi
 	targets := make(map[string]*repairTarget)
 	reg := extract.NewRegistry()
 
-	for path, absPath := range accepted {
+	for path, absPath := range applicableProposalPaths(proposals, accepted, rejected) {
 		// A directory otherwise reaches os.ReadFile and comes back as
 		// "read docs: is a directory" — the syscall that tripped over the path
 		// rather than an answer about the report. Repair takes document paths.
@@ -170,6 +170,11 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string, fillMi
 
 	// Third pass: classify and apply proposals.
 	for _, p := range proposals {
+		// A proposal is applied whole or not at all, so one bad path discards it.
+		if hasRejectedPath(p, rejected) {
+			continue
+		}
+
 		// A value the engine picked because the schema declared none stays out
 		// of the document unless the caller explicitly asked for it.
 		if p.Type == proposal.AddField && proposal.IsEngineChosen(p.ValueSource) && !fillMissing {
@@ -401,6 +406,35 @@ func acceptedProposalPaths(p proposal.Proposal, accepted map[string]string) []st
 		}
 	}
 	return paths
+}
+
+// applicableProposalPaths returns the contained paths that belong to at least
+// one wholly contained proposal. A contained path named only by a rejected
+// proposal must not be read merely because that proposal also named an escape.
+// Paths shared with another, valid proposal remain eligible for that proposal.
+func applicableProposalPaths(proposals []proposal.Proposal, accepted, rejected map[string]string) map[string]string {
+	paths := make(map[string]string)
+	for _, p := range proposals {
+		if hasRejectedPath(p, rejected) {
+			continue
+		}
+		for _, path := range p.Paths {
+			if absPath, ok := accepted[path]; ok {
+				paths[path] = absPath
+			}
+		}
+	}
+	return paths
+}
+
+// hasRejectedPath reports whether any path of the proposal failed containment.
+func hasRejectedPath(p proposal.Proposal, rejected map[string]string) bool {
+	for _, path := range p.Paths {
+		if _, bad := rejected[path]; bad {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneFrontmatter(fm map[string]any) map[string]any {
