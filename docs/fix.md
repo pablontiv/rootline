@@ -399,6 +399,8 @@ Flags:
 
 When Rootline modifies a `.stem` or a frontmatter block, it rewrites through YAML nodes so comments and key order are preserved where possible. Inter-token whitespace, inline-comment spacing, and nested indentation are normalized by the YAML encoder; do not expect byte-identical formatting outside the edited value.
 
+When a valid frontmatter block uses LF newlines and contains only comments and blank lines, adding its first fields retains those comments inside the block, in their original order. The Markdown body and existing file permissions are preserved.
+
 ## Sibling Inference Logic
 
 To prevent noisy guesses, sibling inference requires:
