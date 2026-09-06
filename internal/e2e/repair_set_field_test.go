@@ -20,7 +20,7 @@ func TestRepairSetFieldResumeAndReplay(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	build := exec.Command("go", "build", "-o", bin, "./cmd/rootline")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/rootline") //nolint:gosec // fixed compiler command; output path belongs to this test
 	build.Dir = filepath.Join("..", "..")
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build dev CLI: %v\n%s", err, output)
