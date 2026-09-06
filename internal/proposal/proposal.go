@@ -230,6 +230,48 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 	typeRepairs, typeFindings := detectTypeRepresentationRepairs(records, errs)
 	proposals = append(proposals, typeRepairs...)
 
+	return newReport(proposals, typeFindings)
+}
+
+// CombineReports joins reports produced for independent effective-schema scopes.
+// Caller order is preserved so a deterministically scanned record set yields a
+// deterministic cross-scope proposal order.
+func CombineReports(reports ...*Report) *Report {
+	var proposals []Proposal
+	var schemaSuggestions []Proposal
+	var linkFindings []LinkFinding
+	var typeFindings []TypeFinding
+
+	for _, report := range reports {
+		if report == nil {
+			continue
+		}
+		proposals = append(proposals, report.Proposals...)
+		schemaSuggestions = append(schemaSuggestions, report.SchemaSuggestions...)
+		linkFindings = append(linkFindings, report.LinkFindings...)
+		typeFindings = append(typeFindings, report.TypeFindings...)
+	}
+
+	combined := newReport(proposals, typeFindings)
+	combined.SchemaSuggestions = schemaSuggestions
+	combined.LinkFindings = linkFindings
+	allProposals := append(append([]Proposal(nil), proposals...), schemaSuggestions...)
+	combined.Summary = summarize(allProposals)
+	return combined
+}
+
+func newReport(proposals []Proposal, typeFindings []TypeFinding) *Report {
+	summary := summarize(proposals)
+	return &Report{
+		Version:      1,
+		Kind:         "rootline/proposals",
+		Proposals:    proposals,
+		TypeFindings: typeFindings,
+		Summary:      summary,
+	}
+}
+
+func summarize(proposals []Proposal) Summary {
 	summary := Summary{Total: len(proposals)}
 	for _, p := range proposals {
 		switch p.Type {
@@ -271,14 +313,7 @@ func Analyze(records []*extract.Record, effective *rules.StemFile, errs map[stri
 			summary.LoosenSeverity++
 		}
 	}
-
-	return &Report{
-		Version:      1,
-		Kind:         "rootline/proposals",
-		Proposals:    proposals,
-		TypeFindings: typeFindings,
-		Summary:      summary,
-	}
+	return summary
 }
 
 // detectExtendEnum finds enum values rejected by validation that appear in

@@ -17,19 +17,19 @@ import (
 // string in the aggregate expression. If any value is missing, the formula
 // may produce incorrect results, so propagation is skipped for that field.
 func DetectPropagateAggregate(records []*extract.Record, effective *rules.StemFile) []Proposal {
+	return DetectPropagateAggregateForRecords(records, records, effective)
+}
+
+// DetectPropagateAggregateForRecords evaluates only targetRecords while using
+// the complete record population to verify aggregate formula coverage.
+func DetectPropagateAggregateForRecords(records, targetRecords []*extract.Record, effective *rules.StemFile) []Proposal {
 	if effective == nil || len(effective.Aggregate) == 0 {
 		return nil
 	}
 
-	// Build map of records by path for descendant lookup.
-	recordMap := make(map[string]*extract.Record)
-	for _, rec := range records {
-		recordMap[rec.Path] = rec
-	}
-
 	var proposals []Proposal
 
-	for _, rec := range records {
+	for _, rec := range targetRecords {
 		// Only index files (README.md) can have aggregate values.
 		if !strings.HasSuffix(rec.Path, "README.md") {
 			continue

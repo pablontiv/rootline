@@ -66,6 +66,33 @@ func TestDetectPropagateAggregate_Consistent(t *testing.T) {
 	}
 }
 
+func TestDetectPropagateAggregateForRecordsLimitsTargetsButKeepsPopulation(t *testing.T) {
+	first := &extract.Record{
+		Path:        "S001/README.md",
+		Frontmatter: map[string]any{"estado": "Pending"},
+		Derived:     map[string]any{"estado": "Completed"},
+	}
+	second := &extract.Record{
+		Path:        "S002/README.md",
+		Frontmatter: map[string]any{"estado": "Pending"},
+		Derived:     map[string]any{"estado": "Completed"},
+	}
+	records := []*extract.Record{
+		first,
+		{Path: "S001/T001.md", Frontmatter: map[string]any{"estado": "Completed"}},
+		second,
+		{Path: "S002/T001.md", Frontmatter: map[string]any{"estado": "Completed"}},
+	}
+	stem := &rules.StemFile{Aggregate: map[string]any{
+		"estado": `all(descendants, {.estado == "Completed"}) ? "Completed" : "Pending"`,
+	}}
+
+	proposals := DetectPropagateAggregateForRecords(records, []*extract.Record{first}, stem)
+	if len(proposals) != 1 || len(proposals[0].Paths) != 1 || proposals[0].Paths[0] != first.Path {
+		t.Fatalf("proposals = %#v, want only %s", proposals, first.Path)
+	}
+}
+
 func TestDetectPropagateAggregate_MissingFrontmatter(t *testing.T) {
 	records := []*extract.Record{
 		{

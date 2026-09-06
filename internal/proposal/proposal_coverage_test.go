@@ -7,6 +7,33 @@ import (
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
+func TestCombineReportsPreservesOrderAndRecountsSummary(t *testing.T) {
+	first := &Report{
+		Proposals:         []Proposal{{Type: AddField, Field: "alpha"}},
+		SchemaSuggestions: []Proposal{{Type: ExtendEnum, Field: "state", Value: "Alpha"}},
+		LinkFindings:      []LinkFinding{{Path: "alpha/a.md", Rule: "link_resolve"}},
+		TypeFindings:      []TypeFinding{{Path: "alpha/a.md", Field: "alpha"}},
+	}
+	second := &Report{
+		Proposals:    []Proposal{{Type: CorrectValue, Field: "beta"}},
+		TypeFindings: []TypeFinding{{Path: "beta/b.md", Field: "beta"}},
+	}
+
+	got := CombineReports(first, nil, second)
+	if got.Version != 1 || got.Kind != "rootline/proposals" {
+		t.Fatalf("unexpected envelope: version=%d kind=%q", got.Version, got.Kind)
+	}
+	if len(got.Proposals) != 2 || got.Proposals[0].Field != "alpha" || got.Proposals[1].Field != "beta" {
+		t.Fatalf("proposal order changed: %#v", got.Proposals)
+	}
+	if got.Summary.Total != 3 || got.Summary.AddField != 1 || got.Summary.CorrectValue != 1 || got.Summary.ExtendEnum != 1 {
+		t.Errorf("summary was not recomputed: %#v", got.Summary)
+	}
+	if len(got.SchemaSuggestions) != 1 || len(got.LinkFindings) != 1 || len(got.TypeFindings) != 2 {
+		t.Errorf("findings were not combined: %#v", got)
+	}
+}
+
 // TestAnalyze_Basic tests the top-level Analyze orchestrator with various scenarios.
 func TestAnalyze_Basic(t *testing.T) {
 	tests := []struct {

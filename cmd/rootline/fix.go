@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/derive"
@@ -251,21 +252,24 @@ func runFixAll(ctx context.Context, cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Use the effective stem with the richest schema (most fields defined).
-	var effective *rules.StemFile
-	for _, s := range effectiveStems {
-		if effective == nil || len(s.Schema) > len(effective.Schema) {
-			effective = s
-		}
+	stemGroups := groupRecordsByEffectiveStem(validRecords, effectiveStems, allErrs)
+	groupReports := make([]*proposal.Report, 0, len(stemGroups))
+	for _, group := range stemGroups {
+		groupReports = append(groupReports, proposal.Analyze(group.records, group.stem, group.errs))
 	}
-
-	report := proposal.Analyze(validRecords, effective, allErrs)
+	report := proposal.CombineReports(groupReports...)
 	report.Path = scanRoot
 	report.Root = root
 	if !unresolvedPopulation {
-		appendAggregateProposals(report, root, validRecords, effective)
-		if !fixNoPropagate {
-			appendPropagateProposals(report, validRecords, effective)
+		rootStemEntries, err := rules.WalkUp(root)
+		if err != nil {
+			return emitFixResult(cmd, failedBatchFixResult(fmt.Sprintf("resolving scan-root .stem: %v", err)))
+		}
+		appendAggregateProposals(report, root, validRecords, rules.MergeStemFiles(rootStemEntries))
+		for _, group := range stemGroups {
+			if !fixNoPropagate {
+				appendPropagateProposals(report, validRecords, group.records, group.stem)
+			}
 		}
 	}
 	appendStemHealthProposals(report, ctx, root)
@@ -348,6 +352,46 @@ func appendStemHealthProposals(report *proposal.Report, ctx context.Context, roo
 	}
 }
 
+type effectiveStemGroup struct {
+	stem    *rules.StemFile
+	records []*extract.Record
+	errs    map[string][]rules.ValidationError
+}
+
+// groupRecordsByEffectiveStem preserves scan order while isolating proposal
+// inference to records with the same fully resolved schema. Comparing the
+// effective value, rather than only its source path, also separates fields
+// governed by match and required_match within one .stem file.
+func groupRecordsByEffectiveStem(records []*extract.Record, stems map[string]*rules.StemFile, errs map[string][]rules.ValidationError) []effectiveStemGroup {
+	groups := make([]effectiveStemGroup, 0)
+
+	for _, record := range records {
+		stem := stems[record.Path]
+		groupIndex := -1
+		for i := range groups {
+			if reflect.DeepEqual(groups[i].stem, stem) {
+				groupIndex = i
+				break
+			}
+		}
+
+		if groupIndex < 0 {
+			groupIndex = len(groups)
+			groups = append(groups, effectiveStemGroup{
+				stem: stem,
+				errs: make(map[string][]rules.ValidationError),
+			})
+		}
+
+		groups[groupIndex].records = append(groups[groupIndex].records, record)
+		if recordErrs, ok := errs[record.Path]; ok {
+			groups[groupIndex].errs[record.Path] = recordErrs
+		}
+	}
+
+	return groups
+}
+
 // separateSchemaAndDataProposals splits proposals into data-only (applied) and
 // schema-only (suggestions). This allows dry-run to show both, and apply to
 // skip schema proposals.
@@ -368,8 +412,8 @@ func separateSchemaAndDataProposals(report *proposal.Report) {
 }
 
 // appendPropagateProposals detects stale aggregate values in index files and appends proposals to the report.
-func appendPropagateProposals(report *proposal.Report, records []*extract.Record, effective *rules.StemFile) {
-	propProposals := proposal.DetectPropagateAggregate(records, effective)
+func appendPropagateProposals(report *proposal.Report, records, targetRecords []*extract.Record, effective *rules.StemFile) {
+	propProposals := proposal.DetectPropagateAggregateForRecords(records, targetRecords, effective)
 	if len(propProposals) > 0 {
 		report.Proposals = append(report.Proposals, propProposals...)
 		report.Summary.PropagateAggregate += len(propProposals)
