@@ -520,9 +520,15 @@ func countYAMLDocuments(region string) int {
 
 // formatCondition renders a condition map as a readable string.
 func formatCondition(cond map[string]any) string {
-	parts := make([]string, 0, len(cond))
-	for k, v := range cond {
-		parts = append(parts, fmt.Sprintf("%s = %v", k, v))
+	keys := make([]string, 0, len(cond))
+	for key := range cond {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s = %v", key, cond[key]))
 	}
 	return strings.Join(parts, " and ")
 }

@@ -288,6 +288,40 @@ func TestValidate_Requires_ConditionTrue_FieldMissing(t *testing.T) {
 	if errs[0].Field != "Fecha" {
 		t.Errorf("field = %q, want Fecha", errs[0].Field)
 	}
+	if errs[0].Message != `field "Fecha" is required when Estado = Completed` {
+		t.Errorf("message = %q, want single-key condition unchanged", errs[0].Message)
+	}
+}
+
+func TestValidate_RequiresConditionHasStableKeyOrder(t *testing.T) {
+	stem := &StemFile{
+		Validate: []ValidationRule{
+			{
+				Rule: "requires",
+				If: map[string]any{
+					"status":   "Completed",
+					"priority": "High",
+				},
+				Then:   map[string]any{"fields": []any{"owner"}},
+				Source: "root/.stem",
+			},
+		},
+	}
+	record := makeRecord(map[string]any{
+		"status":   "Completed",
+		"priority": "High",
+	})
+	const want = `field "owner" is required when priority = High and status = Completed`
+
+	for run := 0; run < 128; run++ {
+		errs := Validate(context.Background(), record, stem)
+		if len(errs) != 1 {
+			t.Fatalf("run %d: got %d errors, want 1: %+v", run, len(errs), errs)
+		}
+		if errs[0].Message != want {
+			t.Fatalf("run %d: message = %q, want %q", run, errs[0].Message, want)
+		}
+	}
 }
 
 func TestValidate_Requires_ConditionFalse_NoCheck(t *testing.T) {
