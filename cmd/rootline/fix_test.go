@@ -676,16 +676,16 @@ func TestFixAllDryRunWithProposals(t *testing.T) {
 	}
 }
 
-// TestFixAllSelectsRichestStem verifies that runFixAll picks the stem with the
-// richest schema (most fields) instead of a random map entry. This prevents
-// losing enum definitions like estado/tipo when multiple stems coexist.
-func TestFixAllSelectsRichestStem(t *testing.T) {
+// TestFixAllKeepsRootProposalsWithRicherNestedStem verifies that a nested
+// schema with additional fields does not suppress proposals from its parent
+// scope.
+func TestFixAllKeepsRootProposalsWithRicherNestedStem(t *testing.T) {
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	// Rich stem at root: has estado enum with known values.
+	// Root stem has estado enum with known values.
 	richStem := `version: 2
 scope:
   match: "*.md"
@@ -701,7 +701,7 @@ schema:
 	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(richStem), 0644)
 	declareTestBoundary(t, root)
 
-	// Subdirectory with a poor stem (only id field, no enums).
+	// The nested stem adds a field, making its effective schema richer.
 	subdir := filepath.Join(root, "sub")
 	if err := os.MkdirAll(subdir, 0755); err != nil {
 		t.Fatal(err)
@@ -737,11 +737,140 @@ schema:
 			t.Fatalf("iteration %d: invalid JSON: %v\nraw: %s", i, err, out)
 		}
 
-		// The richest stem has estado as enum. Two files use "Archivado"
-		// which is not in the enum -> extend_enum proposal.
+		// Two root files use "Archivado", so their own effective stem should
+		// still produce an extend_enum proposal.
 		if report.Summary.ExtendEnum == 0 {
 			t.Errorf("iteration %d: expected extend_enum > 0, got 0.\nFull output: %s", i, out)
 		}
+	}
+}
+
+func TestFixAllUsesEachRecordsEffectiveStem(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, ".stem"), []byte(`version: 2
+root: true
+scope:
+  match: "*.md"
+`), 0o644)
+
+	for _, fixture := range []struct {
+		dir, field, value string
+	}{
+		{dir: "alpha", field: "alpha", value: "alpha-default"},
+		{dir: "beta", field: "beta", value: "beta-default"},
+	} {
+		dir := filepath.Join(root, fixture.dir)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		stem := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  " + fixture.field +
+			":\n    type: string\n    required: true\n    default: " + fixture.value + "\n"
+		mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stem), 0o644)
+		mustWriteFile(t, filepath.Join(dir, fixture.dir[:1]+".md"), []byte("---\nseed: present\n---\n# "+fixture.dir+"\n"), 0o644)
+	}
+	declareTestBoundary(t, root)
+	mustChdir(t, root)
+
+	out, err := runCmd(t, "fix", "--all", "--dry-run", "--output", "json")
+	if err != nil {
+		t.Fatalf("dry-run: %v", err)
+	}
+	var report proposal.Report
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("decode dry-run: %v\n%s", err, out)
+	}
+	want := []proposal.Proposal{
+		{Type: proposal.AddField, Field: "alpha", Paths: []string{"alpha/a.md"}, Value: "alpha-default"},
+		{Type: proposal.AddField, Field: "beta", Paths: []string{"beta/b.md"}, Value: "beta-default"},
+	}
+	if len(report.Proposals) != len(want) {
+		t.Fatalf("got %d proposals, want %d: %#v", len(report.Proposals), len(want), report.Proposals)
+	}
+	for i := range want {
+		got := report.Proposals[i]
+		if got.Type != want[i].Type || got.Field != want[i].Field || got.Value != want[i].Value ||
+			len(got.Paths) != 1 || got.Paths[0] != want[i].Paths[0] {
+			t.Errorf("proposal[%d] = %#v, want type=%q field=%q value=%q path=%q", i, got, want[i].Type, want[i].Field, want[i].Value, want[i].Paths[0])
+		}
+	}
+
+	if _, err := runCmd(t, "fix", "--all", "--output", "json"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	for _, fixture := range []struct {
+		path, field, value string
+	}{
+		{path: "alpha/a.md", field: "alpha", value: "alpha-default"},
+		{path: "beta/b.md", field: "beta", value: "beta-default"},
+	} {
+		content := string(mustReadFile(t, filepath.Join(root, fixture.path)))
+		if !strings.Contains(content, fixture.field+": "+fixture.value) {
+			t.Errorf("%s missing applied default %s=%s:\n%s", fixture.path, fixture.field, fixture.value, content)
+		}
+	}
+	if out, err := runCmd(t, "validate", "--all", "--output", "json"); err != nil {
+		t.Fatalf("post-apply validate: %v\n%s", err, out)
+	}
+
+	out, err = runCmd(t, "fix", "--all", "--output", "json")
+	if err != nil {
+		t.Fatalf("second apply: %v", err)
+	}
+	var second BatchFixResult
+	if err := json.Unmarshal([]byte(out), &second); err != nil {
+		t.Fatalf("decode second apply: %v\n%s", err, out)
+	}
+	if second.Summary.Fixed != 0 {
+		t.Errorf("second apply fixed %d records, want 0: %s", second.Summary.Fixed, out)
+	}
+}
+
+func TestFixAllKeepsEnumInferenceWithinEffectiveStem(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, ".stem"), []byte("version: 2\nroot: true\nscope:\n  match: \"*.md\"\n"), 0o644)
+
+	for _, fixture := range []struct {
+		dir, allowed string
+		files        []string
+	}{
+		{dir: "alpha", allowed: "Alpha", files: []string{"a1.md", "a2.md"}},
+		{dir: "beta", allowed: "Beta", files: []string{"b1.md"}},
+	} {
+		dir := filepath.Join(root, fixture.dir)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		stem := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  state:\n    type: enum\n    values: [" + fixture.allowed + "]\n"
+		mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(stem), 0o644)
+		for _, name := range fixture.files {
+			mustWriteFile(t, filepath.Join(dir, name), []byte("---\nstate: Shared\n---\n# Record\n"), 0o644)
+		}
+	}
+	declareTestBoundary(t, root)
+	mustChdir(t, root)
+
+	out, err := runCmd(t, "fix", "--all", "--dry-run", "--output", "json")
+	if err != nil {
+		t.Fatalf("dry-run: %v", err)
+	}
+	var report proposal.Report
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("decode dry-run: %v\n%s", err, out)
+	}
+	if len(report.SchemaSuggestions) != 1 {
+		t.Fatalf("got %d schema suggestions, want 1: %#v", len(report.SchemaSuggestions), report.SchemaSuggestions)
+	}
+
+	got := report.SchemaSuggestions[0]
+	if got.Type != proposal.ExtendEnum || got.Field != "state" || got.Value != "Shared" {
+		t.Fatalf("unexpected schema suggestion: %#v", got)
+	}
+	gotPaths := make(map[string]bool, len(got.Paths))
+	for _, path := range got.Paths {
+		gotPaths[path] = true
+	}
+	if len(gotPaths) != 2 || !gotPaths["alpha/a1.md"] || !gotPaths["alpha/a2.md"] || gotPaths["beta/b1.md"] {
+		t.Errorf("extend_enum paths crossed effective stems: %v", got.Paths)
 	}
 }
 
