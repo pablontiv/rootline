@@ -254,6 +254,56 @@ func TestBrokenLinks_MultipleFromSameSource(t *testing.T) {
 	}
 }
 
+func TestBrokenLinks_TotalOrder(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("z-source.md", []extract.Link{
+			{Target: "missing.md", Type: "reference", Line: 8},
+		}),
+		makeRecord("a-source.md", []extract.Link{
+			{Target: "z-missing.md", Type: "reference", Line: 7},
+			{Target: "a-missing.md", Type: "reference", Line: 9},
+			{Target: "a-missing.md", Type: "blocks", Line: 3},
+		}),
+	}
+
+	got := Build(context.Background(), records).BrokenLinks()
+	want := []BrokenLink{
+		{Source: "a-source.md", Target: "a-missing.md", Type: "blocks", Line: 3},
+		{Source: "a-source.md", Target: "a-missing.md", Type: "reference", Line: 9},
+		{Source: "a-source.md", Target: "z-missing.md", Type: "reference", Line: 7},
+		{Source: "z-source.md", Target: "missing.md", Type: "reference", Line: 8},
+	}
+	if !slices.EqualFunc(got, want, func(a, b BrokenLink) bool {
+		return a.Source == b.Source && a.Target == b.Target && a.Type == b.Type && a.Line == b.Line
+	}) {
+		t.Fatalf("BrokenLinks() = %+v, want %+v", got, want)
+	}
+}
+
+func TestBrokenLinks_SuggestionTiesUseLexicalOrder(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("rat.md", nil),
+		makeRecord("mat.md", nil),
+		makeRecord("hat.md", nil),
+		makeRecord("bat.md", nil),
+		makeRecord("source.md", []extract.Link{
+			{Target: "cat.md", Type: "reference", Line: 3},
+		}),
+	}
+	g := Build(context.Background(), records)
+	want := []string{"bat.md", "hat.md", "mat.md"}
+
+	for run := 1; run <= 100; run++ {
+		broken := g.BrokenLinks()
+		if len(broken) != 1 {
+			t.Fatalf("run %d: BrokenLinks() len = %d, want 1: %+v", run, len(broken), broken)
+		}
+		if !slices.Equal(broken[0].Suggestions, want) {
+			t.Fatalf("run %d: suggestions = %v, want %v", run, broken[0].Suggestions, want)
+		}
+	}
+}
+
 func TestBuild_EmptyGraph(t *testing.T) {
 	g := Build(context.Background(), []*extract.Record{})
 	if len(g.Nodes) != 0 {

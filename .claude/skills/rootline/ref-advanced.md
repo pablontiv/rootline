@@ -41,8 +41,10 @@ Default global output is JSON, so `--format dot|mermaid` only produces diagram t
 
 Output is deterministic: `nodes` is sorted lexically by path, `edges` by
 `(source, target, line, type)`, and `cycles` by canonical rotation — each cycle starts at its
-lexicographically smallest member and the list is sorted element-wise — so JSON, DOT, Mermaid and
-the numbered `--check` enumeration are byte-stable across runs and safe to commit or diff. Cycle
+lexicographically smallest member and the list is sorted element-wise. `broken_links` uses the
+same edge order, while each `suggestions` array is ranked by Levenshtein distance and then path.
+JSON, DOT, Mermaid and the numbered `--check` enumeration are therefore byte-stable across runs
+and safe to commit or diff. Cycle
 detection reports back edges over a canonical spanning forest, not every elementary circuit, so
 `len(cycles)` is a stable count of detected back edges rather than of distinct circuits. `tree`
 likewise picks its status column by sorting the enum-typed schema field names and taking the
