@@ -59,3 +59,55 @@ func TestValidateSchemaErrorsHaveStableSerializedOrder(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateAggregateErrorsHaveStableSerializedOrder(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":     "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  total:\n    type: integer\n  completed:\n    type: integer\naggregate:\n  total: \"len(descendants)\"\n  completed: \"len(filter(descendants, .status == 'Completed'))\"\n",
+		"README.md": "---\ntotal: 99\ncompleted: 99\n---\n\n# Aggregate index\n",
+		"task.md":   "---\nstatus: Completed\n---\n\n# Task\n",
+	})
+	mustChdir(t, root)
+
+	tests := []struct {
+		name   string
+		format string
+	}{
+		{name: "JSON", format: "json"},
+		{name: "table", format: "table"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var first string
+			for run := 0; run < 64; run++ {
+				stdout, err := executeValidate(t, "--all", ".", "-o", tt.format)
+				if err != ErrValidationFailed {
+					t.Fatalf("run %d: err = %v, want ErrValidationFailed\nstdout=%s", run, err, stdout)
+				}
+				if run == 0 {
+					first = stdout
+				} else if stdout != first {
+					t.Fatalf("run %d: output changed\nfirst:\n%s\ncurrent:\n%s", run, first, stdout)
+				}
+
+				if tt.format == "json" {
+					env := decodeEnvelope(t, stdout)
+					if env["version"] != float64(2) || env["kind"] != "rootline/validate-batch" {
+						t.Fatalf("run %d: unexpected envelope contract: version=%v kind=%v", run, env["version"], env["kind"])
+					}
+					errs := firstResult(t, stdout)["errors"].([]any)
+					if len(errs) != 2 || errs[0].(map[string]any)["field"] != "completed" || errs[1].(map[string]any)["field"] != "total" {
+						t.Fatalf("run %d: error order = %#v, want completed then total", run, errs)
+					}
+					continue
+				}
+
+				completed := strings.Index(stdout, `field "completed" is "99" but aggregate computes "1"`)
+				total := strings.Index(stdout, `field "total" is "99" but aggregate computes "1"`)
+				if completed < 0 || total < 0 || completed >= total {
+					t.Fatalf("run %d: table errors not ordered completed then total:\n%s", run, stdout)
+				}
+			}
+		})
+	}
+}

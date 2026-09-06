@@ -782,6 +782,35 @@ func TestValidate_AggregateConsistency_Mismatch(t *testing.T) {
 	}
 }
 
+func TestValidate_AggregateConsistency_StableFieldOrder(t *testing.T) {
+	stem := &StemFile{
+		Path: "test/.stem",
+		Aggregate: map[string]any{
+			"total":     `len(descendants)`,
+			"completed": `len(filter(descendants, {.status == "Completed"}))`,
+		},
+	}
+	record := &extract.Record{
+		Path:        "README.md",
+		Type:        "markdown",
+		Frontmatter: map[string]any{"total": 99, "completed": 99},
+		Derived:     map[string]any{"total": 1, "completed": 1},
+	}
+	want := []string{"completed", "total"}
+
+	for run := 0; run < 128; run++ {
+		errs := Validate(context.Background(), record, stem)
+		if len(errs) != len(want) {
+			t.Fatalf("run %d: got %d errors, want %d: %+v", run, len(errs), len(want), errs)
+		}
+		for i, field := range want {
+			if errs[i].Rule != "aggregate" || errs[i].Field != field {
+				t.Fatalf("run %d: error %d = %+v, want aggregate error for %q", run, i, errs[i], field)
+			}
+		}
+	}
+}
+
 func TestValidate_AggregateConsistency_Match(t *testing.T) {
 	stem := &StemFile{
 		Path: "test/.stem",
