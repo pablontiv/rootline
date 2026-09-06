@@ -309,29 +309,44 @@ func dedupeCycles(sorted [][]string) [][]string {
 // validate disagree in issue #62. Edges nothing resolved keep the historical
 // node-membership check.
 func (g *Graph) BrokenLinks() []BrokenLink {
-	nodeNames := make([]string, 0, len(g.Nodes))
-	for name := range g.Nodes {
-		nodeNames = append(nodeNames, name)
-	}
+	nodeNames := g.SortedNodes()
 
 	var broken []BrokenLink
-	for _, edges := range g.Edges {
-		for _, edge := range edges {
-			if edge.isBroken(g.Nodes) {
-				bl := BrokenLink{
-					Source: edge.Source,
-					Target: edge.Target,
-					Type:   edge.Type,
-					Line:   edge.Line,
-				}
-				if suggestions := fuzzy.MatchN(edge.Target, nodeNames, 3); len(suggestions) > 0 {
-					bl.Suggestions = suggestions
-				}
-				broken = append(broken, bl)
+	for _, edge := range g.SortedEdges() {
+		if edge.isBroken(g.Nodes) {
+			bl := BrokenLink{
+				Source: edge.Source,
+				Target: edge.Target,
+				Type:   edge.Type,
+				Line:   edge.Line,
 			}
+			if suggestions := brokenLinkSuggestions(edge.Target, nodeNames); len(suggestions) > 0 {
+				bl.Suggestions = suggestions
+			}
+			broken = append(broken, bl)
 		}
 	}
 	return broken
+}
+
+// brokenLinkSuggestions preserves fuzzy.MatchN's threshold while adding the
+// total order its distance-only ranking lacks. Asking for every in-threshold
+// candidate before truncating means an equal-distance tie is resolved
+// lexically rather than by the map order that supplied the candidates.
+func brokenLinkSuggestions(target string, nodeNames []string) []string {
+	suggestions := fuzzy.MatchN(target, nodeNames, len(nodeNames))
+	sort.Slice(suggestions, func(i, j int) bool {
+		iDistance := fuzzy.Distance(target, suggestions[i])
+		jDistance := fuzzy.Distance(target, suggestions[j])
+		if iDistance != jDistance {
+			return iDistance < jDistance
+		}
+		return suggestions[i] < suggestions[j]
+	})
+	if len(suggestions) > 3 {
+		suggestions = suggestions[:3]
+	}
+	return suggestions
 }
 
 // TraceOptions controls trace traversal behavior.

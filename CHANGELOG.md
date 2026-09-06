@@ -49,6 +49,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Fixed
 
+- `graph` now orders `broken_links` by `(source, target, line, type)` and ranks equal-distance suggestions lexically before keeping the closest three, so JSON and `--check` no longer change byte output or tied suggestion membership across identical runs.
 - `rootline skill install` now verifies staged symlink preimages by the link identity recorded in the plan and backup, so an Agents/Pi link pointing at the Claude destination is not falsely rejected after the same installation replaces Claude first.
 - `fix` now detects native YAML timestamp, boolean and integer values in governed string fields, preserves their exact scalar text while quoting them, and reports unsupported `rule: type` mismatches under `type_findings`. Stored repair reports carry optional `from_representation` evidence and reject stale lexeme or representation changes without weakening historical `correct_value` guards. Fix findings remain informational; `validate` remains the corpus-validity command. Closes #196.
 - CI ran on crossbeam's default `light` profile, so `Lint`, `Tidy` and `Vulnerability check` reported "skipping" on every run and the test job never used `-race`. `ci.yml` now passes `profile: full`, which is what `CLAUDE.md` already described.

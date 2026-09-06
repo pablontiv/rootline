@@ -120,9 +120,11 @@ diff, or assert on in CI:
 | `nodes` | lexical by path |
 | `edges` | `(source, target, line, type)` |
 | `cycles` | each cycle rotated to start at its lexicographically smallest member and closed by repeating it; the list sorted element-wise, shorter first on a tie |
+| `broken_links` | `(source, target, line, type)` |
+| `broken_links[].suggestions` | ascending Levenshtein distance, then lexical by path; at most three |
 
-The `--check` numbered enumeration prints the same `cycles` order, so `1:` is always the same
-cycle for the same input.
+The `--check` numbered enumeration prints the same `cycles` order and its broken-link report uses
+the same `broken_links` and suggestion order, so every line is stable for the same input.
 
 A cycle through `b.md → c.md → a.md → b.md` therefore always prints as
 `a.md → b.md → c.md → a.md`: rotating a directed cycle does not change which links it contains,

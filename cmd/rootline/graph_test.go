@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -183,6 +184,62 @@ func TestGraphCheck_WithBrokenLink(t *testing.T) {
 	}
 	if !strings.Contains(out, "Broken links: 1") {
 		t.Errorf("expected broken link report, got: %s", out)
+	}
+}
+
+func TestGraphBrokenLinks_DeterministicOrdering(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0o644)
+	declareTestBoundary(t, dir)
+	for _, name := range []string{"c", "b", "a"} {
+		content := "---\n---\n# " + strings.ToUpper(name) + "\n[[missing-" + name + ".md]]\n"
+		mustWriteFile(t, filepath.Join(dir, name+".md"), []byte(content), 0o644)
+	}
+	for _, name := range []string{"rat", "mat", "hat", "bat"} {
+		mustWriteFile(t, filepath.Join(dir, name+".md"), []byte("---\n---\n# Candidate\n"), 0o644)
+	}
+	mustWriteFile(t, filepath.Join(dir, "source.md"), []byte("---\n---\n# Source\n[[cat.md]]\n"), 0o644)
+
+	wantSources := []string{"a.md", "b.md", "c.md", "source.md"}
+	wantSuggestions := []string{"bat.md", "hat.md", "mat.md"}
+	var firstJSON, firstCheck string
+	for run := 1; run <= 100; run++ {
+		jsonOut, err := runCmd(t, "graph", dir)
+		if err != nil {
+			t.Fatalf("run %d JSON: %v\n%s", run, err, jsonOut)
+		}
+		var result GraphResult
+		if err := json.Unmarshal([]byte(jsonOut), &result); err != nil {
+			t.Fatalf("run %d invalid JSON: %v\n%s", run, err, jsonOut)
+		}
+		if result.Version != 1 || result.Kind != "rootline/graph" {
+			t.Fatalf("run %d envelope = version %d kind %q", run, result.Version, result.Kind)
+		}
+		gotSources := make([]string, len(result.BrokenLinks))
+		for i, broken := range result.BrokenLinks {
+			gotSources[i] = broken.Source
+			if broken.Source == "source.md" && !slices.Equal(broken.Suggestions, wantSuggestions) {
+				t.Fatalf("run %d suggestions = %v, want %v", run, broken.Suggestions, wantSuggestions)
+			}
+		}
+		if !slices.Equal(gotSources, wantSources) {
+			t.Fatalf("run %d sources = %v, want %v", run, gotSources, wantSources)
+		}
+
+		checkOut, err := runCmd(t, "graph", "--check", dir)
+		if err != ErrValidationFailed {
+			t.Fatalf("run %d check error = %v, want ErrValidationFailed\n%s", run, err, checkOut)
+		}
+		if run == 1 {
+			firstJSON, firstCheck = jsonOut, checkOut
+			continue
+		}
+		if jsonOut != firstJSON {
+			t.Fatalf("run %d JSON differs from run 1", run)
+		}
+		if checkOut != firstCheck {
+			t.Fatalf("run %d check output differs from run 1", run)
+		}
 	}
 }
 
