@@ -73,6 +73,33 @@ func TestRewriteFrontmatter_AppendsNewKeyAfterExisting(t *testing.T) {
 	}
 }
 
+func TestRewriteFrontmatter_AppendsToEmptyLeadingBlock(t *testing.T) {
+	tests := []struct {
+		name     string
+		original string
+	}{
+		{
+			name:     "adjacent delimiters",
+			original: "---\n---\n# Doc\n\nbody\n",
+		},
+		{
+			name:     "blank line between delimiters",
+			original: "---\n\n---\n# Doc\n\nbody\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := RewriteFrontmatter(tt.original, map[string]any{"alpha": "alpha-default"})
+
+			want := "---\nalpha: alpha-default\n---\n# Doc\n\nbody\n"
+			if result != want {
+				t.Errorf("RewriteFrontmatter() = %q, want %q", result, want)
+			}
+		})
+	}
+}
+
 func TestRewriteFrontmatter_RemovesDroppedKey(t *testing.T) {
 	original := "---\ntitle: A\nobsolete: gone\nstatus: open\n---\n\n# Doc\n"
 	fm := map[string]any{"title": "A", "status": "open"}

@@ -170,12 +170,20 @@ func RewriteFrontmatter(original string, fm map[string]any) string {
 		return b.String()
 	}
 
-	endIdx := strings.Index(original[4:], "\n---\n")
-	if endIdx == -1 {
+	rest := original[4:]
+	closingIdx := 0
+	if !strings.HasPrefix(rest, "---\n") {
+		closingIdx = strings.Index(rest, "\n---\n")
+		if closingIdx == -1 {
+			return original
+		}
+		closingIdx++ // move from the preceding newline to the delimiter
+	}
+	if closingIdx+4 > len(rest) {
 		return original
 	}
-	fmText := original[4 : 4+endIdx+1]
-	body := original[4+endIdx+5:]
+	fmText := rest[:closingIdx]
+	body := rest[closingIdx+4:]
 
 	if rendered, ok := renderPreservedFrontmatter(fmText, fm); ok {
 		return "---\n" + rendered + "---\n" + body
@@ -187,6 +195,21 @@ func RewriteFrontmatter(original string, fm map[string]any) string {
 	b.WriteString("---\n")
 	b.WriteString(body)
 	return b.String()
+}
+
+func rewriteChangedFrontmatter(original string, fm map[string]any, path string) (string, error) {
+	rewritten := RewriteFrontmatter(original, fm)
+	if err := requireContentChange(original, rewritten, path); err != nil {
+		return "", fmt.Errorf("frontmatter rewrite produced no changes for %s", path)
+	}
+	return rewritten, nil
+}
+
+func requireContentChange(original, rewritten, path string) error {
+	if rewritten == original {
+		return fmt.Errorf("rewrite produced no changes for %s", path)
+	}
+	return nil
 }
 
 // WriteFrontmatterFields writes frontmatter fields to a builder in sorted order.
@@ -392,6 +415,9 @@ func applyMigrateValue(p proposal.Proposal, root string, recordMap map[string]*e
 		if len(p.WikiLinks) > 0 {
 			newContent = InsertWikiLinksBeforeHeading(newContent, p.WikiLinks)
 		}
+		if err := requireContentChange(string(content), newContent, path); err != nil {
+			return err
+		}
 
 		if err := fsx.WriteFileAtomic(absPath, []byte(newContent), newFileMode); err != nil {
 			return err
@@ -438,7 +464,10 @@ func rewriteRecordFile(root, path string, fm map[string]any) error {
 	if err != nil {
 		return err
 	}
-	newContent := RewriteFrontmatter(string(content), fm)
+	newContent, err := rewriteChangedFrontmatter(string(content), fm, path)
+	if err != nil {
+		return err
+	}
 	return fsx.WriteFileAtomic(absPath, []byte(newContent), newFileMode)
 }
 
