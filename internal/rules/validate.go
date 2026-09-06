@@ -150,7 +150,12 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 
 	// Phase 1b: Aggregate consistency — if a field has an aggregate expression
 	// and this is an index file, the frontmatter value must match the derived value.
+	aggregateFields := make([]string, 0, len(effective.Aggregate))
 	for name := range effective.Aggregate {
+		aggregateFields = append(aggregateFields, name)
+	}
+	sort.Strings(aggregateFields)
+	for _, name := range aggregateFields {
 		if !IsIndexFile(record.Path, effective) {
 			continue
 		}
