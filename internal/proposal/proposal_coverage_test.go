@@ -1,6 +1,8 @@
 package proposal
 
 import (
+	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -1186,6 +1188,37 @@ func TestDetectExtendEnum_TwoRecords(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected extend_enum proposal for Obsoleto in 2 records")
+	}
+}
+
+func TestDetectExtendEnumSortsPaths(t *testing.T) {
+	effective := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {
+				Type:   "enum",
+				Values: []string{"Pending", "Completed"},
+			},
+		},
+	}
+
+	errs := make(map[string][]rules.ValidationError)
+	for i := 15; i >= 0; i-- {
+		path := fmt.Sprintf("T%03d.md", i)
+		errs[path] = []rules.ValidationError{{
+			Field:   "estado",
+			Rule:    "enum",
+			Message: `value Obsoleto is not in allowed values: Pending, Completed`,
+		}}
+	}
+
+	for i := 0; i < 128; i++ {
+		proposals := detectExtendEnum(effective, errs)
+		if len(proposals) != 1 {
+			t.Fatalf("iteration %d: expected 1 proposal, got %d", i, len(proposals))
+		}
+		if got := proposals[0].Paths; len(got) != 16 || !slices.IsSorted(got) {
+			t.Fatalf("iteration %d: paths = %v, want 16 paths in lexical order", i, got)
+		}
 	}
 }
 
