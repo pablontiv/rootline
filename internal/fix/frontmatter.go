@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"reflect"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -33,6 +34,20 @@ func renderPreservedFrontmatter(fmText string, fm map[string]any) (string, bool)
 
 	seen := reconcileMapping(mapping, fm)
 	appendNewKeys(mapping, fm, seen)
+
+	// yaml.v3 returns a zero document and discards standalone comments when
+	// there are no values. Attach them to the new mapping as one group so a
+	// later node round-trip keeps every note, including formerly orphan ones.
+	if doc.Kind == 0 {
+		var comments []string
+		for _, line := range strings.Split(fmText, "\n") {
+			line = strings.TrimLeft(line, " \t")
+			if strings.HasPrefix(line, "#") {
+				comments = append(comments, line)
+			}
+		}
+		mapping.HeadComment = strings.Join(comments, "\n")
+	}
 
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
