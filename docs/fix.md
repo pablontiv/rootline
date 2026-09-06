@@ -250,6 +250,10 @@ jq -e .complete result.json                                    # ...and still an
 Recovering from a partial run is a re-run: the report is declarative, and re-applying it skips what
 is already correct. Take a `--dry-run` first if you want to see what remains.
 
+For `set_field`, an existing string equal to the requested value is skipped in both dry-run and
+apply, and the remaining paths are still processed. Equality is type-strict: a YAML boolean or
+integer is not the same as its string spelling, and a missing field is not an empty string.
+
 `repair apply` applies only repair-surface proposals to document frontmatter:
 - correct_value
 - add_field

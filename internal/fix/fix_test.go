@@ -632,6 +632,25 @@ func TestRewriteRecordFile(t *testing.T) {
 	}
 }
 
+func TestRewriteRecordFile_RejectsUnchangedRewrite(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "task.md")
+	original := "---\nestado: old\n# missing closing delimiter\n"
+	mustWriteFile(t, target, []byte(original))
+
+	err := rewriteRecordFile(dir, "task.md", map[string]any{"estado": "new"})
+	if err == nil || !strings.Contains(err.Error(), "produced no changes") {
+		t.Fatalf("rewriteRecordFile() error = %v, want unchanged-rewrite error", err)
+	}
+	content, readErr := os.ReadFile(target)
+	if readErr != nil {
+		t.Fatalf("reading target: %v", readErr)
+	}
+	if string(content) != original {
+		t.Errorf("unchanged rewrite modified the target: %q", content)
+	}
+}
+
 // --- addEnumValueToNode ---
 
 func TestAddEnumValueToNode(t *testing.T) {

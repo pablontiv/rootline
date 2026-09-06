@@ -486,6 +486,9 @@ func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTar
 		if p.Type == proposal.MigrateValue && len(p.WikiLinks) > 0 {
 			newContent = InsertWikiLinksBeforeHeading(newContent, p.WikiLinks)
 		}
+		if err := requireContentChange(string(content), newContent, path); err != nil {
+			return err
+		}
 		if err := fsx.WriteFileAtomic(tgt.abs, []byte(newContent), newFileMode); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
@@ -541,7 +544,10 @@ func applyRepairAddField(p *proposal.Proposal, targets map[string]*repairTarget,
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
 
-		newContent := RewriteFrontmatter(string(content), candidate)
+		newContent, err := rewriteChangedFrontmatter(string(content), candidate, path)
+		if err != nil {
+			return err
+		}
 		if err := fsx.WriteFileAtomic(tgt.abs, []byte(newContent), newFileMode); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
@@ -562,6 +568,12 @@ func applyRepairSetField(p *proposal.Proposal, targets map[string]*repairTarget,
 			continue
 		}
 
+		if current, exists := tgt.record.Frontmatter[p.Field]; exists && proposalValueMatches(current, p.Value) {
+			result.Skipped = append(result.Skipped,
+				fmt.Sprintf("%s already %q in %s", p.Field, p.Value, path))
+			continue
+		}
+
 		tgt.record.Frontmatter[p.Field] = p.Value
 		invalidateFrontmatterScalar(tgt.record, p.Field)
 
@@ -577,7 +589,10 @@ func applyRepairSetField(p *proposal.Proposal, targets map[string]*repairTarget,
 			return fmt.Errorf("reading %s: %w", path, err)
 		}
 
-		newContent := RewriteFrontmatter(string(content), tgt.record.Frontmatter)
+		newContent, err := rewriteChangedFrontmatter(string(content), tgt.record.Frontmatter, path)
+		if err != nil {
+			return err
+		}
 		if err := fsx.WriteFileAtomic(tgt.abs, []byte(newContent), newFileMode); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}

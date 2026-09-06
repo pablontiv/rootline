@@ -1036,6 +1036,46 @@ estado: Pending
 	}
 }
 
+func TestApplyRepairAddField_RejectsUnchangedRewrite(t *testing.T) {
+	tmpDir := t.TempDir()
+	testPath := filepath.Join(tmpDir, "test.md")
+	original := "---\n# missing closing delimiter\n"
+	if err := os.WriteFile(testPath, []byte(original), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	targets := map[string]*repairTarget{
+		"test.md": {
+			abs: testPath,
+			record: &extract.Record{
+				Path:        "test.md",
+				Frontmatter: map[string]any{},
+			},
+			original: []byte(original),
+		},
+	}
+	p := proposal.Proposal{
+		Type:  proposal.AddField,
+		Field: "alpha",
+		Value: "alpha-default",
+		Paths: []string{"test.md"},
+	}
+	result := &RepairResult{}
+
+	err := applyRepairAddField(&p, targets, result, false)
+	if err == nil || !strings.Contains(err.Error(), "produced no changes") {
+		t.Fatalf("applyRepairAddField() error = %v, want unchanged-rewrite error", err)
+	}
+	if len(result.Changed) != 0 || targets["test.md"].written {
+		t.Errorf("unchanged rewrite reported a write: result=%+v target=%+v", result, targets["test.md"])
+	}
+	if got, readErr := os.ReadFile(testPath); readErr != nil {
+		t.Fatalf("read: %v", readErr)
+	} else if string(got) != original {
+		t.Errorf("unchanged rewrite modified target: %q", got)
+	}
+}
+
 // TestApplyRepairCorrectValue_DryRun tests CorrectValue in dry-run mode
 func TestApplyRepairCorrectValue_DryRun(t *testing.T) {
 	tmpDir := t.TempDir()
