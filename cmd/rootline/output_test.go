@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -136,6 +137,59 @@ func TestOutput_QueryAcceptsEveryAdvertisedFormat(t *testing.T) {
 		if _, err := runCmd(t, "query", docs, "--select", "path,estado", "-o", f); err != nil {
 			t.Errorf("query --select -o %s: unexpected error: %v", f, err)
 		}
+	}
+}
+
+func TestOutput_QuerySelectTableUsesSelectedColumns(t *testing.T) {
+	docs := setupFormatProject(t)
+
+	out, err := runCmd(t, "query", docs, "--select", "nonexistent,path,estado", "-o", "table")
+	if err != nil {
+		t.Fatalf("query --select -o table: unexpected error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("expected header, separator, and two data rows; got %d lines:\n%s", len(lines), out)
+	}
+	if got := strings.Fields(lines[0]); !slices.Equal(got, []string{"nonexistent", "path", "estado"}) {
+		t.Fatalf("header fields = %v, want selected order; output:\n%s", got, out)
+	}
+	pathColumn := strings.Index(lines[0], "path")
+	estadoColumn := strings.Index(lines[0], "estado")
+	if pathColumn <= 0 || estadoColumn <= pathColumn {
+		t.Fatalf("could not locate selected columns in header %q", lines[0])
+	}
+	for _, line := range lines[2:] {
+		if got := strings.TrimSpace(line[:pathColumn]); got != "" {
+			t.Errorf("missing selected field rendered as %q, want empty cell; row %q", got, line)
+		}
+		if got := strings.TrimSpace(line[pathColumn:estadoColumn]); got == "" {
+			t.Errorf("path cell is empty in row %q", line)
+		}
+		if got := strings.TrimSpace(line[estadoColumn:]); got == "" {
+			t.Errorf("estado cell is empty in row %q", line)
+		}
+	}
+	if strings.Contains(out, `"kind":"rootline/query"`) {
+		t.Fatalf("table output fell back to JSON:\n%s", out)
+	}
+}
+
+func TestOutput_QuerySelectTableEmptyResultKeepsHeader(t *testing.T) {
+	docs := setupFormatProject(t)
+
+	out, err := runCmd(t, "query", docs, "--where", "estado == 'Never'", "--select", "estado,path", "-o", "table")
+	if err != nil {
+		t.Fatalf("empty query --select -o table: unexpected error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected only header and separator, got %d lines:\n%s", len(lines), out)
+	}
+	if got := strings.Fields(lines[0]); !slices.Equal(got, []string{"estado", "path"}) {
+		t.Fatalf("header fields = %v, want selected order; output:\n%s", got, out)
 	}
 }
 

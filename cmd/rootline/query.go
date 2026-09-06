@@ -200,9 +200,10 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	}
 
 	// Apply projection if --select is given
+	var selectFields []string
 	if querySelect != "" {
-		fields := parseSelectFields(querySelect)
-		result, err = projectQueryResult(result, fields)
+		selectFields = parseSelectFields(querySelect)
+		result, err = projectQueryResult(result, selectFields)
 		if err != nil {
 			return fmt.Errorf("applying projection: %w", err)
 		}
@@ -210,20 +211,19 @@ func runQuery(cmd *cobra.Command, args []string) error {
 
 	// Handle output formats
 	if outputFormat == "table" {
-		return renderQueryTable(cmd, result)
+		return renderQueryTable(cmd, result, selectFields)
 	}
 	if outputFormat == "jsonl" {
 		if querySelect == "" {
 			return fmt.Errorf("jsonl output requires --select flag")
 		}
-		return outputQueryJSONL(cmd, result, parseSelectFields(querySelect))
+		return outputQueryJSONL(cmd, result, selectFields)
 	}
 	if outputFormat == "csv" {
 		if querySelect == "" {
 			return fmt.Errorf("csv output requires --select flag")
 		}
-		fields := parseSelectFields(querySelect)
-		return outputQueryCSV(cmd, result, fields)
+		return outputQueryCSV(cmd, result, selectFields)
 	}
 	return outputJSON(cmd, result, false)
 }
@@ -294,7 +294,22 @@ func scanForTraversal(ctx context.Context, absQueryRoot string) ([]*extract.Reco
 	return candidates, g, prefix, nil
 }
 
-func renderQueryTable(cmd *cobra.Command, result any) error {
+func renderQueryTable(cmd *cobra.Command, result any, selectedFields []string) error {
+	if projected, ok := result.(*query.ProjectedQueryResult); ok {
+		rows := make([][]string, len(projected.Rows))
+		for i, projectedRow := range projected.Rows {
+			row := make([]string, len(selectedFields))
+			for j, field := range selectedFields {
+				if value, present := projectedRow[field]; present && value != nil {
+					row[j] = fmt.Sprintf("%v", value)
+				}
+			}
+			rows[i] = row
+		}
+		renderTable(cmd.OutOrStdout(), selectedFields, rows)
+		return nil
+	}
+
 	qr, ok := result.(*query.QueryResult)
 	if !ok {
 		return outputJSON(cmd, result, false)
