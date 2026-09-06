@@ -111,3 +111,56 @@ func TestValidateAggregateErrorsHaveStableSerializedOrder(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRequiresConditionHasStableSerializedOrder(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":   "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  status:\n    type: enum\n    values: [Draft, Completed]\n  priority:\n    type: enum\n    values: [Low, High]\n  owner:\n    type: string\nvalidate:\n  - rule: requires\n    if:\n      status: Completed\n      priority: High\n    then:\n      fields: [owner]\n",
+		"task.md": "---\nstatus: Completed\npriority: High\n---\n\n# Task\n",
+	})
+	mustChdir(t, root)
+
+	tests := []struct {
+		name   string
+		args   []string
+		format string
+	}{
+		{name: "single JSON", args: []string{filepath.Join(root, "task.md"), "-o", "json"}, format: "json"},
+		{name: "all JSON", args: []string{"--all", ".", "-o", "json"}, format: "json"},
+		{name: "single table", args: []string{filepath.Join(root, "task.md"), "-o", "table"}, format: "table"},
+		{name: "all table", args: []string{"--all", ".", "-o", "table"}, format: "table"},
+	}
+
+	const want = `field "owner" is required when priority = High and status = Completed`
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var first string
+			for run := 0; run < 64; run++ {
+				stdout, err := executeValidate(t, tt.args...)
+				if err != ErrValidationFailed {
+					t.Fatalf("run %d: err = %v, want ErrValidationFailed\nstdout=%s", run, err, stdout)
+				}
+				if run == 0 {
+					first = stdout
+				} else if stdout != first {
+					t.Fatalf("run %d: output changed\nfirst:\n%s\ncurrent:\n%s", run, first, stdout)
+				}
+
+				if tt.format == "json" {
+					env := decodeEnvelope(t, stdout)
+					if env["version"] != float64(2) || env["kind"] != "rootline/validate-batch" {
+						t.Fatalf("run %d: unexpected envelope contract: version=%v kind=%v", run, env["version"], env["kind"])
+					}
+					errs := firstResult(t, stdout)["errors"].([]any)
+					if len(errs) != 1 || errs[0].(map[string]any)["message"] != want {
+						t.Fatalf("run %d: errors = %#v, want one canonical requires message", run, errs)
+					}
+					continue
+				}
+
+				if !strings.Contains(stdout, want) {
+					t.Fatalf("run %d: table missing canonical requires message:\n%s", run, stdout)
+				}
+			}
+		})
+	}
+}
