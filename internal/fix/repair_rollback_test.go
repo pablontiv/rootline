@@ -75,6 +75,70 @@ func TestApplyRepair_RollsBackOnPostValidationFailure(t *testing.T) {
 	}
 }
 
+func TestApplyRepair_RollbackValidationErrorsAreDeterministic(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".stem"), []byte(`version: 2
+root: true
+scope:
+  match: "*.md"
+schema:
+  status:
+    type: enum
+    required: true
+    values: [Pending, Completed]
+  priority:
+    type: enum
+    required: true
+    values: [Low, High]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	const original = "---\nstatus: Pending\npriority: Low\n---\n\n# Doc\n"
+	path := filepath.Join(dir, "a.md")
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	proposals := []proposal.Proposal{
+		{Type: proposal.CorrectValue, Field: "status", Paths: []string{"a.md"}, From: "Pending", To: "Broken"},
+		{Type: proposal.CorrectValue, Field: "priority", Paths: []string{"a.md"}, From: "Low", To: "Urgent"},
+	}
+	want := []string{
+		"priority: value Urgent is not in allowed values: [Low, High]",
+		"status: value Broken is not in allowed values: [Pending, Completed]",
+	}
+
+	for i := 0; i < 64; i++ {
+		result, err := ApplyRepair(proposals, false, dir, false)
+		if err != nil {
+			t.Fatalf("ApplyRepair run %d failed: %v", i, err)
+		}
+		if len(result.RolledBack) != 1 {
+			t.Fatalf("run %d rolled_back = %#v, want one entry", i, result.RolledBack)
+		}
+		got := result.RolledBack[0].Errors
+		if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+			t.Fatalf("run %d errors = %#v, want %#v", i, got, want)
+		}
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != original {
+		t.Fatalf("bytes after repeated rollback = %q, want %q", got, original)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode after repeated rollback = %o, want 600", info.Mode().Perm())
+	}
+}
+
 func TestApplyRepair_RolledBackFileIsNotReportedAsChanged(t *testing.T) {
 	dir := newRollbackFixture(t, map[string]string{
 		"a.md": "---\nestado: Pending\n---\n\n# A\n",

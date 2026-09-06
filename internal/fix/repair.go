@@ -332,6 +332,7 @@ func validateWrittenTarget(ctx context.Context, tgt *repairTarget) []string {
 	for _, e := range rules.Validate(ctx, record, effective) {
 		msgs = append(msgs, fmt.Sprintf("%s: %s", e.Field, e.Message))
 	}
+	sort.Strings(msgs)
 	return msgs
 }
 
