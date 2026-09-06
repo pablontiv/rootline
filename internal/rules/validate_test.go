@@ -380,6 +380,33 @@ func TestValidate_MultipleErrors(t *testing.T) {
 	}
 }
 
+func TestValidate_SchemaAutoChecksHaveStableFieldOrder(t *testing.T) {
+	stem := &StemFile{
+		Schema: map[string]SchemaField{
+			"status":   {Type: "enum", Required: true, Source: "root/.stem"},
+			"priority": {Type: "enum", Required: true, Source: "root/.stem"},
+		},
+		Validate: []ValidationRule{
+			{Field: "zeta", Rule: "non_empty", Source: "root/.stem"},
+			{Field: "alpha", Rule: "non_empty", Source: "root/.stem"},
+		},
+	}
+	record := makeRecord(map[string]any{})
+	want := []string{"priority", "status", "zeta", "alpha"}
+
+	for run := 0; run < 128; run++ {
+		errs := Validate(context.Background(), record, stem)
+		if len(errs) != len(want) {
+			t.Fatalf("run %d: got %d errors, want %d: %+v", run, len(errs), len(want), errs)
+		}
+		for i, field := range want {
+			if errs[i].Field != field {
+				t.Fatalf("run %d: error fields out of order at index %d: got %q, want %q; errors=%+v", run, i, errs[i].Field, field, errs)
+			}
+		}
+	}
+}
+
 func TestValidate_ExplicitEnumRule(t *testing.T) {
 	stem := &StemFile{
 		Schema: map[string]SchemaField{

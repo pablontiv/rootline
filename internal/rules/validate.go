@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/pablontiv/picokit/fuzzy"
@@ -92,7 +93,13 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 	fieldContractFailed := make(map[string]bool)
 
 	// Phase 1: Schema auto-checks.
-	for name, field := range effective.Schema {
+	schemaFields := make([]string, 0, len(effective.Schema))
+	for name := range effective.Schema {
+		schemaFields = append(schemaFields, name)
+	}
+	sort.Strings(schemaFields)
+	for _, name := range schemaFields {
+		field := effective.Schema[name]
 		// Skip if severity is "off"
 		if field.Severity == "off" {
 			continue
