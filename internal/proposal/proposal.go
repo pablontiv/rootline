@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -354,6 +355,7 @@ func detectExtendEnum(effective *rules.StemFile, errs map[string][]rules.Validat
 		if strings.Contains(fv.value, "(") {
 			continue
 		}
+		sort.Strings(paths)
 		proposals = append(proposals, Proposal{
 			Type:        ExtendEnum,
 			Field:       fv.field,
