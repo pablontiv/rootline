@@ -364,6 +364,13 @@ func detectExtendEnum(effective *rules.StemFile, errs map[string][]rules.Validat
 			Value:       fv.value,
 		})
 	}
+	// Canonicalize this detector's groups without reordering other proposal phases.
+	sort.Slice(proposals, func(i, j int) bool {
+		if proposals[i].Field != proposals[j].Field {
+			return proposals[i].Field < proposals[j].Field
+		}
+		return proposals[i].Value < proposals[j].Value
+	})
 	return proposals
 }
 
