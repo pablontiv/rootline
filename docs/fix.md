@@ -108,6 +108,8 @@ rootline fix --all             # Apply data-only repairs to documents
 
 `fix` combines proposal generation and application in one step. It writes document frontmatter only. Schema-surface proposals such as `extend_enum`, `add_aggregate`, and `remove_stem_field` are withheld for review: in dry-run JSON they appear as a `schema_suggestions` array, while apply JSON reports a `schema_suggestions` integer count.
 
+Within each effective-schema scope, `extend_enum` suggestions are ordered lexicographically by field, then value; each suggestion's paths are also lexicographically ordered. This does not reorder other proposal phases or schema scopes.
+
 ### 2. `rootline repair apply` — Data-Only Bulk Repair (Current)
 
 Use this for applying the versioned `rootline/proposals` report produced by

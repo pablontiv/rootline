@@ -1,6 +1,8 @@
 package proposal
 
 import (
+	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
@@ -1186,6 +1188,80 @@ func TestDetectExtendEnum_TwoRecords(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected extend_enum proposal for Obsoleto in 2 records")
+	}
+}
+
+func TestDetectExtendEnumSortsGroupsAndTheirPaths(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		groups [][2]string
+	}{
+		{"multiple fields", [][2]string{{"alpha", "Zulu"}, {"middle", "Shared"}, {"zeta", "Alpha"}}},
+		{"multiple values", [][2]string{{"state", "Alpha"}, {"state", "Shared"}, {"state", "Zulu"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			effective := &rules.StemFile{Schema: make(map[string]rules.SchemaField)}
+			errs := make(map[string][]rules.ValidationError)
+			for i := len(tc.groups) - 1; i >= 0; i-- {
+				group := tc.groups[i]
+				effective.Schema[group[0]] = rules.SchemaField{Type: "enum", Values: []string{"Open"}}
+				for _, name := range []string{"c.md", "a.md", "b.md"} {
+					path := fmt.Sprintf("%d/%s", i, name)
+					errs[path] = []rules.ValidationError{{
+						Field: group[0], Rule: "enum",
+						Message: fmt.Sprintf("value %q not in allowed values: Open", group[1]),
+					}}
+				}
+			}
+
+			for iteration := 0; iteration < 128; iteration++ {
+				got := detectExtendEnum(effective, errs)
+				if len(got) != len(tc.groups) {
+					t.Fatalf("iteration %d: got %d groups, want %d", iteration, len(got), len(tc.groups))
+				}
+				for i, want := range tc.groups {
+					p := got[i]
+					if p.Type != ExtendEnum || p.Field != want[0] || p.Value != want[1] {
+						t.Fatalf("iteration %d, group %d: got %s %s=%s, want extend_enum %s=%s", iteration, i, p.Type, p.Field, p.Value, want[0], want[1])
+					}
+					paths := []string{fmt.Sprintf("%d/a.md", i), fmt.Sprintf("%d/b.md", i), fmt.Sprintf("%d/c.md", i)}
+					if !slices.Equal(p.Paths, paths) {
+						t.Fatalf("iteration %d, group %d: paths = %v, want %v", iteration, i, p.Paths, paths)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestDetectExtendEnumSortsPaths(t *testing.T) {
+	effective := &rules.StemFile{
+		Schema: map[string]rules.SchemaField{
+			"estado": {
+				Type:   "enum",
+				Values: []string{"Pending", "Completed"},
+			},
+		},
+	}
+
+	errs := make(map[string][]rules.ValidationError)
+	for i := 15; i >= 0; i-- {
+		path := fmt.Sprintf("T%03d.md", i)
+		errs[path] = []rules.ValidationError{{
+			Field:   "estado",
+			Rule:    "enum",
+			Message: `value Obsoleto is not in allowed values: Pending, Completed`,
+		}}
+	}
+
+	for i := 0; i < 128; i++ {
+		proposals := detectExtendEnum(effective, errs)
+		if len(proposals) != 1 {
+			t.Fatalf("iteration %d: expected 1 proposal, got %d", i, len(proposals))
+		}
+		if got := proposals[0].Paths; len(got) != 16 || !slices.IsSorted(got) {
+			t.Fatalf("iteration %d: paths = %v, want 16 paths in lexical order", i, got)
+		}
 	}
 }
 
