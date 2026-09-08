@@ -251,8 +251,8 @@ func renderMigrateBatch(cmd *cobra.Command, results []*migrate.DiffResult) error
 	if err != nil {
 		return fmt.Errorf("marshaling JSON: %w", err)
 	}
-	if len(fieldPath) > 0 {
-		data, err = extractField(data, fieldPath[0])
+	if paths := effectiveFieldPaths(); len(paths) > 0 {
+		data, err = extractFields(data, paths)
 		if err != nil {
 			return err
 		}
@@ -266,8 +266,8 @@ func renderMigrateJSON(cmd *cobra.Command, result *migrate.DiffResult) error {
 	if err != nil {
 		return fmt.Errorf("marshaling JSON: %w", err)
 	}
-	if len(fieldPath) > 0 {
-		data, err = extractField(data, fieldPath[0])
+	if paths := effectiveFieldPaths(); len(paths) > 0 {
+		data, err = extractFields(data, paths)
 		if err != nil {
 			return err
 		}
