@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,6 +9,18 @@ import (
 	"strings"
 	"testing"
 )
+
+func runCmdWithSeparateOutput(t *testing.T, args ...string) (string, string, error) {
+	t.Helper()
+	resetFlags()
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	rootCmd.SetOut(stdout)
+	rootCmd.SetErr(stderr)
+	rootCmd.SetArgs(args)
+	err := rootCmd.Execute()
+	return stdout.String(), stderr.String(), err
+}
 
 // setupMigrateDir creates a temp dir with .git, .stem, and markdown files for migrate CLI tests.
 func setupMigrateDir(t *testing.T, stemContent string, files map[string]string) string {
@@ -299,6 +312,65 @@ schema:
 	}
 }
 
+func TestMigrateDiffRepeatableFieldExtraction(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte("version: 2\nroot: true\nschema: {}\n"), 0o644)
+
+	for _, tc := range []struct {
+		name   string
+		fields []string
+		want   string
+	}{
+		{"flag order", []string{"kind", "version"}, `["rootline/migrate-diff",1]`},
+		{"reverse order", []string{"version", "kind"}, `[1,"rootline/migrate-diff"]`},
+		{"repeated path", []string{"kind", "kind"}, `["rootline/migrate-diff","rootline/migrate-diff"]`},
+		{"empty path ignored", []string{"", "kind"}, `"rootline/migrate-diff"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{"migrate", stemPath, "--from", stemPath}
+			for _, field := range tc.fields {
+				args = append(args, "--field", field)
+			}
+
+			out, err := runCmd(t, args...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+			}
+			if got := strings.TrimSpace(out); got != tc.want {
+				t.Errorf("output = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMigrateDiffRepeatableFieldFailureIsAtomic(t *testing.T) {
+	dir := t.TempDir()
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte("version: 2\nroot: true\nschema: {}\n"), 0o644)
+
+	for _, fields := range [][]string{
+		{"kind", "nonexistent"},
+		{"nonexistent", "kind"},
+	} {
+		args := []string{"migrate", stemPath, "--from", stemPath}
+		for _, field := range fields {
+			args = append(args, "--field", field)
+		}
+
+		stdout, stderr, err := runCmdWithSeparateOutput(t, args...)
+		if err == nil {
+			t.Fatalf("fields %v: expected an error, got stdout %q", fields, stdout)
+		}
+		if stdout != "" {
+			t.Errorf("fields %v: stdout = %q, want no partial output", fields, stdout)
+		}
+		if !strings.Contains(err.Error(), "nonexistent") || !strings.Contains(stderr, "nonexistent") {
+			t.Errorf("fields %v: error = %v, stderr = %q, want missing path diagnostic", fields, err, stderr)
+		}
+	}
+}
+
 func TestMigrateDiffFromOnlyWithSingleStem(t *testing.T) {
 	// --from can only be used with a single .stem file target.
 	stem := `version: 2
@@ -437,6 +509,73 @@ schema:
 	}
 	if !strings.Contains(strings.TrimSpace(out), "2") {
 		t.Errorf("expected stems_checked=2, got: %s", out)
+	}
+}
+
+func TestMigrateBatchDiffRepeatableFieldExtraction(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nroot: true\nschema: {}\n"), 0o644)
+	child := filepath.Join(dir, "child")
+	if err := os.Mkdir(child, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(child, ".stem"), []byte("version: 2\nschema: {}\n"), 0o644)
+
+	for _, tc := range []struct {
+		name   string
+		fields []string
+		want   string
+	}{
+		{"flag order", []string{"kind", "version"}, `["rootline/migrate-batch",1]`},
+		{"reverse order", []string{"version", "kind"}, `[1,"rootline/migrate-batch"]`},
+		{"repeated path", []string{"kind", "kind"}, `["rootline/migrate-batch","rootline/migrate-batch"]`},
+		{"empty path ignored", []string{"", "kind"}, `"rootline/migrate-batch"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{"migrate", dir}
+			for _, field := range tc.fields {
+				args = append(args, "--field", field)
+			}
+
+			out, err := runCmd(t, args...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+			}
+			if got := strings.TrimSpace(out); got != tc.want {
+				t.Errorf("output = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMigrateBatchDiffRepeatableFieldFailureIsAtomic(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nroot: true\nschema: {}\n"), 0o644)
+	child := filepath.Join(dir, "child")
+	if err := os.Mkdir(child, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteFile(t, filepath.Join(child, ".stem"), []byte("version: 2\nschema: {}\n"), 0o644)
+
+	for _, fields := range [][]string{
+		{"kind", "nonexistent"},
+		{"nonexistent", "kind"},
+	} {
+		args := []string{"migrate", dir}
+		for _, field := range fields {
+			args = append(args, "--field", field)
+		}
+
+		stdout, stderr, err := runCmdWithSeparateOutput(t, args...)
+		if err == nil {
+			t.Fatalf("fields %v: expected an error, got stdout %q", fields, stdout)
+		}
+		if stdout != "" {
+			t.Errorf("fields %v: stdout = %q, want no partial output", fields, stdout)
+		}
+		if !strings.Contains(err.Error(), "nonexistent") || !strings.Contains(stderr, "nonexistent") {
+			t.Errorf("fields %v: error = %v, stderr = %q, want missing path diagnostic", fields, err, stderr)
+		}
 	}
 }
 
