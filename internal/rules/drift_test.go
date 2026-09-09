@@ -1,10 +1,47 @@
 package rules
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/extract"
 )
+
+func TestDetectDrift_SortsWarningsByField(t *testing.T) {
+	parent := extract.Record{
+		Path: "project/README.md",
+		Frontmatter: map[string]any{
+			"zeta":   "parent-z",
+			"alpha":  "parent-a",
+			"middle": "parent-m",
+		},
+	}
+	children := []extract.Record{{
+		Path: "project/task.md",
+		Frontmatter: map[string]any{
+			"zeta":   "child-z",
+			"alpha":  "child-a",
+			"middle": "child-m",
+		},
+	}}
+	schema := map[string]SchemaField{
+		"zeta":   {Type: "string"},
+		"alpha":  {Type: "string"},
+		"middle": {Type: "string"},
+	}
+	want := []string{"alpha", "middle", "zeta"}
+
+	for iteration := 0; iteration < 128; iteration++ {
+		warnings := DetectDrift(parent, children, schema)
+		got := make([]string, len(warnings))
+		for i, warning := range warnings {
+			got[i] = warning.Field
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("iteration %d: warning fields = %v, want %v", iteration, got, want)
+		}
+	}
+}
 
 func TestDetectDrift_UnanimousMismatch(t *testing.T) {
 	parent := extract.Record{

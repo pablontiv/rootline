@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/derive"
@@ -432,7 +433,13 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 	// for each index file against its direct children.
 	var driftWarnings []rules.DriftWarning
 	parentChildren := groupByParentDir(records, root)
-	for dir, group := range parentChildren {
+	dirs := make([]string, 0, len(parentChildren))
+	for dir := range parentChildren {
+		dirs = append(dirs, dir)
+	}
+	sort.Strings(dirs)
+	for _, dir := range dirs {
+		group := parentChildren[dir]
 		if group.parent == nil {
 			continue
 		}
