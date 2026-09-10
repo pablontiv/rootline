@@ -2,6 +2,7 @@ package rules
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/pablontiv/rootline/internal/extract"
 )
@@ -27,7 +28,14 @@ func DetectDrift(parent extract.Record, children []extract.Record, schema map[st
 
 	var warnings []DriftWarning
 
-	for fieldName, field := range schema {
+	fieldNames := make([]string, 0, len(schema))
+	for fieldName := range schema {
+		fieldNames = append(fieldNames, fieldName)
+	}
+	sort.Strings(fieldNames)
+
+	for _, fieldName := range fieldNames {
+		field := schema[fieldName]
 		// Only check fields without match restriction (applies everywhere)
 		if field.Match != nil {
 			continue

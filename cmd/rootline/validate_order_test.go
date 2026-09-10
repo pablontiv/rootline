@@ -2,9 +2,82 @@ package main
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestValidateDriftWarningsHaveStableSerializedOrder(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":               "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  beta:\n    type: string\n  alpha:\n    type: string\n",
+		"project-b/README.md": "---\nalpha: ParentA\nbeta: ParentB\n---\n# Project B\n",
+		"project-b/task.md":   "---\nalpha: ChildA\nbeta: ChildB\n---\n# Task B\n",
+		"project-a/README.md": "---\nalpha: ParentA\nbeta: ParentB\n---\n# Project A\n",
+		"project-a/task.md":   "---\nalpha: ChildA\nbeta: ChildB\n---\n# Task A\n",
+	})
+	mustChdir(t, root)
+
+	want := []string{
+		"project-a/README.md:alpha",
+		"project-a/README.md:beta",
+		"project-b/README.md:alpha",
+		"project-b/README.md:beta",
+	}
+
+	for _, format := range []string{"json", "table"} {
+		t.Run(format, func(t *testing.T) {
+			var first string
+			for run := 0; run < 64; run++ {
+				stdout, err := executeValidate(t, "--all", ".", "-o", format)
+				if err != nil {
+					t.Fatalf("run %d: drift warnings must remain informational: %v\nstdout=%s", run, err, stdout)
+				}
+				if run == 0 {
+					first = stdout
+				} else if stdout != first {
+					t.Fatalf("run %d: output changed\nfirst:\n%s\ncurrent:\n%s", run, first, stdout)
+				}
+
+				var got []string
+				if format == "json" {
+					env := decodeEnvelope(t, stdout)
+					if env["version"] != float64(2) || env["kind"] != "rootline/validate-batch" {
+						t.Fatalf("run %d: unexpected envelope contract: version=%v kind=%v", run, env["version"], env["kind"])
+					}
+					warnings := env["drift_warnings"].([]any)
+					for _, item := range warnings {
+						warning := item.(map[string]any)
+						parentPath := warning["parent_path"].(string)
+						childPaths := warning["child_paths"].([]any)
+						wantChild := strings.TrimSuffix(parentPath, "README.md") + "task.md"
+						if len(childPaths) != 1 || childPaths[0] != wantChild {
+							t.Fatalf("run %d: child_paths = %v for %s, want [%s]", run, childPaths, parentPath, wantChild)
+						}
+						got = append(got, parentPath+":"+warning["field"].(string))
+					}
+					if env["summary"].(map[string]any)["drift_warnings_count"] != float64(len(want)) {
+						t.Fatalf("run %d: drift warning count does not match payload", run)
+					}
+				} else {
+					parts := strings.SplitN(stdout, "Drift Warnings\n", 2)
+					if len(parts) != 2 {
+						t.Fatalf("run %d: table output missing drift section:\n%s", run, stdout)
+					}
+					for _, line := range strings.Split(parts[1], "\n") {
+						columns := strings.Fields(line)
+						if len(columns) >= 2 && strings.HasSuffix(columns[1], "/README.md") {
+							got = append(got, columns[1]+":"+columns[0])
+						}
+					}
+				}
+
+				if !slices.Equal(got, want) {
+					t.Fatalf("run %d: drift warning order = %v, want %v", run, got, want)
+				}
+			}
+		})
+	}
+}
 
 func TestValidateSchemaErrorsHaveStableSerializedOrder(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{

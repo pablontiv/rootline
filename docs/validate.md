@@ -198,6 +198,9 @@ All six keys are always present; empty collections are `[]`, never absent and ne
 Each population is disjoint, and each is counted on its own axis. Splitting them changed
 where a verdict is *reported*, never whether it counts: an error anywhere still exits 1.
 
+`drift_warnings` is ordered lexically by `parent_path` and then by `field`. JSON and
+table output use the same order, so identical inputs produce identical reports.
+
 ### `results[]`
 
 ```json
