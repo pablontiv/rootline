@@ -156,7 +156,7 @@ func generateMarkdown(absPath string, effective *rules.StemFile) (string, error)
 	}
 	for _, section := range sections {
 		b.WriteString("\n")
-		b.WriteString(section.Heading)
+		b.WriteString(section.MarkdownHeading())
 		b.WriteString("\n\n")
 		b.WriteString(section.Content)
 		b.WriteString("\n")

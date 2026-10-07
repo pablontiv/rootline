@@ -2,6 +2,7 @@ package extract
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -74,6 +75,56 @@ func TestParseBodySourceAllowsLevelJump(t *testing.T) {
 	}
 }
 
+func TestParseBodySourceHeadingKeyIsInjective(t *testing.T) {
+	for level := 1; level <= 6; level++ {
+		component := strings.Repeat("#", level) + " "
+		directive := "body.section[" + strconv.Quote(component) + "]"
+		got, err := ParseBodySource(directive)
+		if err != nil {
+			t.Fatalf("level %d returned an error: %v", level, err)
+		}
+		want := SectionSelector{{Level: level, Text: ""}}
+		if !reflect.DeepEqual(got.Selector, want) {
+			t.Fatalf("level %d selector = %+v, want %+v", level, got.Selector, want)
+		}
+	}
+
+	got, err := ParseBodySource("body.section[`## Backslash \\ and  spaces `]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := SectionSelector{{Level: 2, Text: "Backslash \\ and  spaces "}}
+	if !reflect.DeepEqual(got.Selector, want) {
+		t.Fatalf("selector = %+v, want %+v", got.Selector, want)
+	}
+	canonical, err := CanonicalSectionSelectorSource(got.Selector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if canonical != `body.section["## Backslash \\ and  spaces "]` {
+		t.Fatalf("canonical source = %q", canonical)
+	}
+}
+
+func TestParseBodySourcePreservesEveryHierarchicalKey(t *testing.T) {
+	want := SectionSelector{
+		{Level: 1, Text: "Root #"},
+		{Level: 3, Text: "Middle\\  "},
+		{Level: 6, Text: "Leaf ##"},
+	}
+	source, err := CanonicalSectionSelectorSource(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ParseBodySource(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.Selector, want) {
+		t.Fatalf("selector = %+v, want %+v", got.Selector, want)
+	}
+}
+
 func TestCanonicalSectionSource(t *testing.T) {
 	got, err := CanonicalSectionSource("## Notes")
 	if err != nil {
@@ -132,6 +183,77 @@ func TestCanonicalSectionSelectorSource_MultilineHeadingRoundTrip(t *testing.T) 
 				t.Fatalf("heading = %q, want %q", parsed.Heading, exactHeading(wantSelector[1]))
 			}
 		})
+	}
+}
+
+func TestHeadingKeyRoundTripFromSetextAndATX(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		body       string
+		want       HeadingKey
+		wantSource string
+	}{
+		{name: "simple Setext trailing hash", body: "Notes #\n---\n", want: HeadingKey{Level: 2, Text: "Notes #"}, wantSource: `body.section["## Notes #"]`},
+		{name: "multiline Setext trailing hash", body: "First\nSecond #\n---\n", want: HeadingKey{Level: 2, Text: "First\nSecond #"}, wantSource: `body.section["## First\nSecond #"]`},
+		{name: "ATX closing sequence", body: "## Notes ##\n", want: HeadingKey{Level: 2, Text: "Notes"}, wantSource: `body.section["## Notes"]`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			sections := ExtractSectionsFromText(tt.body)
+			if len(sections) != 1 || len(sections[0].Path) != 1 || sections[0].Path[0] != tt.want {
+				t.Fatalf("sections = %+v, want key %+v", sections, tt.want)
+			}
+			source, err := CanonicalSectionSelectorSource(SectionSelector{tt.want})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if source != tt.wantSource {
+				t.Fatalf("source = %q, want %q", source, tt.wantSource)
+			}
+			parsed, err := ParseBodySource(source)
+			if err != nil || !reflect.DeepEqual(parsed.Selector, SectionSelector{tt.want}) {
+				t.Fatalf("parsed source = %+v, error = %v", parsed, err)
+			}
+		})
+	}
+}
+
+func TestLiteralTrailingHashesDoNotMatchATXClosingSequence(t *testing.T) {
+	record := &Record{Body: "## Notes ##\n\nATX content\n"}
+	got, present, err := ResolveBodyValue(record, `body.section["## Notes ##"]`)
+	if err != nil || present || got != "" {
+		t.Fatalf("literal selector result = %q, %v, %v; want no match", got, present, err)
+	}
+	got, present, err = ResolveBodyValue(record, `body.section["## Notes"]`)
+	if err != nil || !present || got != "ATX content" {
+		t.Fatalf("canonical selector result = %q, %v, %v", got, present, err)
+	}
+}
+
+func TestMaterializeHeadingPreservesExtractedKey(t *testing.T) {
+	keys := []HeadingKey{
+		{Level: 1, Text: "Notes #"},
+		{Level: 2, Text: "First\nSecond #"},
+		{Level: 2, Text: "Backslash \\ and  spaces"},
+	}
+	for level := 1; level <= 6; level++ {
+		keys = append(keys, HeadingKey{Level: level, Text: ""})
+	}
+	for _, key := range keys {
+		markdown, err := MaterializeHeading(key)
+		if err != nil {
+			t.Fatalf("MaterializeHeading(%+v) returned an error: %v", key, err)
+		}
+		sections := ExtractSectionsFromText(markdown)
+		if len(sections) != 1 || len(sections[0].Path) != 1 || sections[0].Path[0] != key {
+			t.Fatalf("MaterializeHeading(%+v) = %q, extracted %+v", key, markdown, sections)
+		}
+	}
+}
+
+func TestMaterializeHeadingRejectsDataLoss(t *testing.T) {
+	key := HeadingKey{Level: 3, Text: "Notes #"}
+	if got, err := MaterializeHeading(key); err == nil {
+		t.Fatalf("MaterializeHeading(%+v) = %q, want an error", key, got)
 	}
 }
 

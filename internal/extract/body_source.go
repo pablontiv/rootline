@@ -217,31 +217,49 @@ func exactHeading(key HeadingKey) string {
 }
 
 func parseHeadingKey(heading string) (HeadingKey, error) {
-	var level int
-	var text string
-	var ok bool
-	if strings.Contains(heading, "\n") {
-		level, text, ok = parseMultilineHeadingKey(heading)
-	} else {
-		level, text, ok = parseATXHeading(heading)
-	}
-	key := HeadingKey{Level: level, Text: text}
-	if !ok || level == 0 || exactHeading(key) != heading {
-		return HeadingKey{}, fmt.Errorf("section source heading must be an exact markdown heading, got %q", heading)
-	}
-	return key, nil
-}
-
-func parseMultilineHeadingKey(heading string) (int, string, bool) {
-	firstLineEnd := strings.IndexByte(heading, '\n')
 	level := 0
-	for level < firstLineEnd && heading[level] == '#' {
+	for level < len(heading) && heading[level] == '#' {
 		level++
 	}
-	if level == 0 || level > 6 || level >= firstLineEnd || heading[level] != ' ' {
-		return 0, "", false
+	if level < 1 || level > 6 || level >= len(heading) || heading[level] != ' ' {
+		return HeadingKey{}, fmt.Errorf("section source heading must contain 1 to 6 hashes and one space, got %q", heading)
 	}
-	return level, heading[level+1:], true
+	return HeadingKey{Level: level, Text: heading[level+1:]}, nil
+}
+
+// MaterializeHeading returns markdown that extracts as key without data loss.
+func MaterializeHeading(key HeadingKey) (string, error) {
+	if err := validateHeadingKey(key); err != nil {
+		return "", err
+	}
+
+	atx := exactHeading(key)
+	if materializedHeadingMatches(atx, key) {
+		return atx, nil
+	}
+	if key.Level <= 2 {
+		underline := "---"
+		if key.Level == 1 {
+			underline = "==="
+		}
+		setext := key.Text + "\n" + underline
+		if materializedHeadingMatches(setext, key) {
+			return setext, nil
+		}
+	}
+	return "", fmt.Errorf("heading level %d with text %q cannot be materialized without data loss", key.Level, key.Text)
+}
+
+func materializedHeadingMatches(markdown string, key HeadingKey) bool {
+	sections := ExtractSectionsFromText(markdown)
+	return len(sections) == 1 && sections[0].Level == key.Level && sections[0].Heading == key.Text
+}
+
+func validateHeadingKey(key HeadingKey) error {
+	if key.Level < 1 || key.Level > 6 {
+		return fmt.Errorf("heading level must be from 1 to 6, got %d", key.Level)
+	}
+	return nil
 }
 
 func validateSectionSelector(selector SectionSelector) error {
@@ -249,7 +267,7 @@ func validateSectionSelector(selector SectionSelector) error {
 		return fmt.Errorf("section selector must contain one heading")
 	}
 	for i, key := range selector {
-		if key.Level < 1 || key.Level > 6 || exactHeading(key) == "" {
+		if err := validateHeadingKey(key); err != nil {
 			return fmt.Errorf("section selector has an invalid heading at index %d", i)
 		}
 		parsed, err := parseHeadingKey(exactHeading(key))

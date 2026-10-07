@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/migrate"
 )
 
@@ -66,6 +67,57 @@ func TestMigrateScaffoldRequiredSectionSourceWarningsDoNotBlockWrite(t *testing.
 	}
 	if !strings.Contains(string(content), "## Notes") {
 		t.Fatalf("warning-only scaffold did not write section:\n%s", content)
+	}
+}
+
+func TestMigrateScaffoldMaterializesLosslessSetextHeading(t *testing.T) {
+	dir := newMigrateScaffoldSectionSourceProject(t, `schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["## Notes #"]'
+`, "")
+
+	result, out, err := runMigrateScaffoldJSON(t, dir)
+	if err != nil {
+		t.Fatalf("scaffold failed: %v\noutput: %s", err, out)
+	}
+	if result.SectionsAdded != 1 || result.Details[0].Heading != "## Notes #" {
+		t.Fatalf("result = %+v", result)
+	}
+	target := filepath.Join(dir, "T001-task.md")
+	content := string(mustReadFile(t, target))
+	if !strings.Contains(content, "\nNotes #\n---\n\n<!-- TODO -->\n") {
+		t.Fatalf("scaffolded content does not contain the Setext heading:\n%s", content)
+	}
+	record, err := extractProspectiveRecord(target, target, []byte(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, present, err := extract.ResolveBodyValue(record, `body.section["## Notes #"]`)
+	if err != nil || !present || got != "<!-- TODO -->" {
+		t.Fatalf("extracted value = %q, present = %v, error = %v", got, present, err)
+	}
+}
+
+func TestMigrateScaffoldRejectsLossyHeadingWithoutWrite(t *testing.T) {
+	original := "---\ntitle: Task\n---\n# Task\n"
+	dir := newMigrateScaffoldSectionSourceProject(t, `schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["### Notes #"]'
+`, original)
+
+	out, err := runCmd(t, "migrate", "--scaffold", dir)
+	if err == nil {
+		t.Fatalf("scaffold output = %s, want an error", out)
+	}
+	if !strings.Contains(err.Error(), "without data loss") {
+		t.Fatalf("error = %q", err)
+	}
+	if got := string(mustReadFile(t, filepath.Join(dir, "T001-task.md"))); got != original {
+		t.Fatalf("affected file changed\ngot: %q\nwant: %q", got, original)
 	}
 }
 

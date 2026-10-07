@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
@@ -51,6 +52,32 @@ func TestNewSectionSourceMaterializesRequiredSectionsAndValidates(t *testing.T) 
 	}
 	if out, err := runCmd(t, "validate", target); err != nil {
 		t.Fatalf("generated file must validate, err=%v\noutput: %s", err, out)
+	}
+}
+
+func TestNewSectionSourceMaterializesLosslessSetextHeading(t *testing.T) {
+	dir := newSectionSourceProject(t, `schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["## Notes #"]'
+`)
+	target := filepath.Join(dir, "T001-task.md")
+
+	if out, err := runCmd(t, "new", target); err != nil {
+		t.Fatalf("new failed: %v\noutput: %s", err, out)
+	}
+	content := string(mustReadFile(t, target))
+	if !strings.Contains(content, "\nNotes #\n---\n\n<!-- TODO -->\n") {
+		t.Fatalf("generated content does not contain the Setext heading:\n%s", content)
+	}
+	record, err := extractProspectiveNewRecord(target, content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, present, err := extract.ResolveBodyValue(record, `body.section["## Notes #"]`)
+	if err != nil || !present || got != "<!-- TODO -->" {
+		t.Fatalf("extracted value = %q, present = %v, error = %v", got, present, err)
 	}
 }
 
@@ -133,6 +160,12 @@ func TestNewSectionSourceNoWriteOnSchemaMaterializationOrValidationFailure(t *te
     type: string
     required: true
     source: 'body.section["Notes"]'
+`},
+		{"heading cannot be materialized without data loss", `schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["### Notes #"]'
 `},
 		{"invalid prospective ordinary frontmatter", `schema:
   status:

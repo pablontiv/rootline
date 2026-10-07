@@ -159,7 +159,7 @@ func renderScaffoldedContentFromBytes(data []byte, sections []rules.SectionMater
 	for _, section := range sections {
 		body := strings.TrimRight(section.Content, "\n")
 		sb.WriteString("\n")
-		sb.WriteString(section.Heading)
+		sb.WriteString(section.MarkdownHeading())
 		sb.WriteString("\n\n")
 		sb.WriteString(body)
 		sb.WriteString("\n")

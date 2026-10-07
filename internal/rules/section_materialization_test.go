@@ -79,6 +79,48 @@ func TestRequiredSectionMaterializations_TableContract(t *testing.T) {
 	}
 }
 
+func TestRequiredSectionMaterializations_UsesLosslessHeadingMarkdown(t *testing.T) {
+	stem := &StemFile{Schema: map[string]SchemaField{
+		"notes": {
+			Type:     "string",
+			Required: true,
+			Extract:  `body.section["## Notes #"]`,
+		},
+	}}
+	got, err := RequiredSectionMaterializations(emptyRecord(), stem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("materializations = %+v", got)
+	}
+	if got[0].Heading != "## Notes #" || got[0].MarkdownHeading() != "Notes #\n---" {
+		t.Fatalf("materialization = %+v", got[0])
+	}
+	sections := extract.ExtractSectionsFromText(got[0].MarkdownHeading())
+	want := extract.HeadingKey{Level: 2, Text: "Notes #"}
+	if len(sections) != 1 || len(sections[0].Path) != 1 || sections[0].Path[0] != want {
+		t.Fatalf("rendered heading extracted as %+v, want %+v", sections, want)
+	}
+}
+
+func TestRequiredSectionMaterializations_RejectsLossyHeading(t *testing.T) {
+	stem := &StemFile{Schema: map[string]SchemaField{
+		"notes": {
+			Type:     "string",
+			Required: true,
+			Extract:  `body.section["### Notes #"]`,
+		},
+	}}
+	got, err := RequiredSectionMaterializations(emptyRecord(), stem)
+	if err == nil {
+		t.Fatalf("materializations = %+v, want an error", got)
+	}
+	if !strings.Contains(err.Error(), `field "notes"`) || !strings.Contains(err.Error(), "without data loss") {
+		t.Fatalf("error = %q", err)
+	}
+}
+
 func TestRequiredSectionMaterializations_QualifiedSelectorPolicy(t *testing.T) {
 	const qualified = `body.section["## Parent"]["### Notes"]`
 	field := SchemaField{Type: "string", Required: true, Extract: qualified}
