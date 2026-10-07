@@ -216,6 +216,23 @@ func TestDetectSectionPatterns_DuplicateExactHeadingCountsOncePerRecord(t *testi
 	}
 }
 
+func TestMatchingOccurrencesStopsAfterSecondMatch(t *testing.T) {
+	selector := extract.SectionSelector{{Level: 2, Text: "Notes"}}
+	occurrences := []sectionOccurrence{
+		{sectionOrdinal: 1, path: extract.SectionPath{{Level: 2, Text: "Notes"}}},
+		{sectionOrdinal: 2, path: extract.SectionPath{{Level: 2, Text: "Notes"}}},
+		{sectionOrdinal: 3, path: extract.SectionPath{{Level: 2, Text: "Notes"}}},
+	}
+
+	matches := matchingOccurrences(occurrences, selector)
+	if len(matches) != 2 {
+		t.Fatalf("match count = %d, want 2", len(matches))
+	}
+	if matches[0].sectionOrdinal != 1 || matches[1].sectionOrdinal != 2 {
+		t.Fatalf("match ordinals = %d, %d, want 1, 2", matches[0].sectionOrdinal, matches[1].sectionOrdinal)
+	}
+}
+
 func TestDetectSectionPatterns_PreservesQuotedBackslashBracketDirective(t *testing.T) {
 	heading := `Need "quotes" \ and [brackets]`
 	inferences, err := DetectSectionPatterns([]*extract.Record{

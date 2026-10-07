@@ -175,6 +175,11 @@ func resolveSectionFamily(family *sectionFamily) (string, error) {
 	}
 	sortSectionOccurrences(occurrences)
 
+	occurrencesByRecord := make(map[int][]sectionOccurrence, len(family.contributors))
+	for _, occurrence := range occurrences {
+		occurrencesByRecord[occurrence.recordOrdinal] = append(occurrencesByRecord[occurrence.recordOrdinal], occurrence)
+	}
+
 	if err := rejectDuplicateSectionPaths(family.key, occurrences); err != nil {
 		return "", err
 	}
@@ -210,7 +215,8 @@ func resolveSectionFamily(family *sectionFamily) (string, error) {
 		contributorOrdinals = append(contributorOrdinals, recordOrdinal)
 	}
 	sort.Slice(contributorOrdinals, func(i, j int) bool {
-		left, right := firstOccurrenceForRecord(occurrences, contributorOrdinals[i]), firstOccurrenceForRecord(occurrences, contributorOrdinals[j])
+		left := occurrencesByRecord[contributorOrdinals[i]][0]
+		right := occurrencesByRecord[contributorOrdinals[j]][0]
 		if left.recordPath != right.recordPath {
 			return left.recordPath < right.recordPath
 		}
@@ -222,7 +228,7 @@ func resolveSectionFamily(family *sectionFamily) (string, error) {
 		selected := make([]sectionOccurrence, 0, len(contributorOrdinals))
 		common := true
 		for _, recordOrdinal := range contributorOrdinals {
-			matches := matchingOccurrences(occurrences, recordOrdinal, selector.selector)
+			matches := matchingOccurrences(occurrencesByRecord[recordOrdinal], selector.selector)
 			if len(matches) != 1 {
 				common = false
 				break
@@ -317,20 +323,14 @@ func rejectDuplicateSectionPaths(key extract.HeadingKey, occurrences []sectionOc
 	return fmt.Errorf("duplicate_full_path: duplicate body section path for family %q: %s", exactSectionHeading(key), strings.Join(duplicates, "; "))
 }
 
-func firstOccurrenceForRecord(occurrences []sectionOccurrence, recordOrdinal int) sectionOccurrence {
-	for _, occurrence := range occurrences {
-		if occurrence.recordOrdinal == recordOrdinal {
-			return occurrence
-		}
-	}
-	return sectionOccurrence{recordOrdinal: recordOrdinal}
-}
-
-func matchingOccurrences(occurrences []sectionOccurrence, recordOrdinal int, selector extract.SectionSelector) []sectionOccurrence {
+func matchingOccurrences(occurrences []sectionOccurrence, selector extract.SectionSelector) []sectionOccurrence {
 	var matches []sectionOccurrence
 	for _, occurrence := range occurrences {
-		if occurrence.recordOrdinal == recordOrdinal && extract.SectionSelectorMatches(occurrence.path, selector) {
+		if extract.SectionSelectorMatches(occurrence.path, selector) {
 			matches = append(matches, occurrence)
+			if len(matches) == 2 {
+				break
+			}
 		}
 	}
 	return matches
