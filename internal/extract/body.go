@@ -7,12 +7,25 @@ import (
 	east "github.com/yuin/goldmark/extension/ast"
 )
 
+// HeadingKey identifies one markdown heading.
+type HeadingKey struct {
+	Level int    `json:"level"`
+	Text  string `json:"text"`
+}
+
+// SectionPath identifies a section from its root heading to its own heading.
+type SectionPath []HeadingKey
+
+// SectionSelector identifies a section by a contiguous suffix of its path.
+type SectionSelector []HeadingKey
+
 // Section represents a heading-delimited section in a markdown body.
 type Section struct {
-	Heading   string `json:"heading"`
-	Level     int    `json:"level"`
-	Content   string `json:"content"`
-	StartLine int    `json:"start_line"`
+	Heading   string      `json:"heading"`
+	Level     int         `json:"level"`
+	Path      SectionPath `json:"path,omitempty"`
+	Content   string      `json:"content"`
+	StartLine int         `json:"start_line"`
 }
 
 // ExtractSections splits a markdown body into sections delimited by headings.
@@ -34,15 +47,6 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 			continue
 		}
 		h := child.(*ast.Heading)
-		// Extract heading text from child text nodes.
-		var text strings.Builder
-		for c := h.FirstChild(); c != nil; c = c.NextSibling() {
-			if c.Kind() == ast.KindText {
-				seg := c.(*ast.Text).Segment
-				text.Write(seg.Value(source))
-			}
-		}
-
 		lines := h.Lines()
 		startLine := 0
 		endOffset := 0
@@ -60,7 +64,7 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 		}
 
 		headings = append(headings, headingInfo{
-			text:      text.String(),
+			text:      headingTextAtLine(source, startLine),
 			level:     h.Level,
 			startLine: startLine,
 			endOffset: endOffset,
@@ -100,7 +104,20 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 		})
 	}
 
-	return sections
+	return sectionsWithPaths(sections)
+}
+
+func headingTextAtLine(source []byte, line int) string {
+	start := lineOffset(source, line)
+	end := start
+	for end < len(source) && source[end] != '\n' {
+		end++
+	}
+	raw := string(source[start:end])
+	if _, text, ok := parseATXHeading(raw); ok {
+		return text
+	}
+	return strings.TrimSpace(strings.TrimRight(raw, "\r"))
 }
 
 // CodeBlock represents a fenced code block in a markdown body.
@@ -219,11 +236,11 @@ func ExtractSectionsFromText(body string) []Section {
 			lineEnd++
 		}
 		line := string(source[start:end])
-		if char, length, ok := parseFenceLine(line); ok {
+		if char, length, trailing, ok := parseFenceLine(line); ok {
 			prevOK = false
 			if !inFence {
 				inFence, fenceChar, fenceLen = true, char, length
-			} else if char == fenceChar && length >= fenceLen {
+			} else if char == fenceChar && length >= fenceLen && strings.TrimSpace(trailing) == "" {
 				inFence = false
 			}
 		} else if !inFence {
@@ -258,6 +275,22 @@ func ExtractSectionsFromText(body string) []Section {
 			content = strings.TrimSpace(string(source[h.end:contentEnd]))
 		}
 		sections = append(sections, Section{Heading: h.text, Level: h.level, Content: content, StartLine: h.line})
+	}
+	return sectionsWithPaths(sections)
+}
+
+func sectionsWithPaths(sections []Section) []Section {
+	path := make(SectionPath, 0, 6)
+	for i := range sections {
+		if sections[i].Level <= 0 {
+			sections[i].Path = nil
+			continue
+		}
+		for len(path) > 0 && path[len(path)-1].Level >= sections[i].Level {
+			path = path[:len(path)-1]
+		}
+		path = append(path, HeadingKey{Level: sections[i].Level, Text: sections[i].Heading})
+		sections[i].Path = append(SectionPath(nil), path...)
 	}
 	return sections
 }
@@ -306,17 +339,22 @@ func parseSetextUnderline(line string) (int, bool) {
 	return 2, true
 }
 
-func parseFenceLine(line string) (byte, int, bool) {
+func parseFenceLine(line string) (byte, int, string, bool) {
 	line = strings.TrimRight(line, "\r")
 	indent := len(line) - len(strings.TrimLeft(line, " "))
 	if indent > 3 || indent >= len(line) || (line[indent] != '`' && line[indent] != '~') {
-		return 0, 0, false
+		return 0, 0, "", false
 	}
 	char, count := line[indent], 0
-	for i := indent; i < len(line) && line[i] == char; i++ {
+	i := indent
+	for ; i < len(line) && line[i] == char; i++ {
 		count++
 	}
-	return char, count, count >= 3
+	trailing := line[i:]
+	if count < 3 || (char == '`' && strings.Contains(trailing, "`")) {
+		return 0, 0, "", false
+	}
+	return char, count, trailing, true
 }
 
 // lineOffset returns the byte offset of the start of a 1-based line number.
