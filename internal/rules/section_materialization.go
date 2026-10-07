@@ -51,6 +51,9 @@ func RequiredSectionMaterializations(record *extract.Record, effective *StemFile
 	out := make([]SectionMaterialization, 0)
 	for _, name := range fields {
 		field := local.Schema[name]
+		if !field.Required || !requiredCheckApplies(record, &local, name, field) {
+			continue
+		}
 		if field.Extract == "" || field.Type != "string" {
 			continue
 		}
@@ -65,10 +68,7 @@ func RequiredSectionMaterializations(record *extract.Record, effective *StemFile
 		if err != nil {
 			return nil, err
 		}
-		if present || !field.Required {
-			continue
-		}
-		if !requiredCheckApplies(record, &local, name, field) {
+		if present {
 			continue
 		}
 		if len(source.Selector) > 1 {

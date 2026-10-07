@@ -135,18 +135,27 @@ func TestRequiredSectionMaterializations_QualifiedSelectorPolicy(t *testing.T) {
 	})
 }
 
-func TestRequiredSectionMaterializations_OptionalSelectorAmbiguityReturnsError(t *testing.T) {
+func TestRequiredSectionMaterializations_IneligibleSelectorAmbiguityNeedsNoResolution(t *testing.T) {
 	record := &extract.Record{
 		Frontmatter: map[string]any{},
 		Body:        "## Parent A\n\n### Notes\n\nfirst\n\n## Parent B\n\n### Notes\n\nsecond\n",
 	}
-	stem := &StemFile{Schema: map[string]SchemaField{
-		"notes": {Type: "string", Extract: `body.section["### Notes"]`},
-	}}
+	tests := []struct {
+		name  string
+		field SchemaField
+	}{
+		{"optional field", SchemaField{Type: "string", Extract: `body.section["### Notes"]`}},
+		{"severity off", SchemaField{Type: "string", Required: true, Severity: "off", Extract: `body.section["### Notes"]`}},
+	}
 
-	got, err := RequiredSectionMaterializations(record, stem)
-	if err == nil || !strings.Contains(err.Error(), "ambiguous") {
-		t.Fatalf("materializations = %+v, error = %v; want ambiguity", got, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stem := &StemFile{Schema: map[string]SchemaField{"notes": tt.field}}
+			got, err := RequiredSectionMaterializations(record, stem)
+			if err != nil || len(got) != 0 {
+				t.Fatalf("materializations = %+v, error = %v; want no materialization", got, err)
+			}
+		})
 	}
 }
 
