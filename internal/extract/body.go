@@ -50,13 +50,28 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 		lines := h.Lines()
 		startLine := 0
 		endOffset := 0
+		headingText := ""
 		if lines.Len() > 0 {
-			seg := lines.At(0)
-			startLine = lineFromOffset(source, seg.Start)
+			firstSeg := lines.At(0)
+			startLine = lineFromOffset(source, firstSeg.Start)
 			lastSeg := lines.At(lines.Len() - 1)
 			endOffset = lastSeg.Stop
-			if _, _, ok := parseATXHeading(string(source[seg.Start:lastSeg.Stop])); !ok {
-				underlineStart, underlineEnd := lineOffset(source, startLine+1), lineOffset(source, startLine+2)
+
+			lineStart := lineOffset(source, startLine)
+			lineEnd := lineOffset(source, startLine+1)
+			if _, text, ok := parseATXHeading(string(source[lineStart:lineEnd])); ok {
+				headingText = text
+			} else {
+				var text strings.Builder
+				for i := 0; i < lines.Len(); i++ {
+					segment := lines.At(i)
+					text.Write(segment.Value(source))
+				}
+				headingText = strings.TrimSpace(text.String())
+
+				lastLine := lineFromOffset(source, lastSeg.Start)
+				underlineStart := lineOffset(source, lastLine+1)
+				underlineEnd := lineOffset(source, lastLine+2)
 				if _, ok := parseSetextUnderline(string(source[underlineStart:underlineEnd])); ok {
 					endOffset = underlineEnd
 				}
@@ -64,7 +79,7 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 		}
 
 		headings = append(headings, headingInfo{
-			text:      headingTextAtLine(source, startLine),
+			text:      headingText,
 			level:     h.Level,
 			startLine: startLine,
 			endOffset: endOffset,
@@ -105,19 +120,6 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 	}
 
 	return sectionsWithPaths(sections)
-}
-
-func headingTextAtLine(source []byte, line int) string {
-	start := lineOffset(source, line)
-	end := start
-	for end < len(source) && source[end] != '\n' {
-		end++
-	}
-	raw := string(source[start:end])
-	if _, text, ok := parseATXHeading(raw); ok {
-		return text
-	}
-	return strings.TrimSpace(strings.TrimRight(raw, "\r"))
 }
 
 // CodeBlock represents a fenced code block in a markdown body.
@@ -224,8 +226,8 @@ func ExtractSectionsFromText(body string) []Section {
 		end         int
 	}
 	var headings []heading
-	prevLine, prevLineNo, prevStart, prevOK := "", 0, 0, false
-	inFence, fenceChar, fenceLen := false, byte(0), 0
+	candidateLine, candidateStart, candidateOK := 0, 0, false
+	var fence *fenceContext
 	for start, lineNo := 0, 1; start <= len(source); lineNo++ {
 		end := start
 		for end < len(source) && source[end] != '\n' {
@@ -236,25 +238,39 @@ func ExtractSectionsFromText(body string) []Section {
 			lineEnd++
 		}
 		line := string(source[start:end])
-		if char, length, trailing, ok := parseFenceLine(line); ok {
-			prevOK = false
-			if !inFence {
-				inFence, fenceChar, fenceLen = true, char, length
-			} else if char == fenceChar && length >= fenceLen && strings.TrimSpace(trailing) == "" {
-				inFence = false
+
+		if fence != nil {
+			content, belongs := fence.content(line)
+			if belongs {
+				if char, length, trailing, ok := parseBareFenceLine(content); ok && char == fence.char && length >= fence.length && strings.TrimSpace(trailing) == "" {
+					fence = nil
+				}
+				candidateOK = false
+				if end >= len(source) {
+					break
+				}
+				start = lineEnd
+				continue
 			}
-		} else if !inFence {
-			if level, text, ok := parseATXHeading(line); ok {
-				headings = append(headings, heading{text: text, level: level, line: lineNo, start: start, end: lineEnd})
-				prevOK = false
-			} else if level, ok := parseSetextUnderline(line); ok && prevOK {
-				headings = append(headings, heading{text: strings.TrimSpace(strings.TrimRight(prevLine, "\r")), level: level, line: prevLineNo, start: prevStart, end: lineEnd})
-				prevOK = false
-			} else if _, ok := parseSetextUnderline(line); ok {
-				prevOK = false
-			} else {
-				prevLine, prevLineNo, prevStart, prevOK = line, lineNo, start, strings.TrimSpace(line) != ""
-			}
+			fence = nil
+		}
+
+		if opened, ok := parseFenceOpening(line); ok {
+			fence = &opened
+			candidateOK = false
+		} else if level, text, ok := parseATXHeading(line); ok {
+			headings = append(headings, heading{text: text, level: level, line: lineNo, start: start, end: lineEnd})
+			candidateOK = false
+		} else if level, ok := parseSetextUnderline(line); ok && candidateOK {
+			headingText := strings.TrimSpace(string(source[candidateStart:start]))
+			headings = append(headings, heading{text: headingText, level: level, line: candidateLine, start: candidateStart, end: lineEnd})
+			candidateOK = false
+		} else if _, ok := parseSetextUnderline(line); ok {
+			candidateOK = false
+		} else if strings.TrimSpace(line) == "" {
+			candidateOK = false
+		} else if !candidateOK {
+			candidateLine, candidateStart, candidateOK = lineNo, start, true
 		}
 		if end >= len(source) {
 			break
@@ -339,16 +355,28 @@ func parseSetextUnderline(line string) (int, bool) {
 	return 2, true
 }
 
-func parseFenceLine(line string) (byte, int, string, bool) {
+type fenceContext struct {
+	char       byte
+	length     int
+	quoteDepth int
+	listIndent int
+}
+
+func parseFenceOpening(line string) (fenceContext, bool) {
 	line = strings.TrimRight(line, "\r")
-	if char, count, trailing, ok := parseBareFenceLine(line); ok {
-		return char, count, trailing, true
+	if char, length, _, ok := parseBareFenceLine(line); ok {
+		return fenceContext{char: char, length: length}, true
 	}
-	containerContent, ok := fenceContainerContent(line)
+
+	content, quoteDepth, listIndent, ok := fenceContainerContent(line)
 	if !ok {
-		return 0, 0, "", false
+		return fenceContext{}, false
 	}
-	return parseBareFenceLine(containerContent)
+	char, length, _, ok := parseBareFenceLine(content)
+	if !ok {
+		return fenceContext{}, false
+	}
+	return fenceContext{char: char, length: length, quoteDepth: quoteDepth, listIndent: listIndent}, true
 }
 
 func parseBareFenceLine(line string) (byte, int, string, bool) {
@@ -368,42 +396,87 @@ func parseBareFenceLine(line string) (byte, int, string, bool) {
 	return char, count, trailing, true
 }
 
-func fenceContainerContent(line string) (string, bool) {
+func fenceContainerContent(line string) (content string, quoteDepth, listIndent int, ok bool) {
 	indent := len(line) - len(strings.TrimLeft(line, " "))
 	if indent > 3 {
-		return "", false
+		return "", 0, 0, false
 	}
 	rest := line[indent:]
 	for len(rest) > 0 && rest[0] == '>' {
+		quoteDepth++
 		rest = rest[1:]
 		if len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
 			rest = rest[1:]
 		}
 	}
 
+	listStart := len(rest) - len(strings.TrimLeft(rest, " "))
+	listRest := rest[listStart:]
 	markerEnd := 0
-	if len(rest) > 1 && (rest[0] == '-' || rest[0] == '+' || rest[0] == '*') {
+	if len(listRest) > 1 && (listRest[0] == '-' || listRest[0] == '+' || listRest[0] == '*') {
 		markerEnd = 1
 	} else {
-		for markerEnd < len(rest) && markerEnd < 9 && rest[markerEnd] >= '0' && rest[markerEnd] <= '9' {
+		for markerEnd < len(listRest) && markerEnd < 9 && listRest[markerEnd] >= '0' && listRest[markerEnd] <= '9' {
 			markerEnd++
 		}
-		if markerEnd == 0 || markerEnd >= len(rest) || (rest[markerEnd] != '.' && rest[markerEnd] != ')') {
+		if markerEnd == 0 || markerEnd >= len(listRest) || (listRest[markerEnd] != '.' && listRest[markerEnd] != ')') {
 			markerEnd = 0
 		} else {
 			markerEnd++
 		}
 	}
-	if markerEnd == 0 || markerEnd >= len(rest) || (rest[markerEnd] != ' ' && rest[markerEnd] != '\t') {
-		if rest != line[indent:] {
-			return rest, true
+	if markerEnd == 0 || markerEnd >= len(listRest) || (listRest[markerEnd] != ' ' && listRest[markerEnd] != '\t') {
+		if quoteDepth > 0 {
+			return rest, quoteDepth, 0, true
 		}
+		return "", 0, 0, false
+	}
+	contentStart := markerEnd
+	for contentStart < len(listRest) && (listRest[contentStart] == ' ' || listRest[contentStart] == '\t') {
+		contentStart++
+	}
+	listIndent = listStart + contentStart
+	if quoteDepth == 0 {
+		listIndent += indent
+	}
+	return listRest[contentStart:], quoteDepth, listIndent, true
+}
+
+func (f fenceContext) content(line string) (string, bool) {
+	line = strings.TrimRight(line, "\r")
+	if strings.TrimSpace(line) == "" {
+		return line, true
+	}
+	if f.quoteDepth == 0 && f.listIndent == 0 {
+		return line, true
+	}
+
+	rest := line
+	if f.quoteDepth > 0 {
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+		if indent > 3 {
+			return "", false
+		}
+		rest = line[indent:]
+		for i := 0; i < f.quoteDepth; i++ {
+			if len(rest) == 0 || rest[0] != '>' {
+				return "", false
+			}
+			rest = rest[1:]
+			if len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
+				rest = rest[1:]
+			}
+		}
+	}
+	if f.listIndent == 0 {
+		return rest, true
+	}
+
+	contentIndent := len(rest) - len(strings.TrimLeft(rest, " "))
+	if contentIndent < f.listIndent {
 		return "", false
 	}
-	for markerEnd < len(rest) && (rest[markerEnd] == ' ' || rest[markerEnd] == '\t') {
-		markerEnd++
-	}
-	return rest[markerEnd:], true
+	return rest[f.listIndent:], true
 }
 
 // lineOffset returns the byte offset of the start of a 1-based line number.

@@ -75,8 +75,12 @@ func TestExtractSectionsFromText_ContainerFenceParity(t *testing.T) {
 		name string
 		body string
 	}{
-		{name: "backticks in list", body: "- ```\n  ## Fake\n  ```\n\n## Real\n\nContent\n"},
-		{name: "tildes in list", body: "- ~~~\n  ## Fake\n  ~~~\n\n## Real\n\nContent\n"},
+		{name: "closed backtick fence in list", body: "- ```\n  ## Fake\n  ```\n\n## Real\n\nContent\n"},
+		{name: "closed tilde fence in list", body: "- ~~~\n  ## Fake\n  ~~~\n\n## Real\n\nContent\n"},
+		{name: "unclosed backtick fence in list", body: "- ```\n  ## Fake\n\n## Real\n\nContent\n"},
+		{name: "unclosed tilde fence in list", body: "- ~~~\n  ## Fake\n\n## Real\n\nContent\n"},
+		{name: "unclosed backtick fence in quote", body: "> ```\n> ## Fake\n\n## Real\n\nContent\n"},
+		{name: "unclosed tilde fence in quote", body: "> ~~~\n> ## Fake\n\n## Real\n\nContent\n"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			astSections := parseSections(tt.body)
@@ -86,6 +90,34 @@ func TestExtractSectionsFromText_ContainerFenceParity(t *testing.T) {
 			}
 			if len(textSections) != 1 || textSections[0].Heading != "Real" {
 				t.Fatalf("sections = %+v; want only the real heading after the fence", textSections)
+			}
+		})
+	}
+}
+
+func TestExtractSectionsFromText_SetextParity(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		body        string
+		wantHeading string
+		wantLevel   int
+	}{
+		{name: "simple", body: "First\n===\n\nContent\n", wantHeading: "First", wantLevel: 1},
+		{name: "multiple lines", body: "First\nSecond\n---\n\nContent\n", wantHeading: "First\nSecond", wantLevel: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			astSections := parseSections(tt.body)
+			textSections := ExtractSectionsFromText(tt.body)
+			if !reflect.DeepEqual(textSections, astSections) {
+				t.Fatalf("text sections differ from AST sections: text=%+v AST=%+v", textSections, astSections)
+			}
+			if len(textSections) != 1 {
+				t.Fatalf("section count = %d; want 1", len(textSections))
+			}
+			wantPath := SectionPath{{Level: tt.wantLevel, Text: tt.wantHeading}}
+			want := Section{Heading: tt.wantHeading, Level: tt.wantLevel, Path: wantPath, Content: "Content", StartLine: 1}
+			if !reflect.DeepEqual(textSections[0], want) {
+				t.Fatalf("section = %+v; want %+v", textSections[0], want)
 			}
 		})
 	}
