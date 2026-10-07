@@ -53,6 +53,7 @@ func TestParseBodySourceRejectsInvalidSelectors(t *testing.T) {
 		{`body.section["Notes"]`, "heading"},
 		{`body.section["## Parent"]["## Notes"]`, "increase"},
 		{`body.section["### Parent"]["## Notes"]`, "increase"},
+		{"body.section[\"## First\nSecond\"]", "malformed"},
 	} {
 		_, err := ParseBodySource(tt.directive)
 		if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
@@ -91,6 +92,71 @@ func TestCanonicalSectionSource(t *testing.T) {
 	parsed, err := ParseBodySource(got)
 	if err != nil || len(parsed.Selector) != 2 || parsed.Selector[1].Text != `Quote "value"` {
 		t.Fatalf("serialized selector parsed as %+v, %v", parsed, err)
+	}
+}
+
+func TestCanonicalSectionSelectorSource_MultilineHeadingRoundTrip(t *testing.T) {
+	wantSelector := SectionSelector{
+		{Level: 1, Text: "Root"},
+		{Level: 2, Text: "First\nSecond"},
+	}
+	got, err := CanonicalSectionSelectorSource(wantSelector)
+	if err != nil {
+		t.Fatalf("CanonicalSectionSelectorSource returned an error: %v", err)
+	}
+	wantSource := `body.section["# Root"]["## First\nSecond"]`
+	if got != wantSource {
+		t.Fatalf("source = %q, want %q", got, wantSource)
+	}
+
+	parsed, err := ParseBodySource(got)
+	if err != nil {
+		t.Fatalf("ParseBodySource returned an error: %v", err)
+	}
+	if !reflect.DeepEqual(parsed.Selector, wantSelector) {
+		t.Fatalf("selector = %+v, want %+v", parsed.Selector, wantSelector)
+	}
+	if parsed.Heading != "## First\nSecond" {
+		t.Fatalf("heading = %q, want the complete multiline heading", parsed.Heading)
+	}
+}
+
+func TestResolveBodyValue_HeadingSyntaxCompatibility(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		body      string
+		selector  SectionSelector
+		wantValue string
+	}{
+		{
+			name:      "ATX",
+			body:      "## Notes\n\nATX content\n",
+			selector:  SectionSelector{{Level: 2, Text: "Notes"}},
+			wantValue: "ATX content",
+		},
+		{
+			name:      "simple Setext",
+			body:      "Notes\n---\n\nSetext content\n",
+			selector:  SectionSelector{{Level: 2, Text: "Notes"}},
+			wantValue: "Setext content",
+		},
+		{
+			name:      "multiline Setext hierarchy",
+			body:      "# Root\n\nFirst\nSecond\n---\n\nMultiline content\n",
+			selector:  SectionSelector{{Level: 1, Text: "Root"}, {Level: 2, Text: "First\nSecond"}},
+			wantValue: "Multiline content",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			source, err := CanonicalSectionSelectorSource(tt.selector)
+			if err != nil {
+				t.Fatalf("CanonicalSectionSelectorSource returned an error: %v", err)
+			}
+			got, present, err := ResolveBodyValue(&Record{Body: tt.body}, source)
+			if err != nil || !present || got != tt.wantValue {
+				t.Fatalf("value = %q, present = %v, error = %v; want %q", got, present, err, tt.wantValue)
+			}
+		})
 	}
 }
 

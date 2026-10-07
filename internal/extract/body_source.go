@@ -217,9 +217,6 @@ func exactHeading(key HeadingKey) string {
 }
 
 func parseHeadingKey(heading string) (HeadingKey, error) {
-	if strings.ContainsAny(heading, "\r\n") {
-		return HeadingKey{}, fmt.Errorf("section source heading must be an exact markdown heading, got %q", heading)
-	}
 	level, text, ok := parseATXHeading(heading)
 	key := HeadingKey{Level: level, Text: text}
 	if !ok || level == 0 || exactHeading(key) != heading {
