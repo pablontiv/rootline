@@ -340,7 +340,7 @@ summary:
 
 `required means presence`: an empty section is present with value `""`; use `non_empty` when content is required, and `exists` for an effective field including derived values. Frontmatter has precedence and is a deliberate override.
 
-A `body.section[...]` directive matches its exact heading level and text, and duplicate matching headings fail as ambiguous; Rootline does not select the first or last. The same source resolver serves single-file and batch validation, query, describe, and explain.
+A component in a `body.section[...]` directive matches one exact heading level and text. `body.section["## Parent"]["### Notes"]` matches a contiguous suffix of the heading path. All selector components must be contiguous. A simple selector keeps its existing behavior. More than one match is ambiguous. Rootline does not select the first or last match. A required qualified selector with no match fails validation. The same source resolver serves single-file and batch validation, query, describe, and explain.
 
 Public path-like error `source` values are governance-root-relative with `/` separators. Symbolic sources remain symbolic, so results are stable across working directories and `--all` scan roots.
 

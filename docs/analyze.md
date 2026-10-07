@@ -190,7 +190,7 @@ notes:
   source: body.section["## Notes"]
 ```
 
-Every record contributes to the denominator. A candidate is optional unless the heading occurs in every record. Distinct exact headings that normalize to one logical name are a logical-name collision: analysis fails with each colliding heading and requires explicit names. Analyze, schema proposal, and schema application preserve the canonical source identity.
+Every record contributes to the denominator. A candidate is optional unless the heading occurs in every record. For a hierarchical section, analysis can emit the shortest common selector, such as `body.section["## Parent"]["### Notes"]`. Each component identifies one exact heading. The components are contiguous, and the selector matches a contiguous suffix of the heading path. The shortest common selector can be simple, so analysis does not always emit a qualified selector. Distinct exact headings that normalize to one logical name are a logical-name collision. Analysis fails with each colliding heading and requires explicit names. Analyze, schema proposal, and schema application preserve the canonical source identity.
 
 ## Filtering with --incremental
 

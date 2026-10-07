@@ -149,7 +149,7 @@ Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new comman
 - `source` — a logical body extraction directive when the field has one
 - `defined_in` — the physical `.stem` that declares the field
 
-A source-backed field uses a real type plus `source: body.section["## Heading"]`; frontmatter is an override. Child omission inherits the stable source binding. `new` and `migrate --scaffold` materialize missing required sections in lexical heading order using a non-empty default or `<!-- TODO -->`.
+A source-backed field uses a real type plus a source such as `body.section["## Heading"]` or `body.section["## Parent"]["### Notes"]`. Each component identifies one exact heading. The components must be contiguous, and the selector matches a contiguous suffix of the heading path. A simple selector keeps its existing behavior. More than one match is ambiguous. Frontmatter is an override. Child omission inherits the stable source binding. `new` and `migrate --scaffold` materialize missing required simple sections in lexical heading order using a non-empty default or `<!-- TODO -->`. They do not invent ancestor headings. A missing required qualified section stops the command before it writes the affected file.
 
 Author required section-backed fields in `.stem` like this; `defined_in` appears only in command output, not in authored declarations:
 

@@ -194,7 +194,9 @@ Running `rootline migrate --scaffold` on a file missing both sections produces:
     <!-- TODO -->
 ```
 
-Sections are inserted at the end of the document body. Multiple additions are appended in lexical heading order. A frontmatter override or an empty-present section needs no materialization. Ambiguous source resolution and invalid declarations fail rather than becoming a successful no-op. Scaffold validates prospective bytes before its atomic write. Use `--dry-run` to review insertions before applying.
+Simple sections are inserted at the end of the document body. Multiple simple additions are appended in lexical heading order. A frontmatter override or an empty-present section needs no materialization. Ambiguous source resolution and invalid declarations fail rather than becoming a successful no-op.
+
+A qualified selector can use `body.section["## Parent"]["### Notes"]`. Each component identifies one exact heading. The components must be contiguous, and the selector matches a contiguous suffix of the heading path. `migrate --scaffold` does not invent ancestor headings. If a required qualified section is absent, scaffold stops before it writes the affected file. Scaffold validates prospective bytes before its atomic write. Use `--dry-run` to review insertions before applying.
 
 ## Schema Evolution
 

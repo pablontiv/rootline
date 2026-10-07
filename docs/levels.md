@@ -92,7 +92,7 @@ For example:
 - Child: `estado: { type: enum, values: [draft, active] }` ✓ Valid narrowing
 - Child: `estado: { type: string, required: false }` ✗ Invalid (widening if parent required)
 
-When a child `.stem` violates monotonic constraints, `rootline validate --all` detects this in the **monotonic-violations** stemhealth check. Ancestor-qualified section selectors remain deferred to #190; current `body.section[...]` directives always identify one exact heading.
+When a child `.stem` violates monotonic constraints, `rootline validate --all` detects this in the **monotonic-violations** stemhealth check. A hierarchical source binding can use `body.section["## Parent"]["### Notes"]`. Each component identifies one exact heading. The components must be contiguous, and the selector matches a contiguous suffix of the heading path. A simple selector keeps its existing behavior. More than one match is ambiguous. A child cannot change an inherited simple or qualified source binding.
 
 ## Benefits
 

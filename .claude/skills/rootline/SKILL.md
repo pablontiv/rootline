@@ -206,7 +206,9 @@ Do not apply results automatically. For `apply`, inspect the report first and tr
 
 ## Canonical Field Contract
 
-Use only `string`, `list`, `enum`, `sequence`, `link`, `boolean`, and `integer`; do not coerce YAML values. A body section pairs a real type with `source: body.section["## Heading"]`. Frontmatter is an explicit override; an empty section is present, duplicate matching headings fail, and child omission inherits a stable source binding. `new` and `migrate --scaffold` add missing required sections in lexical heading order with a non-empty default or `<!-- TODO -->`. Validation error paths are governance-root-relative while symbolic sources remain symbolic. Ancestor-qualified selectors are deferred to #190.
+Use only `string`, `list`, `enum`, `sequence`, `link`, `boolean`, and `integer`. Do not coerce YAML values. A body section pairs a real type with a source such as `body.section["## Heading"]` or `body.section["## Parent"]["### Notes"]`. Each component identifies one exact heading. The components must be contiguous. The selector matches a contiguous suffix of the heading path. A simple selector keeps its existing behavior. More than one match is ambiguous. Frontmatter is an explicit override. An empty section is present. Child omission inherits a stable source binding.
+
+`new` and `migrate --scaffold` add missing required simple sections in lexical heading order with a non-empty default or `<!-- TODO -->`. They do not invent ancestor headings. A missing required qualified section stops the command before it writes the affected file. Inference can emit the shortest common selector. It does not always emit a qualified selector. Validation error paths are governance-root-relative while symbolic sources remain symbolic.
 
 ## Reference Files
 

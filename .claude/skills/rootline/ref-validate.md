@@ -113,8 +113,11 @@ Link-check rules (emitted when the effective `.stem` sets `links.checks`): `link
 Schema fields with `source:` directives (body-extracted fields) now participate in validation. The `required` and `enum` constraints apply to values extracted from the document body:
 
 **Extraction directives**:
-- `source: body.h1` — extracts the text of the first H1 heading (e.g., `# My Document` → `"My Document"`)
-- `source: body.section["## Heading"]` — extracts content under the named section (e.g., `## Notes` with content below it)
+- `source: body.h1` extracts the text of the first H1 heading, such as `"My Document"` from `# My Document`.
+- `source: body.section["## Heading"]` extracts content under one exact heading.
+- `source: body.section["## Parent"]["### Notes"]` extracts content from a hierarchical section. Each component identifies one exact heading. The components must be contiguous. The selector matches a contiguous suffix of the heading path.
+
+A simple section selector keeps its existing behavior. More than one match is ambiguous. Rootline does not select the first or last match. A required qualified selector with no match fails validation.
 
 **Precedence**: Frontmatter takes absolute precedence. If a field key exists in the record's YAML frontmatter, that value is used and body extraction is skipped.
 

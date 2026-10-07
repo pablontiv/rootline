@@ -50,9 +50,9 @@ schema:
     default: "<!-- TODO -->"
 ```
 
-`source: body.h1` and exact `body.section[...]` directives are supported. Frontmatter is an explicit override. An empty section is present with value `""`; duplicate matching headings fail rather than selecting one. Extractors preserve source identity so validation, inference, schema proposal, and schema application use the same canonical directive.
+`source: body.h1` and exact `body.section[...]` directives are supported. The syntax `body.section["## Parent"]["### Notes"]` selects a hierarchical section. Each component identifies one exact heading, including its level and text. The components must be contiguous. The complete selector matches a contiguous suffix of the heading path. A simple selector such as `body.section["## Summary"]` keeps its existing behavior. More than one matching path is ambiguous. Rootline does not select the first or last path.
 
-Source-backed fields participate in validation, querying, describe/explain output, and scaffolding. `rootline set` writes a frontmatter override for such a field; it does not edit the body section.
+Frontmatter is an explicit override. An empty section is present with value `""`. Extractors preserve source identity so validation, inference, schema proposal, and schema application use the same canonical directive. Source-backed fields participate in validation, querying, describe/explain output, and scaffolding. `rootline set` writes a frontmatter override for such a field. It does not edit the body section.
 
 > LSP integration has been considered but carries very high complexity.
 > It is not in scope.

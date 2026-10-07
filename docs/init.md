@@ -107,7 +107,7 @@ schema:
     default: "<!-- TODO -->"
 ```
 
-Headings below the 0.80 threshold are omitted from the generated `.stem`. The source preserves exact heading level and text. Frontmatter remains an explicit override, and generated schemas validate the source corpus; distinct exact headings that normalize to one logical field fail with a collision instead of receiving an invented suffix.
+Headings below the 0.80 threshold are omitted from the generated `.stem`. The source preserves each exact heading level and text. For a hierarchical section, inference can emit the shortest common selector, such as `body.section["## Parent"]["### Notes"]`. Each component identifies an exact heading. The components are contiguous, and the selector matches a contiguous suffix of the heading path. The shortest common selector can be simple, so inference does not always emit a qualified selector. Frontmatter remains an explicit override. Generated schemas validate the source corpus. Distinct exact headings that normalize to one logical field fail with a collision instead of receiving an invented suffix.
 
 ### Source-Backed Field Properties
 
