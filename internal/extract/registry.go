@@ -21,8 +21,8 @@ func NewRegistry() *Registry {
 	return r
 }
 
-// NewASTRegistry creates a registry with AST parsing enabled.
-// Use this when body structure (sections, headings) needs to be inspected.
+// NewASTRegistry creates a registry with AST retention enabled.
+// Use this when callers need Record.AST after extraction.
 func NewASTRegistry() *Registry {
 	r := &Registry{
 		byName:      make(map[string]Extractor),

@@ -192,9 +192,12 @@ func SectionSelectorMatches(path SectionPath, selector SectionSelector) bool {
 }
 
 func sectionsForRecord(record *Record) []Section {
-	if len(record.BodySections) > 0 {
+	if record.BodySections != nil {
 		sections := append([]Section(nil), record.BodySections...)
 		return sectionsWithPaths(sections)
+	}
+	if record.AST != nil {
+		return ExtractSections(record.AST, []byte(record.Body))
 	}
 	if record.Body == "" {
 		return nil

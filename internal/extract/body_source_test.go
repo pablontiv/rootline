@@ -4,6 +4,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/yuin/goldmark"
+	gmtext "github.com/yuin/goldmark/text"
 )
 
 func TestParseBodySource(t *testing.T) {
@@ -96,6 +99,62 @@ func TestResolveBodyValue_PresentEmptySection(t *testing.T) {
 	got, present, err := ResolveBodyValue(rec, `body.section["## Notes"]`)
 	if err != nil || !present || got != "" {
 		t.Fatalf("value=%q present=%v error=%v; want a present empty value", got, present, err)
+	}
+}
+
+func TestResolveBodyValue_ReusesAvailableAST(t *testing.T) {
+	astSource := []byte("# AST\n\nAST content\n")
+	node := goldmark.DefaultParser().Parse(gmtext.NewReader(astSource))
+	body := "plain\n\n# Text\n\ntext content\n"
+
+	// The alternate AST makes AST reuse observable without parser instrumentation.
+	wantSections := ExtractSections(node, []byte(body))
+	if reflect.DeepEqual(wantSections, ExtractSectionsFromText(body)) {
+		t.Fatal("test inputs do not distinguish AST reuse from transient parsing")
+	}
+	if len(wantSections) != 1 || wantSections[0].Level != 1 {
+		t.Fatalf("AST-backed sections = %+v; want one H1 section", wantSections)
+	}
+
+	rec := &Record{Body: body, AST: node}
+	gotSections := sectionsForRecord(rec)
+	if !reflect.DeepEqual(gotSections, wantSections) {
+		t.Fatalf("record sections = %+v; want AST-backed sections %+v", gotSections, wantSections)
+	}
+	got, present, err := ResolveBodyValue(rec, "body.h1")
+	if err != nil || !present || got != wantSections[0].Heading {
+		t.Fatalf("value=%q present=%v error=%v; want AST-backed H1 %q", got, present, err, wantSections[0].Heading)
+	}
+}
+
+func TestResolveBodyValue_ParsesBodyWithoutAST(t *testing.T) {
+	rec := &Record{Body: "# Text\n\ntext content\n"}
+	got, present, err := ResolveBodyValue(rec, `body.section["# Text"]`)
+	if err != nil || !present || got != "text content" {
+		t.Fatalf("value=%q present=%v error=%v; want transient parsing result", got, present, err)
+	}
+}
+
+func TestResolveBodyValue_ASTWithoutHeadingsHasNoHeadingResult(t *testing.T) {
+	body := "paragraph only\n"
+	node := goldmark.DefaultParser().Parse(gmtext.NewReader([]byte(body)))
+	rec := &Record{Body: body, AST: node}
+
+	if got, present, err := ResolveBodyValue(rec, "body.h1"); err != nil || present || got != "" {
+		t.Fatalf("value=%q present=%v error=%v; want no H1", got, present, err)
+	}
+	if got, present, err := ResolveBodyValue(rec, `body.section["# Missing"]`); err != nil || present || got != "" {
+		t.Fatalf("value=%q present=%v error=%v; want no section", got, present, err)
+	}
+}
+
+func TestResolveBodyValue_PreservesInitializedEmptySections(t *testing.T) {
+	body := "# Text\n\ntext content\n"
+	node := goldmark.DefaultParser().Parse(gmtext.NewReader([]byte(body)))
+	rec := &Record{Body: body, BodySections: []Section{}, AST: node}
+
+	if got, present, err := ResolveBodyValue(rec, "body.h1"); err != nil || present || got != "" {
+		t.Fatalf("value=%q present=%v error=%v; want initialized empty sections", got, present, err)
 	}
 }
 
