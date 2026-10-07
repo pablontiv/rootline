@@ -1,6 +1,8 @@
 package extract
 
 import (
+	"bytes"
+	"sort"
 	"strings"
 
 	"github.com/yuin/goldmark"
@@ -35,12 +37,14 @@ type Section struct {
 // If the document has no headings, a single section with the entire body is returned.
 func ExtractSections(node ast.Node, source []byte) []Section {
 	type headingInfo struct {
-		text      string
-		level     int
-		startLine int
-		endOffset int // byte offset after the heading line
+		text        string
+		level       int
+		startLine   int
+		startOffset int
+		endOffset   int
 	}
 
+	lineIndex := newSourceLineIndex(source)
 	var headings []headingInfo
 
 	// Collect headings from the AST (top-level block children only).
@@ -50,41 +54,42 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 		}
 		h := child.(*ast.Heading)
 		lines := h.Lines()
-		startLine := 0
-		endOffset := 0
+		position := h.Pos()
+		if position < 0 && lines.Len() > 0 {
+			position = lines.At(0).Start
+		}
+		startLine := lineIndex.lineForOffset(position)
+		startOffset := lineIndex.offset(startLine)
+		lineEnd := lineIndex.offset(startLine + 1)
+		endOffset := lineEnd
 		headingText := ""
-		if lines.Len() > 0 {
-			firstSeg := lines.At(0)
-			startLine = lineFromOffset(source, firstSeg.Start)
+
+		if _, text, ok := parseATXHeading(string(source[startOffset:lineEnd])); ok {
+			headingText = text
+		} else if lines.Len() > 0 {
+			var text strings.Builder
+			for i := 0; i < lines.Len(); i++ {
+				segment := lines.At(i)
+				text.Write(segment.Value(source))
+			}
+			headingText = strings.TrimSpace(text.String())
+
 			lastSeg := lines.At(lines.Len() - 1)
 			endOffset = lastSeg.Stop
-
-			lineStart := lineOffset(source, startLine)
-			lineEnd := lineOffset(source, startLine+1)
-			if _, text, ok := parseATXHeading(string(source[lineStart:lineEnd])); ok {
-				headingText = text
-			} else {
-				var text strings.Builder
-				for i := 0; i < lines.Len(); i++ {
-					segment := lines.At(i)
-					text.Write(segment.Value(source))
-				}
-				headingText = strings.TrimSpace(text.String())
-
-				lastLine := lineFromOffset(source, lastSeg.Start)
-				underlineStart := lineOffset(source, lastLine+1)
-				underlineEnd := lineOffset(source, lastLine+2)
-				if _, ok := parseSetextUnderline(string(source[underlineStart:underlineEnd])); ok {
-					endOffset = underlineEnd
-				}
+			lastLine := lineIndex.lineForOffset(lastSeg.Start)
+			underlineStart := lineIndex.offset(lastLine + 1)
+			underlineEnd := lineIndex.offset(lastLine + 2)
+			if _, ok := parseSetextUnderline(string(source[underlineStart:underlineEnd])); ok {
+				endOffset = underlineEnd
 			}
 		}
 
 		headings = append(headings, headingInfo{
-			text:      headingText,
-			level:     h.Level,
-			startLine: startLine,
-			endOffset: endOffset,
+			text:        headingText,
+			level:       h.Level,
+			startLine:   startLine,
+			startOffset: startOffset,
+			endOffset:   endOffset,
 		})
 	}
 
@@ -103,7 +108,7 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 		var contentEnd int
 		if i+1 < len(headings) {
 			// Content ends where the next heading's line starts.
-			contentEnd = lineOffset(source, headings[i+1].startLine)
+			contentEnd = headings[i+1].startOffset
 		} else {
 			contentEnd = len(source)
 		}
@@ -253,11 +258,13 @@ func parseATXHeading(line string) (int, string, bool) {
 		return 0, "", false
 	}
 	text := strings.TrimSpace(rest[level:])
-	if i := len(text) - 1; i > 0 && text[i] == '#' {
+	if i := len(text) - 1; i >= 0 && text[i] == '#' {
 		for i >= 0 && text[i] == '#' {
 			i--
 		}
-		if i >= 0 && (text[i] == ' ' || text[i] == '\t') {
+		if i < 0 {
+			text = ""
+		} else if text[i] == ' ' || text[i] == '\t' {
 			text = strings.TrimSpace(text[:i])
 		}
 	}
@@ -285,18 +292,40 @@ func parseSetextUnderline(line string) (int, bool) {
 	return 2, true
 }
 
-// lineOffset returns the byte offset of the start of a 1-based line number.
-func lineOffset(source []byte, line int) int {
-	current := 1
-	for i := 0; i < len(source); i++ {
-		if current == line {
-			return i
-		}
-		if source[i] == '\n' {
-			current++
+type sourceLineIndex struct {
+	starts       []int
+	sourceLength int
+}
+
+func newSourceLineIndex(source []byte) sourceLineIndex {
+	starts := make([]int, 1, bytes.Count(source, []byte{'\n'})+1)
+	for offset, value := range source {
+		if value == '\n' {
+			starts = append(starts, offset+1)
 		}
 	}
-	return len(source)
+	return sourceLineIndex{starts: starts, sourceLength: len(source)}
+}
+
+func (index sourceLineIndex) lineForOffset(offset int) int {
+	if offset < 0 {
+		offset = 0
+	} else if offset > index.sourceLength {
+		offset = index.sourceLength
+	}
+	return sort.Search(len(index.starts), func(i int) bool {
+		return index.starts[i] > offset
+	})
+}
+
+func (index sourceLineIndex) offset(line int) int {
+	if line <= 1 {
+		return 0
+	}
+	if line > len(index.starts) {
+		return index.sourceLength
+	}
+	return index.starts[line-1]
 }
 
 // ExtractBodyH1 returns the text of the first H1 heading in the body,

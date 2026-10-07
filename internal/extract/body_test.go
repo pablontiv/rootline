@@ -2,6 +2,8 @@ package extract
 
 import (
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/yuin/goldmark"
@@ -54,6 +56,55 @@ func TestExtractSections_MultipleHeadings(t *testing.T) {
 		t.Errorf("section 2 content: got %q", sections[2].Content)
 	}
 }
+
+func TestExtractSections_ATXBoundaries(t *testing.T) {
+	body := "## Notes ##\n\nFirst\n\n##\n\nSecond\n\n### ###\n\nThird\n\nTitle\n=====\n\nFourth\n\n## Literal##\n\nFifth\n"
+	want := []Section{
+		{Heading: "Notes", Level: 2, Path: SectionPath{{Level: 2, Text: "Notes"}}, Content: "First", StartLine: 1},
+		{Heading: "", Level: 2, Path: SectionPath{{Level: 2, Text: ""}}, Content: "Second", StartLine: 5},
+		{Heading: "", Level: 3, Path: SectionPath{{Level: 2, Text: ""}, {Level: 3, Text: ""}}, Content: "Third", StartLine: 9},
+		{Heading: "Title", Level: 1, Path: SectionPath{{Level: 1, Text: "Title"}}, Content: "Fourth", StartLine: 13},
+		{Heading: "Literal##", Level: 2, Path: SectionPath{{Level: 1, Text: "Title"}, {Level: 2, Text: "Literal##"}}, Content: "Fifth", StartLine: 18},
+	}
+
+	for name, sections := range map[string][]Section{
+		"AST":  parseSections(body),
+		"text": ExtractSectionsFromText(body),
+	} {
+		if !reflect.DeepEqual(sections, want) {
+			t.Errorf("%s sections = %+v; want %+v", name, sections, want)
+		}
+	}
+}
+
+func TestExtractSections_AdjacentATXHeadings(t *testing.T) {
+	body := "# First #\n##\n### Third ###\nContent\n"
+	want := []Section{
+		{Heading: "First", Level: 1, Path: SectionPath{{Level: 1, Text: "First"}}, Content: "", StartLine: 1},
+		{Heading: "", Level: 2, Path: SectionPath{{Level: 1, Text: "First"}, {Level: 2, Text: ""}}, Content: "", StartLine: 2},
+		{Heading: "Third", Level: 3, Path: SectionPath{{Level: 1, Text: "First"}, {Level: 2, Text: ""}, {Level: 3, Text: "Third"}}, Content: "Content", StartLine: 3},
+	}
+	if sections := parseSections(body); !reflect.DeepEqual(sections, want) {
+		t.Fatalf("sections = %+v; want %+v", sections, want)
+	}
+}
+
+func BenchmarkExtractSectionsManyHeadings(b *testing.B) {
+	for _, count := range []int{100, 1000} {
+		b.Run(strconv.Itoa(count), func(b *testing.B) {
+			source := []byte(strings.Repeat("## Heading ##\n\nContent\n\n", count))
+			node := goldmark.DefaultParser().Parse(text.NewReader(source))
+			b.ReportAllocs()
+			b.SetBytes(int64(len(source)))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				benchmarkSections = ExtractSections(node, source)
+			}
+		})
+	}
+}
+
+var benchmarkSections []Section
 
 func TestExtractSections_HeadingInCodeBlock(t *testing.T) {
 	body := "## Real\n\nSome text\n\n```\n## Fake\n```\n\n## Also Real\n\nMore text\n"
