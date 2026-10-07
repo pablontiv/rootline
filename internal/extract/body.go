@@ -3,8 +3,10 @@ package extract
 import (
 	"strings"
 
+	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	east "github.com/yuin/goldmark/extension/ast"
+	"github.com/yuin/goldmark/text"
 )
 
 // HeadingKey identifies one markdown heading.
@@ -219,80 +221,8 @@ func ExtractTables(node ast.Node, source []byte) []Table {
 // ExtractSectionsFromText splits markdown text into heading-delimited sections.
 func ExtractSectionsFromText(body string) []Section {
 	source := []byte(body)
-	type heading struct {
-		text        string
-		level       int
-		line, start int
-		end         int
-	}
-	var headings []heading
-	candidateLine, candidateStart, candidateOK := 0, 0, false
-	var fence *fenceContext
-	for start, lineNo := 0, 1; start <= len(source); lineNo++ {
-		end := start
-		for end < len(source) && source[end] != '\n' {
-			end++
-		}
-		lineEnd := end
-		if end < len(source) {
-			lineEnd++
-		}
-		line := string(source[start:end])
-
-		if fence != nil {
-			content, belongs := fence.content(line)
-			if belongs {
-				if char, length, trailing, ok := parseBareFenceLine(content); ok && char == fence.char && length >= fence.length && strings.TrimSpace(trailing) == "" {
-					fence = nil
-				}
-				candidateOK = false
-				if end >= len(source) {
-					break
-				}
-				start = lineEnd
-				continue
-			}
-			fence = nil
-		}
-
-		if opened, ok := parseFenceOpening(line); ok {
-			fence = &opened
-			candidateOK = false
-		} else if level, text, ok := parseATXHeading(line); ok {
-			headings = append(headings, heading{text: text, level: level, line: lineNo, start: start, end: lineEnd})
-			candidateOK = false
-		} else if level, ok := parseSetextUnderline(line); ok && candidateOK {
-			headingText := strings.TrimSpace(string(source[candidateStart:start]))
-			headings = append(headings, heading{text: headingText, level: level, line: candidateLine, start: candidateStart, end: lineEnd})
-			candidateOK = false
-		} else if _, ok := parseSetextUnderline(line); ok {
-			candidateOK = false
-		} else if strings.TrimSpace(line) == "" {
-			candidateOK = false
-		} else if !candidateOK {
-			candidateLine, candidateStart, candidateOK = lineNo, start, true
-		}
-		if end >= len(source) {
-			break
-		}
-		start = lineEnd
-	}
-	if len(headings) == 0 {
-		return []Section{{Heading: "", Level: 0, Content: body, StartLine: 1}}
-	}
-	sections := make([]Section, 0, len(headings))
-	for i, h := range headings {
-		contentEnd := len(source)
-		if i+1 < len(headings) {
-			contentEnd = headings[i+1].start
-		}
-		content := ""
-		if h.end < contentEnd {
-			content = strings.TrimSpace(string(source[h.end:contentEnd]))
-		}
-		sections = append(sections, Section{Heading: h.text, Level: h.level, Content: content, StartLine: h.line})
-	}
-	return sectionsWithPaths(sections)
+	node := goldmark.DefaultParser().Parse(text.NewReader(source))
+	return ExtractSections(node, source)
 }
 
 func sectionsWithPaths(sections []Section) []Section {
@@ -353,130 +283,6 @@ func parseSetextUnderline(line string) (int, bool) {
 		return 1, true
 	}
 	return 2, true
-}
-
-type fenceContext struct {
-	char       byte
-	length     int
-	quoteDepth int
-	listIndent int
-}
-
-func parseFenceOpening(line string) (fenceContext, bool) {
-	line = strings.TrimRight(line, "\r")
-	if char, length, _, ok := parseBareFenceLine(line); ok {
-		return fenceContext{char: char, length: length}, true
-	}
-
-	content, quoteDepth, listIndent, ok := fenceContainerContent(line)
-	if !ok {
-		return fenceContext{}, false
-	}
-	char, length, _, ok := parseBareFenceLine(content)
-	if !ok {
-		return fenceContext{}, false
-	}
-	return fenceContext{char: char, length: length, quoteDepth: quoteDepth, listIndent: listIndent}, true
-}
-
-func parseBareFenceLine(line string) (byte, int, string, bool) {
-	indent := len(line) - len(strings.TrimLeft(line, " "))
-	if indent > 3 || indent >= len(line) || (line[indent] != '`' && line[indent] != '~') {
-		return 0, 0, "", false
-	}
-	char, count := line[indent], 0
-	i := indent
-	for ; i < len(line) && line[i] == char; i++ {
-		count++
-	}
-	trailing := line[i:]
-	if count < 3 || (char == '`' && strings.Contains(trailing, "`")) {
-		return 0, 0, "", false
-	}
-	return char, count, trailing, true
-}
-
-func fenceContainerContent(line string) (content string, quoteDepth, listIndent int, ok bool) {
-	indent := len(line) - len(strings.TrimLeft(line, " "))
-	if indent > 3 {
-		return "", 0, 0, false
-	}
-	rest := line[indent:]
-	for len(rest) > 0 && rest[0] == '>' {
-		quoteDepth++
-		rest = rest[1:]
-		if len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
-			rest = rest[1:]
-		}
-	}
-
-	listStart := len(rest) - len(strings.TrimLeft(rest, " "))
-	listRest := rest[listStart:]
-	markerEnd := 0
-	if len(listRest) > 1 && (listRest[0] == '-' || listRest[0] == '+' || listRest[0] == '*') {
-		markerEnd = 1
-	} else {
-		for markerEnd < len(listRest) && markerEnd < 9 && listRest[markerEnd] >= '0' && listRest[markerEnd] <= '9' {
-			markerEnd++
-		}
-		if markerEnd == 0 || markerEnd >= len(listRest) || (listRest[markerEnd] != '.' && listRest[markerEnd] != ')') {
-			markerEnd = 0
-		} else {
-			markerEnd++
-		}
-	}
-	if markerEnd == 0 || markerEnd >= len(listRest) || (listRest[markerEnd] != ' ' && listRest[markerEnd] != '\t') {
-		if quoteDepth > 0 {
-			return rest, quoteDepth, 0, true
-		}
-		return "", 0, 0, false
-	}
-	contentStart := markerEnd
-	for contentStart < len(listRest) && (listRest[contentStart] == ' ' || listRest[contentStart] == '\t') {
-		contentStart++
-	}
-	listIndent = listStart + contentStart
-	if quoteDepth == 0 {
-		listIndent += indent
-	}
-	return listRest[contentStart:], quoteDepth, listIndent, true
-}
-
-func (f fenceContext) content(line string) (string, bool) {
-	line = strings.TrimRight(line, "\r")
-	if strings.TrimSpace(line) == "" {
-		return line, true
-	}
-	if f.quoteDepth == 0 && f.listIndent == 0 {
-		return line, true
-	}
-
-	rest := line
-	if f.quoteDepth > 0 {
-		indent := len(line) - len(strings.TrimLeft(line, " "))
-		if indent > 3 {
-			return "", false
-		}
-		rest = line[indent:]
-		for i := 0; i < f.quoteDepth; i++ {
-			if len(rest) == 0 || rest[0] != '>' {
-				return "", false
-			}
-			rest = rest[1:]
-			if len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
-				rest = rest[1:]
-			}
-		}
-	}
-	if f.listIndent == 0 {
-		return rest, true
-	}
-
-	contentIndent := len(rest) - len(strings.TrimLeft(rest, " "))
-	if contentIndent < f.listIndent {
-		return "", false
-	}
-	return rest[f.listIndent:], true
 }
 
 // lineOffset returns the byte offset of the start of a 1-based line number.

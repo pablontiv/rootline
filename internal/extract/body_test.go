@@ -70,6 +70,29 @@ func TestExtractSections_HeadingInCodeBlock(t *testing.T) {
 	}
 }
 
+func TestExtractSectionsFromText_BlockContainerParity(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		body string
+	}{
+		{name: "ATX heading in list", body: "- item\n\n  ## Nested\n\n## Real"},
+		{name: "Setext underline in list", body: "- First\n  Second\n  ---\n\n## Real"},
+		{name: "heading in HTML block", body: "<div>\n## Fake\n</div>\n\n## Real"},
+		{name: "ATX heading in blockquote", body: "> ## Quoted\n\n## Real"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			astSections := parseSections(tt.body)
+			textSections := ExtractSectionsFromText(tt.body)
+			if !reflect.DeepEqual(textSections, astSections) {
+				t.Fatalf("text sections differ from AST sections: text=%+v AST=%+v", textSections, astSections)
+			}
+			if len(textSections) != 1 || textSections[0].Heading != "Real" {
+				t.Fatalf("sections = %+v; want only the real heading", textSections)
+			}
+		})
+	}
+}
+
 func TestExtractSectionsFromText_ContainerFenceParity(t *testing.T) {
 	for _, tt := range []struct {
 		name string
