@@ -341,6 +341,17 @@ func parseSetextUnderline(line string) (int, bool) {
 
 func parseFenceLine(line string) (byte, int, string, bool) {
 	line = strings.TrimRight(line, "\r")
+	if char, count, trailing, ok := parseBareFenceLine(line); ok {
+		return char, count, trailing, true
+	}
+	containerContent, ok := fenceContainerContent(line)
+	if !ok {
+		return 0, 0, "", false
+	}
+	return parseBareFenceLine(containerContent)
+}
+
+func parseBareFenceLine(line string) (byte, int, string, bool) {
 	indent := len(line) - len(strings.TrimLeft(line, " "))
 	if indent > 3 || indent >= len(line) || (line[indent] != '`' && line[indent] != '~') {
 		return 0, 0, "", false
@@ -355,6 +366,44 @@ func parseFenceLine(line string) (byte, int, string, bool) {
 		return 0, 0, "", false
 	}
 	return char, count, trailing, true
+}
+
+func fenceContainerContent(line string) (string, bool) {
+	indent := len(line) - len(strings.TrimLeft(line, " "))
+	if indent > 3 {
+		return "", false
+	}
+	rest := line[indent:]
+	for len(rest) > 0 && rest[0] == '>' {
+		rest = rest[1:]
+		if len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
+			rest = rest[1:]
+		}
+	}
+
+	markerEnd := 0
+	if len(rest) > 1 && (rest[0] == '-' || rest[0] == '+' || rest[0] == '*') {
+		markerEnd = 1
+	} else {
+		for markerEnd < len(rest) && markerEnd < 9 && rest[markerEnd] >= '0' && rest[markerEnd] <= '9' {
+			markerEnd++
+		}
+		if markerEnd == 0 || markerEnd >= len(rest) || (rest[markerEnd] != '.' && rest[markerEnd] != ')') {
+			markerEnd = 0
+		} else {
+			markerEnd++
+		}
+	}
+	if markerEnd == 0 || markerEnd >= len(rest) || (rest[markerEnd] != ' ' && rest[markerEnd] != '\t') {
+		if rest != line[indent:] {
+			return rest, true
+		}
+		return "", false
+	}
+	for markerEnd < len(rest) && (rest[markerEnd] == ' ' || rest[markerEnd] == '\t') {
+		markerEnd++
+	}
+	return rest[markerEnd:], true
 }
 
 // lineOffset returns the byte offset of the start of a 1-based line number.

@@ -218,6 +218,18 @@ func TestIsCovered_SectionSourceAndRequiredness(t *testing.T) {
 			want:  false,
 		},
 		{
+			name:  "same hierarchical source is covered",
+			inf:   Inference{Type: "optional_section", Field: "notes", SourceDirective: `body.section["## Parent"]["### Notes"]`},
+			field: rules.SchemaField{Type: "string", Extract: `body.section["## Parent"]["### Notes"]`},
+			want:  true,
+		},
+		{
+			name:  "different hierarchical parent is not covered",
+			inf:   Inference{Type: "optional_section", Field: "notes", SourceDirective: `body.section["## Parent B"]["### Notes"]`},
+			field: rules.SchemaField{Type: "string", Extract: `body.section["## Parent A"]["### Notes"]`},
+			want:  false,
+		},
+		{
 			name:  "missing existing source is not covered",
 			inf:   Inference{Type: "optional_section", Field: "notes", SourceDirective: `body.section["## Notes"]`},
 			field: rules.SchemaField{Type: "string"},

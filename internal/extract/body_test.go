@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/yuin/goldmark"
@@ -66,6 +67,27 @@ func TestExtractSections_HeadingInCodeBlock(t *testing.T) {
 	}
 	if sections[1].Heading != "Also Real" {
 		t.Errorf("section 1 heading: got %q", sections[1].Heading)
+	}
+}
+
+func TestExtractSectionsFromText_ContainerFenceParity(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		body string
+	}{
+		{name: "backticks in list", body: "- ```\n  ## Fake\n  ```\n\n## Real\n\nContent\n"},
+		{name: "tildes in list", body: "- ~~~\n  ## Fake\n  ~~~\n\n## Real\n\nContent\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			astSections := parseSections(tt.body)
+			textSections := ExtractSectionsFromText(tt.body)
+			if !reflect.DeepEqual(textSections, astSections) {
+				t.Fatalf("text sections differ from AST sections: text=%+v AST=%+v", textSections, astSections)
+			}
+			if len(textSections) != 1 || textSections[0].Heading != "Real" {
+				t.Fatalf("sections = %+v; want only the real heading after the fence", textSections)
+			}
+		})
 	}
 }
 

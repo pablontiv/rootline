@@ -1622,9 +1622,11 @@ func TestSchemaApplyWritesProposedPatchVerbatim(t *testing.T) {
 
 func TestSchemaProposeIncrementalSectionConversionPreservesSource(t *testing.T) {
 	source := `body.section["## Notes"]`
+	hierarchicalSource := `body.section["# Root"]["## Parent"]["### Detail"]`
 	got := schemaToInferences(&rules.StemFile{Schema: map[string]rules.SchemaField{
 		"notes":   {Type: "string", Required: true, Extract: source},
 		"summary": {Type: "string", Extract: `body.section["## Summary"]`},
+		"detail":  {Type: "string", Extract: hierarchicalSource},
 	}})
 
 	seen := map[string]infer.Inference{}
@@ -1636,6 +1638,9 @@ func TestSchemaProposeIncrementalSectionConversionPreservesSource(t *testing.T) 
 	}
 	if inf := seen["summary"]; inf.Type != "optional_section" || inf.SourceDirective != `body.section["## Summary"]` {
 		t.Fatalf("optional section conversion dropped source: %+v (all %+v)", inf, got)
+	}
+	if inf := seen["detail"]; inf.Type != "optional_section" || inf.SourceDirective != hierarchicalSource {
+		t.Fatalf("hierarchical section conversion dropped source: %+v (all %+v)", inf, got)
 	}
 }
 
