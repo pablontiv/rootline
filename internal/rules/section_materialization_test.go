@@ -79,6 +79,77 @@ func TestRequiredSectionMaterializations_TableContract(t *testing.T) {
 	}
 }
 
+func TestRequiredSectionMaterializations_QualifiedSelectorPolicy(t *testing.T) {
+	const qualified = `body.section["## Parent"]["### Notes"]`
+	field := SchemaField{Type: "string", Required: true, Extract: qualified}
+
+	t.Run("simple required absence keeps materialization", func(t *testing.T) {
+		stem := &StemFile{Schema: map[string]SchemaField{
+			"notes": {Type: "string", Required: true, Extract: `body.section["## Notes"]`},
+		}}
+		got, err := RequiredSectionMaterializations(emptyRecord(), stem)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].Heading != "## Notes" {
+			t.Fatalf("materializations = %+v, want the simple section", got)
+		}
+	})
+
+	t.Run("qualified required presence needs no materialization", func(t *testing.T) {
+		record := &extract.Record{Frontmatter: map[string]any{}, Body: "## Parent\n\n### Notes\n\npresent\n"}
+		got, err := RequiredSectionMaterializations(record, &StemFile{Schema: map[string]SchemaField{"notes": field}})
+		if err != nil || len(got) != 0 {
+			t.Fatalf("materializations = %+v, error = %v; want no materialization", got, err)
+		}
+	})
+
+	t.Run("qualified optional absence needs no materialization", func(t *testing.T) {
+		field.Required = false
+		got, err := RequiredSectionMaterializations(emptyRecord(), &StemFile{Schema: map[string]SchemaField{"notes": field}})
+		if err != nil || len(got) != 0 {
+			t.Fatalf("materializations = %+v, error = %v; want no materialization", got, err)
+		}
+	})
+
+	t.Run("qualified required absence returns field and canonical selector", func(t *testing.T) {
+		field.Required = true
+		got, err := RequiredSectionMaterializations(emptyRecord(), &StemFile{Schema: map[string]SchemaField{"notes": field}})
+		if err == nil {
+			t.Fatalf("expected an error, got materializations %+v", got)
+		}
+		if !strings.Contains(err.Error(), `field "notes"`) || !strings.Contains(err.Error(), qualified) {
+			t.Fatalf("error = %q, want field and canonical selector", err)
+		}
+	})
+
+	t.Run("frontmatter presence has precedence over an ambiguous selector", func(t *testing.T) {
+		record := &extract.Record{
+			Frontmatter: map[string]any{"notes": "override"},
+			Body:        "## Parent\n\n### Notes\n\nfirst\n\n## Parent\n\n### Notes\n\nsecond\n",
+		}
+		got, err := RequiredSectionMaterializations(record, &StemFile{Schema: map[string]SchemaField{"notes": field}})
+		if err != nil || len(got) != 0 {
+			t.Fatalf("materializations = %+v, error = %v; want frontmatter to satisfy the field", got, err)
+		}
+	})
+}
+
+func TestRequiredSectionMaterializations_OptionalSelectorAmbiguityReturnsError(t *testing.T) {
+	record := &extract.Record{
+		Frontmatter: map[string]any{},
+		Body:        "## Parent A\n\n### Notes\n\nfirst\n\n## Parent B\n\n### Notes\n\nsecond\n",
+	}
+	stem := &StemFile{Schema: map[string]SchemaField{
+		"notes": {Type: "string", Extract: `body.section["### Notes"]`},
+	}}
+
+	got, err := RequiredSectionMaterializations(record, stem)
+	if err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("materializations = %+v, error = %v; want ambiguity", got, err)
+	}
+}
+
 func TestRequiredSectionMaterializations_OrdersByHeadingThenField(t *testing.T) {
 	stem := &StemFile{Schema: map[string]SchemaField{
 		"gamma": {Type: "string", Required: true, Extract: `body.section["## Shared"]`, Default: "same"},

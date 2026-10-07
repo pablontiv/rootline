@@ -51,13 +51,7 @@ func RequiredSectionMaterializations(record *extract.Record, effective *StemFile
 	out := make([]SectionMaterialization, 0)
 	for _, name := range fields {
 		field := local.Schema[name]
-		if !field.Required || field.Extract == "" {
-			continue
-		}
-		if !requiredCheckApplies(record, &local, name, field) {
-			continue
-		}
-		if field.Type != "string" {
+		if field.Extract == "" || field.Type != "string" {
 			continue
 		}
 		source, err := extract.ParseBodySource(field.Extract)
@@ -71,8 +65,18 @@ func RequiredSectionMaterializations(record *extract.Record, effective *StemFile
 		if err != nil {
 			return nil, err
 		}
-		if present {
+		if present || !field.Required {
 			continue
+		}
+		if !requiredCheckApplies(record, &local, name, field) {
+			continue
+		}
+		if len(source.Selector) > 1 {
+			canonical, err := extract.CanonicalSectionSelectorSource(source.Selector)
+			if err != nil {
+				return nil, err
+			}
+			return nil, fmt.Errorf("cannot materialize required field %q: qualified section selector %s is missing", name, canonical)
 		}
 		content := field.Default
 		if content == "" {

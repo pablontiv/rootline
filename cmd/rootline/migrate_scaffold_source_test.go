@@ -131,6 +131,66 @@ func TestMigrateScaffoldRequiredSectionSourceDryRunParityAndNoWrite(t *testing.T
 	}
 }
 
+func TestMigrateScaffoldRejectsMissingQualifiedSectionWithoutWriting(t *testing.T) {
+	schema := `schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["## Parent"]["### Notes"]'
+`
+	selector := `body.section["## Parent"]["### Notes"]`
+	original := "---\ntitle: Task\n---\n# Task\n"
+
+	writeDir := newMigrateScaffoldSectionSourceProject(t, schema, original)
+	writeOut, writeErr := runCmd(t, "migrate", "--scaffold", writeDir)
+	if writeErr == nil {
+		t.Fatalf("expected scaffold to reject the qualified selector, output: %s", writeOut)
+	}
+	if !strings.Contains(writeErr.Error(), `field "notes"`) || !strings.Contains(writeErr.Error(), selector) {
+		t.Fatalf("write error = %q, want field and canonical selector", writeErr)
+	}
+	writeContent, err := os.ReadFile(filepath.Join(writeDir, "T001-task.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(writeContent) != original {
+		t.Fatalf("affected file changed after materialization error\ngot: %q\nwant: %q", writeContent, original)
+	}
+
+	dryDir := newMigrateScaffoldSectionSourceProject(t, schema, original)
+	dryOut, dryErr := runCmd(t, "migrate", "--scaffold", "--dry-run", dryDir)
+	if dryErr == nil {
+		t.Fatalf("expected dry-run to reject the qualified selector, output: %s", dryOut)
+	}
+	if dryErr.Error() != writeErr.Error() {
+		t.Fatalf("dry-run error = %q, want write error %q", dryErr, writeErr)
+	}
+	dryContent, err := os.ReadFile(filepath.Join(dryDir, "T001-task.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(dryContent) != original {
+		t.Fatalf("dry-run changed the affected file\ngot: %q\nwant: %q", dryContent, original)
+	}
+}
+
+func TestMigrateScaffoldQualifiedSectionFrontmatterPrecedence(t *testing.T) {
+	dir := newMigrateScaffoldSectionSourceProject(t, `schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["## Parent"]["### Notes"]'
+`, "---\nnotes: override\n---\n# Task\n")
+
+	result, out, err := runMigrateScaffoldJSON(t, dir)
+	if err != nil {
+		t.Fatalf("frontmatter must satisfy the qualified field: %v\noutput: %s", err, out)
+	}
+	if result.SectionsAdded != 0 || result.FilesScaffolded != 0 {
+		t.Fatalf("result = %+v, want no materialization", result)
+	}
+}
+
 func TestMigrateScaffoldRequiredSectionSourcePreservesModeAndValidatesAfterWrite(t *testing.T) {
 	dir := newMigrateScaffoldSectionSourceProject(t, `schema:
   anchor:

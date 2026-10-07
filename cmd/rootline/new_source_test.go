@@ -169,6 +169,39 @@ func TestNewSectionSourceNoWriteOnSchemaMaterializationOrValidationFailure(t *te
 	}
 }
 
+func TestNewRejectsMissingQualifiedSectionBeforeWriting(t *testing.T) {
+	dir := newSectionSourceProject(t, `schema:
+  notes:
+    type: string
+    required: true
+    source: 'body.section["## Parent"]["### Notes"]'
+`)
+	selector := `body.section["## Parent"]["### Notes"]`
+
+	target := filepath.Join(dir, "T001-task.md")
+	out, err := runCmd(t, "new", target)
+	if err == nil {
+		t.Fatalf("expected new to reject the qualified selector, output: %s", out)
+	}
+	if !strings.Contains(err.Error(), `field "notes"`) || !strings.Contains(err.Error(), selector) {
+		t.Fatalf("error = %q, want field and canonical selector", err)
+	}
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+		t.Fatalf("target must remain absent, stat error = %v", statErr)
+	}
+
+	existing := filepath.Join(dir, "existing.md")
+	original := []byte("---\ntitle: Keep\n---\n# Existing\n")
+	mustWriteFile(t, existing, original, 0o640)
+	out, err = runCmd(t, "new", existing, "--force")
+	if err == nil {
+		t.Fatalf("expected forced new to reject the qualified selector, output: %s", out)
+	}
+	if got := mustReadFile(t, existing); string(got) != string(original) {
+		t.Fatalf("forced target changed after materialization error\ngot: %q\nwant: %q", got, original)
+	}
+}
+
 func mustResolveNewEffective(t *testing.T, dir, target string) *rules.StemFile {
 	t.Helper()
 	effective, err := rules.ResolveForRecord(dir, target)
