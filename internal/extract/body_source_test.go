@@ -53,6 +53,10 @@ func TestParseBodySourceRejectsInvalidSelectors(t *testing.T) {
 		{`body.section["Notes"]`, "heading"},
 		{`body.section["## Parent"]["## Notes"]`, "increase"},
 		{`body.section["### Parent"]["## Notes"]`, "increase"},
+		{`body.section["####### First\nSecond"]`, "heading"},
+		{`body.section["##First\nSecond"]`, "heading"},
+		{`body.section[" ## First\nSecond"]`, "heading"},
+		{`body.section["##\nSecond"]`, "heading"},
 		{"body.section[\"## First\nSecond\"]", "malformed"},
 	} {
 		_, err := ParseBodySource(tt.directive)
@@ -96,28 +100,38 @@ func TestCanonicalSectionSource(t *testing.T) {
 }
 
 func TestCanonicalSectionSelectorSource_MultilineHeadingRoundTrip(t *testing.T) {
-	wantSelector := SectionSelector{
-		{Level: 1, Text: "Root"},
-		{Level: 2, Text: "First\nSecond"},
-	}
-	got, err := CanonicalSectionSelectorSource(wantSelector)
-	if err != nil {
-		t.Fatalf("CanonicalSectionSelectorSource returned an error: %v", err)
-	}
-	wantSource := `body.section["# Root"]["## First\nSecond"]`
-	if got != wantSource {
-		t.Fatalf("source = %q, want %q", got, wantSource)
-	}
+	for _, tt := range []struct {
+		name string
+		text string
+	}{
+		{name: "plain", text: "First\nSecond"},
+		{name: "trailing hash", text: "First\nSecond #"},
+		{name: "trailing hashes", text: "First\nSecond ##"},
+		{name: "trailing space", text: "First\nSecond "},
+		{name: "trailing backslash", text: "First\nSecond \\"},
+		{name: "intermediate hash", text: "First\nMiddle #\nSecond"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			wantSelector := SectionSelector{
+				{Level: 1, Text: "Root"},
+				{Level: 2, Text: tt.text},
+			}
+			got, err := CanonicalSectionSelectorSource(wantSelector)
+			if err != nil {
+				t.Fatalf("CanonicalSectionSelectorSource returned an error: %v", err)
+			}
 
-	parsed, err := ParseBodySource(got)
-	if err != nil {
-		t.Fatalf("ParseBodySource returned an error: %v", err)
-	}
-	if !reflect.DeepEqual(parsed.Selector, wantSelector) {
-		t.Fatalf("selector = %+v, want %+v", parsed.Selector, wantSelector)
-	}
-	if parsed.Heading != "## First\nSecond" {
-		t.Fatalf("heading = %q, want the complete multiline heading", parsed.Heading)
+			parsed, err := ParseBodySource(got)
+			if err != nil {
+				t.Fatalf("ParseBodySource returned an error for %q: %v", got, err)
+			}
+			if !reflect.DeepEqual(parsed.Selector, wantSelector) {
+				t.Fatalf("selector = %+v, want %+v", parsed.Selector, wantSelector)
+			}
+			if parsed.Heading != exactHeading(wantSelector[1]) {
+				t.Fatalf("heading = %q, want %q", parsed.Heading, exactHeading(wantSelector[1]))
+			}
+		})
 	}
 }
 
@@ -144,6 +158,12 @@ func TestResolveBodyValue_HeadingSyntaxCompatibility(t *testing.T) {
 			name:      "multiline Setext hierarchy",
 			body:      "# Root\n\nFirst\nSecond\n---\n\nMultiline content\n",
 			selector:  SectionSelector{{Level: 1, Text: "Root"}, {Level: 2, Text: "First\nSecond"}},
+			wantValue: "Multiline content",
+		},
+		{
+			name:      "multiline Setext trailing hash",
+			body:      "First\nSecond #\n---\n\nMultiline content\n",
+			selector:  SectionSelector{{Level: 2, Text: "First\nSecond #"}},
 			wantValue: "Multiline content",
 		},
 	} {

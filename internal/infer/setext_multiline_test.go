@@ -9,15 +9,15 @@ import (
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
-const multilineSetextSource = `body.section["## First\nSecond"]`
+const multilineSetextSource = `body.section["## First\nSecond #"]`
 
 func TestDetectSectionPatterns_MultilineSetext(t *testing.T) {
-	record := makeRecord("First\nSecond\n---\n\nContent\n")
+	record := makeRecord("First\nSecond #\n---\n\nContent\n")
 	sections := extract.ExtractSections(record.AST, []byte(record.Body))
 	if len(sections) != 1 || len(sections[0].Path) != 1 {
 		t.Fatalf("sections = %+v, want one section path", sections)
 	}
-	wantPath := extract.SectionPath{{Level: 2, Text: "First\nSecond"}}
+	wantPath := extract.SectionPath{{Level: 2, Text: "First\nSecond #"}}
 	if !reflect.DeepEqual(sections[0].Path, wantPath) {
 		t.Fatalf("section path = %+v, want %+v", sections[0].Path, wantPath)
 	}
@@ -45,7 +45,7 @@ func TestDetectSectionPatterns_MultilineSetext(t *testing.T) {
 }
 
 func TestGenerateFlatSchema_MultilineSetext(t *testing.T) {
-	record := makeRecord("First\nSecond\n---\n\nContent\n")
+	record := makeRecord("First\nSecond #\n---\n\nContent\n")
 	opts := DefaultInferOptions()
 	opts.IncludeStructural = false
 	opts.SectionThreshold = 1
@@ -63,7 +63,7 @@ func TestGenerateFlatSchema_MultilineSetext(t *testing.T) {
 }
 
 func TestApplySchemaInferences_MultilineSetext(t *testing.T) {
-	record := makeRecord("First\nSecond\n---\n\nContent\n")
+	record := makeRecord("First\nSecond #\n---\n\nContent\n")
 	inferences, err := DetectSectionPatterns([]*extract.Record{record}, 1)
 	if err != nil {
 		t.Fatalf("DetectSectionPatterns returned an error: %v", err)

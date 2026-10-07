@@ -217,12 +217,31 @@ func exactHeading(key HeadingKey) string {
 }
 
 func parseHeadingKey(heading string) (HeadingKey, error) {
-	level, text, ok := parseATXHeading(heading)
+	var level int
+	var text string
+	var ok bool
+	if strings.Contains(heading, "\n") {
+		level, text, ok = parseMultilineHeadingKey(heading)
+	} else {
+		level, text, ok = parseATXHeading(heading)
+	}
 	key := HeadingKey{Level: level, Text: text}
 	if !ok || level == 0 || exactHeading(key) != heading {
 		return HeadingKey{}, fmt.Errorf("section source heading must be an exact markdown heading, got %q", heading)
 	}
 	return key, nil
+}
+
+func parseMultilineHeadingKey(heading string) (int, string, bool) {
+	firstLineEnd := strings.IndexByte(heading, '\n')
+	level := 0
+	for level < firstLineEnd && heading[level] == '#' {
+		level++
+	}
+	if level == 0 || level > 6 || level >= firstLineEnd || heading[level] != ' ' {
+		return 0, "", false
+	}
+	return level, heading[level+1:], true
 }
 
 func validateSectionSelector(selector SectionSelector) error {

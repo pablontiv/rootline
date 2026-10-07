@@ -174,10 +174,12 @@ func TestExtractSectionsFromText_SetextParity(t *testing.T) {
 		name        string
 		body        string
 		wantHeading string
+		wantContent string
 		wantLevel   int
 	}{
-		{name: "simple", body: "First\n===\n\nContent\n", wantHeading: "First", wantLevel: 1},
-		{name: "multiple lines", body: "First\nSecond\n---\n\nContent\n", wantHeading: "First\nSecond", wantLevel: 2},
+		{name: "simple", body: "First\n===\n\nContent\n", wantHeading: "First", wantContent: "Content", wantLevel: 1},
+		{name: "multiple lines", body: "First\nSecond\n---\n\nContent\n", wantHeading: "First\nSecond", wantContent: "Content", wantLevel: 2},
+		{name: "multiple lines with trailing hash", body: "First\nSecond #\n---\n", wantHeading: "First\nSecond #", wantLevel: 2},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			astSections := parseSections(tt.body)
@@ -189,11 +191,27 @@ func TestExtractSectionsFromText_SetextParity(t *testing.T) {
 				t.Fatalf("section count = %d; want 1", len(textSections))
 			}
 			wantPath := SectionPath{{Level: tt.wantLevel, Text: tt.wantHeading}}
-			want := Section{Heading: tt.wantHeading, Level: tt.wantLevel, Path: wantPath, Content: "Content", StartLine: 1}
+			want := Section{Heading: tt.wantHeading, Level: tt.wantLevel, Path: wantPath, Content: tt.wantContent, StartLine: 1}
 			if !reflect.DeepEqual(textSections[0], want) {
 				t.Fatalf("section = %+v; want %+v", textSections[0], want)
 			}
 		})
+	}
+}
+
+func TestParseATXHeading_ClosingSequence(t *testing.T) {
+	for _, tt := range []struct {
+		line     string
+		wantText string
+	}{
+		{line: "## Heading ##", wantText: "Heading"},
+		{line: "## Heading #  ", wantText: "Heading"},
+		{line: "## Heading#", wantText: "Heading#"},
+	} {
+		level, text, ok := parseATXHeading(tt.line)
+		if !ok || level != 2 || text != tt.wantText {
+			t.Fatalf("parseATXHeading(%q) = %d, %q, %v; want 2, %q, true", tt.line, level, text, ok, tt.wantText)
+		}
 	}
 }
 
