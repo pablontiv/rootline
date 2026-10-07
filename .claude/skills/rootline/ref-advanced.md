@@ -133,7 +133,7 @@ Use `--field summary` only after confirming the analyze JSON contains that path.
 
 ## Canonical schema transport
 
-`init`, `analyze`, `schema apply`, and `migrate --split` preserve a section as a real type plus a source such as `body.section["## Heading"]` or `body.section["## Parent"]["### Notes"]`. Each selector component identifies one exact heading. The components must be contiguous, and the selector matches a contiguous suffix of the heading path. A simple selector keeps its existing behavior. More than one match is ambiguous.
+`init`, `analyze`, `schema apply`, and `migrate --split` preserve a section as a real type plus a source such as `source: body.section["## Heading"]` or `source: body.section["## Parent"]["### Notes"]`. A simple selector identifies the final heading by exact level and text. A qualified selector matches a contiguous suffix of the hierarchical heading path. More than one matching path is ambiguous.
 
 Inference preserves exact headings. It can emit the shortest common selector. The shortest common selector can be simple, so inference does not always emit a qualified selector. Inference makes partial-frequency candidates optional and fails logical-name collisions. `new` and `migrate --scaffold` materialize missing required simple sections in lexical heading order with a non-empty default or `<!-- TODO -->`. They do not invent ancestor headings. A missing required qualified section stops the command before it writes the affected file. Frontmatter overrides are never written as empty shadow keys.
 
