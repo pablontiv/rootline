@@ -196,7 +196,9 @@ Running `rootline migrate --scaffold` on a file missing both sections produces:
 
 Sections are inserted at the end of the document body only when they use simple selectors and need materialization. Multiple simple additions are appended in lexical heading order. A frontmatter override or an empty-present section needs no materialization. Ambiguous source resolution and invalid declarations fail rather than becoming a successful no-op.
 
-A qualified selector can use `body.section["## Parent"]["### Notes"]`. Each component identifies one exact heading. The components must be contiguous, and the selector matches a contiguous suffix of the heading path. `migrate --scaffold` does not invent ancestor headings. If a required qualified section is absent, scaffold stops before it writes the affected file. Scaffold validates prospective bytes before its atomic write. Use `--dry-run` to review insertions before applying.
+Each selector component contains one to six `#` characters, one space, and the exact parsed heading text. The `#` characters encode the heading level, not the original Markdown form. Scaffold materializes a simple selector with ATX or Setext syntax that preserves the level and text. Setext syntax is available only for levels 1 and 2. If neither form preserves the selector, scaffold fails before it writes the affected file.
+
+A qualified selector can use `body.section["## Parent"]["### Notes"]`. The components must be contiguous, and the selector matches a contiguous suffix of the heading path. `migrate --scaffold` does not invent ancestor headings. If a required qualified section is absent, scaffold stops before it writes the affected file. Scaffold validates prospective bytes before each affected-file write. It does not guarantee global atomicity across all affected files. Use `--dry-run` to review insertions before applying.
 
 ## Schema Evolution
 

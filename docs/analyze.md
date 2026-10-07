@@ -182,7 +182,7 @@ actionable for future tooling.
 
 ## Canonical Section Inferences
 
-Section candidates preserve the exact heading and carry a real type plus a canonical source binding:
+Section candidates carry a real type plus a canonical source binding:
 
 ```yaml
 notes:
@@ -190,7 +190,9 @@ notes:
   source: body.section["## Notes"]
 ```
 
-Every record contributes to the denominator. Rootline calculates the frequency of each exact heading family. Rootline discards each family that does not reach the threshold. A family that reaches the threshold is optional unless the heading occurs in every record. For a hierarchical section, analysis can emit the shortest common selector, such as `body.section["## Parent"]["### Notes"]`. Each component identifies one exact heading. The components are contiguous, and the selector matches a contiguous suffix of the heading path. The shortest common selector can be simple, so analysis does not always emit a qualified selector. After the threshold filter, Rootline resolves selectors and checks logical-name collisions only among families that reach the threshold. A discarded family does not produce a collision. If families that reach the threshold collide, Rootline fails inference and reports each colliding heading. Rootline requires explicit logical names and does not invent logical names. Analyze, schema proposal, and schema application preserve the canonical source identity.
+Each selector component contains one to six `#` characters, one space, and the exact parsed heading text. The `#` characters encode the heading level, not the original Markdown form. Thus, an ATX heading `## Notes ##` produces `body.section["## Notes"]`. The selector `body.section["## Notes ##"]` identifies literal parsed text `Notes ##`. Setext headings use the same form. A multiline Setext heading uses an escaped `\n` in the quoted text, such as `body.section["## First\nSecond"]`. Inference preserves the parsed level and text. It does not preserve whether the source used ATX or Setext syntax.
+
+Every record contributes to the denominator. Rootline calculates the frequency of each exact heading family. Rootline discards each family that does not reach the threshold. A family that reaches the threshold is optional unless the heading occurs in every record. For a hierarchical section, analysis can emit the shortest common selector, such as `body.section["## Parent"]["### Notes"]`. The components are contiguous, and the selector matches a contiguous suffix of the heading path. The shortest common selector can be simple, so analysis does not always emit a qualified selector. After the threshold filter, Rootline resolves selectors and checks logical-name collisions only among families that reach the threshold. A discarded family does not produce a collision. If families that reach the threshold collide, Rootline fails inference and reports each colliding heading. Rootline requires explicit logical names and does not invent logical names. Analyze, schema proposal, and schema application preserve the canonical source identity.
 
 ## Filtering with --incremental
 
