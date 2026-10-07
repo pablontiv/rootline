@@ -243,7 +243,7 @@ func resolveSectionFamily(family *sectionFamily) (string, error) {
 
 	exact := exactSectionHeading(family.key)
 	if len(groupsByIdentity) == 0 {
-		return "", fmt.Errorf("section family %q has no common selector", exact)
+		return "", fmt.Errorf("no_common_selector: section family %q has no common selector", exact)
 	}
 
 	groups := make([]*stableOccurrenceGroup, 0, len(groupsByIdentity))
@@ -268,7 +268,7 @@ func resolveSectionFamily(family *sectionFamily) (string, error) {
 		for _, group := range groups {
 			sources = append(sources, group.selectors[0].source)
 		}
-		return "", fmt.Errorf("section family %q has multiple stable occurrence groups: %s", exact, strings.Join(sources, ", "))
+		return "", fmt.Errorf("multiple_stable_groups: section family %q has multiple stable occurrence groups: %s", exact, strings.Join(sources, ", "))
 	}
 	return groups[0].selectors[0].source, nil
 }
@@ -314,7 +314,7 @@ func rejectDuplicateSectionPaths(key extract.HeadingKey, occurrences []sectionOc
 		return nil
 	}
 	sort.Strings(duplicates)
-	return fmt.Errorf("duplicate body section path for family %q: %s", exactSectionHeading(key), strings.Join(duplicates, "; "))
+	return fmt.Errorf("duplicate_full_path: duplicate body section path for family %q: %s", exactSectionHeading(key), strings.Join(duplicates, "; "))
 }
 
 func firstOccurrenceForRecord(occurrences []sectionOccurrence, recordOrdinal int) sectionOccurrence {

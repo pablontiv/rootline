@@ -104,8 +104,9 @@ func TestDetectSectionPatterns_IncompatibleParentsHaveNoCommonSelector(t *testin
 	}
 
 	inferences, err := DetectSectionPatterns(records, 1)
-	if err == nil || err.Error() != `section family "### Notes" has no common selector` {
-		t.Fatalf("error = %v", err)
+	want := `no_common_selector: section family "### Notes" has no common selector`
+	if err == nil || err.Error() != want {
+		t.Fatalf("error = %v, want %q", err, want)
 	}
 	if inferences != nil {
 		t.Fatalf("inferences = %+v, want nil", inferences)
@@ -119,7 +120,7 @@ func TestDetectSectionPatterns_MultipleStableOccurrenceGroupsFail(t *testing.T) 
 	}
 
 	_, err := DetectSectionPatterns(records, 1)
-	want := `section family "### Notes" has multiple stable occurrence groups: body.section["## First"]["### Notes"], body.section["## Second"]["### Notes"]`
+	want := `multiple_stable_groups: section family "### Notes" has multiple stable occurrence groups: body.section["## First"]["### Notes"], body.section["## Second"]["### Notes"]`
 	if err == nil || err.Error() != want {
 		t.Fatalf("error = %v, want %q", err, want)
 	}
@@ -300,7 +301,7 @@ func TestDetectSectionPatterns_DuplicateFullPathFailsOnlyAtThreshold(t *testing.
 	}
 
 	inferences, err = DetectSectionPatterns(records, 0.5)
-	want := `duplicate body section path for family "### Notes": "a.md" (record 0), body.section["## Parent"]["### Notes"] (section ordinals 1, 2)`
+	want := `duplicate_full_path: duplicate body section path for family "### Notes": "a.md" (record 0), body.section["## Parent"]["### Notes"] (section ordinals 1, 2)`
 	if err == nil || err.Error() != want {
 		t.Fatalf("error = %v, want %q", err, want)
 	}
