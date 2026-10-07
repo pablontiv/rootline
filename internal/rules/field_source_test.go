@@ -11,15 +11,12 @@ func TestResolveFieldValue_FrontmatterPresenceOverridesBodySource(t *testing.T) 
 	for _, value := range []any{"", nil} {
 		rec := &extract.Record{
 			Frontmatter: map[string]any{"notes": value},
-			BodySections: []extract.Section{
-				{Heading: "Notes", Level: 2, Content: "first"},
-				{Heading: "Notes", Level: 2, Content: "second"},
-			},
+			Body:        "# Root\n\n## Parent\n\n### Notes\n\nfirst\n\n### Notes\n\nsecond\n",
 		}
 
-		got, present, err := ResolveFieldValue(rec, "notes", SchemaField{Extract: `body.section["## Notes"]`})
+		got, present, err := ResolveFieldValue(rec, "notes", SchemaField{Extract: `body.section["# Root"]["## Parent"]["### Notes"]`})
 		if err != nil || !present || got != value {
-			t.Fatalf("got value=%#v present=%v err=%v; want frontmatter value %#v", got, present, err, value)
+			t.Fatalf("value=%#v present=%v error=%v; want frontmatter value %#v", got, present, err, value)
 		}
 	}
 }

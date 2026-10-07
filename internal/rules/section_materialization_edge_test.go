@@ -38,7 +38,7 @@ func TestRequiredSectionMaterializations_InvalidDeclarationsUseStableFieldOrder(
 	if err == nil {
 		t.Fatalf("expected declaration error, got %+v", got)
 	}
-	want := `field "alpha": field "alpha" has unsupported source: section source heading must be an exact markdown heading, got "Alpha"`
+	want := `field "alpha": field "alpha" has unsupported source: section source heading must contain 1 to 6 hashes and one space, got "Alpha"`
 	if err.Error() != want {
 		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}

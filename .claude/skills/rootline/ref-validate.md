@@ -113,8 +113,11 @@ Link-check rules (emitted when the effective `.stem` sets `links.checks`): `link
 Schema fields with `source:` directives (body-extracted fields) now participate in validation. The `required` and `enum` constraints apply to values extracted from the document body:
 
 **Extraction directives**:
-- `source: body.h1` — extracts the text of the first H1 heading (e.g., `# My Document` → `"My Document"`)
-- `source: body.section["## Heading"]` — extracts content under the named section (e.g., `## Notes` with content below it)
+- `source: body.h1` extracts the text of the first H1 heading, such as `"My Document"` from `# My Document`.
+- `source: body.section["## Heading"]` identifies the final heading by exact level and text. It extracts the content under that heading.
+- `source: body.section["## Parent"]["### Notes"]` matches a contiguous suffix of the hierarchical heading path. It extracts content from the matched section.
+
+Only multiple paths that match the complete selector produce ambiguity. Rootline does not select the first or last matching path. A required qualified selector with no match fails validation.
 
 **Precedence**: Frontmatter takes absolute precedence. If a field key exists in the record's YAML frontmatter, that value is used and body extraction is skipped.
 
@@ -153,7 +156,7 @@ In validation:
 
 ### Source and provenance
 
-`body.section[...]` matches an exact heading level and text. Duplicate matching headings fail rather than choosing an occurrence; frontmatter remains an override. Path-like validation error sources are governance-root-relative, while symbolic sources stay symbolic.
+A simple `body.section[...]` selector identifies the final heading by exact level and text. A qualified selector matches a contiguous suffix of the hierarchical heading path. Only multiple paths that match the complete selector produce ambiguity. Frontmatter remains an override. Path-like validation error sources are governance-root-relative, while symbolic sources stay symbolic.
 
 ### Reporting Format
 

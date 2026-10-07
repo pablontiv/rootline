@@ -1,18 +1,35 @@
 package extract
 
 import (
+	"bytes"
+	"sort"
 	"strings"
 
+	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	east "github.com/yuin/goldmark/extension/ast"
+	"github.com/yuin/goldmark/text"
 )
+
+// HeadingKey identifies one markdown heading.
+type HeadingKey struct {
+	Level int    `json:"level"`
+	Text  string `json:"text"`
+}
+
+// SectionPath identifies a section from its root heading to its own heading.
+type SectionPath []HeadingKey
+
+// SectionSelector identifies a section by a contiguous suffix of its path.
+type SectionSelector []HeadingKey
 
 // Section represents a heading-delimited section in a markdown body.
 type Section struct {
-	Heading   string `json:"heading"`
-	Level     int    `json:"level"`
-	Content   string `json:"content"`
-	StartLine int    `json:"start_line"`
+	Heading   string      `json:"heading"`
+	Level     int         `json:"level"`
+	Path      SectionPath `json:"path,omitempty"`
+	Content   string      `json:"content"`
+	StartLine int         `json:"start_line"`
 }
 
 // ExtractSections splits a markdown body into sections delimited by headings.
@@ -20,12 +37,14 @@ type Section struct {
 // If the document has no headings, a single section with the entire body is returned.
 func ExtractSections(node ast.Node, source []byte) []Section {
 	type headingInfo struct {
-		text      string
-		level     int
-		startLine int
-		endOffset int // byte offset after the heading line
+		text        string
+		level       int
+		startLine   int
+		startOffset int
+		endOffset   int
 	}
 
+	lineIndex := newSourceLineIndex(source)
 	var headings []headingInfo
 
 	// Collect headings from the AST (top-level block children only).
@@ -34,36 +53,43 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 			continue
 		}
 		h := child.(*ast.Heading)
-		// Extract heading text from child text nodes.
-		var text strings.Builder
-		for c := h.FirstChild(); c != nil; c = c.NextSibling() {
-			if c.Kind() == ast.KindText {
-				seg := c.(*ast.Text).Segment
-				text.Write(seg.Value(source))
-			}
-		}
-
 		lines := h.Lines()
-		startLine := 0
-		endOffset := 0
-		if lines.Len() > 0 {
-			seg := lines.At(0)
-			startLine = lineFromOffset(source, seg.Start)
+		position := h.Pos()
+		if position < 0 && lines.Len() > 0 {
+			position = lines.At(0).Start
+		}
+		startLine := lineIndex.lineForOffset(position)
+		startOffset := lineIndex.offset(startLine)
+		lineEnd := lineIndex.offset(startLine + 1)
+		endOffset := lineEnd
+		headingText := ""
+
+		if _, text, ok := parseATXHeading(string(source[startOffset:lineEnd])); ok {
+			headingText = text
+		} else if lines.Len() > 0 {
+			var text strings.Builder
+			for i := 0; i < lines.Len(); i++ {
+				segment := lines.At(i)
+				text.Write(segment.Value(source))
+			}
+			headingText = strings.TrimSpace(text.String())
+
 			lastSeg := lines.At(lines.Len() - 1)
 			endOffset = lastSeg.Stop
-			if _, _, ok := parseATXHeading(string(source[seg.Start:lastSeg.Stop])); !ok {
-				underlineStart, underlineEnd := lineOffset(source, startLine+1), lineOffset(source, startLine+2)
-				if _, ok := parseSetextUnderline(string(source[underlineStart:underlineEnd])); ok {
-					endOffset = underlineEnd
-				}
+			lastLine := lineIndex.lineForOffset(lastSeg.Start)
+			underlineStart := lineIndex.offset(lastLine + 1)
+			underlineEnd := lineIndex.offset(lastLine + 2)
+			if _, ok := parseSetextUnderline(string(source[underlineStart:underlineEnd])); ok {
+				endOffset = underlineEnd
 			}
 		}
 
 		headings = append(headings, headingInfo{
-			text:      text.String(),
-			level:     h.Level,
-			startLine: startLine,
-			endOffset: endOffset,
+			text:        headingText,
+			level:       h.Level,
+			startLine:   startLine,
+			startOffset: startOffset,
+			endOffset:   endOffset,
 		})
 	}
 
@@ -82,7 +108,7 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 		var contentEnd int
 		if i+1 < len(headings) {
 			// Content ends where the next heading's line starts.
-			contentEnd = lineOffset(source, headings[i+1].startLine)
+			contentEnd = headings[i+1].startOffset
 		} else {
 			contentEnd = len(source)
 		}
@@ -100,7 +126,7 @@ func ExtractSections(node ast.Node, source []byte) []Section {
 		})
 	}
 
-	return sections
+	return sectionsWithPaths(sections)
 }
 
 // CodeBlock represents a fenced code block in a markdown body.
@@ -200,64 +226,22 @@ func ExtractTables(node ast.Node, source []byte) []Table {
 // ExtractSectionsFromText splits markdown text into heading-delimited sections.
 func ExtractSectionsFromText(body string) []Section {
 	source := []byte(body)
-	type heading struct {
-		text        string
-		level       int
-		line, start int
-		end         int
-	}
-	var headings []heading
-	prevLine, prevLineNo, prevStart, prevOK := "", 0, 0, false
-	inFence, fenceChar, fenceLen := false, byte(0), 0
-	for start, lineNo := 0, 1; start <= len(source); lineNo++ {
-		end := start
-		for end < len(source) && source[end] != '\n' {
-			end++
+	node := goldmark.DefaultParser().Parse(text.NewReader(source))
+	return ExtractSections(node, source)
+}
+
+func sectionsWithPaths(sections []Section) []Section {
+	path := make(SectionPath, 0, 6)
+	for i := range sections {
+		if sections[i].Level <= 0 {
+			sections[i].Path = nil
+			continue
 		}
-		lineEnd := end
-		if end < len(source) {
-			lineEnd++
+		for len(path) > 0 && path[len(path)-1].Level >= sections[i].Level {
+			path = path[:len(path)-1]
 		}
-		line := string(source[start:end])
-		if char, length, ok := parseFenceLine(line); ok {
-			prevOK = false
-			if !inFence {
-				inFence, fenceChar, fenceLen = true, char, length
-			} else if char == fenceChar && length >= fenceLen {
-				inFence = false
-			}
-		} else if !inFence {
-			if level, text, ok := parseATXHeading(line); ok {
-				headings = append(headings, heading{text: text, level: level, line: lineNo, start: start, end: lineEnd})
-				prevOK = false
-			} else if level, ok := parseSetextUnderline(line); ok && prevOK {
-				headings = append(headings, heading{text: strings.TrimSpace(strings.TrimRight(prevLine, "\r")), level: level, line: prevLineNo, start: prevStart, end: lineEnd})
-				prevOK = false
-			} else if _, ok := parseSetextUnderline(line); ok {
-				prevOK = false
-			} else {
-				prevLine, prevLineNo, prevStart, prevOK = line, lineNo, start, strings.TrimSpace(line) != ""
-			}
-		}
-		if end >= len(source) {
-			break
-		}
-		start = lineEnd
-	}
-	if len(headings) == 0 {
-		return []Section{{Heading: "", Level: 0, Content: body, StartLine: 1}}
-	}
-	sections := make([]Section, 0, len(headings))
-	for i, h := range headings {
-		contentEnd := len(source)
-		if i+1 < len(headings) {
-			contentEnd = headings[i+1].start
-		}
-		content := ""
-		if h.end < contentEnd {
-			content = strings.TrimSpace(string(source[h.end:contentEnd]))
-		}
-		sections = append(sections, Section{Heading: h.text, Level: h.level, Content: content, StartLine: h.line})
+		path = append(path, HeadingKey{Level: sections[i].Level, Text: sections[i].Heading})
+		sections[i].Path = append(SectionPath(nil), path...)
 	}
 	return sections
 }
@@ -274,11 +258,13 @@ func parseATXHeading(line string) (int, string, bool) {
 		return 0, "", false
 	}
 	text := strings.TrimSpace(rest[level:])
-	if i := len(text) - 1; i > 0 && text[i] == '#' {
+	if i := len(text) - 1; i >= 0 && text[i] == '#' {
 		for i >= 0 && text[i] == '#' {
 			i--
 		}
-		if i >= 0 && (text[i] == ' ' || text[i] == '\t') {
+		if i < 0 {
+			text = ""
+		} else if text[i] == ' ' || text[i] == '\t' {
 			text = strings.TrimSpace(text[:i])
 		}
 	}
@@ -306,31 +292,40 @@ func parseSetextUnderline(line string) (int, bool) {
 	return 2, true
 }
 
-func parseFenceLine(line string) (byte, int, bool) {
-	line = strings.TrimRight(line, "\r")
-	indent := len(line) - len(strings.TrimLeft(line, " "))
-	if indent > 3 || indent >= len(line) || (line[indent] != '`' && line[indent] != '~') {
-		return 0, 0, false
-	}
-	char, count := line[indent], 0
-	for i := indent; i < len(line) && line[i] == char; i++ {
-		count++
-	}
-	return char, count, count >= 3
+type sourceLineIndex struct {
+	starts       []int
+	sourceLength int
 }
 
-// lineOffset returns the byte offset of the start of a 1-based line number.
-func lineOffset(source []byte, line int) int {
-	current := 1
-	for i := 0; i < len(source); i++ {
-		if current == line {
-			return i
-		}
-		if source[i] == '\n' {
-			current++
+func newSourceLineIndex(source []byte) sourceLineIndex {
+	starts := make([]int, 1, bytes.Count(source, []byte{'\n'})+1)
+	for offset, value := range source {
+		if value == '\n' {
+			starts = append(starts, offset+1)
 		}
 	}
-	return len(source)
+	return sourceLineIndex{starts: starts, sourceLength: len(source)}
+}
+
+func (index sourceLineIndex) lineForOffset(offset int) int {
+	if offset < 0 {
+		offset = 0
+	} else if offset > index.sourceLength {
+		offset = index.sourceLength
+	}
+	return sort.Search(len(index.starts), func(i int) bool {
+		return index.starts[i] > offset
+	})
+}
+
+func (index sourceLineIndex) offset(line int) int {
+	if line <= 1 {
+		return 0
+	}
+	if line > len(index.starts) {
+		return index.sourceLength
+	}
+	return index.starts[line-1]
 }
 
 // ExtractBodyH1 returns the text of the first H1 heading in the body,

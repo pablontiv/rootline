@@ -184,9 +184,13 @@ Schema fields with `source:` directives (e.g., `source: body.h1` or `source: bod
 
 ## Canonical Field Contract
 
-Use exactly `string`, `list`, `enum`, `sequence`, `link`, `boolean`, and `integer`; validation does not coerce YAML representations. A body section is a source binding on a real type, such as `source: body.section["## Summary"]`. Frontmatter is an explicit override, duplicate matching headings fail, and an inherited source binding is stable: a child omission inherits it, while a change or removal conflicts.
+Use exactly `string`, `list`, `enum`, `sequence`, `link`, `boolean`, and `integer`. Validation does not coerce YAML representations. A body section is a source binding on a real type. Each selector component contains one to six `#` characters, one space, and the exact parsed heading text. The `#` characters encode only the heading level. They do not encode the original Markdown form. An ATX heading `## Notes ##` uses `body.section["## Notes"]`. The selector `body.section["## Notes ##"]` identifies literal parsed text `Notes ##`. Setext headings use the same form. A multiline Setext heading uses an escaped `\n` in the quoted text.
 
-`new` and `migrate --scaffold` append missing required sections in lexical heading order, using a non-empty default or `<!-- TODO -->`. `query`, `set`, `describe`, and `explain` resolve the same canonical binding; `set` writes frontmatter only. In public inspection output, logical `source` is separate from physical `defined_in`. Path-like validation errors are relative to the governance root; symbolic sources remain symbolic. Ancestor-qualified selectors are deferred to #190.
+A qualified binding can use `source: body.section["## Parent"]["### Notes"]`. Its components must be contiguous. The selector matches a contiguous suffix of the heading path. More than one match is ambiguous. Frontmatter is an explicit override. A child omission inherits a stable source binding.
+
+Inference preserves the parsed level and text. It does not preserve the original ATX or Setext form. `new` and `migrate --scaffold` materialize a missing required simple selector with ATX or Setext syntax that preserves the level and text. Setext syntax is available only for levels 1 and 2. If neither form preserves the selector, Rootline fails before it writes the affected file. The commands use a non-empty default or `<!-- TODO -->`. They do not invent ancestor headings. A missing required qualified section also stops the command before it writes the affected file.
+
+`query`, `set`, `describe`, and `explain` resolve the same canonical binding. `set` writes frontmatter only. In public inspection output, logical `source` is separate from physical `defined_in`. Path-like validation errors are relative to the governance root. Symbolic sources remain symbolic.
 
 ## Module Path
 

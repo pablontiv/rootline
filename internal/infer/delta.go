@@ -105,7 +105,15 @@ func isCovered(inf Inference, stem *rules.StemFile) bool {
 }
 
 func sectionInferenceCovered(inf Inference, sf rules.SchemaField) bool {
-	if sf.Type != "string" || inf.SourceDirective == "" || sf.Extract != inf.SourceDirective {
+	if sf.Type != "string" || inf.SourceDirective == "" || sf.Extract == "" {
+		return false
+	}
+	inferredSource, err := canonicalSectionDirective(inf.SourceDirective)
+	if err != nil {
+		return false
+	}
+	existingSource, err := canonicalSectionDirective(sf.Extract)
+	if err != nil || existingSource != inferredSource {
 		return false
 	}
 	if inf.Type == "required_section" {

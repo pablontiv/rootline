@@ -1034,7 +1034,7 @@ func schemaToInferences(stem *rules.StemFile) []infer.Inference {
 	for fieldName, sf := range stem.Schema {
 		if sf.Extract != "" && sf.Type == "string" {
 			if source, err := extract.ParseBodySource(sf.Extract); err == nil && source.Kind == extract.BodySourceSection {
-				if canonical, err := extract.CanonicalSectionSource(source.Heading); err == nil && canonical == sf.Extract {
+				if canonical, err := extract.CanonicalSectionSelectorSource(source.Selector); err == nil && canonical == sf.Extract {
 					infType := "optional_section"
 					if sf.Required {
 						infType = "required_section"

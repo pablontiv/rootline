@@ -79,9 +79,9 @@ Fields present at all levels stay global; fields present at specific levels get 
 
 ## Section Source Inference
 
-When AST extraction is enabled, `rootline init` scans document bodies and infers source-backed fields for Markdown headings that appear frequently across files.
+`rootline init` scans document bodies and infers source-backed fields for Markdown headings that appear frequently across files.
 
-Init uses a **0.80 threshold** — a heading must appear in at least 80% of files to be emitted. This is stricter than `analyze` default threshold of 0.60, to avoid generating spurious required sections from document-specific headings.
+Init uses a **0.80 threshold**. A heading must appear in at least 80% of files to be emitted. This threshold is stricter than `analyze` default threshold of 0.60. It prevents document-specific headings from becoming required sections.
 
 ### Example
 
@@ -107,7 +107,9 @@ schema:
     default: "<!-- TODO -->"
 ```
 
-Headings below the 0.80 threshold are omitted from the generated `.stem`. The source preserves exact heading level and text. Frontmatter remains an explicit override, and generated schemas validate the source corpus; distinct exact headings that normalize to one logical field fail with a collision instead of receiving an invented suffix.
+Rootline calculates the frequency of each exact heading family. Headings below the 0.80 threshold are omitted from the generated `.stem`. Each selector component contains one to six `#` characters, one space, and the exact parsed heading text. The `#` characters encode the heading level, not the original Markdown form. ATX and Setext headings use the same selector form. A multiline Setext heading uses an escaped `\n` in the quoted text. Inference preserves the parsed level and text. It does not preserve the original ATX or Setext form.
+
+For a hierarchical section, inference can emit the shortest common selector, such as `body.section["## Parent"]["### Notes"]`. The components are contiguous, and the selector matches a contiguous suffix of the heading path. The shortest common selector can be simple, so inference does not always emit a qualified selector. After the threshold filter, Rootline resolves selectors and checks logical-name collisions only among families that reach the threshold. A discarded family does not produce a collision. If families that reach the threshold collide, Rootline fails inference. Rootline does not invent logical names. Frontmatter remains an explicit override. Generated schemas validate the source corpus.
 
 ### Source-Backed Field Properties
 

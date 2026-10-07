@@ -133,7 +133,11 @@ Use `--field summary` only after confirming the analyze JSON contains that path.
 
 ## Canonical schema transport
 
-`init`, `analyze`, `schema apply`, and `migrate --split` preserve a section as a real type plus `source: body.section["## Heading"]`. Inference preserves exact headings, makes partial-frequency candidates optional, and fails logical-name collisions. `new` and `migrate --scaffold` materialize missing required sections in lexical heading order with a non-empty default or `<!-- TODO -->`; frontmatter overrides are never written as empty shadow keys.
+`init`, `analyze`, `schema apply`, and `migrate --split` preserve a section as a real type plus a source such as `source: body.section["## Heading"]`. Each selector component contains one to six `#` characters, one space, and the exact parsed heading text. The `#` characters encode only the heading level. They do not encode the original Markdown form. An ATX heading `## Notes ##` uses `body.section["## Notes"]`. The selector `body.section["## Notes ##"]` identifies literal parsed text `Notes ##`. Setext headings use the same form. A multiline Setext heading uses an escaped `\n` in the quoted text.
+
+A qualified selector can use `source: body.section["## Parent"]["### Notes"]`. It matches a contiguous suffix of the heading path. More than one matching path is ambiguous. Inference preserves the parsed heading level and text. It does not preserve the original ATX or Setext form. Rootline calculates the frequency of each exact heading family. Rootline discards each family that does not reach the threshold. Rootline can emit the shortest common selector. After the threshold filter, Rootline resolves selectors and checks logical-name collisions only among families that reach the threshold. If retained families collide, Rootline fails inference. Rootline does not invent logical names. Rootline makes a retained partial-frequency family optional.
+
+`new` and `migrate --scaffold` materialize missing required simple selectors in lexical heading order. They use ATX or Setext syntax that preserves the level and text. Setext syntax is available only for levels 1 and 2. If neither form preserves the selector, Rootline fails before it writes the affected file. The commands use a non-empty default or `<!-- TODO -->`. They do not invent ancestor headings. A missing required qualified section also stops the command before it writes the affected file. Frontmatter overrides are never written as empty shadow keys.
 
 ## apply (Removed)
 

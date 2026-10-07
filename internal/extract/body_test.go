@@ -1,6 +1,9 @@
 package extract
 
 import (
+	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/yuin/goldmark"
@@ -54,6 +57,55 @@ func TestExtractSections_MultipleHeadings(t *testing.T) {
 	}
 }
 
+func TestExtractSections_ATXBoundaries(t *testing.T) {
+	body := "## Notes ##\n\nFirst\n\n##\n\nSecond\n\n### ###\n\nThird\n\nTitle\n=====\n\nFourth\n\n## Literal##\n\nFifth\n"
+	want := []Section{
+		{Heading: "Notes", Level: 2, Path: SectionPath{{Level: 2, Text: "Notes"}}, Content: "First", StartLine: 1},
+		{Heading: "", Level: 2, Path: SectionPath{{Level: 2, Text: ""}}, Content: "Second", StartLine: 5},
+		{Heading: "", Level: 3, Path: SectionPath{{Level: 2, Text: ""}, {Level: 3, Text: ""}}, Content: "Third", StartLine: 9},
+		{Heading: "Title", Level: 1, Path: SectionPath{{Level: 1, Text: "Title"}}, Content: "Fourth", StartLine: 13},
+		{Heading: "Literal##", Level: 2, Path: SectionPath{{Level: 1, Text: "Title"}, {Level: 2, Text: "Literal##"}}, Content: "Fifth", StartLine: 18},
+	}
+
+	for name, sections := range map[string][]Section{
+		"AST":  parseSections(body),
+		"text": ExtractSectionsFromText(body),
+	} {
+		if !reflect.DeepEqual(sections, want) {
+			t.Errorf("%s sections = %+v; want %+v", name, sections, want)
+		}
+	}
+}
+
+func TestExtractSections_AdjacentATXHeadings(t *testing.T) {
+	body := "# First #\n##\n### Third ###\nContent\n"
+	want := []Section{
+		{Heading: "First", Level: 1, Path: SectionPath{{Level: 1, Text: "First"}}, Content: "", StartLine: 1},
+		{Heading: "", Level: 2, Path: SectionPath{{Level: 1, Text: "First"}, {Level: 2, Text: ""}}, Content: "", StartLine: 2},
+		{Heading: "Third", Level: 3, Path: SectionPath{{Level: 1, Text: "First"}, {Level: 2, Text: ""}, {Level: 3, Text: "Third"}}, Content: "Content", StartLine: 3},
+	}
+	if sections := parseSections(body); !reflect.DeepEqual(sections, want) {
+		t.Fatalf("sections = %+v; want %+v", sections, want)
+	}
+}
+
+func BenchmarkExtractSectionsManyHeadings(b *testing.B) {
+	for _, count := range []int{100, 1000} {
+		b.Run(strconv.Itoa(count), func(b *testing.B) {
+			source := []byte(strings.Repeat("## Heading ##\n\nContent\n\n", count))
+			node := goldmark.DefaultParser().Parse(text.NewReader(source))
+			b.ReportAllocs()
+			b.SetBytes(int64(len(source)))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				benchmarkSections = ExtractSections(node, source)
+			}
+		})
+	}
+}
+
+var benchmarkSections []Section
+
 func TestExtractSections_HeadingInCodeBlock(t *testing.T) {
 	body := "## Real\n\nSome text\n\n```\n## Fake\n```\n\n## Also Real\n\nMore text\n"
 	sections := parseSections(body)
@@ -66,6 +118,100 @@ func TestExtractSections_HeadingInCodeBlock(t *testing.T) {
 	}
 	if sections[1].Heading != "Also Real" {
 		t.Errorf("section 1 heading: got %q", sections[1].Heading)
+	}
+}
+
+func TestExtractSectionsFromText_BlockContainerParity(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		body string
+	}{
+		{name: "ATX heading in list", body: "- item\n\n  ## Nested\n\n## Real"},
+		{name: "Setext underline in list", body: "- First\n  Second\n  ---\n\n## Real"},
+		{name: "heading in HTML block", body: "<div>\n## Fake\n</div>\n\n## Real"},
+		{name: "ATX heading in blockquote", body: "> ## Quoted\n\n## Real"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			astSections := parseSections(tt.body)
+			textSections := ExtractSectionsFromText(tt.body)
+			if !reflect.DeepEqual(textSections, astSections) {
+				t.Fatalf("text sections differ from AST sections: text=%+v AST=%+v", textSections, astSections)
+			}
+			if len(textSections) != 1 || textSections[0].Heading != "Real" {
+				t.Fatalf("sections = %+v; want only the real heading", textSections)
+			}
+		})
+	}
+}
+
+func TestExtractSectionsFromText_ContainerFenceParity(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		body string
+	}{
+		{name: "closed backtick fence in list", body: "- ```\n  ## Fake\n  ```\n\n## Real\n\nContent\n"},
+		{name: "closed tilde fence in list", body: "- ~~~\n  ## Fake\n  ~~~\n\n## Real\n\nContent\n"},
+		{name: "unclosed backtick fence in list", body: "- ```\n  ## Fake\n\n## Real\n\nContent\n"},
+		{name: "unclosed tilde fence in list", body: "- ~~~\n  ## Fake\n\n## Real\n\nContent\n"},
+		{name: "unclosed backtick fence in quote", body: "> ```\n> ## Fake\n\n## Real\n\nContent\n"},
+		{name: "unclosed tilde fence in quote", body: "> ~~~\n> ## Fake\n\n## Real\n\nContent\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			astSections := parseSections(tt.body)
+			textSections := ExtractSectionsFromText(tt.body)
+			if !reflect.DeepEqual(textSections, astSections) {
+				t.Fatalf("text sections differ from AST sections: text=%+v AST=%+v", textSections, astSections)
+			}
+			if len(textSections) != 1 || textSections[0].Heading != "Real" {
+				t.Fatalf("sections = %+v; want only the real heading after the fence", textSections)
+			}
+		})
+	}
+}
+
+func TestExtractSectionsFromText_SetextParity(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		body        string
+		wantHeading string
+		wantContent string
+		wantLevel   int
+	}{
+		{name: "simple", body: "First\n===\n\nContent\n", wantHeading: "First", wantContent: "Content", wantLevel: 1},
+		{name: "multiple lines", body: "First\nSecond\n---\n\nContent\n", wantHeading: "First\nSecond", wantContent: "Content", wantLevel: 2},
+		{name: "multiple lines with trailing hash", body: "First\nSecond #\n---\n", wantHeading: "First\nSecond #", wantLevel: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			astSections := parseSections(tt.body)
+			textSections := ExtractSectionsFromText(tt.body)
+			if !reflect.DeepEqual(textSections, astSections) {
+				t.Fatalf("text sections differ from AST sections: text=%+v AST=%+v", textSections, astSections)
+			}
+			if len(textSections) != 1 {
+				t.Fatalf("section count = %d; want 1", len(textSections))
+			}
+			wantPath := SectionPath{{Level: tt.wantLevel, Text: tt.wantHeading}}
+			want := Section{Heading: tt.wantHeading, Level: tt.wantLevel, Path: wantPath, Content: tt.wantContent, StartLine: 1}
+			if !reflect.DeepEqual(textSections[0], want) {
+				t.Fatalf("section = %+v; want %+v", textSections[0], want)
+			}
+		})
+	}
+}
+
+func TestParseATXHeading_ClosingSequence(t *testing.T) {
+	for _, tt := range []struct {
+		line     string
+		wantText string
+	}{
+		{line: "## Heading ##", wantText: "Heading"},
+		{line: "## Heading #  ", wantText: "Heading"},
+		{line: "## Heading#", wantText: "Heading#"},
+	} {
+		level, text, ok := parseATXHeading(tt.line)
+		if !ok || level != 2 || text != tt.wantText {
+			t.Fatalf("parseATXHeading(%q) = %d, %q, %v; want 2, %q, true", tt.line, level, text, ok, tt.wantText)
+		}
 	}
 }
 

@@ -50,9 +50,13 @@ schema:
     default: "<!-- TODO -->"
 ```
 
-`source: body.h1` and exact `body.section[...]` directives are supported. Frontmatter is an explicit override. An empty section is present with value `""`; duplicate matching headings fail rather than selecting one. Extractors preserve source identity so validation, inference, schema proposal, and schema application use the same canonical directive.
+`source: body.h1` and exact `body.section[...]` directives are supported. Each selector component contains one to six `#` characters, one space, and the exact parsed heading text. The `#` characters encode only the heading level. They do not encode the original Markdown form. An ATX heading `## Notes ##` uses `body.section["## Notes"]` because its parsed text is `Notes`. The selector `body.section["## Notes ##"]` instead identifies the literal parsed text `Notes ##`. Setext headings use the same form with `#` characters. A multiline Setext heading uses an escaped `\n` inside the quoted text, such as `body.section["## First\nSecond"]`.
 
-Source-backed fields participate in validation, querying, describe/explain output, and scaffolding. `rootline set` writes a frontmatter override for such a field; it does not edit the body section.
+The syntax `body.section["## Parent"]["### Notes"]` selects a hierarchical section. The components must be contiguous. The complete selector matches a contiguous suffix of the heading path. More than one matching path is ambiguous. Rootline does not select the first or last path.
+
+Inference preserves the parsed heading level and text. It does not preserve the original ATX or Setext form. Rootline materializes a missing simple selector with ATX or Setext syntax that preserves the level and text. Setext syntax is available only for levels 1 and 2. If neither form preserves the selector, Rootline fails before it writes the affected file.
+
+Frontmatter is an explicit override. An empty section is present with value `""`. Extractors preserve source identity so validation, inference, schema proposal, and schema application use the same canonical directive. Source-backed fields participate in validation, querying, describe/explain output, and scaffolding. `rootline set` writes a frontmatter override for such a field. It does not edit the body section.
 
 > LSP integration has been considered but carries very high complexity.
 > It is not in scope.

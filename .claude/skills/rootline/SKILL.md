@@ -206,7 +206,11 @@ Do not apply results automatically. For `apply`, inspect the report first and tr
 
 ## Canonical Field Contract
 
-Use only `string`, `list`, `enum`, `sequence`, `link`, `boolean`, and `integer`; do not coerce YAML values. A body section pairs a real type with `source: body.section["## Heading"]`. Frontmatter is an explicit override; an empty section is present, duplicate matching headings fail, and child omission inherits a stable source binding. `new` and `migrate --scaffold` add missing required sections in lexical heading order with a non-empty default or `<!-- TODO -->`. Validation error paths are governance-root-relative while symbolic sources remain symbolic. Ancestor-qualified selectors are deferred to #190.
+Use only `string`, `list`, `enum`, `sequence`, `link`, `boolean`, and `integer`. Do not coerce YAML values. A body section pairs a real type with a source such as `body.section["## Heading"]`. Each selector component contains one to six `#` characters, one space, and the exact parsed heading text. The `#` characters encode only the heading level. They do not encode the original Markdown form. An ATX heading `## Notes ##` uses `body.section["## Notes"]`. The selector `body.section["## Notes ##"]` identifies literal parsed text `Notes ##`. Setext headings use the same form. A multiline Setext heading uses an escaped `\n` in the quoted text.
+
+A qualified selector can use `body.section["## Parent"]["### Notes"]`. Its components must be contiguous. The selector matches a contiguous suffix of the heading path. More than one match is ambiguous. A frontmatter override takes precedence. An empty section is present. Child omission inherits a stable source binding.
+
+Inference preserves the parsed level and text. It does not preserve the original ATX or Setext form. `new` and `migrate --scaffold` materialize a missing required simple selector with ATX or Setext syntax that preserves the level and text. Setext syntax is available only for levels 1 and 2. If neither form preserves the selector, Rootline fails before it writes the affected file. The commands use a non-empty default or `<!-- TODO -->`. They do not invent ancestor headings. A missing required qualified section also stops the command before it writes the affected file. Validation error paths are governance-root-relative while symbolic sources remain symbolic.
 
 ## Reference Files
 

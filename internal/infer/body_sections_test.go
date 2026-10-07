@@ -46,6 +46,86 @@ func TestDetectSectionPatterns_UniversalSectionRequiredWithCanonicalSource(t *te
 	}
 }
 
+func TestDetectSectionPatterns_VariableH1UsesSimpleRequiredSelector(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("# Alpha\n\n## Overview\nFirst.\n"),
+		makeRecord("# Beta\n\n## Overview\nSecond.\n"),
+	}
+
+	inferences, err := DetectSectionPatterns(records, 1)
+	if err != nil {
+		t.Fatalf("DetectSectionPatterns: %v", err)
+	}
+	inf, ok := findSectionInference(inferences, "overview")
+	if !ok {
+		t.Fatalf("overview inference is missing: %+v", inferences)
+	}
+	if inf.Type != "required_section" || inf.SourceDirective != `body.section["## Overview"]` {
+		t.Fatalf("overview inference = %+v", inf)
+	}
+}
+
+func TestDetectSectionPatterns_VariableParentsUseSimpleSelectorForSingleOccurrence(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("# Alpha\n\n## First Parent\n\n### Notes\nFirst.\n"),
+		makeRecord("# Beta\n\n## Second Parent\n\n### Notes\nSecond.\n"),
+	}
+
+	inferences, err := DetectSectionPatterns(records, 1)
+	if err != nil {
+		t.Fatalf("DetectSectionPatterns: %v", err)
+	}
+	inf, ok := findSectionInference(inferences, "notes")
+	if !ok || inf.SourceDirective != `body.section["### Notes"]` {
+		t.Fatalf("notes inference = %+v, present = %v", inf, ok)
+	}
+}
+
+func TestDetectSectionPatterns_SelectsShortestCommonQualifiedSelector(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("# Root\n\n## First Parent\n\n### Notes\nVariable.\n\n## Shared\n\n### Notes\nStable.\n"),
+		makeRecord("# Root\n\n## Second Parent\n\n### Notes\nVariable.\n\n## Shared\n\n### Notes\nStable.\n"),
+	}
+
+	inferences, err := DetectSectionPatterns(records, 1)
+	if err != nil {
+		t.Fatalf("DetectSectionPatterns: %v", err)
+	}
+	inf, ok := findSectionInference(inferences, "notes")
+	if !ok || inf.SourceDirective != `body.section["## Shared"]["### Notes"]` {
+		t.Fatalf("notes inference = %+v, present = %v", inf, ok)
+	}
+}
+
+func TestDetectSectionPatterns_IncompatibleParentsHaveNoCommonSelector(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("# Alpha\n\n## First A\n\n### Notes\nOne.\n\n## Second A\n\n### Notes\nTwo.\n"),
+		makeRecord("# Beta\n\n## First B\n\n### Notes\nOne.\n\n## Second B\n\n### Notes\nTwo.\n"),
+	}
+
+	inferences, err := DetectSectionPatterns(records, 1)
+	want := `no_common_selector: section family "### Notes" has no common selector`
+	if err == nil || err.Error() != want {
+		t.Fatalf("error = %v, want %q", err, want)
+	}
+	if inferences != nil {
+		t.Fatalf("inferences = %+v, want nil", inferences)
+	}
+}
+
+func TestDetectSectionPatterns_MultipleStableOccurrenceGroupsFail(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("# Alpha\n\n## First\n\n### Notes\nOne.\n\n## Second\n\n### Notes\nTwo.\n"),
+		makeRecord("# Beta\n\n## First\n\n### Notes\nOne.\n\n## Second\n\n### Notes\nTwo.\n"),
+	}
+
+	_, err := DetectSectionPatterns(records, 1)
+	want := `multiple_stable_groups: section family "### Notes" has multiple stable occurrence groups: body.section["## First"]["### Notes"], body.section["## Second"]["### Notes"]`
+	if err == nil || err.Error() != want {
+		t.Fatalf("error = %v, want %q", err, want)
+	}
+}
+
 func TestDetectSectionPatterns_ThresholdCandidateOptionalUntilUniversal(t *testing.T) {
 	records := []*extract.Record{
 		makeRecord("## Notes\nA\n"), makeRecord("## Notes\nB\n"),
@@ -136,6 +216,23 @@ func TestDetectSectionPatterns_DuplicateExactHeadingCountsOncePerRecord(t *testi
 	}
 }
 
+func TestMatchingOccurrencesStopsAfterSecondMatch(t *testing.T) {
+	selector := extract.SectionSelector{{Level: 2, Text: "Notes"}}
+	occurrences := []sectionOccurrence{
+		{sectionOrdinal: 1, path: extract.SectionPath{{Level: 2, Text: "Notes"}}},
+		{sectionOrdinal: 2, path: extract.SectionPath{{Level: 2, Text: "Notes"}}},
+		{sectionOrdinal: 3, path: extract.SectionPath{{Level: 2, Text: "Notes"}}},
+	}
+
+	matches := matchingOccurrences(occurrences, selector)
+	if len(matches) != 2 {
+		t.Fatalf("match count = %d, want 2", len(matches))
+	}
+	if matches[0].sectionOrdinal != 1 || matches[1].sectionOrdinal != 2 {
+		t.Fatalf("match ordinals = %d, %d, want 1, 2", matches[0].sectionOrdinal, matches[1].sectionOrdinal)
+	}
+}
+
 func TestDetectSectionPatterns_PreservesQuotedBackslashBracketDirective(t *testing.T) {
 	heading := `Need "quotes" \ and [brackets]`
 	inferences, err := DetectSectionPatterns([]*extract.Record{
@@ -189,15 +286,44 @@ func TestDetectSectionPatterns_NameCollisionFails(t *testing.T) {
 	}
 }
 
-func TestDetectSectionPatterns_NameCollisionFailsBeforeThreshold(t *testing.T) {
+func TestDetectSectionPatterns_BelowThresholdFamiliesDoNotCollide(t *testing.T) {
 	records := []*extract.Record{
 		makeRecord("## Notes\nA\n\n### Notes\nB\n"),
 		makeRecord("# Other\n"), makeRecord("# Other\n"),
 		makeRecord("# Other\n"), makeRecord("# Other\n"),
 	}
-	_, err := DetectSectionPatterns(records, 0.8)
-	if err == nil || !strings.Contains(err.Error(), "## Notes") || !strings.Contains(err.Error(), "### Notes") {
-		t.Fatalf("expected below-threshold colliding headings, got %v", err)
+	inferences, err := DetectSectionPatterns(records, 0.8)
+	if err != nil {
+		t.Fatalf("DetectSectionPatterns: %v", err)
+	}
+	if _, ok := findSectionInference(inferences, "notes"); ok {
+		t.Fatalf("notes inference is above the threshold: %+v", inferences)
+	}
+}
+
+func TestDetectSectionPatterns_DuplicateFullPathFailsOnlyAtThreshold(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("## Parent\n\n### Notes\nFirst.\n\n### Notes\nSecond.\n"),
+		makeRecord("# Other\n"),
+	}
+	records[0].Path = "a.md"
+	records[1].Path = "b.md"
+
+	inferences, err := DetectSectionPatterns(records, 0.75)
+	if err != nil {
+		t.Fatalf("below-threshold family returned an error: %v", err)
+	}
+	if _, ok := findSectionInference(inferences, "notes"); ok {
+		t.Fatalf("notes inference is above the threshold: %+v", inferences)
+	}
+
+	inferences, err = DetectSectionPatterns(records, 0.5)
+	want := `duplicate_full_path: duplicate body section path for family "### Notes": "a.md" (record 0), body.section["## Parent"]["### Notes"] (section ordinals 1, 2)`
+	if err == nil || err.Error() != want {
+		t.Fatalf("error = %v, want %q", err, want)
+	}
+	if inferences != nil {
+		t.Fatalf("inferences = %+v, want nil", inferences)
 	}
 }
 

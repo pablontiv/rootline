@@ -149,7 +149,11 @@ Use these instead of hand-rolling `WalkUp` + `entries[0]` indexing in new comman
 - `source` — a logical body extraction directive when the field has one
 - `defined_in` — the physical `.stem` that declares the field
 
-A source-backed field uses a real type plus `source: body.section["## Heading"]`; frontmatter is an override. Child omission inherits the stable source binding. `new` and `migrate --scaffold` materialize missing required sections in lexical heading order using a non-empty default or `<!-- TODO -->`.
+A source-backed field uses a real type plus a source such as `body.section["## Heading"]`. Each selector component contains one to six `#` characters, one space, and the exact parsed heading text. The `#` characters encode only the heading level. They do not encode the original Markdown form. An ATX heading `## Notes ##` uses `body.section["## Notes"]`. The selector `body.section["## Notes ##"]` identifies literal parsed text `Notes ##`. Setext headings use the same form. A multiline Setext heading uses an escaped `\n` in the quoted text.
+
+A qualified selector can use `body.section["## Parent"]["### Notes"]`. Its components must be contiguous. The selector matches a contiguous suffix of the heading path. More than one match is ambiguous. Frontmatter is an override. Child omission inherits the stable source binding. Inference preserves the parsed level and text, not the original ATX or Setext form.
+
+`new` and `migrate --scaffold` materialize missing required simple selectors in lexical heading order. They use ATX or Setext syntax that preserves the level and text. Setext syntax is available only for levels 1 and 2. If neither form preserves the selector, Rootline fails before it writes the affected file. The commands use a non-empty default or `<!-- TODO -->`. They do not invent ancestor headings. A missing required qualified section also stops the command before it writes the affected file.
 
 Author required section-backed fields in `.stem` like this; `defined_in` appears only in command output, not in authored declarations:
 

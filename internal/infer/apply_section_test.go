@@ -112,3 +112,28 @@ func TestApplySchemaInferences_CanonicalizesParseableSectionSource(t *testing.T)
 		t.Fatalf("source = %q, want canonical %q", got, want)
 	}
 }
+
+func TestApplySchemaInferences_PreservesHierarchicalSectionSource(t *testing.T) {
+	stemPath := writeApplyStem(t, "version: 2\nschema: {}\n")
+	input := "body.section[`# Root`][`## Parent`][`### Notes`]"
+	want := `body.section["# Root"]["## Parent"]["### Notes"]`
+	_, err := ApplySchemaInferences(stemPath, []ReportInference{{Type: "required_section", Field: "notes", SourceDirective: input}}, false)
+	if err != nil {
+		t.Fatalf("apply hierarchical source: %v", err)
+	}
+	if got := readApplyStem(t, stemPath).Schema["notes"].Extract; got != want {
+		t.Fatalf("source = %q, want %q", got, want)
+	}
+}
+
+func TestApplySchemaInferences_DistinguishesHierarchicalSectionParents(t *testing.T) {
+	stemPath := writeApplyStem(t, "version: 2\nschema:\n  notes:\n    type: string\n    source: 'body.section[\"## Parent A\"][\"### Notes\"]'\n")
+	before := string(mustReadApplyFile(t, stemPath))
+	_, err := ApplySchemaInferences(stemPath, []ReportInference{{Type: "required_section", Field: "notes", SourceDirective: `body.section["## Parent B"]["### Notes"]`}}, false)
+	if err == nil {
+		t.Fatal("expected different parents to conflict")
+	}
+	if after := string(mustReadApplyFile(t, stemPath)); after != before {
+		t.Fatalf("conflict mutated stem:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}

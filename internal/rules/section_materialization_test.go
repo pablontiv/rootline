@@ -79,6 +79,128 @@ func TestRequiredSectionMaterializations_TableContract(t *testing.T) {
 	}
 }
 
+func TestRequiredSectionMaterializations_UsesLosslessHeadingMarkdown(t *testing.T) {
+	stem := &StemFile{Schema: map[string]SchemaField{
+		"notes": {
+			Type:     "string",
+			Required: true,
+			Extract:  `body.section["## Notes #"]`,
+		},
+	}}
+	got, err := RequiredSectionMaterializations(emptyRecord(), stem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("materializations = %+v", got)
+	}
+	if got[0].Heading != "## Notes #" || got[0].MarkdownHeading() != "Notes #\n---" {
+		t.Fatalf("materialization = %+v", got[0])
+	}
+	sections := extract.ExtractSectionsFromText(got[0].MarkdownHeading())
+	want := extract.HeadingKey{Level: 2, Text: "Notes #"}
+	if len(sections) != 1 || len(sections[0].Path) != 1 || sections[0].Path[0] != want {
+		t.Fatalf("rendered heading extracted as %+v, want %+v", sections, want)
+	}
+}
+
+func TestRequiredSectionMaterializations_RejectsLossyHeading(t *testing.T) {
+	stem := &StemFile{Schema: map[string]SchemaField{
+		"notes": {
+			Type:     "string",
+			Required: true,
+			Extract:  `body.section["### Notes #"]`,
+		},
+	}}
+	got, err := RequiredSectionMaterializations(emptyRecord(), stem)
+	if err == nil {
+		t.Fatalf("materializations = %+v, want an error", got)
+	}
+	if !strings.Contains(err.Error(), `field "notes"`) || !strings.Contains(err.Error(), "without data loss") {
+		t.Fatalf("error = %q", err)
+	}
+}
+
+func TestRequiredSectionMaterializations_QualifiedSelectorPolicy(t *testing.T) {
+	const qualified = `body.section["## Parent"]["### Notes"]`
+	field := SchemaField{Type: "string", Required: true, Extract: qualified}
+
+	t.Run("simple required absence keeps materialization", func(t *testing.T) {
+		stem := &StemFile{Schema: map[string]SchemaField{
+			"notes": {Type: "string", Required: true, Extract: `body.section["## Notes"]`},
+		}}
+		got, err := RequiredSectionMaterializations(emptyRecord(), stem)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].Heading != "## Notes" {
+			t.Fatalf("materializations = %+v, want the simple section", got)
+		}
+	})
+
+	t.Run("qualified required presence needs no materialization", func(t *testing.T) {
+		record := &extract.Record{Frontmatter: map[string]any{}, Body: "## Parent\n\n### Notes\n\npresent\n"}
+		got, err := RequiredSectionMaterializations(record, &StemFile{Schema: map[string]SchemaField{"notes": field}})
+		if err != nil || len(got) != 0 {
+			t.Fatalf("materializations = %+v, error = %v; want no materialization", got, err)
+		}
+	})
+
+	t.Run("qualified optional absence needs no materialization", func(t *testing.T) {
+		field.Required = false
+		got, err := RequiredSectionMaterializations(emptyRecord(), &StemFile{Schema: map[string]SchemaField{"notes": field}})
+		if err != nil || len(got) != 0 {
+			t.Fatalf("materializations = %+v, error = %v; want no materialization", got, err)
+		}
+	})
+
+	t.Run("qualified required absence returns field and canonical selector", func(t *testing.T) {
+		field.Required = true
+		got, err := RequiredSectionMaterializations(emptyRecord(), &StemFile{Schema: map[string]SchemaField{"notes": field}})
+		if err == nil {
+			t.Fatalf("expected an error, got materializations %+v", got)
+		}
+		if !strings.Contains(err.Error(), `field "notes"`) || !strings.Contains(err.Error(), qualified) {
+			t.Fatalf("error = %q, want field and canonical selector", err)
+		}
+	})
+
+	t.Run("frontmatter presence has precedence over an ambiguous selector", func(t *testing.T) {
+		record := &extract.Record{
+			Frontmatter: map[string]any{"notes": "override"},
+			Body:        "## Parent\n\n### Notes\n\nfirst\n\n## Parent\n\n### Notes\n\nsecond\n",
+		}
+		got, err := RequiredSectionMaterializations(record, &StemFile{Schema: map[string]SchemaField{"notes": field}})
+		if err != nil || len(got) != 0 {
+			t.Fatalf("materializations = %+v, error = %v; want frontmatter to satisfy the field", got, err)
+		}
+	})
+}
+
+func TestRequiredSectionMaterializations_IneligibleSelectorAmbiguityNeedsNoResolution(t *testing.T) {
+	record := &extract.Record{
+		Frontmatter: map[string]any{},
+		Body:        "## Parent A\n\n### Notes\n\nfirst\n\n## Parent B\n\n### Notes\n\nsecond\n",
+	}
+	tests := []struct {
+		name  string
+		field SchemaField
+	}{
+		{"optional field", SchemaField{Type: "string", Extract: `body.section["### Notes"]`}},
+		{"severity off", SchemaField{Type: "string", Required: true, Severity: "off", Extract: `body.section["### Notes"]`}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stem := &StemFile{Schema: map[string]SchemaField{"notes": tt.field}}
+			got, err := RequiredSectionMaterializations(record, stem)
+			if err != nil || len(got) != 0 {
+				t.Fatalf("materializations = %+v, error = %v; want no materialization", got, err)
+			}
+		})
+	}
+}
+
 func TestRequiredSectionMaterializations_OrdersByHeadingThenField(t *testing.T) {
 	stem := &StemFile{Schema: map[string]SchemaField{
 		"gamma": {Type: "string", Required: true, Extract: `body.section["## Shared"]`, Default: "same"},

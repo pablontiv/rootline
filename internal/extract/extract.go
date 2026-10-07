@@ -58,7 +58,8 @@ type ExtractionError struct {
 }
 
 // MarkdownExtractor extracts YAML frontmatter from Markdown files.
-// Set ParseAST to false to skip goldmark AST parsing (default: true).
+// ParseAST controls whether Extract retains the Goldmark AST in Record.AST.
+// Section extraction can use a transient AST when ParseAST is false.
 type MarkdownExtractor struct {
 	ParseAST *bool
 }

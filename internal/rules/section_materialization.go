@@ -9,9 +9,17 @@ import (
 )
 
 type SectionMaterialization struct {
-	Field   string
-	Heading string
-	Content string
+	Field           string
+	Heading         string
+	RenderedHeading string
+	Content         string
+}
+
+func (m SectionMaterialization) MarkdownHeading() string {
+	if m.RenderedHeading != "" {
+		return m.RenderedHeading
+	}
+	return m.Heading
 }
 
 func RequiredSectionMaterializations(record *extract.Record, effective *StemFile) ([]SectionMaterialization, error) {
@@ -51,13 +59,10 @@ func RequiredSectionMaterializations(record *extract.Record, effective *StemFile
 	out := make([]SectionMaterialization, 0)
 	for _, name := range fields {
 		field := local.Schema[name]
-		if !field.Required || field.Extract == "" {
+		if !field.Required || !requiredCheckApplies(record, &local, name, field) {
 			continue
 		}
-		if !requiredCheckApplies(record, &local, name, field) {
-			continue
-		}
-		if field.Type != "string" {
+		if field.Extract == "" || field.Type != "string" {
 			continue
 		}
 		source, err := extract.ParseBodySource(field.Extract)
@@ -74,11 +79,26 @@ func RequiredSectionMaterializations(record *extract.Record, effective *StemFile
 		if present {
 			continue
 		}
+		if len(source.Selector) > 1 {
+			canonical, err := extract.CanonicalSectionSelectorSource(source.Selector)
+			if err != nil {
+				return nil, err
+			}
+			return nil, fmt.Errorf("cannot materialize required field %q: qualified section selector %s is missing", name, canonical)
+		}
+		renderedHeading, err := extract.MaterializeHeading(source.Selector[0])
+		if err != nil {
+			return nil, fmt.Errorf("cannot materialize required field %q: %w", name, err)
+		}
 		content := field.Default
 		if content == "" {
 			content = "<!-- TODO -->"
 		}
-		out = append(out, SectionMaterialization{Field: name, Heading: source.Heading, Content: content})
+		materialization := SectionMaterialization{Field: name, Heading: source.Heading, Content: content}
+		if renderedHeading != source.Heading {
+			materialization.RenderedHeading = renderedHeading
+		}
+		out = append(out, materialization)
 	}
 
 	sort.Slice(out, func(i, j int) bool {

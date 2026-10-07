@@ -356,7 +356,7 @@ func canonicalSectionDirective(directive string) (string, error) {
 	if source.Kind != extract.BodySourceSection {
 		return "", fmt.Errorf("source_directive must be a body section")
 	}
-	return extract.CanonicalSectionSource(source.Heading)
+	return extract.CanonicalSectionSelectorSource(source.Selector)
 }
 
 func existingFieldMatchesSectionIntent(sf rules.SchemaField, source string) bool {
