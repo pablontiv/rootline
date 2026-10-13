@@ -36,6 +36,13 @@ Run `just --list` to see all available recipes. Key ones:
 | `just fmt` | Auto-format code |
 | `just validate` | Validate docs/roadmap with rootline |
 | `just fix-docs` | Fix and propagate doc aggregates |
+| `just test-install` | Offline installer tests (PowerShell when available) |
+| `just dagu-bootstrap` / `just dagu-version` | Bootstrap / report pinned Dagu v2.19.2 |
+| `just dagu-validate` | Validate both local pilot DAGs |
+| `just dagu-start RUN_ID` | Run the local pilot in safe default shadow mode |
+| `just dagu-retry RUN_ID STEP` | Retry a named failed pilot step using stored parameters |
+| `just dagu-recover RUN_ID SPACE_ID` | Recover only the exact owner's local resources |
+| `just test-dagu` | Run the pilot's offline fault/contract tests |
 
 ## Workflow
 
@@ -45,6 +52,17 @@ Run `just --list` to see all available recipes. Key ones:
 4. Run `just check` and `just test`
 5. Commit using [Conventional Commits](https://www.conventionalcommits.org/)
 6. Open a Pull Request
+
+### Optional local Dagu pilot
+
+The [Dagu pilot](docs/dagu.md) runs the full local gate in an isolated external
+worktree. Start with `just dagu-start my-run`; the default `shadow` mode never
+pushes, creates a PR, publishes status, or merges. Explicit `pr` and
+human-approved `merge` modes are opt-in; both wait for all hosted CI and
+bind its evidence to the tested SHA before approval. Read the prerequisites,
+exact-SHA evidence contract, and recovery instructions before using either forge
+mode. Local macOS results do not replace hosted Linux/Windows checks; hosted CI
+and release workflows are unchanged.
 
 ## Releasing
 

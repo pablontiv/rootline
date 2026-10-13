@@ -1,0 +1,6 @@
+# No implicit .env ingestion, parallel checks, background commands, or schedules.
+dotenv: []
+shell: bash
+max_active_steps: 1
+hist_retention_days: 90
+max_clean_up_time_sec: 120

@@ -1,0 +1,14 @@
+# DAGU_HOME is exported by the tracked .workspace/dagu/bin/dagu wrapper.
+host: 127.0.0.1
+port: 8080
+check_updates: false
+skip_examples: true
+terminal:
+  enabled: false
+auth:
+  mode: builtin
+paths:
+  dags_dir: "${DAGU_HOME}/dags"
+  log_dir: "${DAGU_HOME}/logs"
+  data_dir: "${DAGU_HOME}/data"
+  base_config: "${DAGU_HOME}/base.yaml"
