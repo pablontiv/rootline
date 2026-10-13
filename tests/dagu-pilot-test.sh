@@ -14,9 +14,31 @@ fail() { printf 'dagu-pilot-test: %s\n' "$*" >&2; exit 1; }
 expect_failure() { if "$@" >"$TMP/expected-failure.log" 2>&1; then fail "unexpected success: $*"; fi; }
 assert_absent() { [[ ! -e "$1" ]] || fail "unexpected resource: $1"; }
 line_count() { wc -l < "$1" | tr -d ' '; }
-mkdir -p "$TMP/repo/.workspace/dagu/scripts" "$TMP/stubs" "$TMP/stub-state"
+mkdir -p "$TMP/repo/.workspace/dagu/scripts" "$TMP/repo/.workspace/dagu/bin" "$TMP/stubs" "$TMP/stub-state"
 cp "$SOURCE"/.workspace/dagu/scripts/*.sh "$TMP/repo/.workspace/dagu/scripts/"
 printf '.workspace/dagu/data/\n.workspace/dagu/logs/\n' > "$TMP/repo/.gitignore"
+# Simulate the feature DAG offline, keeping execution and logical identity separate.
+cat > "$TMP/repo/.workspace/dagu/bin/dagu" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$@" > "$STUB_STATE/launch"
+[[ $# == 9 && "$1" == start && "$2" == --run-id && "$5" == -- ]] || exit 97
+[[ "$3" != "${7#RUN_ID=}" ]] || exit 98
+if [[ -f "$STUB_STATE/fail-launch" ]]; then exit 70; fi
+space=${6#SPACE_ID=} run=${7#RUN_ID=} mode=${8#MODE=}
+export ISSUE_NUMBER=${9#ISSUE_NUMBER=}
+scripts="$(dirname "$0")/../scripts"
+trap 'bash "$scripts/cleanup.sh" "$space" "$run" >/dev/null' EXIT
+bash "$scripts/sync.sh" "$space" "$run" >/dev/null
+for phase in tidy-clean check test coverage-check test-install validate govulncheck gitleaks; do
+    bash "$scripts/check.sh" "$space" "$run" "$phase" >/dev/null
+done
+if [[ "$mode" != shadow ]]; then
+    for action in pr status ci; do bash "$scripts/forge.sh" "$space" "$run" "$action" >/dev/null; done
+fi
+if [[ "$mode" == merge ]]; then bash "$scripts/forge.sh" "$space" "$run" merge >/dev/null; fi
+STUB
+chmod +x "$TMP/repo/.workspace/dagu/bin/dagu"
 printf 'fixture\n' > "$TMP/repo/record"
 git init --bare --initial-branch=master "$TMP/remote.git" >/dev/null
 git -C "$TMP/repo" init --initial-branch=master >/dev/null
@@ -209,6 +231,7 @@ chmod +x "$TMP/repo/.git/hooks/pre-push"
 rm "$TMP/repo/.git/hooks/pre-push"
 [[ "$(git -C "$TMP/repo" ls-remote origin refs/heads/dagu/pilot/one | cut -f1)" == "$SHA" ]] || fail 'existing PR branch did not fast-forward to tested SHA'
 rm "$STUB_STATE/pr" "$STUB_STATE/pr-state"
+rm "$STATE/pr" # Reset this synthetic pre-existing PR fixture before creation tests.
 git -C "$TMP/repo" push origin :refs/heads/dagu/pilot/one >/dev/null
 # Failure after server-side creation must look up and reuse the PR next time.
 touch "$STUB_STATE/fail-create-response"
@@ -222,6 +245,105 @@ expect_failure env ISSUE_NUMBER=262 "$SCRIPTS/forge.sh" pilot one status
 touch "$STUB_STATE/fail-ci"
 expect_failure "$SCRIPTS/forge.sh" pilot one ci
 assert_absent "$STATE/ci.sha"
+# A fresh execution must retire a cleaned, PR-bound failed CI attempt, not
+# retest a changed commit under old exact-SHA checkpoints.
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 pr pilot 261
+assert_absent "$TMP/repo/.workspace/dagu/data/rootline-attempts/pilot/one/attempt-2"
+"$SCRIPTS/cleanup.sh" pilot one >/dev/null
+cp -R "$STATE" "$TMP/prior-attempt"
+ARCHIVES="$TMP/repo/.workspace/dagu/data/rootline-attempts/pilot/one"
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 pr pilot 262
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 unknown pilot 261
+expect_failure "$SCRIPTS/fresh-attempt.sh" one one pr pilot 261
+printf 'wrong owner\n' > "$STATE/owner"
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 pr pilot 261
+cp "$TMP/prior-attempt/owner" "$STATE/owner"
+mv "$STATE/pr" "$STATE/pr.saved"
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 pr pilot 261
+mv "$STATE/pr.saved" "$STATE/pr"
+touch "$STATE/merged"
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 pr pilot 261
+rm "$STATE/merged"
+assert_absent "$LOCK"
+printf 'another\nowner\n' > "$LOCK"
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 pr pilot 261
+[[ "$(cat "$LOCK")" == $'another\nowner' ]] || fail 'fresh launch changed a foreign lock'
+rm "$LOCK"
+printf 'pilot\none\n' > "$LOCK"
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 pr pilot 261
+rm "$LOCK"
+for metadata in attempt previous; do
+    ln -s "$TMP/prior-attempt/owner" "$STATE/$metadata"
+    expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 pr pilot 261
+    expect_failure "$SCRIPTS/check.sh" pilot one test
+    rm "$STATE/$metadata"
+done
+mkdir -p "$ARCHIVES"
+ln -s "$TMP/prior-attempt" "$ARCHIVES/attempt-2"
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 pr pilot 261
+rm "$ARCHIVES/attempt-2"
+# A symlink in an archive ancestor is also refused, not traversed.
+mv "$ARCHIVES" "$ARCHIVES.saved"
+ln -s "$ARCHIVES.saved" "$ARCHIVES"
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 pr pilot 261
+rm "$ARCHIVES"
+mv "$ARCHIVES.saved" "$ARCHIVES"
+assert_absent "$LOCK"
+# An early launcher failure keeps the new live binding and lock, but old
+# checkpoints exist only in the append-only archive.
+touch "$STUB_STATE/fail-launch"
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 pr pilot 261
+diff -r "$TMP/prior-attempt" "$ARCHIVES/attempt-2/state" >/dev/null || fail 'prior evidence changed during archive'
+[[ "$(cat "$STATE/owner")" == "$(cat "$ARCHIVES/attempt-2/state/owner")" ]] || fail 'logical ownership changed'
+[[ "$(cat "$STATE/pr")" == 17 && "$(cat "$STATE/issue")" == 261 ]] || fail 'fresh attempt lost forge binding'
+[[ "$(cat "$STATE/attempt")" == attempt-2 && "$(cat "$STATE/previous")" == rootline-attempts/pilot/one/attempt-2/state ]] || fail 'fresh linkage missing'
+[[ "$(cat "$LOCK")" == $'pilot\none' ]] || fail 'failed launcher released owner lock'
+assert_absent "$STATE/tested.sha"; assert_absent "$STATE/evidence"; assert_absent "$STATE/phases"
+printf 'start\n--run-id\nattempt-2\n%s\n--\nSPACE_ID=pilot\nRUN_ID=one\nMODE=pr\nISSUE_NUMBER=261\n' \
+    "$TMP/repo/.workspace/dagu/dags/rootline-feature.yaml" > "$TMP/expected-launch"
+cmp "$TMP/expected-launch" "$STUB_STATE/launch" || fail 'execution ID was confused with logical owner'
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-3 pr pilot 261
+"$SCRIPTS/cleanup.sh" pilot one >/dev/null
+assert_absent "$LOCK"
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-2 pr pilot 261
+diff -r "$TMP/prior-attempt" "$ARCHIVES/attempt-2/state" >/dev/null || fail 'duplicate archive ID overwrote evidence'
+rm "$STUB_STATE/fail-launch"
+# Source changes are descendants, so the stable branch updates the same PR
+# after a completely new gate. No creation occurs during either fresh launch.
+PREVIOUS_SHA=$SHA
+printf 'fix hosted CI\n' >> "$TMP/repo/record"
+git -C "$TMP/repo" commit -am 'fix: hosted CI fixture' >/dev/null
+SHA=$(git -C "$TMP/repo" rev-parse HEAD)
+printf '%s\n' "$SHA" > "$STUB_STATE/sha"
+printf '%s\n' "$PREVIOUS_SHA" > "$STUB_STATE/pr-head-override"
+gates_before=$(line_count "$STUB_STATE/gates")
+touch "$STUB_STATE/fail-ci"
+expect_failure "$SCRIPTS/fresh-attempt.sh" one attempt-3 pr pilot 261
+[[ "$(cat "$STATE/tested.sha")" == "$SHA" && "$(cat "$STATE/evidence")" == "$SHA" ]] || fail 'fresh gate did not bind new source'
+[[ "$(line_count "$STUB_STATE/gates")" -gt "$gates_before" ]] || fail 'fresh gate reused old checkpoints'
+[[ "$(cat "$STATE/pr")" == 17 && "$(line_count "$STUB_STATE/creates")" == 1 ]] || fail 'fresh attempt created another PR'
+[[ "$(git -C "$TMP/repo" ls-remote origin refs/heads/dagu/pilot/one | cut -f1)" == "$SHA" ]] || fail 'stable PR branch did not advance'
+git -C "$TMP/repo" merge-base --is-ancestor "$PREVIOUS_SHA" "$SHA" || fail 'fresh PR update was not a descendant'
+assert_absent "$LOCK"; assert_absent "$WORKTREE"
+[[ -f "$STATE/cleaned" ]] || fail 'failed fresh CI did not run terminal cleanup'
+diff -r "$TMP/prior-attempt" "$ARCHIVES/attempt-2/state" >/dev/null || fail 'subsequent attempt changed archived evidence'
+# The existing forge guard still refuses a divergent PR head before push.
+side_sha=$(printf 'fix: divergent fixture\n' | git -C "$TMP/repo" commit-tree "$SHA^{tree}" -p "$BASE_SHA")
+git -C "$TMP/repo" push --force origin "$side_sha:refs/heads/dagu/pilot/one" >/dev/null
+printf '%s\n' "$side_sha" > "$STUB_STATE/pr-head-override"
+remote_before=$(git -C "$TMP/repo" ls-remote origin refs/heads/dagu/pilot/one)
+expect_failure "$SCRIPTS/forge.sh" pilot one pr
+[[ "$(git -C "$TMP/repo" ls-remote origin refs/heads/dagu/pilot/one)" == "$remote_before" ]] || fail 'divergent PR was pushed'
+rm "$STUB_STATE/pr-head-override"
+git -C "$TMP/repo" push --force origin "$SHA:refs/heads/dagu/pilot/one" >/dev/null
+"$SCRIPTS/cleanup.sh" pilot one >/dev/null
+expect_failure env ISSUE_NUMBER=262 "$SCRIPTS/forge.sh" pilot one status
+"$SCRIPTS/cleanup.sh" pilot one >/dev/null
+printf '18\n' > "$STATE/pr"
+expect_failure "$SCRIPTS/forge.sh" pilot one pr
+printf '17\n' > "$STATE/pr"
+"$SCRIPTS/cleanup.sh" pilot one >/dev/null
+assert_absent "$LOCK"
 touch "$STUB_STATE/no-hosted-ci"
 expect_failure "$SCRIPTS/forge.sh" pilot one ci
 rm "$STUB_STATE/no-hosted-ci"
@@ -236,6 +358,7 @@ expect_failure "$SCRIPTS/forge.sh" pilot one merge
 assert_absent "$STUB_STATE/merges"
 "$SCRIPTS/forge.sh" pilot one status >/dev/null
 # Mutating local HEAD after the gate invalidates every checkpoint and forge action.
+"$SCRIPTS/check.sh" pilot one test >/dev/null
 printf 'late commit\n' >> "$WORKTREE/record"
 git -C "$WORKTREE" commit -am 'chore: late commit' >/dev/null
 expect_failure "$SCRIPTS/check.sh" pilot one test
@@ -277,4 +400,4 @@ rm -rf "$STALE_WORKTREE"
 "$SCRIPTS/cleanup.sh" pilot stale >/dev/null
 assert_absent "$LOCK"; assert_absent "$STALE_WORKTREE"
 if git -C "$TMP/repo" show-ref --verify --quiet refs/heads/dagu/pilot/stale; then fail 'stale registered branch leaked'; fi
-printf 'dagu-pilot-test: PASS (lock ownership, checkpoint retry, exact-SHA evidence, forge idempotency, cleanup, credential isolation, nested pre-push umask)\n'
+printf 'dagu-pilot-test: PASS (lock ownership, checkpoint retry, exact-SHA evidence, forge idempotency, archived fresh executions, cleanup, credential isolation, nested pre-push umask)\n'
