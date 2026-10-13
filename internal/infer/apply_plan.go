@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/rules"
@@ -43,12 +44,38 @@ func PlanSchemaInferences(stemPath string, inferences []ReportInference) (*Schem
 
 	inferences = normalizeSchemaInferences(inferences)
 
+	// Gap diagnostics without usable values are not mutation intents. Classify
+	// them before section conflict planning so valid same-field siblings survive.
+	result := ApplyResult{}
+	actionable := inferences[:0]
+	for _, inf := range inferences {
+		if !inf.RequiresAgent {
+			switch inf.Type {
+			case "untyped_field":
+				if strings.TrimSpace(inf.Value) == "" {
+					result.Skipped = append(result.Skipped, fmt.Sprintf("%s: %s (missing type value)", inf.Type, inf.Field))
+					continue
+				}
+			case "sequence_incomplete":
+				if strings.TrimSpace(inf.Value) == "" {
+					result.Skipped = append(result.Skipped, fmt.Sprintf("%s: %s (missing prefix:digits value)", inf.Type, inf.Field))
+					continue
+				}
+				if _, _, ok := parseSequenceInferenceValue(inf.Value); !ok {
+					result.Rejected = append(result.Rejected, fmt.Sprintf("%s: %s (invalid prefix:digits value %q)", inf.Type, inf.Field, inf.Value))
+					continue
+				}
+			}
+		}
+		actionable = append(actionable, inf)
+	}
+	inferences = actionable
+
 	sectionPlan, err := buildSectionApplyPlan(stem, inferences)
 	if err != nil {
 		return nil, err
 	}
 
-	result := ApplyResult{}
 	modified := false
 	changedFields := map[string]bool{}
 

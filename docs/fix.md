@@ -354,6 +354,13 @@ rootline schema apply --report proposals.json
 
 Data-only repairs (correct_value, add_field, etc.) are rejected visibly in `rejected[]` — use `rootline repair apply` instead.
 
+On the analyze-report path, empty or whitespace-only `untyped_field` and
+`sequence_incomplete` values are visibly deferred in `skipped[]`. Non-empty
+sequence values lacking a non-blank prefix or positive integer width are refused
+in `rejected[]`. Neither decision invents schema values or blocks valid sibling
+inferences, including same-field section bindings; both have exit status `0`
+unless another accepted operation fails. See [Consuming the Report](analyze.md#consuming-the-report).
+
 **What propose proposes is what apply writes.** Each `create_stem` proposal carries a `patch`
 field holding the complete inferred YAML, and `schema apply` writes those bytes verbatim. It does
 not re-derive the schema at apply time, so the artifact a reviewer approved is the artifact that

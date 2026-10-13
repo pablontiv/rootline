@@ -3,6 +3,7 @@ package infer
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -233,6 +234,122 @@ func TestPlanSchemaInferencesNormalizesOrderBeforeMutation(t *testing.T) {
 	}
 	if strings.Join(planA.Result.Applied, "\n") != strings.Join(planB.Result.Applied, "\n") {
 		t.Fatalf("applied actions differ by inference order:\nA=%#v\nB=%#v", planA.Result.Applied, planB.Result.Applied)
+	}
+}
+
+func TestApplySchemaInferencesNonActionableGapsPreserveValidSiblings(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		gapType  string
+		value    string
+		skipped  string
+		rejected string
+	}{
+		{name: "untyped empty", gapType: "untyped_field", skipped: "untyped_field: notes (missing type value)"},
+		{name: "untyped whitespace", gapType: "untyped_field", value: " \t\n", skipped: "untyped_field: notes (missing type value)"},
+		{name: "sequence empty", gapType: "sequence_incomplete", skipped: "sequence_incomplete: notes (missing prefix:digits value)"},
+		{name: "sequence whitespace", gapType: "sequence_incomplete", value: " \t\n", skipped: "sequence_incomplete: notes (missing prefix:digits value)"},
+		{name: "sequence missing separator", gapType: "sequence_incomplete", value: "T", rejected: `sequence_incomplete: notes (invalid prefix:digits value "T")`},
+		{name: "sequence empty prefix", gapType: "sequence_incomplete", value: ":3", rejected: `sequence_incomplete: notes (invalid prefix:digits value ":3")`},
+		{name: "sequence whitespace prefix", gapType: "sequence_incomplete", value: " :3", rejected: `sequence_incomplete: notes (invalid prefix:digits value " :3")`},
+		{name: "sequence empty digits", gapType: "sequence_incomplete", value: "T:", rejected: `sequence_incomplete: notes (invalid prefix:digits value "T:")`},
+		{name: "sequence zero digits", gapType: "sequence_incomplete", value: "T:0", rejected: `sequence_incomplete: notes (invalid prefix:digits value "T:0")`},
+		{name: "sequence negative digits", gapType: "sequence_incomplete", value: "T:-1", rejected: `sequence_incomplete: notes (invalid prefix:digits value "T:-1")`},
+		{name: "sequence nonnumeric digits", gapType: "sequence_incomplete", value: "T:bad", rejected: `sequence_incomplete: notes (invalid prefix:digits value "T:bad")`},
+		{name: "sequence extra separator", gapType: "sequence_incomplete", value: "T:3:4", rejected: `sequence_incomplete: notes (invalid prefix:digits value "T:3:4")`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, dryRun := range []bool{true, false} {
+				for _, reverse := range []bool{false, true} {
+					const original = "version: 2\nschema:\n  status:\n    type: enum\n    values: [Pending]\n  id:\n    type: sequence\n"
+					stemPath := writeApplyStem(t, original)
+					inferences := []ReportInference{
+						{Type: tc.gapType, Field: "notes", Value: tc.value},
+						{Type: "optional_section", Field: "notes", SourceDirective: `body.section["## Notes"]`},
+						{Type: "untyped_field", Field: "title", Value: "string"},
+						{Type: "sequence_incomplete", Field: "id", Value: "T:3"},
+						{Type: "enum_values", Field: "status", Value: "[Pending Done]"},
+					}
+					if reverse {
+						for i, j := 0, len(inferences)-1; i < j; i, j = i+1, j-1 {
+							inferences[i], inferences[j] = inferences[j], inferences[i]
+						}
+					}
+					result, err := ApplySchemaInferences(stemPath, inferences, dryRun)
+					if err != nil {
+						t.Fatalf("dryRun=%v reverse=%v: %v", dryRun, reverse, err)
+					}
+					want := ApplyResult{
+						Applied: []string{"add_field: notes (section)", "add_field: title (type=string)", "extend_enum: status", "sequence: id completed"},
+						DryRun:  dryRun,
+					}
+					if tc.skipped != "" {
+						want.Skipped = []string{tc.skipped}
+					}
+					if tc.rejected != "" {
+						want.Rejected = []string{tc.rejected}
+					}
+					if !reflect.DeepEqual(*result, want) {
+						t.Fatalf("dryRun=%v reverse=%v: result = %#v, want %#v", dryRun, reverse, *result, want)
+					}
+					if dryRun {
+						if got := string(mustReadApplyFile(t, stemPath)); got != original {
+							t.Fatalf("dry-run changed stem:\n%s", got)
+						}
+						continue
+					}
+					stem := readApplyStem(t, stemPath)
+					notes := stem.Schema["notes"]
+					if notes.Type != "string" || notes.Extract != `body.section["## Notes"]` || notes.Prefix != "" || notes.Digits != 0 {
+						t.Fatalf("same-field section sibling = %+v", notes)
+					}
+					if stem.Schema["title"].Type != "string" {
+						t.Fatalf("valid untyped sibling = %+v", stem.Schema["title"])
+					}
+					id := stem.Schema["id"]
+					if id.Prefix != "T" || id.Digits != 3 {
+						t.Fatalf("valid sequence sibling = %+v", id)
+					}
+					if !containsString(stem.Schema["status"].Values, "Done") {
+						t.Fatalf("valid enum sibling = %+v", stem.Schema["status"])
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestPlanSchemaInferencesNonActionableGapsLeaveOriginalUnchanged(t *testing.T) {
+	const original = "version: 2\nschema:\n  title:\n    required: true\n  id:\n    type: sequence\n"
+	stemPath := writeApplyStem(t, original)
+	plan, err := PlanSchemaInferences(stemPath, []ReportInference{
+		{Type: "untyped_field", Field: "title"},
+		{Type: "untyped_field", Field: "absent"},
+		{Type: "sequence_incomplete", Field: "id"},
+		{Type: "sequence_incomplete", Field: "id", Value: ":3"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ApplyResult{
+		Skipped: []string{
+			"sequence_incomplete: id (missing prefix:digits value)",
+			"untyped_field: absent (missing type value)",
+			"untyped_field: title (missing type value)",
+		},
+		Rejected: []string{`sequence_incomplete: id (invalid prefix:digits value ":3")`},
+	}
+	if !reflect.DeepEqual(plan.Result, want) {
+		t.Fatalf("result = %#v, want %#v", plan.Result, want)
+	}
+	if plan.Modified || string(plan.Content) != original {
+		t.Fatalf("non-actionable plan changed original: modified=%v\n%s", plan.Modified, plan.Content)
+	}
+	if err := ApplySchemaInferencePlan(plan); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(mustReadApplyFile(t, stemPath)); got != original {
+		t.Fatalf("non-actionable apply changed original:\n%s", got)
 	}
 }
 
