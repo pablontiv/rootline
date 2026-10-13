@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 - `schema apply` now rejects invalid prospective `.stem` hierarchies before publishing actions or writing files, while preserving version-1 `stem_health[]` diagnostics and atomic per-file `.stem` replacement for accepted writes.
 - `schema apply` now converges proposal and analyze writes on a bound physical target: internal aliases are supported, escaping aliases are rejected, malformed external governing ancestors surface as structured relative `yaml-valid` diagnostics in `stem_health[]`, and schema proposal targets must use the literal basename `.stem` so case-insensitive basename aliases are rejected before resolution.
 - Hosted CI pins golangci-lint v2.14.0 so linting remains compatible with the Go 1.27 export-data format selected by the stable toolchain.
+- Local Dagu scripts now normalize `umask 022` at their shared boundary, so forge pushes and nested Git hooks use the same file-mode policy as direct gate phases even when started under `umask 077`.
 
 ### Added
 

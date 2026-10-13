@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Offline pilot fault tests: real local Git topology, stubbed gate/forge commands.
 set -euo pipefail
+# Exercise every script from a restrictive caller, not only direct gate phases.
+umask 077
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX GIT_NAMESPACE GIT_CEILING_DIRECTORIES GIT_DISCOVERY_ACROSS_FILESYSTEM
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 SOURCE=$(cd "$(dirname "$0")/.." && pwd -P)
@@ -193,7 +195,18 @@ git -C "$TMP/repo" push origin "$BASE_SHA:refs/heads/dagu/pilot/one" >/dev/null
 touch "$STUB_STATE/pr"
 printf 'OPEN\n' > "$STUB_STATE/pr-state"
 printf '%s\n' "$BASE_SHA" > "$STUB_STATE/pr-head-override"
+# A real nested Git hook must inherit forge's policy before it can run checks.
+cat > "$TMP/repo/.git/hooks/pre-push" <<'HOOK'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$(umask)" > "$STUB_STATE/pre-push-umask"
+[[ "$(umask)" == 0022 ]] || { echo 'forge pre-push hook did not normalize umask' >&2; exit 93; }
+HOOK
+chmod +x "$TMP/repo/.git/hooks/pre-push"
+[[ "$(umask)" == 0077 ]] || fail 'forge regression requires a restrictive caller'
 "$SCRIPTS/forge.sh" pilot one pr >/dev/null
+[[ "$(cat "$STUB_STATE/pre-push-umask")" == 0022 ]] || fail 'nested pre-push hook did not inherit normalized umask'
+rm "$TMP/repo/.git/hooks/pre-push"
 [[ "$(git -C "$TMP/repo" ls-remote origin refs/heads/dagu/pilot/one | cut -f1)" == "$SHA" ]] || fail 'existing PR branch did not fast-forward to tested SHA'
 rm "$STUB_STATE/pr" "$STUB_STATE/pr-state"
 git -C "$TMP/repo" push origin :refs/heads/dagu/pilot/one >/dev/null
@@ -264,4 +277,4 @@ rm -rf "$STALE_WORKTREE"
 "$SCRIPTS/cleanup.sh" pilot stale >/dev/null
 assert_absent "$LOCK"; assert_absent "$STALE_WORKTREE"
 if git -C "$TMP/repo" show-ref --verify --quiet refs/heads/dagu/pilot/stale; then fail 'stale registered branch leaked'; fi
-printf 'dagu-pilot-test: PASS (lock ownership, checkpoint retry, exact-SHA evidence, forge idempotency, cleanup, credential isolation)\n'
+printf 'dagu-pilot-test: PASS (lock ownership, checkpoint retry, exact-SHA evidence, forge idempotency, cleanup, credential isolation, nested pre-push umask)\n'

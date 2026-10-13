@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-umask 022
 # Remove forge credentials before loading shared code or launching any check.
 unset GH_TOKEN GITHUB_TOKEN
 source "$(dirname "$0")/lib.sh"

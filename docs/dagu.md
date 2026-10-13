@@ -119,9 +119,10 @@ Every normal phase uses the repository's selected Go toolchain; the vulnerabilit
 phase alone pins patched `go1.27.2`. Every phase verifies a clean worktree and an
 unchanged tested SHA. Final evidence is bound to that exact SHA; a branch name,
 old log, or partially completed gate is not sufficient proof.
-Check phases normalize the process umask to `0022`, so file-mode assertions do
-not depend on the shell that started Dagu. They also run with **GH_TOKEN and
-GITHUB_TOKEN unset**. Implicit dotenv loading is disabled. This isolates those
+All workflow scripts normalize the process umask to `0022` at their shared
+boundary, including forge actions and nested `git push` hooks, so file-mode
+assertions do not depend on the shell that started Dagu. Check phases also run
+with **GH_TOKEN and GITHUB_TOKEN unset**. Implicit dotenv loading is disabled. This isolates those
 GitHub credential variables, not every credential mechanism on the host (for
 example Git credential helpers or SSH agents); do not treat the pilot as a
 general sandbox.
