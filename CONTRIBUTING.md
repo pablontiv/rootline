@@ -57,12 +57,13 @@ Run `just --list` to see all available recipes. Key ones:
 
 The [Dagu pilot](docs/dagu.md) runs the full local gate in an isolated external
 worktree. Start with `just dagu-start my-run`; the default `shadow` mode never
-pushes, creates a PR, publishes status, or merges. Explicit `pr` and
-human-approved `merge` modes are opt-in; both wait for all hosted CI and
-bind its evidence to the tested SHA before approval. Read the prerequisites,
-exact-SHA evidence contract, and recovery instructions before using either forge
-mode. Local macOS results do not replace hosted Linux/Windows checks; hosted CI
-and release workflows are unchanged.
+pushes, creates a PR, publishes status, or merges. Explicit `pr` and `merge`
+modes are opt-in; both wait for all hosted CI and bind its evidence to the
+tested SHA. In `merge` mode, Dagu revalidates that evidence and automatically
+squash-merges the exact tested SHA. Read the prerequisites, exact-SHA evidence
+contract, and recovery instructions before using either forge mode. Local macOS
+results do not replace hosted Linux/Windows checks; hosted CI and release
+workflows are unchanged.
 
 ## Releasing
 

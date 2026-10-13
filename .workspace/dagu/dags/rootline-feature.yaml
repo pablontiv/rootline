@@ -91,10 +91,6 @@ steps:
     retry_policy:
       limit: 2
       interval_sec: 10
-    approval:
-      prompt: 'Review the PR, successful hosted CI, local status, and tested SHA shown above. Enter that exact tested SHA as APPROVED_SHA and your name as APPROVED_BY. Merge mode permits a guarded squash merge after this gate; PR mode stops without merging.'
-      input: [APPROVED_SHA, APPROVED_BY]
-      required: [APPROVED_SHA, APPROVED_BY]
   - id: merge
     depends: wait_ci
     preconditions:
@@ -106,8 +102,7 @@ steps:
     retry_policy:
       limit: 2
       interval_sec: 5
-# Waiting for native approval is not terminal and must retain owned resources.
-# Exit covers success, exhausted failure/rejection, and explicit abort.
+# Exit covers success, exhausted failure, and explicit abort.
 handler_on:
   exit:
     run: bash .workspace/dagu/scripts/cleanup.sh "$SPACE_ID" "$RUN_ID"

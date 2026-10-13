@@ -29,29 +29,18 @@ lookup_pr() {
         [[ "$PR" =~ ^[1-9][0-9]*$ && "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || fail 'invalid PR response'
     fi
 }
-approval_valid() {
-    [[ -f "$STATE/approval.owner" && -f "$STATE/approval.sha" && -f "$STATE/approval.by" ]] &&
-        [[ "$(cat "$STATE/approval.owner")" == "$RECORD" ]] &&
-        [[ "$(cat "$STATE/approval.sha")" == "$SHA" ]] &&
-        [[ -n "$(cat "$STATE/approval.by")" ]]
-}
-record_approval() {
-    approval_valid && return
-    local by_pattern='^[A-Za-z0-9][A-Za-z0-9._@ -]{0,127}$'
-    [[ "${APPROVED_SHA:-}" == "$SHA" && "${APPROVED_BY:-}" =~ $by_pattern ]] ||
-        fail 'native human approval must name this exact tested SHA and a valid operator'
-    atomic_write "$STATE/approval.owner" "$RECORD"
-    atomic_write "$STATE/approval.sha" "$SHA"
-    atomic_write "$STATE/approval.by" "$APPROVED_BY"
-    approval_valid || fail 'approval evidence was not persisted'
-}
-load_approval() {
-    approval_valid || fail 'missing native human approval for this owner and tested SHA'
-}
 ci_evidence_valid() {
     [[ -f "$STATE/ci.owner" && -f "$STATE/ci.sha" && -s "$STATE/ci.checks" ]] &&
         [[ "$(cat "$STATE/ci.owner")" == "$RECORD" ]] &&
         [[ "$(cat "$STATE/ci.sha")" == "$SHA" ]]
+}
+local_status() {
+    gh api "repos/$FORGE_REPO/commits/$SHA/status" \
+        --jq '[.statuses[] | select(.context == "dagu/rootline-local")][0].state // ""'
+}
+verify_local_status() {
+    [[ "$(local_status)" == success ]] ||
+        fail 'merge blocked: local gate status is missing or not successful'
 }
 verify_hosted_ci() {
     [[ -n "$PR" && "$HEAD_SHA" == "$SHA" && ( "$PR_STATE" == OPEN || "$PR_STATE" == MERGED ) ]] ||
@@ -105,8 +94,7 @@ case "$ACTION" in
         ;;
     status)
         [[ -n "$PR" && "$HEAD_SHA" == "$SHA" ]] || fail 'PR missing or stale'
-        existing=$(gh api "repos/$FORGE_REPO/commits/$SHA/status" \
-            --jq '[.statuses[] | select(.context == "dagu/rootline-local")][0].state // ""')
+        existing=$(local_status)
         if [[ "$existing" != success ]]; then
             gh api --method POST "repos/$FORGE_REPO/statuses/$SHA" \
                 -f state=success -f context=dagu/rootline-local \
@@ -120,14 +108,12 @@ case "$ACTION" in
         ;;
     merge)
         [[ -n "$PR" ]] || fail 'run PR is missing'
-        # Re-query immediately before the consequential action, not from cached PR state.
+        # Re-query the PR before evaluating the local merge preconditions.
         row=$(gh pr view "$PR" --repo "$FORGE_REPO" --json headRefOid,state \
             --jq '[.headRefOid, .state] | @tsv')
         IFS=$'\t' read -r HEAD_SHA PR_STATE <<< "$row"
         completed_evidence
         [[ "$HEAD_SHA" == "$SHA" ]] || fail 'merge blocked: PR head differs from tested SHA'
-        verify_hosted_ci
-        record_approval
         [[ -f "$STATE/base.sha" ]] || fail 'missing primary base SHA'
         BASE_SHA=$(cat "$STATE/base.sha")
         [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || fail 'invalid primary base SHA'
@@ -142,6 +128,19 @@ case "$ACTION" in
         case "$PR_STATE" in
             OPEN)
                 [[ "$CURRENT_SHA" == "$BASE_SHA" ]] || fail 'primary master changed after the run started'
+                lookup_pr
+                [[ -n "$PR" && "$HEAD_SHA" == "$SHA" && "$PR_STATE" == OPEN ]] ||
+                    fail 'merge blocked: PR is not open at the tested SHA'
+                verify_hosted_ci
+                verify_local_status
+                [[ "$HEAD_SHA" == "$SHA" && "$PR_STATE" == OPEN ]] ||
+                    fail 'merge blocked: PR changed during final checks'
+                [[ "$(git symbolic-ref --quiet --short HEAD)" == master ]] ||
+                    fail 'primary checkout moved off master'
+                [[ -z "$(git status --porcelain --untracked-files=all)" ]] ||
+                    fail 'primary checkout became dirty before merge'
+                [[ "$(git rev-parse HEAD)" == "$BASE_SHA" ]] ||
+                    fail 'primary master changed before merge'
                 gh pr merge "$PR" --repo "$FORGE_REPO" --squash --match-head-commit "$SHA"
                 row=$(gh pr view "$PR" --repo "$FORGE_REPO" --json headRefOid,state \
                     --jq '[.headRefOid, .state] | @tsv')

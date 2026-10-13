@@ -32,9 +32,8 @@ the cached executable against a tracked platform checksum on every invocation.
 **DAGU_HOME always resolves to this checkout's absolute `.workspace/dagu`
 directory**, not a user's global Dagu home. The wrapper exports it before every
 command. Tracked configuration and DAG definitions stay in `.workspace/dagu/`;
-only `data/` and `logs/` there are ignored. Shadow mode needs no background
-server. Forge modes use Dagu's local server/Web UI to resolve durable approvals;
-run the server explicitly in the foreground, never as an unattended background job.
+only `data/` and `logs/` there are ignored. Neither shadow nor forge modes need
+a background server.
 
 ## Modes and commands
 
@@ -53,10 +52,10 @@ just dagu-start pilot-004 merge team-a 261
   or merge. This is the default, including when MODE is omitted.
 - `pr` additionally pushes the tested branch, finds or creates its PR, publishes
   `dagu/rootline-local` for the exact tested commit, waits for every reported
-  hosted workflow check, then stops at durable human approval without merging.
-- `merge` includes the same PR and hosted-CI flow, then performs a guarded
-  squash merge after approval. It is never the default. Both forge modes require
-  a positive GitHub issue number; the generated PR title uses the tested commit
+  hosted workflow check, and stops without merging.
+- `merge` includes the same PR and hosted-CI flow, then automatically performs a
+  guarded squash merge. It is never the default. Both forge modes require a
+  positive GitHub issue number; the generated PR title uses the tested commit
   subject and its body closes that issue.
 
 The pilot gates committed source; it does not author changes. `sync` requires the
@@ -127,7 +126,7 @@ GitHub credential variables, not every credential mechanism on the host (for
 example Git credential helpers or SSH agents); do not treat the pilot as a
 general sandbox.
 
-## Approval and forge behavior
+## Automatic merge and forge behavior
 
 PR lookup happens before creation, so retries reuse the existing PR. Publishing
 `dagu/rootline-local` is skipped when that exact commit already has a successful
@@ -137,45 +136,23 @@ that evidence, and records each passing or intentionally skipped check plus the
 exact SHA. A PR with no hosted check fails closed. Push, PR, status, CI wait, and
 merge operations are designed to be idempotent.
 
-Forge modes attach Dagu's native durable `approval` gate to `wait_ci`. That step
-first waits for all hosted CI and persists exact-SHA evidence, then waits;
-shadow skips it. Review the owner, PR URL, local gate, hosted CI, exact tested
-SHA, and requested mode in the step's stdout before approving it. Enter that
-exact SHA as `APPROVED_SHA` and your operator name as `APPROVED_BY`. In `pr` mode
-approval ends the run without merging. In `merge` mode the downstream merge
-persists an owner- and SHA-bound approval record before its guarded merge.
-Approval is not a failed check: do not use step retry or precondition bypass as
-a substitute.
+After `wait_ci` persists successful exact-SHA evidence, `pr` mode ends without
+merging. In `merge` mode, the downstream merge runs automatically. Starting a
+run in `merge` mode authorizes that guarded action; use `pr` mode when review
+must stop before merge.
 
-Start the scheduler and local Web UI in a separate terminal, keeping it in the
-foreground and bound to localhost:
-
-```sh
-.workspace/dagu/bin/dagu start-all --host=127.0.0.1
-```
-
-Builtin authentication is enabled. On the first server start, create the local
-administrator through `/setup` before starting a forge run; its state stays in
-the ignored repository-local data directory. Do not switch forge operation to
-unauthenticated mode.
-
-Open `http://127.0.0.1:8080`, select the exact run, and review its waiting
-`wait_ci` approval. Keep the foreground service running while the approved run
-resumes; stop it when finished.
-See the [Dagu CLI reference](https://docs.dagu.sh/getting-started/cli) for server operations.
-
-Immediately before merging, the forge action rechecks all hosted CI and
-that the PR head equals the evidence's tested SHA, then uses:
+Immediately before merging, the forge action rechecks all hosted CI, the
+successful `dagu/rootline-local` commit status, and that the PR head equals the
+evidence's tested SHA, then uses:
 
 ```text
 gh pr merge --squash --match-head-commit <tested-sha>
 ```
 
-A moved PR head or failed/pending hosted check cannot reuse the old
-approval/evidence. A human approval does not bypass hosted checks, branch
-protection, or GitHub permissions. After a
-successful squash, the workflow verifies that the primary checkout is still
-clean and unchanged from its recorded starting commit, then realigns local
+A moved PR head, missing local success status, or failed/pending hosted check
+cannot reuse old evidence. GitHub branch protection and permissions still apply.
+After a successful squash, the workflow verifies that the primary checkout is
+still clean and unchanged from its recorded starting commit, then realigns local
 `master` to `origin/master`; this removes the pre-squash local commit topology
 without discarding uncommitted work.
 
@@ -195,7 +172,7 @@ successful upstream gate work from rerunning. A changed source SHA or a dirty
 worktree is not recoverable evidence: commit the intended source change and
 start a fresh run ID instead.
 
-Normal success, exhausted failure or rejection, and abort clean up the owned
+Normal success, exhausted failure, and abort clean up the owned
 local worktree, branch, and lock. After a process crash or interrupted cleanup,
 `dagu-recover` invokes
 `cleanup.sh SPACE_ID RUN_ID`; it must refuse to release another owner's lock or
@@ -206,14 +183,13 @@ Advance deliberately. Phase 1 requires five successful `shadow` runs plus
 restart/checkpoint, injected E2E crash, lock-contention, stale-SHA, and
 post-creation network-failure scenarios. Phase 2 may create one controlled
 `docs` or `chore` PR, publish `dagu/rootline-local`, wait for all hosted CI, and
-stop at the human gate. Only phase 3 may select `merge`, after the prior evidence
-has been reviewed and repository rules protect the PR merge path. `just
-test-dagu` exercises the offline
-fault contracts; real GitHub permissions, protections, and merge behavior still
-need deliberate live evaluation. Do not enable forge modes based solely on an
-offline test result.
+finish in `pr` mode without merging. Only phase 3 may select `merge`, after the
+prior evidence has been reviewed and repository rules protect the PR merge path.
+`just test-dagu` exercises the offline fault contracts; real GitHub permissions,
+protections, and merge behavior still need deliberate live evaluation. Do not
+enable forge modes based solely on an offline test result.
 
 The pilot is local and serialized by its Git lock. It is not a replacement for
-hosted platform coverage, a distributed worker system, or an unattended merge
-service. Forge approvals are resolved through Dagu's durable local Web UI gates,
-not by treating an intentional failure and retry as approval.
+hosted platform coverage or a distributed worker system. Automatic merge is
+limited to an explicit `merge` run and remains fail-closed on stale or incomplete
+evidence.
