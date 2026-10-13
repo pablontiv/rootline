@@ -108,3 +108,32 @@ validate:
 # Fix docs (propagate aggregates)
 fix-docs:
     rootline fix --all docs/roadmap/
+
+# Bootstrap the pinned local Dagu binary without starting a run
+dagu-bootstrap:
+    .workspace/dagu/bin/dagu version
+
+# Report the pinned Dagu version
+dagu-version:
+    .workspace/dagu/bin/dagu version
+
+# Validate the feature and owner-bound recovery DAGs
+dagu-validate:
+    .workspace/dagu/bin/dagu validate .workspace/dagu/dags/rootline-feature.yaml
+    .workspace/dagu/bin/dagu validate .workspace/dagu/dags/rootline-recovery.yaml
+
+# Run locally; forge mutations require an explicit pr or merge mode
+dagu-start run_id mode="shadow" space_id="local" issue_number="0":
+    .workspace/dagu/bin/dagu start --run-id "{{run_id}}" .workspace/dagu/dags/rootline-feature.yaml -- SPACE_ID="{{space_id}}" RUN_ID="{{run_id}}" MODE="{{mode}}" ISSUE_NUMBER="{{issue_number}}"
+
+# Retry one named failed step with the original run's parameters
+dagu-retry run_id step:
+    .workspace/dagu/bin/dagu retry --run-id "{{run_id}}" --step "{{step}}" --downstream .workspace/dagu/dags/rootline-feature.yaml
+
+# Recover only resources belonging to this exact space/run owner
+dagu-recover run_id space_id="local":
+    bash .workspace/dagu/scripts/cleanup.sh "{{space_id}}" "{{run_id}}"
+
+# Exercise offline pilot contracts and injected failures
+test-dagu:
+    bash tests/dagu-pilot-test.sh

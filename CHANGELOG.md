@@ -11,8 +11,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 - **BREAKING**: Rootline no longer installs or supports the former OpenCode-specific `~/.config/opencode/skills/rootline` destination. OpenCode and Pi consume the shared `~/.agents/skills/rootline` symlink; Claude consumes `~/.claude/skills/rootline`. Agents upgrading an older environment must inspect and preserve the former destination themselves, retire it deliberately, run `rootline skill install` from the primary Rootline checkout, apply the emitted `plan_digest` with `--approve`, and verify with `rootline skill status`. Rootline does not discover or mutate obsolete runtime paths.
 - `schema apply` now rejects invalid prospective `.stem` hierarchies before publishing actions or writing files, while preserving version-1 `stem_health[]` diagnostics and atomic per-file `.stem` replacement for accepted writes.
 - `schema apply` now converges proposal and analyze writes on a bound physical target: internal aliases are supported, escaping aliases are rejected, malformed external governing ancestors surface as structured relative `yaml-valid` diagnostics in `stem_health[]`, and schema proposal targets must use the literal basename `.stem` so case-insensitive basename aliases are rejected before resolution.
+- Hosted CI pins golangci-lint v2.14.0 so linting remains compatible with the Go 1.27 export-data format selected by the stable toolchain.
 
 ### Added
+
+- Optional Dagu v2.19.2 local pilot with isolated worktrees, exact-SHA gate evidence, default shadow mode, opt-in PR/approved merge modes, explicit hosted-CI waiting and revalidation, owner-bound recovery, and contributor recipes. Hosted CI and release workflows remain unchanged.
 
 - `validate` envelope gained `structural[]` (directory verdicts, previously trailing-slash pseudo-records inside `results[]`) with `summary.structural_errors_count` / `structural_warnings_count`
 - `validate` envelope gained `stem_health[]` (`.stem` diagnostics with `error`/`warn`/`info` severity), `notices[]` (run-level diagnostics keyed by a stable `code`: `scan_failed`, `schema_resolution_failed`, `stem_health_unavailable`, `no_records`), and three `summary.stem_health_*_count` fields
