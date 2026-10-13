@@ -83,6 +83,26 @@ func (op *RenameOperation) Execute() (*RenameResult, error) {
 		return nil, fmt.Errorf("scanning: %w", err)
 	}
 
+	// Preflight every affected document and schema before any writes.
+	for _, rec := range records {
+		if _, hasOld := rec.Frontmatter[op.OldField]; !hasOld {
+			continue
+		}
+		if _, hasNew := rec.Frontmatter[op.NewField]; hasNew {
+			return nil, fmt.Errorf("file %s already has field %q; rename would overwrite", rec.Path, op.NewField)
+		}
+	}
+
+	stems, err := findStemsWithField(absRoot, op.OldField)
+	if err != nil {
+		return nil, fmt.Errorf("finding .stem files: %w", err)
+	}
+	for _, entry := range stems {
+		if _, hasNew := entry.Stem.Schema[op.NewField]; hasNew {
+			return nil, fmt.Errorf(".stem %s already has field %q; rename would overwrite", entry.Path, op.NewField)
+		}
+	}
+
 	result := &RenameResult{
 		Version:  1,
 		Kind:     "rootline/migrate-rename",
@@ -100,11 +120,6 @@ func (op *RenameOperation) Execute() (*RenameResult, error) {
 			continue
 		}
 
-		// Check if the new field already exists to prevent data loss.
-		if _, hasNew := rec.Frontmatter[op.NewField]; hasNew {
-			return nil, fmt.Errorf("file %s already has field %q; rename would overwrite", rec.Path, op.NewField)
-		}
-
 		if !op.DryRun {
 			absPath := filepath.Join(absRoot, rec.Path)
 			if err := renameFieldInFile(absPath, op.OldField, op.NewField); err != nil {
@@ -120,12 +135,8 @@ func (op *RenameOperation) Execute() (*RenameResult, error) {
 	result.Summary.FilesUpdated = len(result.FilesUpdated)
 
 	// Phase 2: Rename field in .stem schema files.
-	stemPaths, err := findStemsWithField(absRoot, op.OldField)
-	if err != nil {
-		return nil, fmt.Errorf("finding .stem files: %w", err)
-	}
-
-	for _, stemPath := range stemPaths {
+	for _, entry := range stems {
+		stemPath := entry.Path
 		if !op.DryRun {
 			if err := renameFieldInStem(stemPath, op.OldField, op.NewField); err != nil {
 				return nil, fmt.Errorf("renaming field in .stem %s: %w", stemPath, err)
@@ -212,10 +223,10 @@ func renameFrontmatterField(text, oldField, newField string) (string, bool) {
 	return b.String(), true
 }
 
-// findStemsWithField walks up from the given root to find all .stem files
-// that contain the specified field in their schema.
-func findStemsWithField(rootPath, field string) ([]string, error) {
-	var stemPaths []string
+// findStemsWithField finds declaring .stem files under and above the root,
+// retaining their parsed schemas for collision preflight.
+func findStemsWithField(rootPath, field string) ([]rules.StemEntry, error) {
+	var stems []rules.StemEntry
 	seen := make(map[string]bool)
 
 	err := filepath.WalkDir(rootPath, func(path string, d os.DirEntry, err error) error {
@@ -246,7 +257,7 @@ func findStemsWithField(rootPath, field string) ([]string, error) {
 		}
 
 		if _, ok := stem.Schema[field]; ok {
-			stemPaths = append(stemPaths, absPath)
+			stems = append(stems, rules.StemEntry{Path: absPath, Stem: stem})
 		}
 		return nil
 	})
@@ -261,15 +272,15 @@ func findStemsWithField(rootPath, field string) ([]string, error) {
 			}
 			if entry.Stem != nil {
 				if _, ok := entry.Stem.Schema[field]; ok {
-					stemPaths = append(stemPaths, absPath)
+					stems = append(stems, rules.StemEntry{Path: absPath, Stem: entry.Stem})
 					seen[absPath] = true
 				}
 			}
 		}
 	}
 
-	sort.Strings(stemPaths)
-	return stemPaths, err
+	sort.Slice(stems, func(i, j int) bool { return stems[i].Path < stems[j].Path })
+	return stems, err
 }
 
 // renameFieldInStem renames a field key within a .stem file's schema section,

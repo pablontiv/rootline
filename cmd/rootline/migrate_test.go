@@ -186,6 +186,101 @@ schema:
 	}
 }
 
+func TestMigrateRenameCollisionNoLog(t *testing.T) {
+	const stem = "version: 2\nschema:\n  titulo:\n    type: string\n"
+	tests := []struct {
+		name          string
+		stem          string
+		files         map[string]string
+		collidingPath string
+	}{
+		{
+			name: "later document",
+			stem: stem,
+			files: map[string]string{
+				"a.md": "---\ntitulo: Rename me\n---\n# First\n",
+				"z.md": "---\ntitulo: Keep me\ntitle: Existing\n---\n# Last\n",
+			},
+			collidingPath: "z.md",
+		},
+		{
+			name: "stem",
+			stem: stem + "  title:\n    type: string\n",
+			files: map[string]string{
+				"a.md": "---\ntitulo: Rename me\n---\n# First\n",
+			},
+			collidingPath: ".stem",
+		},
+	}
+	for _, tt := range tests {
+		for _, existingLog := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/existing-log=%v", tt.name, existingLog), func(t *testing.T) {
+				dir := setupMigrateDir(t, tt.stem, tt.files)
+				before := make(map[string]string)
+				for path := range tt.files {
+					content, err := os.ReadFile(filepath.Join(dir, path))
+					if err != nil {
+						t.Fatal(err)
+					}
+					before[path] = string(content)
+				}
+				stemContent, err := os.ReadFile(filepath.Join(dir, ".stem"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				before[".stem"] = string(stemContent)
+				logPath := filepath.Join(dir, ".rootline-migrations")
+				const logContent = "{\"operation\":\"rename\",\"old_field\":\"legacy\",\"new_field\":\"titulo\"}\n"
+				if existingLog {
+					mustWriteFile(t, logPath, []byte(logContent), 0644)
+				}
+				var dryRunError string
+				for _, dryRun := range []bool{true, false} {
+					args := []string{"migrate", dir, "--rename", "titulo=title"}
+					if dryRun {
+						args = append(args, "--dry-run")
+					}
+					out, _, err := runCmdWithSeparateOutput(t, args...)
+					if err == nil {
+						t.Fatalf("dry-run=%v: expected collision refusal", dryRun)
+					}
+					if !strings.Contains(err.Error(), tt.collidingPath) || !strings.Contains(err.Error(), `"title"`) {
+						t.Errorf("dry-run=%v: missing colliding path or destination key: %v", dryRun, err)
+					}
+					if dryRun {
+						dryRunError = err.Error()
+					} else if err.Error() != dryRunError {
+						t.Errorf("real refusal %q differs from dry-run %q", err.Error(), dryRunError)
+					}
+					if out != "" {
+						t.Errorf("dry-run=%v: refused rename emitted stdout: %s", dryRun, out)
+					}
+					for path, want := range before {
+						content, readErr := os.ReadFile(filepath.Join(dir, path))
+						if readErr != nil {
+							t.Fatal(readErr)
+						}
+						if string(content) != want {
+							t.Errorf("dry-run=%v: %s changed on refusal", dryRun, path)
+						}
+					}
+					content, readErr := os.ReadFile(logPath)
+					if existingLog {
+						if readErr != nil {
+							t.Fatal(readErr)
+						}
+						if string(content) != logContent {
+							t.Errorf("dry-run=%v: migration log changed on refusal", dryRun)
+						}
+					} else if !os.IsNotExist(readErr) {
+						t.Errorf("dry-run=%v: expected no migration log, got error %v", dryRun, readErr)
+					}
+				}
+			})
+		}
+	}
+}
+
 // --- migrate diff tests ---
 
 func TestMigrateDiffNoStemFiles(t *testing.T) {
