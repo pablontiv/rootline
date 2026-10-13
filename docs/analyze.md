@@ -180,6 +180,16 @@ Inferences with `requires_agent: true` are logged in the report but skipped by
 `schema apply`. Human or agent review is needed to resolve them; they remain
 actionable for future tooling.
 
+Schema-gap diagnostics are not always mutation instructions. An `untyped_field`
+with an empty or whitespace-only `value` is reported in `skipped[]` with
+`missing type value`; a similarly empty `sequence_incomplete` is skipped with
+`missing prefix:digits value`. A non-empty sequence value must contain a
+non-blank prefix and a positive integer width, such as `T:3`; malformed values
+(including `:3`) appear in `rejected[]` with `invalid prefix:digits value`.
+Rootline does not invent a type, prefix, or digit width. These entries are
+classified before same-field conflict planning, so valid siblings in the report
+can still apply. Dry-run and write mode report the same decisions.
+
 ## Canonical Section Inferences
 
 Section candidates carry a real type plus a canonical source binding:

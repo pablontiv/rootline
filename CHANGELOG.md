@@ -56,6 +56,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Fixed
 
+- `schema apply` now skips empty-value `untyped_field` and `sequence_incomplete` diagnostics explicitly and rejects malformed sequence completion values, including empty prefixes. These entries no longer write empty types, mutate sequence formats, or abort valid same-field and unrelated siblings; dry-run and write modes share sorted decision ledgers without inventing missing values. Closes #264.
 - `migrate --rename` now changes only a column-0 key in the leading document frontmatter, leaving nested keys untouched and preserving every other byte, including comments, indentation, body content, CRLF line endings, and UTF-8 BOMs. Real and dry-run results no longer claim updates when no key matches. Closes #265.
 - `migrate --rename` now preflights destination-key collisions across every affected document and declaring `.stem` before any write. Real and dry-run modes refuse identically, preserving all document/schema bytes and leaving the migration log untouched. Closes #269.
 - Boundary preflight now checks the effective `query`/`stats` target (positional path before `--from`) and the resolved `repair apply` root (`--root`, report `root`, report `path`, then report directory). Repair application consumes the same invocation-scoped report snapshot and absolute root authorized by preflight, so a changed report cannot redirect writes. Closes #263.

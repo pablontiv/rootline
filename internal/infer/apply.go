@@ -429,13 +429,8 @@ func applySectionFieldNode(doc *yaml.Node, intent sectionApplyIntent) (bool, boo
 }
 
 func applySequenceCompleteNode(doc *yaml.Node, inf ReportInference) bool {
-	parts := strings.SplitN(inf.Value, ":", 2)
-	if len(parts) != 2 {
-		return false
-	}
-	prefix := parts[0]
-	digits, err := strconv.Atoi(parts[1])
-	if err != nil || digits <= 0 {
+	prefix, digits, ok := parseSequenceInferenceValue(inf.Value)
+	if !ok {
 		return false
 	}
 
@@ -448,4 +443,16 @@ func applySequenceCompleteNode(doc *yaml.Node, inf ReportInference) bool {
 	setFieldProperty(fieldNode, "prefix", prefix)
 	setFieldProperty(fieldNode, "digits", strconv.Itoa(digits))
 	return true
+}
+
+func parseSequenceInferenceValue(value string) (string, int, bool) {
+	prefix, width, ok := strings.Cut(value, ":")
+	if !ok || strings.TrimSpace(prefix) == "" {
+		return "", 0, false
+	}
+	digits, err := strconv.Atoi(width)
+	if err != nil || digits <= 0 {
+		return "", 0, false
+	}
+	return prefix, digits, true
 }
