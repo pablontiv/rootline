@@ -71,9 +71,18 @@ printf '%s\n' "$*" >> "$STUB_STATE/forge"
 case "$1 $2" in
     'repo view') echo fixture/rootline ;;
     'pr list')
-        [[ "$*" == *'--head fixture:dagu/pilot/one'* ]] || exit 97
+        [[ "$*" == *'--head dagu/pilot/one'* && "$*" != *'--head fixture:'* ]] || exit 97
         if [[ -f "$STUB_STATE/pr" ]]; then
-            printf '17\t%s\t%s\thttps://example.invalid/pull/17\n' "$(cat "$STUB_STATE/sha")" "$(cat "$STUB_STATE/pr-state")"
+            head=$(cat "$STUB_STATE/sha")
+            if [[ -f "$STUB_STATE/pr-head-override" ]]; then
+                remote_head=$(git -C "$PRIMARY_REPO" ls-remote origin refs/heads/dagu/pilot/one | cut -f1)
+                if [[ "$remote_head" == "$head" ]]; then
+                    rm "$STUB_STATE/pr-head-override"
+                else
+                    head=$(cat "$STUB_STATE/pr-head-override")
+                fi
+            fi
+            printf '17\t%s\t%s\thttps://example.invalid/pull/17\n' "$head" "$(cat "$STUB_STATE/pr-state")"
         fi
         ;;
     'pr create')
@@ -176,6 +185,17 @@ grep -q '^rootline validate --all docs/roadmap/$' "$STUB_STATE/gates" || fail 'd
 grep -q '^go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...$' "$STUB_STATE/gates" || fail 'govulncheck version is not pinned'
 printf '%s\n' "$SHA" > "$STUB_STATE/sha"
 expect_failure env -u ISSUE_NUMBER "$SCRIPTS/forge.sh" pilot one pr
+# An existing PR may advance only when its old head is an ancestor of the newly
+# tested SHA; the push and subsequent lookup must bind it to current evidence.
+BASE_SHA=$(git -C "$WORKTREE" rev-parse "$SHA^")
+git -C "$TMP/repo" push origin "$BASE_SHA:refs/heads/dagu/pilot/one" >/dev/null
+touch "$STUB_STATE/pr"
+printf 'OPEN\n' > "$STUB_STATE/pr-state"
+printf '%s\n' "$BASE_SHA" > "$STUB_STATE/pr-head-override"
+"$SCRIPTS/forge.sh" pilot one pr >/dev/null
+[[ "$(git -C "$TMP/repo" ls-remote origin refs/heads/dagu/pilot/one | cut -f1)" == "$SHA" ]] || fail 'existing PR branch did not fast-forward to tested SHA'
+rm "$STUB_STATE/pr" "$STUB_STATE/pr-state"
+git -C "$TMP/repo" push origin :refs/heads/dagu/pilot/one >/dev/null
 # Failure after server-side creation must look up and reuse the PR next time.
 touch "$STUB_STATE/fail-create-response"
 expect_failure "$SCRIPTS/forge.sh" pilot one pr

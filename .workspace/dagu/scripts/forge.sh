@@ -20,7 +20,7 @@ FORGE_REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 FORGE_OWNER=${FORGE_REPO%%/*}
 lookup_pr() {
     local row
-    row=$(gh pr list --repo "$FORGE_REPO" --state all --head "$FORGE_OWNER:$BRANCH" --base master \
+    row=$(gh pr list --repo "$FORGE_REPO" --state all --head "$BRANCH" --base master \
         --json number,headRefOid,state,url --jq '.[] | [.number, .headRefOid, .state, .url] | @tsv')
     [[ "$row" != *$'\n'* ]] || fail 'multiple PRs match the run branch'
     PR='' HEAD_SHA='' PR_STATE='' PR_URL=''
@@ -77,8 +77,16 @@ lookup_pr
 case "$ACTION" in
     pr)
         if [[ -n "$PR" ]]; then
-            [[ "$HEAD_SHA" == "$SHA" ]] || fail 'existing PR head differs from tested SHA'
             [[ "$PR_STATE" != CLOSED ]] || fail 'run PR was closed without merge'
+            if [[ "$HEAD_SHA" != "$SHA" ]]; then
+                git merge-base --is-ancestor "$HEAD_SHA" "$SHA" ||
+                    fail 'existing PR head diverges from tested SHA'
+                completed_evidence
+                git push origin "$SHA:refs/heads/$BRANCH"
+                lookup_pr
+                [[ -n "$PR" && "$HEAD_SHA" == "$SHA" ]] ||
+                    fail 'updated PR does not match tested SHA'
+            fi
         else
             # Push the immutable SHA, not whichever commit a branch now names.
             completed_evidence
