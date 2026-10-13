@@ -178,6 +178,201 @@ func TestValidateAll_StructuralViolationStillFails(t *testing.T) {
 	}
 }
 
+func assertStructuralPaths(t *testing.T, env map[string]any, wantPaths ...string) map[string]map[string]any {
+	t.Helper()
+	structural, ok := env["structural"].([]any)
+	if !ok {
+		t.Fatalf("structural missing or not an array: %v", env["structural"])
+	}
+	if len(structural) != len(wantPaths) {
+		t.Fatalf("structural = %v, want paths %v", structural, wantPaths)
+	}
+	byPath := make(map[string]map[string]any, len(structural))
+	for i, raw := range structural {
+		result := raw.(map[string]any)
+		path := result["path"].(string)
+		if path != wantPaths[i] {
+			t.Fatalf("structural[%d].path = %q, want %q", i, path, wantPaths[i])
+		}
+		byPath[path] = result
+	}
+	return byPath
+}
+
+func TestValidateAll_RecordlessAncestorsStructuralViolations(t *testing.T) {
+	for _, position := range []struct {
+		name   string
+		prefix string
+		target string
+	}{
+		{name: "root", target: "/"},
+		{name: "intermediate", prefix: "branch/", target: "branch/"},
+	} {
+		for _, rule := range []struct {
+			name     string
+			yaml     string
+			children int
+		}{
+			{name: "require_index", yaml: "require_index: README.md", children: 1},
+			{name: "min_children", yaml: "min_children: 2", children: 1},
+			{name: "max_children", yaml: "max_children: 1", children: 2},
+		} {
+			t.Run(position.name+"/"+rule.name, func(t *testing.T) {
+				files := map[string]string{
+					".stem": "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: string\nstructural:\n  subdirs:\n    " + rule.yaml + "\n",
+				}
+				files[position.prefix+"one/doc.md"] = "---\nestado: Done\n---\n# One\n"
+				wantPaths := []string{"/"}
+				if position.prefix != "" {
+					wantPaths = append(wantPaths, position.prefix)
+				}
+				wantPaths = append(wantPaths, position.prefix+"one/")
+				if rule.children == 2 {
+					files[position.prefix+"two/doc.md"] = "---\nestado: Done\n---\n# Two\n"
+					wantPaths = append(wantPaths, position.prefix+"two/")
+				}
+				root := setupValidateProject(t, files)
+				mustChdir(t, root)
+
+				stdout, err := executeValidate(t, "--all")
+				if err != ErrValidationFailed {
+					t.Fatalf("err = %v, want ErrValidationFailed\noutput: %s", err, stdout)
+				}
+				env := decodeEnvelope(t, stdout)
+				if env["version"] != float64(2) || env["kind"] != "rootline/validate-batch" {
+					t.Fatalf("unexpected envelope identity: %v", env)
+				}
+				byPath := assertStructuralPaths(t, env, wantPaths...)
+				target := byPath[position.target]
+				if target["valid"] != false {
+					t.Fatalf("%s is valid, want structural violation: %v", position.target, target)
+				}
+				errs := target["errors"].([]any)
+				if len(errs) != 1 || errs[0].(map[string]any)["rule"] != rule.name {
+					t.Fatalf("%s errors = %v, want one %s violation", position.target, errs, rule.name)
+				}
+				summary := env["summary"].(map[string]any)
+				if summary["total"] != float64(rule.children) || summary["valid"] != float64(rule.children) {
+					t.Fatalf("structural verdicts changed record counts: %v", summary)
+				}
+				if summary["structural_errors_count"].(float64) == 0 {
+					t.Fatalf("structural_errors_count = 0: %v", summary)
+				}
+			})
+		}
+	}
+}
+
+func TestValidateAll_RecordlessAncestorsStructuralWarnings(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":             "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: string\nstructural:\n  subdirs:\n    require_index: README.md\n    severity: warn\n",
+		"branch/one/doc.md": "---\nestado: Done\n---\n# One\n",
+	})
+	mustChdir(t, root)
+
+	for _, strict := range []bool{false, true} {
+		args := []string{"--all"}
+		if strict {
+			args = append(args, "--strict")
+		}
+		stdout, err := executeValidate(t, args...)
+		if strict && err != ErrValidationFailed || !strict && err != nil {
+			t.Fatalf("strict = %v: err = %v\noutput: %s", strict, err, stdout)
+		}
+		env := decodeEnvelope(t, stdout)
+		byPath := assertStructuralPaths(t, env, "/", "branch/", "branch/one/")
+		for _, path := range []string{"/", "branch/"} {
+			warnings := byPath[path]["warnings"].([]any)
+			if len(warnings) != 1 || warnings[0].(map[string]any)["rule"] != "require_index" {
+				t.Fatalf("%s warnings = %v, want require_index", path, warnings)
+			}
+		}
+		summary := env["summary"].(map[string]any)
+		if summary["structural_errors_count"] != float64(0) || summary["structural_warnings_count"] != float64(2) {
+			t.Fatalf("unexpected structural severity counts: %v", summary)
+		}
+	}
+}
+
+func TestValidateAll_RecordlessAncestorsRespectRecordFilters(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":               "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: string\nstructural:\n  subdirs:\n    max_children: 5\n",
+		".stemignore":         "ignored/one/doc.md\n",
+		"kept/one/doc.md":     "---\nestado: Done\n---\n# Kept\n",
+		"filtered/one/doc.md": "---\nestado: Pending\n---\n# Filtered\n",
+		"ignored/one/doc.md":  "---\nestado: Done\n---\n# Ignored\n",
+		"excluded/.stem":      "version: 2\nscope:\n  match: \"*.txt\"\n",
+		"excluded/one/doc.md": "---\nestado: Done\n---\n# Excluded\n",
+		".git/hidden/doc.md":  "---\nestado: Done\n---\n# Git\n",
+	})
+	mustChdir(t, root)
+
+	stdout, err := executeValidate(t, "--all", "--where", "estado == 'Done'")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, stdout)
+	}
+	env := decodeEnvelope(t, stdout)
+	assertStructuralPaths(t, env, "/", "kept/", "kept/one/")
+	if paths := envelopePaths(t, env); len(paths) != 1 || paths[0] != "kept/one/doc.md" {
+		t.Fatalf("record paths = %v, want kept/one/doc.md", paths)
+	}
+
+	stdout, err = executeValidate(t, "--all", "--where", "estado == 'Missing'")
+	if err != nil {
+		t.Fatalf("unexpected empty-filter error: %v\noutput: %s", err, stdout)
+	}
+	assertStructuralPaths(t, decodeEnvelope(t, stdout))
+}
+
+func TestValidateAll_RecordlessAncestorsStayInsideScanRoot(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":             "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: string\nstructural:\n  subdirs:\n    max_children: 1\n",
+		"branch/one/doc.md": "---\nestado: Done\n---\n# One\n",
+		"other/doc.md":      "---\nestado: Done\n---\n# Other\n",
+	})
+	mustChdir(t, root)
+
+	stdout, err := executeValidate(t, "--all", "branch")
+	if err != nil {
+		t.Fatalf("validated outside the scan root: %v\noutput: %s", err, stdout)
+	}
+	assertStructuralPaths(t, decodeEnvelope(t, stdout), "/", "one/")
+}
+
+func TestValidateAll_RecordlessAncestorsStopAtNestedGovernanceRoot(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":                    "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: string\nstructural:\n  subdirs:\n    max_children: 1\n",
+		"nested/.stem":             "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: string\nstructural:\n  subdirs:\n    max_children: 5\n",
+		"nested/middle/one/doc.md": "---\nestado: Done\n---\n# One\n",
+		"other/data.txt":           "Not a record.\n",
+	})
+	mustChdir(t, root)
+
+	stdout, err := executeValidate(t, "--all")
+	if err != nil {
+		t.Fatalf("crossed nested governance boundary: %v\noutput: %s", err, stdout)
+	}
+	assertStructuralPaths(t, decodeEnvelope(t, stdout), "nested/", "nested/middle/", "nested/middle/one/")
+}
+
+func TestValidateAll_RecordlessAncestorsWithoutStructuralRules(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":             "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  estado:\n    type: string\n",
+		"branch/one/doc.md": "---\nestado: Done\n---\n# One\n",
+	})
+	mustChdir(t, root)
+
+	stdout, err := executeValidate(t, "--all")
+	if err != nil {
+		t.Fatalf("unexpected error: %v\noutput: %s", err, stdout)
+	}
+	env := decodeEnvelope(t, stdout)
+	assertStructuralPaths(t, env)
+	if got := env["summary"].(map[string]any)["total"]; got != float64(1) {
+		t.Fatalf("summary.total = %v, want 1", got)
+	}
+}
+
 func TestValidateAll_WhereFilterDoesNotLeakStemEntries(t *testing.T) {
 	setupHealthProject(t)
 

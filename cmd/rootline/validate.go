@@ -396,16 +396,26 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		}
 		results, notices = appendNormalizedValidationResult(results, notices, rules.NewValidationResult(rec.Path, errs), rec.Path, absPath, recCtx.governanceRoot)
 
-		// Track directories for structural validation.
-		if !visitedDirs[dir] {
+		// Include record-bearing ancestors without another filesystem traversal.
+		// Never leave the scan scope or cross this record's governance boundary.
+		for !visitedDirs[dir] {
 			visitedDirs[dir] = true
+			if dir == root || dir == recCtx.governanceRoot {
+				break
+			}
+			dir = filepath.Dir(dir)
 		}
 	}
 
 	// Structural directory validation. A directory is not a record either, so
 	// its verdict travels beside the documents rather than among them.
 	var structural []*rules.ValidationResult
+	structuralDirs := make([]string, 0, len(visitedDirs))
 	for dir := range visitedDirs {
+		structuralDirs = append(structuralDirs, dir)
+	}
+	sort.Strings(structuralDirs)
+	for _, dir := range structuralDirs {
 		entries, walkErr := rules.WalkUp(dir)
 		if walkErr != nil {
 			notices = append(notices, rules.Notice{

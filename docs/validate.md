@@ -51,7 +51,7 @@ Batch validation runs four phases in order:
    - `nested-root-marker` — reports (info) a `.stem` that declares `root: true` below another one that already does, since records under it stop inheriting the ancestor
 
 2. **Document Validation** — Checks each record against its effective schema: required fields, enum values, non_empty, exists, requires rules. When the effective `.stem` declares `links.checks`, link targets are resolved here too — see [Link resolution](#link-resolution).
-3. **Structural Validation** — Directory-level rules: `require_index` (must have README.md), `min_children`/`max_children` constraints.
+3. **Structural Validation** — Directory-level rules: `require_index` (each subdirectory must contain the configured index file), `min_children`/`max_children` constraints. Checks record-bearing directories and their governed ancestors, including a root or intermediate directory with no direct Markdown records.
 4. **Drift Detection** — Warns when an index file's field value contradicts its children (e.g., parent says "Completed" but children are "Pending").
 
 ## Link resolution
@@ -241,6 +241,15 @@ Each error carries the rule, field, message, governance-root-relative diagnostic
 
 A directory is not a record, so it no longer occupies a `results` slot. The root of the
 scan is reported as `"/"`.
+
+In `--all` mode, directories come from the records remaining after `.stemignore`,
+`scope.match`, and `--where` filtering, together with their ancestors inside the scan
+scope. Ancestor enumeration stops at each record's governance boundary, so a nested
+`root: true` does not pull in directories above it. No separate directory traversal is
+needed. Entries are ordered lexically by directory path, and directories with no
+effective structural rules are omitted; without structural rules, `structural` stays
+`[]`. The existing rules still inspect each selected directory's non-hidden immediate
+subdirectories; record filtering does not change how children are counted.
 
 ### `stem_health[]`
 
