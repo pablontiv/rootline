@@ -63,7 +63,7 @@ acquire_lock() {
 load_state() {
     [[ -f "$STATE/owner" && ! -L "$STATE/owner" && "$(cat "$STATE/owner")" == "$RECORD" ]] || fail 'missing or mismatched run ownership record'
     local entry
-    for entry in "$STATE/phases" "$STATE/base.sha" "$STATE/tested.sha" "$STATE/evidence" "$STATE/rootline" "$STATE/rootline.tmp" "$STATE/pr" "$STATE/issue" "$STATE/merged" "$STATE/cleaned" "$STATE/approval.owner" "$STATE/approval.sha" "$STATE/approval.by" "$STATE/ci.owner" "$STATE/ci.sha" "$STATE/ci.checks" "$STATE/phases/"*; do
+    for entry in "$STATE/phases" "$STATE/base.sha" "$STATE/tested.sha" "$STATE/evidence" "$STATE/rootline" "$STATE/rootline.tmp" "$STATE/pr" "$STATE/issue" "$STATE/merged" "$STATE/cleaned" "$STATE/ci.owner" "$STATE/ci.sha" "$STATE/ci.checks" "$STATE/phases/"*; do
         [[ ! -L "$entry" ]] || fail "refusing symlinked run evidence: $entry"
     done
 }

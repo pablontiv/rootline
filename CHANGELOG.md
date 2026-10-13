@@ -15,7 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Added
 
-- Optional Dagu v2.19.2 local pilot with isolated worktrees, exact-SHA gate evidence, default shadow mode, opt-in PR/approved merge modes, explicit hosted-CI waiting and revalidation, owner-bound recovery, and contributor recipes. Hosted CI and release workflows remain unchanged.
+- Optional Dagu v2.19.2 local pilot with isolated worktrees, exact-SHA gate evidence, default shadow mode, opt-in PR and automatic guarded merge modes, explicit hosted-CI waiting and revalidation, owner-bound recovery, and contributor recipes. Hosted CI and release workflows remain unchanged.
 
 - `validate` envelope gained `structural[]` (directory verdicts, previously trailing-slash pseudo-records inside `results[]`) with `summary.structural_errors_count` / `structural_warnings_count`
 - `validate` envelope gained `stem_health[]` (`.stem` diagnostics with `error`/`warn`/`info` severity), `notices[]` (run-level diagnostics keyed by a stable `code`: `scan_failed`, `schema_resolution_failed`, `stem_health_unavailable`, `no_records`), and three `summary.stem_health_*_count` fields

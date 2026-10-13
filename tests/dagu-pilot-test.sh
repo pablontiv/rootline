@@ -129,6 +129,7 @@ case "$1 $2" in
             echo success > "$STUB_STATE/status"
             echo posted >> "$STUB_STATE/status-posts"
         elif [[ "$1" == api ]]; then
+            [[ "$2" == "repos/fixture/rootline/commits/$(cat "$STUB_STATE/sha")/status" ]] || exit 99
             [[ ! -f "$STUB_STATE/status" ]] || cat "$STUB_STATE/status"
         else exit 96; fi
         ;;
@@ -214,10 +215,13 @@ rm "$STUB_STATE/no-hosted-ci"
 "$SCRIPTS/forge.sh" pilot one ci >/dev/null
 [[ "$(cat "$STATE/ci.sha")" == "$SHA" ]] || fail 'hosted CI evidence is not SHA-bound'
 grep -q $'^CI / test\tpass\tCI$' "$STATE/ci.checks" || fail 'hosted CI check evidence is incomplete'
-unset APPROVED_SHA APPROVED_BY
+printf 'failure\n' > "$STUB_STATE/status"
 expect_failure "$SCRIPTS/forge.sh" pilot one merge
-expect_failure env APPROVED_SHA=0000000000000000000000000000000000000000 APPROVED_BY='pilot operator' "$SCRIPTS/forge.sh" pilot one merge
-export APPROVED_SHA="$SHA" APPROVED_BY='pilot operator'
+assert_absent "$STUB_STATE/merges"
+rm "$STUB_STATE/status"
+expect_failure "$SCRIPTS/forge.sh" pilot one merge
+assert_absent "$STUB_STATE/merges"
+"$SCRIPTS/forge.sh" pilot one status >/dev/null
 # Mutating local HEAD after the gate invalidates every checkpoint and forge action.
 printf 'late commit\n' >> "$WORKTREE/record"
 git -C "$WORKTREE" commit -am 'chore: late commit' >/dev/null
@@ -248,7 +252,6 @@ expect_failure "$SCRIPTS/forge.sh" pilot one merge
 grep -q 'unsaved during merge recovery' "$TMP/repo/record" || fail 'recovery discarded a concurrent primary edit'
 git -C "$TMP/repo" checkout -- record
 "$SCRIPTS/forge.sh" pilot one merge >/dev/null
-unset APPROVED_SHA APPROVED_BY
 "$SCRIPTS/forge.sh" pilot one merge >/dev/null
 [[ "$(line_count "$STUB_STATE/merges")" == 1 ]] || fail 'merge was not idempotent'
 [[ "$(git -C "$TMP/repo" rev-parse HEAD)" == "$(git --git-dir="$TMP/remote.git" rev-parse master)" ]] || fail 'primary master did not realign after squash'
