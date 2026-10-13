@@ -55,6 +55,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Fixed
 
+- `set` now restores original document bytes atomically after post-mutation extraction, schema resolution, or validation failure, preserving file mode. A failed restore reports the original cause, absolute unreverted path, and restore error without falsely claiming rollback. Closes #271.
 - Report-selected repair and schema targets now resolve existing symlinks before containment checks. Directory and file aliases that escape the scan root are rejected before access, while aliases and missing targets that remain physically inside the root retain their existing behavior.
 - `graph` now orders `broken_links` by `(source, target, line, type)` and ranks equal-distance suggestions lexically before keeping the closest three, so JSON and `--check` no longer change byte output or tied suggestion membership across identical runs.
 - `rootline skill install` now verifies staged symlink preimages by the link identity recorded in the plan and backup, so an Agents/Pi link pointing at the Claude destination is not falsely rejected after the same installation replaces Claude first.

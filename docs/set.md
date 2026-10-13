@@ -3,7 +3,7 @@ estado: Completed
 ---
 # Set Command
 
-`rootline set` mutates frontmatter fields with schema validation. It is the primary mutation command — changes are validated against the effective `.stem` schema before and after application, with automatic rollback on failure.
+`rootline set` mutates frontmatter fields with schema validation. It is the primary mutation command — changes are validated against the effective `.stem` schema before and after application, with an atomic restore attempt on post-mutation extraction, schema resolution, or validation failure.
 
 ## Synopsis
 
@@ -44,9 +44,16 @@ For frontmatter fields, `field` is the YAML key name.
 4. **Pre-validate** — Check proposed values against schema constraints (enum membership, type)
 5. **Apply** — Write mutations to the in-memory document
 6. **Post-validate** — Run full validation on the mutated document
-7. **Rollback** — If post-validation fails and `--no-validate` is not set, discard changes and report errors
+7. **Rollback** — If post-mutation extraction, schema resolution, or validation fails and `--no-validate` is not set, atomically restore the original bytes and report the cause
 
 If `--dry-run` is active, the pipeline stops before step 6 and prints the proposed diff.
+
+Restoration stages the original bytes in the file's own directory before replacing
+the mutated file, preserving its permission mode. The error says `(rolled back)`
+only after restoration succeeds. If restoration fails, the error retains the
+original cause, names the absolute path that was not restored, and includes the
+restore error; it does not claim rollback. A post-mutation re-read failure is
+reported without attempting restoration.
 
 ## Examples
 
@@ -88,6 +95,7 @@ rootline set docs/api/overview.md estado=review --no-validate
 |-----------|---------|
 | Invalid enum value | `Error: value "Custom" not in allowed values for estado: [draft, review, published]` |
 | Post-validation failure | `Error: post-mutation validation failed (rolled back): tipo: required field "tipo" is missing` |
+| Restore failure | `Error: post-mutation validation failed: tipo: required field "tipo" is missing; restoring original content failed for /abs/path/docs/api/overview.md: <restore error>` |
 | File not found | `Error: file not found: /abs/path/docs/api/missing.md (use 'rootline new' to scaffold a new document)` |
 | Source-backed field | `set` writes a frontmatter override and does not edit the body section |
 | Source file not found (`=@path`) | `Error: resolving value for notes: reading notes.txt: open notes.txt: no such file or directory` |
