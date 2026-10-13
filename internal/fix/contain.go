@@ -3,8 +3,11 @@ package fix
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 // ContainmentPolicy selects how ContainPath treats an absolute input path.
@@ -54,17 +57,15 @@ func ContainmentReason(err error) string {
 // ContainPath checks that path resolves to a location inside root and returns
 // the validated absolute target.
 //
-// Containment is lexical: the check operates on cleaned path text and never
-// touches the filesystem, so it works for targets that do not exist yet (a
-// create_stem write, for instance) where filepath.EvalSymlinks would fail.
+// Containment is both lexical and physical. Existing symlinks are resolved
+// through the deepest existing ancestor, while a missing suffix is appended to
+// that physical ancestor. This rejects symlink escapes without breaking callers
+// that plan an in-root file which does not exist yet. Symlinks whose physical
+// targets remain under root are allowed.
 //
 // Absolute inputs are cleaned and compared to root as-is. They are deliberately
 // NOT joined onto root first: filepath.Join(root, "/etc/.stem") silently yields
 // root/etc/.stem, which would report an out-of-root target as contained.
-//
-// Limitation: a symlink inside the target path is not resolved, so a link that
-// points outside root escapes at access time. Reports should come from trusted
-// producers, and apply commands should run without privileged write access.
 func ContainPath(root, path string, policy ContainmentPolicy) (string, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -90,6 +91,25 @@ func ContainPath(root, path string, policy ContainmentPolicy) (string, error) {
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", containmentFailure(path, absRoot, "escapes root")
+	}
+
+	physicalRoot, err := rules.CanonicalPhysicalPath(absRoot)
+	if err != nil {
+		return "", fmt.Errorf("resolve report root %q physically: %w", absRoot, err)
+	}
+	physicalTarget, err := rules.CanonicalPhysicalPath(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", containmentFailure(path, absRoot, fmt.Sprintf("cannot be physically resolved: %v", err))
+		}
+		return "", fmt.Errorf("resolve report path %q physically: %w", path, err)
+	}
+	physicalRel, err := filepath.Rel(physicalRoot, physicalTarget)
+	if err != nil {
+		return "", containmentFailure(path, absRoot, fmt.Sprintf("cannot be physically resolved relative to root: %v", err))
+	}
+	if physicalRel == ".." || strings.HasPrefix(physicalRel, ".."+string(filepath.Separator)) {
+		return "", containmentFailure(path, absRoot, "escapes root through symlink")
 	}
 
 	return target, nil

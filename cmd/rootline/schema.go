@@ -446,14 +446,19 @@ func planSchemaProposalApplyWithResolver(proposals []SchemaProposal, scanRoot st
 
 		// `schema propose` emits absolute targets under the scan root, so the
 		// propose->apply contract depends on absolute paths staying valid — they
-		// are accepted, then confined. Containment remains the lexical policy
-		// classifier; the resolved atomic target below becomes the physical write
-		// authority.
+		// are accepted, then confined lexically and physically. Containment is the
+		// policy classifier; the resolved atomic target below remains the physical
+		// write authority.
 		targetPath, err := fix.ContainPath(scanRoot, proposal.Target, fix.PolicyAcceptAbsolute)
 		if err != nil {
-			// A target outside the scan root is a policy refusal, not a failed write.
-			result.Rejected = append(result.Rejected, err.Error())
 			resolved.Rejected[proposal.Target] = fix.ContainmentReason(err)
+			var containmentErr *fix.ContainmentError
+			if errors.As(err, &containmentErr) {
+				// A target outside the scan root is a policy refusal, not a failed write.
+				result.Rejected = append(result.Rejected, err.Error())
+			} else {
+				result.Errors = append(result.Errors, err.Error())
+			}
 			continue
 		}
 		if filepath.Base(targetPath) != ".stem" {

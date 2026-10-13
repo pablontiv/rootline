@@ -388,7 +388,12 @@ func containProposalPaths(proposals []proposal.Proposal, root string, result *Re
 			absPath, err := ContainPath(root, path, PolicyRejectAbsolute)
 			if err != nil {
 				rejected[path] = ContainmentReason(err)
-				result.Rejected = append(result.Rejected, err.Error())
+				var containmentErr *ContainmentError
+				if errors.As(err, &containmentErr) {
+					result.Rejected = append(result.Rejected, err.Error())
+				} else {
+					result.Errors = append(result.Errors, fmt.Sprintf("resolve %s: %v", path, err))
+				}
 				continue
 			}
 			accepted[path] = absPath

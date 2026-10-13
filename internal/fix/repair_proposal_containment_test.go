@@ -182,3 +182,81 @@ func TestApplyRepairValidProposalMaySharePathWithRejectedProposal(t *testing.T) 
 		t.Fatalf("outside content=%q err=%v", gotOutside, err)
 	}
 }
+
+func TestApplyRepairRejectsPhysicalSymlinkEscapesBeforeAccess(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "root")
+	outside := filepath.Join(base, "outside")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := "---\nstatus: old\n---\n# Outside\n"
+	outsidePath := filepath.Join(outside, "outside.md")
+	if err := os.WriteFile(outsidePath, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	dirLink := filepath.Join(root, "outside-dir")
+	fileLink := filepath.Join(root, "outside-file.md")
+	if err := os.Symlink(outside, dirLink); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := os.Symlink(outsidePath, fileLink); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	for name, path := range map[string]string{
+		"directory": filepath.Join("outside-dir", "outside.md"),
+		"file":      "outside-file.md",
+	} {
+		t.Run(name, func(t *testing.T) {
+			result, err := ApplyRepair([]proposal.Proposal{{
+				Type:  proposal.CorrectValue,
+				Field: "status",
+				From:  "old",
+				To:    "new",
+				Paths: []string{path},
+			}}, false, root, false)
+			if err != nil {
+				t.Fatalf("ApplyRepair: %v", err)
+			}
+			if !result.Complete || len(result.Rejected) != 1 || len(result.Errors) != 0 ||
+				len(result.Changed) != 0 || !strings.Contains(result.Rejected[0], "escapes root through symlink") {
+				t.Fatalf("result=%+v, want one physical containment rejection", result)
+			}
+			got, err := os.ReadFile(outsidePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != original {
+				t.Fatalf("outside file was modified through %s symlink:\n%s", name, got)
+			}
+		})
+	}
+}
+
+func TestApplyRepairReportsPhysicalResolutionFailuresAsErrors(t *testing.T) {
+	root := t.TempDir()
+	blocker := filepath.Join(root, "blocked")
+	if err := os.WriteFile(blocker, []byte("not a directory\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ApplyRepair([]proposal.Proposal{{
+		Type:  proposal.CorrectValue,
+		Field: "status",
+		From:  "old",
+		To:    "new",
+		Paths: []string{filepath.Join("blocked", "record.md")},
+	}}, false, root, false)
+	if err != nil {
+		t.Fatalf("ApplyRepair: %v", err)
+	}
+	if result.Complete || len(result.Errors) != 1 || len(result.Rejected) != 0 || len(result.Changed) != 0 ||
+		!strings.Contains(result.Errors[0], "not a directory") {
+		t.Fatalf("result=%+v, want one operational physical-resolution error", result)
+	}
+}

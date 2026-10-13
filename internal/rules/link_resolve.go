@@ -150,11 +150,11 @@ func resolveLinkTarget(req ResolveRequest, provider linkTargetProvider) LinkReso
 	return LinkResolution{Path: cur, OK: true}
 }
 
-// canonicalPhysicalPath returns the path identity used for containment and
+// CanonicalPhysicalPath returns the path identity used for containment and
 // prospective overlay matching. It resolves symlinks through the deepest
 // existing parent, then appends the still-missing suffix, so absent files are
 // compared by the physical directory they would be written into.
-func canonicalPhysicalPath(path string) (string, error) {
+func CanonicalPhysicalPath(path string) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
@@ -176,6 +176,8 @@ func canonicalPhysicalPath(path string) (string, error) {
 				real = filepath.Join(real, missing[i])
 			}
 			return filepath.Clean(real), nil
+		} else if !os.IsNotExist(err) {
+			return "", err
 		}
 		parent := filepath.Dir(cur)
 		if parent == cur {
@@ -187,18 +189,18 @@ func canonicalPhysicalPath(path string) (string, error) {
 }
 
 // PhysicalPathWithin reports whether path's physical identity is contained by
-// root's physical identity. Both sides use canonicalPhysicalPath, so symlinked
+// root's physical identity. Both sides use CanonicalPhysicalPath, so symlinked
 // roots such as macOS /var -> /private/var and absent target files compare by
 // the same authority.
 func PhysicalPathWithin(root, path string) (bool, error) {
 	if root == "" {
 		return true, nil
 	}
-	realRoot, err := canonicalPhysicalPath(root)
+	realRoot, err := CanonicalPhysicalPath(root)
 	if err != nil {
 		return false, err
 	}
-	realPath, err := canonicalPhysicalPath(path)
+	realPath, err := CanonicalPhysicalPath(path)
 	if err != nil {
 		return false, err
 	}

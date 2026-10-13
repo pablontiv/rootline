@@ -2,29 +2,20 @@ package fix
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
 
-// absPrefix is the platform's root prefix so that constructed test paths are
-// genuinely absolute on every OS (filepath.IsAbs(`\root`) is false on Windows).
-var absPrefix = func() string {
-	if runtime.GOOS == "windows" {
-		return `C:\`
-	}
-	return "/"
-}()
-
-// abs builds an absolute, platform-native path from slash-separated segments.
-func abs(parts ...string) string {
-	return filepath.Join(absPrefix, filepath.Join(parts...))
-}
-
 func TestContainPath(t *testing.T) {
-	root := abs("root")
-	nested := abs("root", "dir")
+	base := t.TempDir()
+	root := filepath.Join(base, "root")
+	nested := filepath.Join(root, "dir")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	tests := []struct {
 		name       string
@@ -41,14 +32,14 @@ func TestContainPath(t *testing.T) {
 			root:       root,
 			path:       "docs/page.md",
 			policy:     PolicyRejectAbsolute,
-			wantResult: abs("root", "docs", "page.md"),
+			wantResult: filepath.Join(root, "docs", "page.md"),
 		},
 		{
 			name:       "RejectAbsolute/relative nested directories",
 			root:       root,
 			path:       "a/b/c.md",
 			policy:     PolicyRejectAbsolute,
-			wantResult: abs("root", "a", "b", "c.md"),
+			wantResult: filepath.Join(root, "a", "b", "c.md"),
 		},
 		{
 			name:       "RejectAbsolute/dot resolves to root",
@@ -69,14 +60,14 @@ func TestContainPath(t *testing.T) {
 			root:       root,
 			path:       "docs/",
 			policy:     PolicyRejectAbsolute,
-			wantResult: abs("root", "docs"),
+			wantResult: filepath.Join(root, "docs"),
 		},
 		{
 			name:       "RejectAbsolute/nested dotdot staying inside",
 			root:       root,
 			path:       "a/../b/file.md",
 			policy:     PolicyRejectAbsolute,
-			wantResult: abs("root", "b", "file.md"),
+			wantResult: filepath.Join(root, "b", "file.md"),
 		},
 		{
 			// Spec Scenario 8: a/../../dir/file.md under /root/dir resolves back
@@ -85,21 +76,21 @@ func TestContainPath(t *testing.T) {
 			root:       nested,
 			path:       "a/../../dir/file.md",
 			policy:     PolicyRejectAbsolute,
-			wantResult: abs("root", "dir", "file.md"),
+			wantResult: filepath.Join(root, "dir", "file.md"),
 		},
 		{
 			name:       "RejectAbsolute/non-existent target is allowed",
 			root:       root,
 			path:       "does/not/exist.md",
 			policy:     PolicyRejectAbsolute,
-			wantResult: abs("root", "does", "not", "exist.md"),
+			wantResult: filepath.Join(root, "does", "not", "exist.md"),
 		},
 		{
 			name:       "AcceptAbsolute/relative path still allowed",
 			root:       root,
 			path:       "docs/page.md",
 			policy:     PolicyAcceptAbsolute,
-			wantResult: abs("root", "docs", "page.md"),
+			wantResult: filepath.Join(root, "docs", "page.md"),
 		},
 
 		// --- relative paths that escape root ---
@@ -158,7 +149,7 @@ func TestContainPath(t *testing.T) {
 			// Spec Scenario 3: absolute input is a policy violation, not an I/O error.
 			name:    "RejectAbsolute/absolute outside root",
 			root:    root,
-			path:    abs("etc", "passwd"),
+			path:    filepath.Join(base, "etc", "passwd"),
 			policy:  PolicyRejectAbsolute,
 			wantErr: true,
 			wantMsg: "absolute paths are not allowed",
@@ -168,7 +159,7 @@ func TestContainPath(t *testing.T) {
 			// shape of the input, not only about where it lands.
 			name:    "RejectAbsolute/absolute inside root",
 			root:    root,
-			path:    abs("root", "docs", "page.md"),
+			path:    filepath.Join(root, "docs", "page.md"),
 			policy:  PolicyRejectAbsolute,
 			wantErr: true,
 			wantMsg: "absolute paths are not allowed",
@@ -179,9 +170,9 @@ func TestContainPath(t *testing.T) {
 			// Spec Scenario 6: schema propose emits absolute targets; they must survive.
 			name:       "AcceptAbsolute/absolute inside root",
 			root:       root,
-			path:       abs("root", "docs", ".stem"),
+			path:       filepath.Join(root, "docs", ".stem"),
 			policy:     PolicyAcceptAbsolute,
-			wantResult: abs("root", "docs", ".stem"),
+			wantResult: filepath.Join(root, "docs", ".stem"),
 		},
 		{
 			name:       "AcceptAbsolute/absolute equal to root",
@@ -194,7 +185,7 @@ func TestContainPath(t *testing.T) {
 			// Spec Scenario 7: absolute target above the root.
 			name:    "AcceptAbsolute/absolute outside root",
 			root:    root,
-			path:    abs("tmp", ".stem"),
+			path:    filepath.Join(base, "tmp", ".stem"),
 			policy:  PolicyAcceptAbsolute,
 			wantErr: true,
 			wantMsg: "escapes root",
@@ -204,7 +195,7 @@ func TestContainPath(t *testing.T) {
 			// is exactly the case filepath.Join(root, path) would have hidden.
 			name:    "AcceptAbsolute/absolute escaping after clean",
 			root:    root,
-			path:    abs("root", "..", "etc", ".stem"),
+			path:    filepath.Join(root, "..", "etc", ".stem"),
 			policy:  PolicyAcceptAbsolute,
 			wantErr: true,
 			wantMsg: "escapes root",
@@ -213,7 +204,7 @@ func TestContainPath(t *testing.T) {
 			// String-prefix containment checks accept this; filepath.Rel does not.
 			name:    "AcceptAbsolute/sibling directory sharing the root prefix",
 			root:    root,
-			path:    abs("rootother", "file.md"),
+			path:    filepath.Join(root+"other", "file.md"),
 			policy:  PolicyAcceptAbsolute,
 			wantErr: true,
 			wantMsg: "escapes root",
@@ -269,7 +260,7 @@ func TestContainPathResolvesRelativeRoot(t *testing.T) {
 }
 
 func TestContainPathErrorCarriesContext(t *testing.T) {
-	root := abs("root")
+	root := filepath.Join(t.TempDir(), "root")
 	_, err := ContainPath(root, "../../../etc/shadow", PolicyRejectAbsolute)
 	if err == nil {
 		t.Fatal("expected a containment error")
@@ -351,4 +342,70 @@ func TestContainPathWindowsVolumes(t *testing.T) {
 			t.Errorf("resolved path = %q, want %q", got, want)
 		}
 	})
+}
+
+func TestContainPathChecksPhysicalSymlinkTargets(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "root")
+	inside := filepath.Join(root, "inside")
+	outside := filepath.Join(base, "outside")
+	for _, dir := range []string{inside, outside} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, path := range []string{filepath.Join(inside, "inside.md"), filepath.Join(outside, "outside.md")} {
+		if err := os.WriteFile(path, []byte("fixture"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	outsideDirLink := filepath.Join(root, "outside-dir")
+	outsideFileLink := filepath.Join(root, "outside-file.md")
+	insideDirLink := filepath.Join(root, "inside-dir")
+	for target, link := range map[string]string{
+		outside:                              outsideDirLink,
+		filepath.Join(outside, "outside.md"): outsideFileLink,
+		inside:                               insideDirLink,
+	} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+	}
+
+	for name, path := range map[string]string{
+		"directory": filepath.Join("outside-dir", "outside.md"),
+		"file":      "outside-file.md",
+	} {
+		t.Run("rejects "+name+" escape", func(t *testing.T) {
+			if _, err := ContainPath(root, path, PolicyRejectAbsolute); err == nil ||
+				!strings.Contains(err.Error(), "escapes root through symlink") {
+				t.Fatalf("ContainPath(%q) error = %v, want physical containment rejection", path, err)
+			}
+		})
+	}
+
+	for name, path := range map[string]string{
+		"existing target": filepath.Join("inside-dir", "inside.md"),
+		"missing target":  filepath.Join("inside-dir", "missing.md"),
+	} {
+		t.Run("allows internal alias with "+name, func(t *testing.T) {
+			got, err := ContainPath(root, path, PolicyRejectAbsolute)
+			if err != nil {
+				t.Fatalf("ContainPath(%q): %v", path, err)
+			}
+			if want := filepath.Join(root, path); got != want {
+				t.Fatalf("ContainPath(%q) = %q, want %q", path, got, want)
+			}
+		})
+	}
+
+	danglingLink := filepath.Join(root, "dangling")
+	if err := os.Symlink(filepath.Join(root, "future.md"), danglingLink); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := ContainPath(root, "dangling", PolicyRejectAbsolute); err == nil ||
+		!strings.Contains(err.Error(), "cannot be physically resolved") {
+		t.Fatalf("ContainPath(dangling) error = %v, want fail-closed resolution error", err)
+	}
 }
