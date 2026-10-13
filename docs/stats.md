@@ -16,6 +16,12 @@ rootline stats -o json                            # JSON output (default)
 rootline stats -o table                           # Summary line
 ```
 
+A positional path takes precedence over `--from`; without either, the target is `.`.
+The governance-boundary preflight checks the chosen scan target, not the working directory.
+For example, `rootline stats docs/ --from other/` scans and checks `docs/`.
+A governed working directory cannot authorize an undeclared target, and an undeclared
+working directory does not block a target with its own declared boundary.
+
 ### Flags
 
 | Flag | Description |

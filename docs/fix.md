@@ -152,6 +152,12 @@ report stored beside its documents still applies. It was also the whole problem:
 made a report in a `reports/` directory resolve to paths that do not exist, and the run silently
 changed nothing.
 
+`repair apply` checks the governance boundary at that resolved absolute root, not at the
+working directory or report directory unless the legacy fallback selects it. It reads and
+validates the report once before preflight, then applies the same report snapshot and root.
+Replacing the report between preflight and application cannot redirect the repair to another
+tree. This target binding also applies to `--dry-run`; the boundary policy itself is unchanged.
+
 Both commands report the root they settled on in their output envelope as `root`, so a run that
 touched nothing tells you where it looked:
 

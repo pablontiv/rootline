@@ -70,9 +70,9 @@ func runQuery(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
 	// Determine scan root
-	scanRoot := queryFrom
-	if len(args) > 0 {
-		scanRoot = args[0]
+	scanRoot, err := commandScanRoot(cmd, args)
+	if err != nil {
+		return err
 	}
 
 	absRoot, err := filepath.Abs(scanRoot)

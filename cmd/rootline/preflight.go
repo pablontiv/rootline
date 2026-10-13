@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -86,11 +87,59 @@ func boundaryPreflight(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	target := "."
-	if len(args) > 0 && args[0] != "" {
-		target = args[0]
+	// A reused Cobra command must never retain a previous report authorization.
+	if isRepairApplyCommand(cmd) {
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		cmd.SetContext(context.WithValue(ctx, repairInvocationKey{}, (*repairInvocation)(nil)))
 	}
+	target, invocation, err := boundaryPreflightTarget(cmd, args)
+	if err != nil {
+		return err
+	}
+	if err := boundaryPreflightAtTarget(cmd, target); err != nil {
+		return err
+	}
+	if invocation != nil {
+		cmd.SetContext(context.WithValue(cmd.Context(), repairInvocationKey{}, invocation))
+	}
+	return nil
+}
 
+// commandScanRoot keeps positional precedence identical in preflight and scanning.
+func commandScanRoot(cmd *cobra.Command, args []string) (string, error) {
+	if len(args) > 0 {
+		return args[0], nil
+	}
+	return cmd.Flags().GetString("from")
+}
+
+func isRepairApplyCommand(cmd *cobra.Command) bool {
+	return cmd.Name() == "repair" || (cmd.Name() == "apply" && cmd.Parent() != nil && cmd.Parent().Name() == "repair")
+}
+
+func boundaryPreflightTarget(cmd *cobra.Command, args []string) (string, *repairInvocation, error) {
+	if isRepairApplyCommand(cmd) {
+		invocation, err := prepareRepairInvocation(cmd)
+		if err != nil {
+			return "", nil, err
+		}
+		return invocation.root, invocation, nil
+	}
+	switch cmd.Name() {
+	case "query", "stats":
+		target, err := commandScanRoot(cmd, args)
+		return target, nil, err
+	}
+	if len(args) > 0 && args[0] != "" {
+		return args[0], nil, nil
+	}
+	return ".", nil, nil
+}
+
+func boundaryPreflightAtTarget(cmd *cobra.Command, target string) error {
 	entries, err := rules.WalkUp(target)
 	if err != nil {
 		if !errors.Is(err, rules.ErrNoSchemaFound) && reportsSchemaFailureItself(cmd) {

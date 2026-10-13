@@ -9,6 +9,12 @@ Queries return **records**, not rendered documents. Derived and aggregated field
 
 ## CLI Usage
 
+The scan target is the positional path, if supplied, otherwise `--from` (default `.`).
+The governance-boundary preflight checks that same target, not the working directory.
+For example, `rootline query docs/ --from other/` scans and checks `docs/`;
+a governed working directory cannot authorize an undeclared target, and an undeclared
+working directory does not block a target with its own declared boundary.
+
 The `--where` flag accepts [expr-lang/expr](https://expr-lang.org/) expressions. Multiple `--where` flags are combined with AND:
 
 ```bash
