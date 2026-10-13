@@ -83,6 +83,134 @@ func TestSchemaProposeNoStem(t *testing.T) {
 	}
 }
 
+func TestSchemaProposeBootstrapBoundary(t *testing.T) {
+	for _, mode := range []string{"flat", "hierarchical"} {
+		t.Run(mode, func(t *testing.T) {
+			for _, tc := range []struct {
+				name         string
+				ancestorStem string
+				existingRoot bool
+				wantRoot     bool
+			}{
+				{name: "standalone", wantRoot: true},
+				{name: "unmarked_ancestor", ancestorStem: "version: 2\nschema:\n  inherited:\n    type: string\n", wantRoot: true},
+				{name: "governed_subtree", ancestorStem: "version: 2\nroot: true\nschema:\n  inherited:\n    type: string\n"},
+				{name: "existing_root", existingRoot: true, wantRoot: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					parent := t.TempDir()
+					scanRoot := filepath.Join(parent, "project", "docs")
+					if err := os.MkdirAll(scanRoot, 0o755); err != nil {
+						t.Fatal(err)
+					}
+					if tc.ancestorStem != "" {
+						mustWriteFile(t, filepath.Join(parent, ".stem"), []byte(tc.ancestorStem), 0o644)
+						// An unmarked intermediate layer must not hide a farther boundary.
+						mustWriteFile(t, filepath.Join(parent, "project", ".stem"), []byte("version: 2\n"), 0o644)
+					}
+					if tc.existingRoot {
+						mustWriteFile(t, filepath.Join(scanRoot, ".stem"), []byte("version: 2\nroot: true\n"), 0o644)
+					}
+					mustWriteFile(t, filepath.Join(scanRoot, "README.md"), []byte("---\ntitle: Overview\n---\n# Overview\n"), 0o644)
+					if mode == "hierarchical" {
+						for _, path := range []string{
+							"E01-one/README.md",
+							"E01-one/F01-first/README.md",
+							"E01-one/F02-second/README.md",
+							"E02-two/README.md",
+							"E02-two/F01-first/README.md",
+							"E02-two/F02-second/README.md",
+						} {
+							target := filepath.Join(scanRoot, filepath.FromSlash(path))
+							if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+								t.Fatal(err)
+							}
+							mustWriteFile(t, target, []byte("---\ntitle: "+path+"\n---\n# "+path+"\n"), 0o644)
+						}
+					}
+
+					before := listFilesWithContent(t, parent)
+					stdout, err := executeSchemaPropose(t, scanRoot)
+					if err != nil {
+						t.Fatalf("schema propose: %v", err)
+					}
+					if after := listFilesWithContent(t, parent); !reflect.DeepEqual(before, after) {
+						t.Fatal("schema propose modified fixture files")
+					}
+					var report SchemaProposalsReport
+					if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+						t.Fatalf("decoding proposals: %v", err)
+					}
+					if len(report.Proposals) != 1 {
+						t.Fatalf("expected one bootstrap proposal, got %#v", report.Proposals)
+					}
+					proposal := report.Proposals[0]
+					target := filepath.Join(scanRoot, ".stem")
+					if proposal.ID != "bootstrap-"+mode || proposal.Operation != "create_stem" || proposal.Target != target {
+						t.Fatalf("unexpected bootstrap proposal: %#v", proposal)
+					}
+					stem, err := rules.ParseStem(target, []byte(proposal.Patch))
+					if err != nil {
+						t.Fatalf("parsing bootstrap patch: %v", err)
+					}
+					if stem.Root != tc.wantRoot {
+						t.Fatalf("patch root = %v, want %v:\n%s", stem.Root, tc.wantRoot, proposal.Patch)
+					}
+					if proposal.PatchPreview != truncatePreview(proposal.Patch, 200) {
+						t.Fatal("patch preview does not match the boundary-bearing patch")
+					}
+
+					// init still marks its target as root, even under a governed ancestor.
+					initOutput, err := runCmd(t, "init", scanRoot, "--dry-run")
+					if err != nil {
+						t.Fatalf("init dry-run: %v", err)
+					}
+					initPatch := strings.TrimPrefix(initOutput, "# --- .stem ---\n")
+					initStem, err := rules.ParseStem(target, []byte(initPatch))
+					if err != nil || !initStem.Root {
+						t.Fatalf("init must retain its root marker: stem=%#v, err=%v", initStem, err)
+					}
+					if !tc.wantRoot {
+						initPatch = strings.Replace(initPatch, "root: true\n", "", 1)
+					}
+					if initPatch != proposal.Patch {
+						t.Fatalf("proposal and init differ beyond boundary policy:\nproposal:\n%s\ninit:\n%s", proposal.Patch, initPatch)
+					}
+
+					reportPath := filepath.Join(parent, "proposals.json")
+					mustWriteFile(t, reportPath, []byte(stdout), 0o644)
+					args := []string{"--report", reportPath}
+					if tc.existingRoot {
+						args = append(args, "--force")
+					}
+					applied, err := executeSchemaApply(t, args...)
+					if err != nil {
+						t.Fatalf("schema apply: %v\n%s", err, applied)
+					}
+					if written := mustReadFile(t, target); string(written) != proposal.Patch {
+						t.Fatal("schema apply did not write the approved patch verbatim")
+					}
+					// Exercise rootPreflight through a real governed command, not
+					// schema apply (which is deliberately exempt from that check).
+					if output, err := runCmd(t, "query", scanRoot, "--count"); err != nil {
+						t.Fatalf("applied bootstrap failed governed-command preflight: %v\n%s", err, output)
+					}
+					entries, err := rules.WalkUp(scanRoot)
+					if err != nil || rules.ChainHasNoDeclaredBoundary(entries) {
+						t.Fatalf("applied bootstrap has no declared boundary: entries=%#v, err=%v", entries, err)
+					}
+					if !tc.wantRoot {
+						effective := rules.MergeStemFiles(entries)
+						if _, ok := effective.Schema["inherited"]; !ok {
+							t.Fatal("bootstrap patch cut off the governing ancestor's schema")
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
 // TestSchemaProposeIncremental tests that with --incremental, existing .stem
 // results in fewer proposals. When all inferences are covered by existing stems,
 // no proposals are generated.

@@ -955,6 +955,17 @@ func runPostApplyValidation(ctx context.Context, root string) (*ValidationSummar
 func generateSchemaProposals(ctx context.Context, root string, records []*extract.Record, existingStem *rules.StemFile, incremental bool, resolve infer.StemResolver) ([]SchemaProposal, error) {
 	var proposals []SchemaProposal
 
+	// A bootstrap patch owns a boundary only when no ancestor already does.
+	// Inspect the parent, not the target .stem that this proposal may replace.
+	declareRoot := true
+	if parent := filepath.Dir(root); parent != root {
+		entries, err := rules.WalkUp(parent)
+		if rules.IsRealSchemaError(err) {
+			return nil, fmt.Errorf("resolving ancestor boundary: %w", err)
+		}
+		declareRoot = rules.ChainHasNoDeclaredBoundary(entries)
+	}
+
 	// Try hierarchical detection first
 	hierarchy := infer.AnalyzeHierarchy(records, root)
 
@@ -971,6 +982,7 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 
 		for _, rootStem := range stemMap {
 			generatedStem = rootStem
+			rootStem.Root = declareRoot
 			yaml, err := stemFileToYAML(rootStem, root)
 			if err != nil {
 				return nil, fmt.Errorf("serializing hierarchical schema: %w", err)
@@ -995,6 +1007,7 @@ func generateSchemaProposals(ctx context.Context, root string, records []*extrac
 		}
 
 		generatedStem = stemFile
+		stemFile.Root = declareRoot
 		yaml, err := stemFileToYAML(stemFile, root)
 		if err != nil {
 			return nil, fmt.Errorf("serializing flat schema: %w", err)
