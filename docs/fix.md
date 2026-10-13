@@ -369,6 +369,15 @@ display; it is not the write source. A proposal with no `patch` — a report gen
 field existed — is refused with an instruction to re-run `schema propose`, rather than falling
 back to a generator that emits untyped `type: string` shells.
 
+**Bootstrap boundaries.** Flat and hierarchical `schema propose` patches declare
+`root: true` when the scan directory has no ancestor `.stem` with that marker.
+Applying such a patch establishes the boundary needed by governed commands such
+as `query` and `validate`. When an ancestor already declares the boundary, the
+patch omits the marker so the subtree keeps inheriting its governing schema
+instead of introducing a nested root. An unmarked ancestor is not a boundary.
+This policy belongs to proposal generation; `init` keeps its existing behavior
+of marking the generated target as a root.
+
 **Where the scan root comes from.** `schema propose` records an absolute `root`, so a report
 applies from any working directory — the usual CI shape, where proposals are written into an
 `artifacts/` directory and applied from elsewhere. Reports without `root` keep the older behaviour
