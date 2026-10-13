@@ -81,16 +81,32 @@ type repairTarget struct {
 	// post-validation can restore them. They are captured during the read pass
 	// that already loads every file, so tracking them costs no extra I/O.
 	original []byte
+	// content is loaded lazily from the preflight snapshot and tracks accepted
+	// mutations so section proposals compose with earlier repairs in both modes.
+	content    string
+	contentSet bool
 	// written records whether a handler actually wrote this target. Files that
 	// were only read must not be post-validated: reporting a pre-existing
 	// validation failure as a rollback would be a false accusation.
 	written bool
 }
 
+func (t *repairTarget) currentContent() string {
+	if !t.contentSet {
+		t.setContent(string(t.original))
+	}
+	return t.content
+}
+
+func (t *repairTarget) setContent(content string) {
+	t.content = content
+	t.contentSet = true
+}
+
 // ApplyRepair applies repair proposals (data-only corrections) to the filesystem.
 // It accepts only proposals with Surface() == SurfaceRepair and silently rejects
 // SurfaceSchema, SurfaceBootstrap, and SurfaceMigration proposals.
-// Modifies Markdown frontmatter only — never touches .stem files.
+// Modifies Markdown documents only — never touches .stem files.
 // Supports dryRun for preview mode.
 //
 // Every file it writes is post-validated on its own and restored to its
@@ -99,12 +115,6 @@ type repairTarget struct {
 // construction: an error against one path — including a path that could not be
 // read at all — has no bearing on whether any other file is validated.
 // Reverted files are reported in RolledBack and withdrawn from Changed.
-//
-// This covers every handler that writes through a repairTarget. set_section is
-// the one exception: it resolves its own paths inside applySetSection and holds
-// no target, so its writes carry no captured original and are not post-validated
-// here. Stated rather than glossed over, because a doc comment promising a
-// rollback that does not happen is the defect this function was fixing.
 //
 // Reports are untrusted input, so every path they name is checked against root
 // before the filesystem is touched at all. Paths that escape are recorded in
@@ -217,7 +227,7 @@ func ApplyRepair(proposals []proposal.Proposal, dryRun bool, root string, fillMi
 			}
 
 		case proposal.SetSection:
-			if err := applyRepairSetSection(&p, root, result, dryRun); err != nil {
+			if err := applyRepairSetSection(&p, targets, result, dryRun); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("set_section %s: %v", p.Heading, err))
 			}
 
@@ -507,9 +517,13 @@ func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTar
 		candidate[p.Field] = p.To
 
 		if dryRun {
-			result.Changed = append(result.Changed,
+			result.recordChange(path,
 				fmt.Sprintf("correct %s: %q->%q in %s", p.Field, p.From, p.To, path))
 			tgt.record.Frontmatter = candidate
+			tgt.setContent(RewriteFrontmatter(tgt.currentContent(), candidate))
+			if p.Type == proposal.MigrateValue && len(p.WikiLinks) > 0 {
+				tgt.setContent(InsertWikiLinksBeforeHeading(tgt.currentContent(), p.WikiLinks))
+			}
 			if p.FromRepresentation != "" {
 				invalidateFrontmatterScalar(tgt.record, p.Field)
 			}
@@ -532,6 +546,7 @@ func applyRepairCorrectValue(p *proposal.Proposal, targets map[string]*repairTar
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 		tgt.record.Frontmatter = candidate
+		tgt.setContent(newContent)
 		if p.FromRepresentation != "" {
 			invalidateFrontmatterScalar(tgt.record, p.Field)
 		}
@@ -572,9 +587,10 @@ func applyRepairAddField(p *proposal.Proposal, targets map[string]*repairTarget,
 		candidate[p.Field] = value
 
 		if dryRun {
-			result.Changed = append(result.Changed,
+			result.recordChange(path,
 				fmt.Sprintf("add %s=%q in %s", p.Field, value, path))
 			tgt.record.Frontmatter = candidate
+			tgt.setContent(RewriteFrontmatter(tgt.currentContent(), candidate))
 			continue
 		}
 
@@ -591,6 +607,7 @@ func applyRepairAddField(p *proposal.Proposal, targets map[string]*repairTarget,
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
 		tgt.record.Frontmatter = candidate
+		tgt.setContent(newContent)
 		tgt.written = true
 
 		result.recordChange(path,
@@ -617,8 +634,9 @@ func applyRepairSetField(p *proposal.Proposal, targets map[string]*repairTarget,
 		invalidateFrontmatterScalar(tgt.record, p.Field)
 
 		if dryRun {
-			result.Changed = append(result.Changed,
+			result.recordChange(path,
 				fmt.Sprintf("set %s=%q in %s", p.Field, p.Value, path))
+			tgt.setContent(RewriteFrontmatter(tgt.currentContent(), tgt.record.Frontmatter))
 			continue
 		}
 
@@ -635,6 +653,7 @@ func applyRepairSetField(p *proposal.Proposal, targets map[string]*repairTarget,
 		if err := fsx.WriteFileAtomic(tgt.abs, []byte(newContent), newFileMode); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
+		tgt.setContent(newContent)
 		tgt.written = true
 
 		result.recordChange(path,
@@ -643,23 +662,31 @@ func applyRepairSetField(p *proposal.Proposal, targets map[string]*repairTarget,
 	return nil
 }
 
-// applyRepairSetSection applies a SetSection proposal by delegating to the
-// shared applySetSection, which re-checks containment because it is also
-// reachable from the fix --all pipeline.
-func applyRepairSetSection(p *proposal.Proposal, root string, result *RepairResult, dryRun bool) error {
+// applyRepairSetSection transforms the preflight-captured content through the
+// same target and change ledger as frontmatter repairs.
+func applyRepairSetSection(p *proposal.Proposal, targets map[string]*repairTarget, result *RepairResult, dryRun bool) error {
 	mode := p.Mode
 	if mode == "" {
 		mode = "replace"
 	}
 
-	if err := applySetSectionWithWrite(*p, root, PolicyRejectAbsolute, !dryRun); err != nil {
-		return err
-	}
-
-	// Recorded in both modes: an applied section write used to be invisible in
-	// the result even though dry-run previewed it.
 	for _, path := range p.Paths {
-		result.Changed = append(result.Changed,
+		tgt, ok := targets[path]
+		if !ok {
+			continue
+		}
+		content, err := transformSetSection(tgt.currentContent(), *p, path)
+		if err != nil {
+			return err
+		}
+		if !dryRun {
+			if err := fsx.WriteFileAtomic(tgt.abs, []byte(content), newFileMode); err != nil {
+				return fmt.Errorf("writing %s: %w", path, err)
+			}
+			tgt.written = true
+		}
+		tgt.setContent(content)
+		result.recordChange(path,
 			fmt.Sprintf("%s section %s in %s", mode, p.Heading, path))
 	}
 	return nil
@@ -668,14 +695,14 @@ func applyRepairSetSection(p *proposal.Proposal, root string, result *RepairResu
 // applyRepairCorrectLink applies a CorrectLink proposal.
 func applyRepairCorrectLink(p *proposal.Proposal, targets map[string]*repairTarget, result *RepairResult, dryRun bool) error {
 	for _, path := range p.Paths {
-		if dryRun {
-			result.Changed = append(result.Changed,
-				fmt.Sprintf("correct link: %s -> %s in %s", p.From, p.To, path))
-			continue
-		}
-
 		tgt, ok := targets[path]
 		if !ok {
+			continue
+		}
+		if dryRun {
+			tgt.setContent(replaceOnce(tgt.currentContent(), p.From, p.To))
+			result.recordChange(path,
+				fmt.Sprintf("correct link: %s -> %s in %s", p.From, p.To, path))
 			continue
 		}
 
@@ -694,6 +721,7 @@ func applyRepairCorrectLink(p *proposal.Proposal, targets map[string]*repairTarg
 		if err := fsx.WriteFileAtomic(tgt.abs, []byte(newContent), newFileMode); err != nil {
 			return fmt.Errorf("writing %s: %w", path, err)
 		}
+		tgt.setContent(newContent)
 		tgt.written = true
 
 		result.recordChange(path,
