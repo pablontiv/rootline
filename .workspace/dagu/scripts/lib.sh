@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Shared path, ownership, and immutable evidence rules for the local Dagu pilot.
 set -euo pipefail
+# Normalize every script and its children, including Git push hooks.
+umask 022
 fail() { printf 'rootline-dagu: %s\n' "$*" >&2; exit 1; }
 valid_id() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ ]] || fail "invalid identifier: $1"; }
 atomic_write() {
