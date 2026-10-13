@@ -123,8 +123,32 @@ case "$1 $2" in
     'pr checks')
         echo checked >> "$STUB_STATE/ci-calls"
         if [[ "$*" == *'--watch'* ]]; then
+            echo watched >> "$STUB_STATE/ci-watches"
+            [[ "$*" == *'--fail-fast'* ]] || exit 99
             if [[ -f "$STUB_STATE/fail-ci" ]]; then rm "$STUB_STATE/fail-ci"; exit 8; fi
-        elif [[ ! -f "$STUB_STATE/no-hosted-ci" ]]; then
+        else
+            echo polled >> "$STUB_STATE/ci-polls"
+            polls=$(wc -l < "$STUB_STATE/ci-polls")
+            if [[ -f "$STUB_STATE/no-hosted-ci" ]]; then
+                if (( polls > 19 )); then touch "$STUB_STATE/unbounded-ci"; exit 99; fi
+                exit 0
+            fi
+            if [[ -f "$STUB_STATE/delayed-ci" ]]; then
+                remaining=$(cat "$STUB_STATE/delayed-ci")
+                if (( remaining > 0 )); then
+                    printf '%s\n' "$(( remaining - 1 ))" > "$STUB_STATE/delayed-ci"
+                    # The first poll has no checks at all; subsequent polls
+                    # have only a commit status, filtered out by the JSON jq.
+                    if [[ "$remaining" == 3 ]]; then
+                        echo "no checks reported on the 'dagu/pilot/one' branch" >&2
+                        exit 1
+                    fi
+                    exit 0
+                fi
+                rm "$STUB_STATE/delayed-ci"
+                printf 'CI / test\tpending\tCI\n'
+                exit 0
+            fi
             printf 'CI / test\tpass\tCI\nSecurity / scan\tpass\tCI\nrelease\tskipping\tCI\n'
         fi
         ;;
@@ -160,6 +184,26 @@ case "$1 $2" in
 esac
 STUB
 chmod +x "$TMP/stubs/gh"
+cat > "$TMP/stubs/date" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == +%s ]] || exit 99
+if [[ -f "$STUB_STATE/clock" ]]; then cat "$STUB_STATE/clock"; else echo 0; fi
+STUB
+cat > "$TMP/stubs/sleep" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ $# == 1 && "$1" == 10 ]] || exit 99
+echo "$1" >> "$STUB_STATE/ci-sleeps"
+clock=0
+[[ ! -f "$STUB_STATE/clock" ]] || clock=$(cat "$STUB_STATE/clock")
+if [[ -f "$STUB_STATE/no-hosted-ci" ]] && (( clock >= 180 )); then
+    touch "$STUB_STATE/unbounded-ci"
+    exit 99
+fi
+printf '%s\n' "$(( clock + $1 ))" > "$STUB_STATE/clock"
+STUB
+chmod +x "$TMP/stubs/date" "$TMP/stubs/sleep"
 export PATH="$TMP/stubs:$PATH" STUB_STATE="$TMP/stub-state" PRIMARY_REPO="$TMP/repo"
 export ROOTLINE_WORKTREE_ROOT="$TMP/worktrees" GH_TOKEN=forge-secret GITHUB_TOKEN=github-secret ISSUE_NUMBER=261
 SCRIPTS="$TMP/repo/.workspace/dagu/scripts"
@@ -344,10 +388,28 @@ expect_failure "$SCRIPTS/forge.sh" pilot one pr
 printf '17\n' > "$STATE/pr"
 "$SCRIPTS/cleanup.sh" pilot one >/dev/null
 assert_absent "$LOCK"
+# Permanent absence exhausts the registration window, without a real sleep
+# or entering watch mode, and cannot publish successful CI evidence.
+rm -f "$STUB_STATE/ci-polls" "$STUB_STATE/ci-watches" "$STUB_STATE/ci-sleeps"
+printf '0\n' > "$STUB_STATE/clock"
 touch "$STUB_STATE/no-hosted-ci"
 expect_failure "$SCRIPTS/forge.sh" pilot one ci
+grep -q 'hosted CI registration timeout' "$TMP/expected-failure.log" || fail 'missing registration-timeout error'
+[[ "$(line_count "$STUB_STATE/ci-polls")" == 19 && "$(line_count "$STUB_STATE/ci-sleeps")" == 18 ]] ||
+    fail 'registration polling was not bounded to 180 seconds'
+assert_absent "$STUB_STATE/ci-watches"; assert_absent "$STUB_STATE/unbounded-ci"
+assert_absent "$STATE/ci.owner"; assert_absent "$STATE/ci.sha"; assert_absent "$STATE/ci.checks"
 rm "$STUB_STATE/no-hosted-ci"
+# A hosted pending check appearing on poll four must enter fail-fast watch,
+# then persist only the successful, re-read final rows.
+rm "$STUB_STATE/ci-polls" "$STUB_STATE/ci-sleeps"
+printf '0\n' > "$STUB_STATE/clock"
+printf '3\n' > "$STUB_STATE/delayed-ci"
 "$SCRIPTS/forge.sh" pilot one ci >/dev/null
+[[ "$(line_count "$STUB_STATE/ci-polls")" == 5 && "$(line_count "$STUB_STATE/ci-sleeps")" == 3 ]] ||
+    fail 'delayed registration did not poll through discovery and final validation'
+[[ "$(line_count "$STUB_STATE/ci-watches")" == 1 ]] || fail 'delayed registration did not enter watch exactly once'
+assert_absent "$STUB_STATE/delayed-ci"
 [[ "$(cat "$STATE/ci.sha")" == "$SHA" ]] || fail 'hosted CI evidence is not SHA-bound'
 grep -q $'^CI / test\tpass\tCI$' "$STATE/ci.checks" || fail 'hosted CI check evidence is incomplete'
 printf 'failure\n' > "$STUB_STATE/status"

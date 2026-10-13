@@ -45,13 +45,35 @@ verify_local_status() {
     [[ "$(local_status)" == success ]] ||
         fail 'merge blocked: local gate status is missing or not successful'
 }
+hosted_check_rows() {
+    local rows status
+    if rows=$(gh pr checks "$PR" --repo "$FORGE_REPO" --json name,bucket,workflow \
+        --jq '.[] | select(.workflow != "") | [.name, .bucket, .workflow] | @tsv' 2>&1); then
+        printf '%s' "$rows"
+    else
+        status=$?
+        # gh exits 1 before exporting JSON when no check or status exists yet.
+        [[ "$status" == 1 && "$rows" == "no checks reported on the '"*"' branch" ]] || {
+            printf '%s\n' "$rows" >&2
+            return "$status"
+        }
+    fi
+}
 verify_hosted_ci() {
     [[ -n "$PR" && "$HEAD_SHA" == "$SHA" && ( "$PR_STATE" == OPEN || "$PR_STATE" == MERGED ) ]] ||
         fail 'hosted CI check needs the PR at the tested SHA'
+    local rows name bucket workflow remaining
+    local deadline=$(( $(date +%s) + 180 ))
+    while :; do
+        rows=$(hosted_check_rows)
+        [[ -z "$rows" ]] || break
+        remaining=$(( deadline - $(date +%s) ))
+        (( remaining > 0 )) || fail 'hosted CI registration timeout: no workflow checks appeared within 180 seconds'
+        (( remaining <= 10 )) || remaining=10
+        sleep "$remaining"
+    done
     gh pr checks "$PR" --repo "$FORGE_REPO" --watch --fail-fast
-    local rows name bucket workflow
-    rows=$(gh pr checks "$PR" --repo "$FORGE_REPO" --json name,bucket,workflow \
-        --jq '.[] | select(.workflow != "") | [.name, .bucket, .workflow] | @tsv')
+    rows=$(hosted_check_rows)
     [[ -n "$rows" ]] || fail 'no hosted CI checks were reported for the PR'
     while IFS=$'\t' read -r name bucket workflow; do
         [[ -n "$name" && -n "$workflow" && ( "$bucket" == pass || "$bucket" == skipping ) ]] ||

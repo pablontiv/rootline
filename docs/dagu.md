@@ -132,11 +132,17 @@ general sandbox.
 
 PR lookup happens before creation, so retries reuse the existing PR. Publishing
 `dagu/rootline-local` is skipped when that exact commit already has a successful
-status. The `wait_ci` step then uses `gh pr checks --watch --fail-fast`, requires
-at least one hosted workflow check, excludes non-workflow commit statuses from
-that evidence, and records each passing or intentionally skipped check plus the
-exact SHA. A PR with no hosted check fails closed. Push, PR, status, CI wait, and
-merge operations are designed to be idempotent.
+status. Before watching, the `wait_ci` step polls for at least one hosted workflow
+check every 10 seconds, allowing up to 180 seconds for GitHub Actions to register
+it. This discovery window covers delayed registration; it does not treat an empty
+listing as success or retry a failed hosted check. If no workflow check appears,
+the step fails with `hosted CI registration timeout` and writes no CI evidence.
+Once a hosted check appears, `gh pr checks --watch --fail-fast` retains the normal
+completion wait. The final listing excludes non-workflow commit statuses,
+requires every hosted row to pass or be intentionally skipped, and is followed
+by an exact-SHA PR-head recheck before evidence is recorded. Push, PR, status,
+CI wait, and merge operations are designed to be idempotent; hosted CI remains
+required and is not replaced by the local gate.
 
 After `wait_ci` persists successful exact-SHA evidence, `pr` mode ends without
 merging. In `merge` mode, the downstream merge runs automatically. Starting a
