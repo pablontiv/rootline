@@ -120,11 +120,14 @@ func (op *RenameOperation) Execute() (*RenameResult, error) {
 			continue
 		}
 
-		if !op.DryRun {
-			absPath := filepath.Join(absRoot, rec.Path)
-			if err := renameFieldInFile(absPath, op.OldField, op.NewField); err != nil {
-				return nil, fmt.Errorf("renaming field in %s: %w", rec.Path, err)
-			}
+		absPath := filepath.Join(absRoot, rec.Path)
+		changed, err := renameFieldInFile(absPath, op.OldField, op.NewField, op.DryRun)
+		if err != nil {
+			return nil, fmt.Errorf("renaming field in %s: %w", rec.Path, err)
+		}
+		if !changed {
+			result.FileDetails = append(result.FileDetails, detail)
+			continue
 		}
 
 		detail.Updated = true
@@ -154,73 +157,53 @@ func (op *RenameOperation) Execute() (*RenameResult, error) {
 	return result, nil
 }
 
-// renameFieldInFile reads a markdown file, renames the field in its frontmatter,
-// and writes the file back preserving the body content.
-func renameFieldInFile(absPath, oldField, newField string) error {
+// renameFieldInFile reads a markdown file and renames the field in its frontmatter.
+// It reports whether the key changed and skips the write in dry-run mode.
+func renameFieldInFile(absPath, oldField, newField string, dryRun bool) (bool, error) {
 	content, err := os.ReadFile(absPath)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	text := string(content)
-	newContent, changed := renameFrontmatterField(text, oldField, newField)
-	if !changed {
-		return nil
+	newContent, changed := renameFrontmatterField(string(content), oldField, newField)
+	if !changed || dryRun {
+		return changed, nil
 	}
 
-	return fsx.WriteFileAtomic(absPath, []byte(newContent), 0o644)
+	if err := fsx.WriteFileAtomic(absPath, []byte(newContent), 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
-// renameFrontmatterField renames a key in the YAML frontmatter of a markdown string.
-// It preserves the body and field ordering. Returns the modified string and whether
-// a change was made.
+// renameFrontmatterField renames a column-0 key in the leading YAML frontmatter.
+// Only the key bytes change; all other document bytes are preserved.
 func renameFrontmatterField(text, oldField, newField string) (string, bool) {
-	if !strings.HasPrefix(text, "---\n") {
+	// Extraction strips a UTF-8 BOM before locating frontmatter. Keep it in the
+	// original document and translate the locator's offsets back to that document.
+	offset := 0
+	if strings.HasPrefix(text, "\xef\xbb\xbf") {
+		offset = 3
+	}
+	start, end, _, ok := extract.FrontmatterBounds(text[offset:])
+	if !ok {
 		return text, false
 	}
+	start += offset
+	end += offset
 
-	endIdx := strings.Index(text[4:], "\n---\n")
-	if endIdx == -1 {
-		// Check for file ending with ---\n or ---EOF
-		endIdx = strings.Index(text[4:], "\n---")
-		if endIdx == -1 {
-			return text, false
-		}
-		// Make sure it's actually the end of frontmatter.
-		remaining := text[4+endIdx+4:]
-		if remaining != "" && remaining != "\n" {
-			return text, false
-		}
-	}
-
-	fmContent := text[4 : 4+endIdx]
-	body := text[4+endIdx+4:] // skip \n---
-
-	// Process frontmatter line by line, renaming the key.
-	lines := strings.Split(fmContent, "\n")
-	changed := false
 	prefix := oldField + ":"
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, prefix) {
-			rest := line[strings.Index(line, ":")+1:]
-			lines[i] = newField + ":" + rest
-			changed = true
-			break // Only rename the first occurrence at the top level.
+	for pos := start; pos < end; {
+		lineEnd := end
+		if nl := strings.IndexByte(text[pos:end], '\n'); nl >= 0 {
+			lineEnd = pos + nl
 		}
+		if strings.HasPrefix(text[pos:lineEnd], prefix) {
+			return text[:pos] + newField + text[pos+len(oldField):], true
+		}
+		pos = lineEnd + 1
 	}
-
-	if !changed {
-		return text, false
-	}
-
-	var b strings.Builder
-	b.WriteString("---\n")
-	b.WriteString(strings.Join(lines, "\n"))
-	b.WriteString("\n---")
-	b.WriteString(body)
-	return b.String(), true
+	return text, false
 }
 
 // findStemsWithField finds declaring .stem files under and above the root,

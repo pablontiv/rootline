@@ -116,6 +116,15 @@ rootline migrate --rename status=estado
 
 Updates frontmatter in all affected markdown files and schema definitions in `.stem` files. Operations are logged to `.rootline-migrations` (JSON Lines, append-only).
 
+Document renames match only a plain, column-0 key in the leading YAML frontmatter
+block. Nested keys with the same name are left untouched, even when they appear
+before the top-level key. Only the matched key's bytes are replaced: values,
+comments, indentation, field order, delimiters, the Markdown body, LF/CRLF line
+endings, and any leading UTF-8 BOM remain byte-identical. A nested-only occurrence
+or a key that does not match this form is not reported in `files_updated`.
+`--dry-run` reports the same document matches without writing them. Schema
+definitions in `.stem` files continue to use the schema-aware rename path.
+
 Before writing anything, rename checks every document containing the old field
 and every `.stem` declaring it. If any of those already contains the destination
 key (in frontmatter or `schema`, respectively), the command refuses the entire
