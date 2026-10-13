@@ -50,11 +50,11 @@ func newProspectiveLinkOverlay(target ProspectiveLinkTarget, root string) *prosp
 	if err != nil {
 		return nil
 	}
-	physicalPath, err := canonicalPhysicalPath(absPath)
+	physicalPath, err := CanonicalPhysicalPath(absPath)
 	if err != nil {
 		return nil
 	}
-	physicalDir, err := canonicalPhysicalPath(filepath.Dir(absPath))
+	physicalDir, err := CanonicalPhysicalPath(filepath.Dir(absPath))
 	if err != nil {
 		return nil
 	}
@@ -109,7 +109,7 @@ func (o *prospectiveLinkOverlay) dirMatches(dir string) bool {
 	if o == nil {
 		return false
 	}
-	physicalDir, err := canonicalPhysicalPath(dir)
+	physicalDir, err := CanonicalPhysicalPath(dir)
 	return err == nil && physicalDir == o.physicalDir
 }
 
@@ -121,7 +121,7 @@ func (o *prospectiveLinkOverlay) physicalPathMatches(path string) bool {
 		info, err := os.Stat(path)
 		return err == nil && os.SameFile(o.targetInfo, info)
 	}
-	physicalPath, err := canonicalPhysicalPath(path)
+	physicalPath, err := CanonicalPhysicalPath(path)
 	return err == nil && physicalPath == o.physicalPath
 }
 

@@ -201,11 +201,12 @@ func TestSchemaApply_RejectsEscapingSymlinkParentBeforeDryRunOrWrite(t *testing.
 				args = append(args, "--dry-run")
 			}
 			out, err := executeSchemaApply(t, args...)
-			if err == nil {
-				t.Fatalf("schema apply accepted escaping symlink parent: %s", out)
+			if err != nil {
+				t.Fatalf("schema apply returned an operational error for a policy refusal: %v\n%s", err, out)
 			}
 			result := decodeSchemaApplyResult(t, out)
-			if result.Complete || len(result.Applied) != 0 || len(result.Errors) == 0 {
+			if !result.Complete || len(result.Applied) != 0 || len(result.Errors) != 0 ||
+				len(result.Rejected) != 1 || !strings.Contains(result.Rejected[0], "escapes root through symlink") {
 				t.Fatalf("unexpected envelope: %+v", result)
 			}
 			if _, statErr := os.Stat(filepath.Join(outside, ".stem")); !os.IsNotExist(statErr) {
@@ -291,8 +292,8 @@ func TestSchemaApply_StatErrorAbortsBeforeActionsOrWrites(t *testing.T) {
 			if result.Version != 1 || result.Kind != "rootline/schema-apply" || result.Complete {
 				t.Fatalf("failure envelope changed contract: %+v", result)
 			}
-			if len(result.Errors) != 1 || !strings.Contains(result.Errors[0], "stat "+target) || !strings.Contains(result.Errors[0], "not a directory") {
-				t.Fatalf("errors = %#v, want rooted stat failure naming %s and not-a-directory cause", result.Errors, target)
+			if len(result.Errors) != 1 || !strings.Contains(result.Errors[0], target) || !strings.Contains(result.Errors[0], "not a directory") {
+				t.Fatalf("errors = %#v, want failure naming %s and not-a-directory cause", result.Errors, target)
 			}
 			if len(result.Applied) != 0 || len(result.Skipped) != 0 || len(result.Rejected) != 0 {
 				t.Fatalf("actions changed before stat abort: applied=%#v skipped=%#v rejected=%#v", result.Applied, result.Skipped, result.Rejected)

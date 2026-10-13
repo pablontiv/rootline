@@ -2,6 +2,7 @@ package fix
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -351,4 +352,70 @@ func TestContainPathWindowsVolumes(t *testing.T) {
 			t.Errorf("resolved path = %q, want %q", got, want)
 		}
 	})
+}
+
+func TestContainPathChecksPhysicalSymlinkTargets(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "root")
+	inside := filepath.Join(root, "inside")
+	outside := filepath.Join(base, "outside")
+	for _, dir := range []string{inside, outside} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, path := range []string{filepath.Join(inside, "inside.md"), filepath.Join(outside, "outside.md")} {
+		if err := os.WriteFile(path, []byte("fixture"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	outsideDirLink := filepath.Join(root, "outside-dir")
+	outsideFileLink := filepath.Join(root, "outside-file.md")
+	insideDirLink := filepath.Join(root, "inside-dir")
+	for target, link := range map[string]string{
+		outside:                              outsideDirLink,
+		filepath.Join(outside, "outside.md"): outsideFileLink,
+		inside:                               insideDirLink,
+	} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+	}
+
+	for name, path := range map[string]string{
+		"directory": filepath.Join("outside-dir", "outside.md"),
+		"file":      "outside-file.md",
+	} {
+		t.Run("rejects "+name+" escape", func(t *testing.T) {
+			if _, err := ContainPath(root, path, PolicyRejectAbsolute); err == nil ||
+				!strings.Contains(err.Error(), "escapes root through symlink") {
+				t.Fatalf("ContainPath(%q) error = %v, want physical containment rejection", path, err)
+			}
+		})
+	}
+
+	for name, path := range map[string]string{
+		"existing target": filepath.Join("inside-dir", "inside.md"),
+		"missing target":  filepath.Join("inside-dir", "missing.md"),
+	} {
+		t.Run("allows internal alias with "+name, func(t *testing.T) {
+			got, err := ContainPath(root, path, PolicyRejectAbsolute)
+			if err != nil {
+				t.Fatalf("ContainPath(%q): %v", path, err)
+			}
+			if want := filepath.Join(root, path); got != want {
+				t.Fatalf("ContainPath(%q) = %q, want %q", path, got, want)
+			}
+		})
+	}
+
+	danglingLink := filepath.Join(root, "dangling")
+	if err := os.Symlink(filepath.Join(root, "future.md"), danglingLink); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := ContainPath(root, "dangling", PolicyRejectAbsolute); err == nil ||
+		!strings.Contains(err.Error(), "cannot be physically resolved") {
+		t.Fatalf("ContainPath(dangling) error = %v, want fail-closed resolution error", err)
+	}
 }

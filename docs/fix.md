@@ -271,8 +271,12 @@ integer is not the same as its string spelling, and a missing field is not an em
 Schema proposals (extend_enum, add_aggregate, remove_stem_field) are rejected visibly in `rejected[]` — use `rootline schema apply` instead.
 
 **Path containment.** A report is untrusted input, so every path it names is checked against
-the scan root before any file is opened. A path that escapes the root — `../../../etc/shadow`
-or an absolute path — is refused outright and never read, let alone written. Refusals land in
+the scan root before any file is opened. A path that escapes the root — through
+`../../../etc/shadow`, an absolute path, or an in-root symlink that resolves outside — is
+refused outright and never read, let alone written. Containment resolves existing symlinks
+through the deepest existing ancestor, so aliases that remain physically inside the root are
+allowed and direct missing in-root targets retain their normal planning behavior. A dangling
+symlink is refused because its physical destination cannot be established. Refusals land in
 `rejected[]`, not `errors[]`, keeping a policy decision distinguishable from a failed write:
 
 ```bash
@@ -352,8 +356,9 @@ that root, and a scan that fails surfaces in `errors[]` rather than as an all-ze
 `validation_summary`, which reads identically to a clean run.
 
 **Path containment.** As with `repair apply`, a report is untrusted input: every `create_stem`
-target is checked against the scan root before a `.stem` is written, so a report naming
-`<root>/../../outside/.stem` no longer scaffolds outside the tree the command was pointed at.
+target is checked against the scan root before a `.stem` is written, so neither
+`<root>/../../outside/.stem` nor an in-root symlink to an external directory can scaffold
+outside the tree the command was pointed at.
 
 `schema propose` emits **absolute** targets, so the propose→apply loop depends on absolute paths
 staying valid — they are accepted and then confined, not refused outright. That is the one
