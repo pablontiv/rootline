@@ -86,9 +86,13 @@ a root-anchored target cannot be anchored and stays unresolved rather than guess
 Resolution is clamped to the root. A target that walks out of the tree does not resolve —
 whether it escapes with `..` (root-anchored `/../secrets.md` or relative `../../secrets.md`) or
 through a symlink inside the tree that points outside it. Containment compares real paths, so a
-symlink that stays inside the root still resolves normally. Link targets are document-controlled
-text, and resolution would otherwise report on — and with `anchors` enabled, read — files
-outside the tree being governed.
+symlink that stays inside the root still resolves normally. Before enumerating a directory for
+an exact match or fuzzy suggestion, resolution establishes that the directory is physically
+inside the root. An escaped target stays unresolved with no suggestion, even when its first
+missing component could match a name outside the root. In-root near misses still receive
+suggestions, and `..` traversal that stays inside the root remains valid. Link targets are
+document-controlled text, and resolution would otherwise expose outside filenames — or, with
+`anchors` enabled, read files outside the tree being governed.
 
 ### Naming a file does not bypass its exclusions
 

@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -236,5 +237,96 @@ func TestResolveLinkTarget_SymlinkInsideRootResolves(t *testing.T) {
 	})
 	if !got.OK {
 		t.Errorf("symlink inside the root must resolve, got %+v", got)
+	}
+}
+
+type recordingLinkTargetProvider struct {
+	diskLinkTargetProvider
+	readDirs []string
+}
+
+func (p *recordingLinkTargetProvider) readDir(dir string) ([]string, error) {
+	p.readDirs = append(p.readDirs, dir)
+	return p.diskLinkTargetProvider.readDir(dir)
+}
+
+func TestResolveLinkTarget_RefusesOutsideEnumeration(t *testing.T) {
+	for _, tc := range []struct {
+		name, target, style  string
+		symlink, outsideBase bool
+		wantReads            int
+	}{
+		{name: "symlink missing file", target: "escape/secret-plan.md", style: extract.StyleMarkdown, symlink: true, wantReads: 1},
+		{name: "symlink missing directory", target: "escape/secret-plnas/page.md", style: extract.StyleMarkdown, symlink: true, wantReads: 1},
+		{name: "symlink inferred markdown", target: "escape/secret-plan", style: extract.StyleWikilink, symlink: true, wantReads: 1},
+		{name: "parent missing file", target: "../secret-plan.md", style: extract.StyleMarkdown},
+		{name: "parent missing directory", target: "../secret-plnas/page.md", style: extract.StyleMarkdown},
+		{name: "parent inferred markdown", target: "../secret-plan", style: extract.StyleWikilink},
+		{name: "root anchored parent", target: "/../secret-plan.md", style: extract.StyleMarkdown},
+		{name: "outside base", target: "secret-plan.md", style: extract.StyleMarkdown, outsideBase: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parent := t.TempDir()
+			root := filepath.Join(parent, "root")
+			outside := filepath.Join(parent, "outside")
+			writeFile(t, filepath.Join(root, "src.md"), "body")
+			for _, dir := range []string{parent, outside} {
+				writeFile(t, filepath.Join(dir, "secret-plans.md"), "# Secret plans\n")
+				writeFile(t, filepath.Join(dir, "secret-plans", "page.md"), "# Secret page\n")
+			}
+			if tc.symlink {
+				if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
+					t.Skipf("symlinks unavailable: %v", err)
+				}
+			}
+			base := root
+			if tc.outsideBase {
+				base = outside
+			}
+			provider := &recordingLinkTargetProvider{}
+			got := resolveLinkTarget(ResolveRequest{
+				BaseDir: base, Root: root, Target: tc.target, Style: tc.style,
+			}, provider)
+			if got != (LinkResolution{}) {
+				t.Errorf("escaped target must be unresolved without a suggestion, got %+v", got)
+			}
+			if len(provider.readDirs) != tc.wantReads {
+				t.Errorf("enumerated directories = %v, want %d in-root reads", provider.readDirs, tc.wantReads)
+			}
+			for _, dir := range provider.readDirs {
+				if !withinRoot(root, dir) {
+					t.Errorf("enumerated outside directory %q before establishing containment", dir)
+				}
+			}
+
+			// Check the public diagnostic, not just the resolver: outside names
+			// must appear in neither its suggestion field nor its message.
+			link := extract.Link{Target: tc.target, Style: tc.style, Type: "reference", Line: 1}
+			schema := LinkSchema{Styles: []string{tc.style}, Checks: &LinkChecks{Resolve: boolPtr(true), Anchors: true}}
+			errs := CheckLinks([]extract.Link{link}, schema, filepath.Join(base, "src.md"), root, nil)
+			if len(errs) != 1 || errs[0].Rule != "link_resolve" {
+				t.Fatalf("expected one link_resolve diagnostic, got %+v", errs)
+			}
+			wantMessage := fmt.Sprintf("link target %q does not resolve to an existing file (case-sensitive)", tc.target)
+			if errs[0].Suggestion != "" || errs[0].Message != wantMessage {
+				t.Errorf("escaped target diagnostic leaked a suggestion: %+v", errs[0])
+			}
+		})
+	}
+}
+
+func TestResolveLinkTarget_ParentTraversalInsideRootPreservesSuggestion(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "setup.md"), "# Setup\n")
+	writeFile(t, filepath.Join(root, "deep", "src.md"), "body")
+	provider := &recordingLinkTargetProvider{}
+	got := resolveLinkTarget(ResolveRequest{
+		BaseDir: filepath.Join(root, "deep"), Root: root, Target: "../setpu.md", Style: extract.StyleMarkdown,
+	}, provider)
+	if got.OK || got.Path != "" || got.Suggestion != "setup.md" {
+		t.Errorf("in-root near miss must retain its suggestion, got %+v", got)
+	}
+	if len(provider.readDirs) != 1 || provider.readDirs[0] != root {
+		t.Errorf("enumerated directories = %v, want only %q", provider.readDirs, root)
 	}
 }
