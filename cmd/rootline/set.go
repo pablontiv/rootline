@@ -9,6 +9,7 @@ import (
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"github.com/pablontiv/rootline/internal/fix"
+	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/proposal"
 	"github.com/pablontiv/rootline/internal/rules"
 	"github.com/spf13/cobra"
@@ -259,8 +260,13 @@ func buildProposal(op fieldOp, relPath string, effective *rules.StemFile) (propo
 }
 
 // postValidateOrRollback re-extracts the file and validates it.
-// If validation fails, the original content is restored (rollback).
+// If validation fails, it attempts to restore the original content atomically.
 func postValidateOrRollback(ctx context.Context, absPath, dir string, originalContent []byte) error {
+	return postValidateOrRollbackWithRestore(ctx, absPath, dir, originalContent, fsx.WriteFileAtomic)
+}
+
+// The restore dependency is per invocation so failure tests need no global hooks.
+func postValidateOrRollbackWithRestore(ctx context.Context, absPath, dir string, originalContent []byte, restore func(string, []byte, os.FileMode) error) error {
 	newContent, err := os.ReadFile(absPath)
 	if err != nil {
 		return fmt.Errorf("re-reading %s after mutation: %w", absPath, err)
@@ -270,9 +276,7 @@ func postValidateOrRollback(ctx context.Context, absPath, dir string, originalCo
 	ext := &extract.MarkdownExtractor{ParseAST: &parseAST}
 	newRecord, err := ext.Extract(absPath, newContent)
 	if err != nil {
-		// Rollback
-		_ = os.WriteFile(absPath, originalContent, 0644) //nolint:gosec // rollback intentionally restores the user-selected validated document path
-		return fmt.Errorf("re-extracting %s after mutation (rolled back): %w", absPath, err)
+		return restoreSetOriginal(absPath, originalContent, fmt.Sprintf("re-extracting %s after mutation", absPath), err, restore)
 	}
 
 	// Re-resolve effective after the mutation. A failed governed resolution is
@@ -280,19 +284,24 @@ func postValidateOrRollback(ctx context.Context, absPath, dir string, originalCo
 	// surface the actual cause rather than validating against stale governance.
 	freshEffective, err := rules.ResolveForRecord(dir, absPath)
 	if err != nil {
-		_ = os.WriteFile(absPath, originalContent, 0o644) //nolint:gosec // rollback intentionally restores the user-selected validated document path
-		return fmt.Errorf("resolving .stem for %s after mutation (rolled back): %w", absPath, err)
+		return restoreSetOriginal(absPath, originalContent, fmt.Sprintf("resolving .stem for %s after mutation", absPath), err, restore)
 	}
 
 	errs := rules.Validate(ctx, newRecord, freshEffective)
 	if len(errs) > 0 {
-		// Rollback
-		_ = os.WriteFile(absPath, originalContent, 0644) //nolint:gosec // rollback intentionally restores the user-selected validated document path
 		var msgs []string
 		for _, e := range errs {
 			msgs = append(msgs, fmt.Sprintf("%s: %s", e.Field, e.Message))
 		}
-		return fmt.Errorf("post-mutation validation failed (rolled back): %s", strings.Join(msgs, "; "))
+		return restoreSetOriginal(absPath, originalContent, "post-mutation validation failed", fmt.Errorf("%s", strings.Join(msgs, "; ")), restore)
 	}
 	return nil
+}
+
+// Report a completed rollback only after the atomic restore succeeds.
+func restoreSetOriginal(absPath string, originalContent []byte, stage string, cause error, restore func(string, []byte, os.FileMode) error) error {
+	if err := restore(absPath, originalContent, 0o644); err != nil {
+		return fmt.Errorf("%s: %w; restoring original content failed for %s: %w", stage, cause, absPath, err)
+	}
+	return fmt.Errorf("%s (rolled back): %w", stage, cause)
 }
