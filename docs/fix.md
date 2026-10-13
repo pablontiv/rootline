@@ -218,6 +218,14 @@ moves from `changed[]` to `rolled_back[]`, and the run reports failure. The chec
 error against one path — including a path that could not be read at all — never disables the check
 for the rest.
 
+This includes `set_section` body edits as well as frontmatter and link repairs. Proposals for the
+same target compose in report order. If their final document fails validation, all changes for that
+path are removed from `changed[]`, one `rolled_back[]` entry records the failure, and the exact
+original bytes are restored. Successful section or frontmatter repairs to other files remain in
+place. A rollback makes `complete` false and the command exit non-zero, even when `errors[]` is empty.
+In dry-run, section transforms use the same per-target content and change ledger without writing or
+post-validating files; no rollback is reported.
+
 **Per run: best-effort with honest reporting. NOT all-or-nothing.** A run that fails partway leaves
 the files it already wrote in place. It does not buffer every rewrite and flush at the end, and it
 does not roll the whole run back.

@@ -550,8 +550,8 @@ func TestApplyRepair_RejectsAbsolutePath(t *testing.T) {
 }
 
 func TestApplySetSection_ContainmentPolicy(t *testing.T) {
-	// applySetSection is reached from both repair apply and fix --all, so it
-	// carries its own guard rather than trusting the caller.
+	// fix --all's section writer guards containment independently of the
+	// repair apply preflight.
 	t.Run("rejects escaping path", func(t *testing.T) {
 		root, outside := escapeFixture(t)
 		before, err := os.ReadFile(outside)

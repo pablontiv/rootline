@@ -471,15 +471,9 @@ func rewriteRecordFile(root, path string, fm map[string]any) error {
 	return fsx.WriteFileAtomic(absPath, []byte(newContent), newFileMode)
 }
 
-// applySetSection rewrites a named section of each target document. Both the
-// repair-apply path and the fix --all path reach it, so it validates containment
-// itself rather than trusting the caller to have done so; policy carries the
-// caller's trust model for absolute paths.
+// applySetSection rewrites a named section of each target document in the
+// fix --all pipeline, validating containment under the caller's path policy.
 func applySetSection(p proposal.Proposal, root string, _ map[string]*extract.Record, policy ContainmentPolicy) error {
-	return applySetSectionWithWrite(p, root, policy, true)
-}
-
-func applySetSectionWithWrite(p proposal.Proposal, root string, policy ContainmentPolicy, write bool) error {
 	for _, relPath := range p.Paths {
 		absPath, err := ContainPath(root, relPath, policy)
 		if err != nil {
@@ -493,9 +487,6 @@ func applySetSectionWithWrite(p proposal.Proposal, root string, policy Containme
 		content, err := transformSetSection(string(data), p, relPath)
 		if err != nil {
 			return err
-		}
-		if !write {
-			continue
 		}
 		if err := fsx.WriteFileAtomic(absPath, []byte(content), newFileMode); err != nil {
 			return err
