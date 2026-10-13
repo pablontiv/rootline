@@ -455,6 +455,113 @@ schema:
 	}
 }
 
+func TestRenameTopLevelFrontmatterBytes(t *testing.T) {
+	const stem = "version: 2\nroot: true\nschema:\n  titulo:\n    type: string\n"
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		changed bool
+	}{
+		{
+			name:  "nested only",
+			input: "---\nmetadata:\n  titulo: Nested\n---\n# Body\n",
+			want:  "---\nmetadata:\n  titulo: Nested\n---\n# Body\n",
+		},
+		{
+			name:    "nested before top level",
+			input:   "---\n# Keep this comment\nmetadata:\n    titulo: Nested # keep indentation\n    items:\n      - titulo: Item\ntitulo: 'Top level'  # keep spacing\n---\n# Body\n\n```yaml\ntitulo: Body\n---\n```\n",
+			want:    "---\n# Keep this comment\nmetadata:\n    titulo: Nested # keep indentation\n    items:\n      - titulo: Item\ntitle: 'Top level'  # keep spacing\n---\n# Body\n\n```yaml\ntitulo: Body\n---\n```\n",
+			changed: true,
+		},
+		{
+			name:    "CRLF",
+			input:   "---\r\nmetadata:\r\n  titulo: Nested\r\ntitulo: Top # comment\r\n---\r\n# Body\r\n\r\n---\r\n",
+			want:    "---\r\nmetadata:\r\n  titulo: Nested\r\ntitle: Top # comment\r\n---\r\n# Body\r\n\r\n---\r\n",
+			changed: true,
+		},
+		{
+			name:    "BOM with CRLF",
+			input:   "\xef\xbb\xbf---\r\nmetadata:\r\n  titulo: Nested\r\ntitulo: Top\r\n---\r\n# Body\r\n",
+			want:    "\xef\xbb\xbf---\r\nmetadata:\r\n  titulo: Nested\r\ntitle: Top\r\n---\r\n# Body\r\n",
+			changed: true,
+		},
+		{
+			name:    "normal success",
+			input:   "---\ntitulo: Top\nmetadata:\n  titulo: Nested\n---\n# Body\n",
+			want:    "---\ntitle: Top\nmetadata:\n  titulo: Nested\n---\n# Body\n",
+			changed: true,
+		},
+		{
+			name:  "unmatched quoted key is not reported updated",
+			input: "---\n\"titulo\": Top\nmetadata:\n  titulo: Nested\n---\n# Body\n",
+			want:  "---\n\"titulo\": Top\nmetadata:\n  titulo: Nested\n---\n# Body\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, changed := renameFrontmatterField(tt.input, "titulo", "title")
+			if changed != tt.changed || got != tt.want {
+				t.Fatalf("renameFrontmatterField = (%q, %v), want (%q, %v)", got, changed, tt.want, tt.changed)
+			}
+
+			for _, dryRun := range []bool{false, true} {
+				name := "apply"
+				if dryRun {
+					name = "dry run"
+				}
+				t.Run(name, func(t *testing.T) {
+					dir := setupTestDir(t, stem, map[string]string{"doc.md": tt.input})
+					op := &RenameOperation{OldField: "titulo", NewField: "title", RootPath: dir, DryRun: dryRun}
+					result, err := op.Execute()
+					if err != nil {
+						t.Fatalf("Execute failed: %v", err)
+					}
+					wantUpdated := 0
+					if tt.changed {
+						wantUpdated = 1
+					}
+					if result.Summary.FilesScanned != 1 || result.Summary.FilesUpdated != wantUpdated || len(result.FilesUpdated) != wantUpdated {
+						t.Fatalf("unexpected update counts: %+v, files_updated: %v", result.Summary, result.FilesUpdated)
+					}
+					if tt.changed && result.FilesUpdated[0] != "doc.md" {
+						t.Errorf("files_updated = %v, want [doc.md]", result.FilesUpdated)
+					}
+					if len(result.FileDetails) != 1 || result.FileDetails[0].Path != "doc.md" || result.FileDetails[0].Updated != tt.changed {
+						t.Errorf("unexpected file details: %+v", result.FileDetails)
+					}
+					content, err := os.ReadFile(filepath.Join(dir, "doc.md"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					want := tt.want
+					if dryRun {
+						want = tt.input
+					}
+					if string(content) != want {
+						t.Errorf("document bytes = %q, want %q", content, want)
+					}
+					if result.Summary.StemsUpdated != 1 {
+						t.Errorf("stems_updated = %d, want 1", result.Summary.StemsUpdated)
+					}
+					stemContent, err := os.ReadFile(filepath.Join(dir, ".stem"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if dryRun {
+						if string(stemContent) != stem {
+							t.Error("dry run changed schema bytes")
+						}
+					} else if strings.Contains(string(stemContent), "titulo:") || !strings.Contains(string(stemContent), "title:") {
+						t.Errorf("schema rename did not complete: %s", stemContent)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestRenameFrontmatterField(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -495,6 +602,30 @@ func TestRenameFrontmatterField(t *testing.T) {
 			newField: "title",
 			want:     "---\nestado: Pending\ntitle: Hi\ntipo: task\n---\n",
 			changed:  true,
+		},
+		{
+			name:     "similar key is not a match",
+			input:    "---\ntitulo_extra: Keep\n---\ntitulo: Body\n",
+			oldField: "titulo",
+			newField: "title",
+			want:     "---\ntitulo_extra: Keep\n---\ntitulo: Body\n",
+			changed:  false,
+		},
+		{
+			name:     "closing delimiter at EOF",
+			input:    "---\ntitulo: Top\n---",
+			oldField: "titulo",
+			newField: "title",
+			want:     "---\ntitle: Top\n---",
+			changed:  true,
+		},
+		{
+			name:     "unterminated frontmatter",
+			input:    "---\ntitulo: Top\n",
+			oldField: "titulo",
+			newField: "title",
+			want:     "---\ntitulo: Top\n",
+			changed:  false,
 		},
 	}
 

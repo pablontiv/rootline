@@ -56,6 +56,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Fixed
 
+- `migrate --rename` now changes only a column-0 key in the leading document frontmatter, leaving nested keys untouched and preserving every other byte, including comments, indentation, body content, CRLF line endings, and UTF-8 BOMs. Real and dry-run results no longer claim updates when no key matches. Closes #265.
 - `migrate --rename` now preflights destination-key collisions across every affected document and declaring `.stem` before any write. Real and dry-run modes refuse identically, preserving all document/schema bytes and leaving the migration log untouched. Closes #269.
 - Boundary preflight now checks the effective `query`/`stats` target (positional path before `--from`) and the resolved `repair apply` root (`--root`, report `root`, report `path`, then report directory). Repair application consumes the same invocation-scoped report snapshot and absolute root authorized by preflight, so a changed report cannot redirect writes. Closes #263.
 - `repair apply` now post-validates and atomically rolls back invalid `set_section` edits, retracting only the reverted target's changes while preserving unrelated repairs. Section, frontmatter, and link proposals share aligned change ledgers in real and dry-run modes, and successive same-file repairs retain earlier mutations. Closes #276.
