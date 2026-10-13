@@ -13,9 +13,9 @@ import (
 // ResolveRequest describes one link target to resolve.
 //
 // BaseDir is the directory of the record that carries the link; relative
-// targets resolve against it. Root is the scan root and is only consulted for
-// root-anchored ("/x.md") targets — leave it empty when no root is in scope,
-// in which case a root-anchored target cannot be judged and stays unresolved.
+// targets resolve against it. Root bounds directory enumeration and resolved
+// targets, and root-anchored ("/x.md") targets rebase onto it. Leave it empty
+// when no root is in scope; root-anchored targets then stay unresolved.
 // Style selects style-aware behavior: only wikilinks infer a ".md" extension.
 type ResolveRequest struct {
 	BaseDir string
@@ -118,12 +118,12 @@ func resolveLinkTarget(req ResolveRequest, provider linkTargetProvider) LinkReso
 			cur = filepath.Dir(cur)
 			continue
 		}
-		entry, suggestion, ok := findEntry(provider, cur, comp)
+		entry, suggestion, ok := findEntry(provider, req.Root, cur, comp)
 		if !ok {
 			// Only the final component may gain an inferred extension:
 			// [[b]] means b.md, but a missing intermediate directory is a
 			// missing directory, not a file to guess at.
-			if inferred, ok2 := inferMarkdown(provider, cur, comp, i == len(comps)-1, req.Style); ok2 {
+			if inferred, ok2 := inferMarkdown(provider, req.Root, cur, comp, i == len(comps)-1, req.Style); ok2 {
 				cur = filepath.Join(cur, inferred)
 				continue
 			}
@@ -141,7 +141,7 @@ func resolveLinkTarget(req ResolveRequest, provider linkTargetProvider) LinkReso
 		return LinkResolution{}
 	}
 	if info.IsDir {
-		entry, suggestion, ok := findEntry(provider, cur, "README.md")
+		entry, suggestion, ok := findEntry(provider, req.Root, cur, "README.md")
 		if !ok {
 			return LinkResolution{Suggestion: suggestion}
 		}
@@ -249,11 +249,11 @@ func SchemaRoot(path string) string {
 // wikilinks: a markdown destination carries its extension by convention and
 // ADO resolves it literally, so inferring one there would accept links the
 // published wiki rejects.
-func inferMarkdown(provider linkTargetProvider, dir, comp string, isFinal bool, style string) (string, bool) {
+func inferMarkdown(provider linkTargetProvider, root, dir, comp string, isFinal bool, style string) (string, bool) {
 	if !isFinal || style != extract.StyleWikilink || strings.HasSuffix(comp, ".md") {
 		return "", false
 	}
-	entry, _, ok := findEntry(provider, dir, comp+".md")
+	entry, _, ok := findEntry(provider, root, dir, comp+".md")
 	if !ok {
 		return "", false
 	}
@@ -261,8 +261,13 @@ func inferMarkdown(provider linkTargetProvider, dir, comp string, isFinal bool, 
 }
 
 // findEntry looks for an exact-case directory entry, returning a fuzzy
-// suggestion from the directory's entries when absent.
-func findEntry(provider linkTargetProvider, dir, name string) (string, string, bool) {
+// suggestion from the directory's entries when absent. Establish physical
+// containment before enumerating: a missing component must not expose names
+// from an outside directory through a suggestion.
+func findEntry(provider linkTargetProvider, root, dir, name string) (string, string, bool) {
+	if !withinRoot(root, dir) {
+		return "", "", false
+	}
 	names, err := provider.readDir(dir)
 	if err != nil {
 		return "", "", false
