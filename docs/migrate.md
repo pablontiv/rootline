@@ -116,10 +116,19 @@ rootline migrate --rename status=estado
 
 Updates frontmatter in all affected markdown files and schema definitions in `.stem` files. Operations are logged to `.rootline-migrations` (JSON Lines, append-only).
 
+Before writing anything, rename checks every document containing the old field
+and every `.stem` declaring it. If any of those already contains the destination
+key (in frontmatter or `schema`, respectively), the command refuses the entire
+rename with an error naming the colliding path and destination key. All documents
+and `.stem` files remain byte-identical, and no migration log entry is appended.
+`--dry-run` performs the same collision checks and returns the same refusal.
+A destination key in a document or `.stem` that does not contain the old field
+does not block the rename.
+
 Each generated document or `.stem` is replaced atomically from a sibling staging
-file, so a failed write cannot leave that destination truncated. Migration runs
-are still best-effort rather than transactional: files completed before a later
-error are not rolled back.
+file, so a failed write cannot leave that destination truncated. After collision
+preflight succeeds, migration runs are still best-effort rather than transactional:
+files completed before a later write error are not rolled back.
 
 ## Split Mode
 

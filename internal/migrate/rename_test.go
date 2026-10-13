@@ -113,6 +113,136 @@ schema:
 	}
 }
 
+func TestRenameCollisionPreflight(t *testing.T) {
+	const stem = "version: 2\nroot: true\nschema:\n  titulo:\n    type: string\n"
+	const collidingStem = stem + "  title:\n    type: string\n"
+	tests := []struct {
+		name          string
+		stem          string
+		files         map[string]string
+		root          string
+		collidingPath string
+	}{
+		{
+			name: "later document",
+			stem: stem,
+			files: map[string]string{
+				"a.md": "---\ntitulo: Rename me\n---\n# First\n",
+				"z.md": "---\ntitulo: Keep me\ntitle: null\n---\n# Last\n",
+			},
+			collidingPath: "z.md",
+		},
+		{
+			name: "root stem",
+			stem: collidingStem,
+			files: map[string]string{
+				"a.md": "---\ntitulo: Rename me\n---\n# First\n",
+			},
+			collidingPath: ".stem",
+		},
+		{
+			name:          "stem without documents",
+			stem:          collidingStem,
+			collidingPath: ".stem",
+		},
+		{
+			name: "child stem after valid root",
+			stem: stem,
+			files: map[string]string{
+				"a.md":      "---\ntitulo: Rename me\n---\n# First\n",
+				"sub/.stem": collidingStem,
+				"sub/z.md":  "---\ntitulo: Rename me too\n---\n# Last\n",
+			},
+			collidingPath: filepath.Join("sub", ".stem"),
+		},
+		{
+			name: "ancestor stem",
+			stem: collidingStem,
+			files: map[string]string{
+				"sub/a.md": "---\ntitulo: Rename me\n---\n# First\n",
+			},
+			root:          "sub",
+			collidingPath: ".stem",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := setupTestDir(t, tt.stem, tt.files)
+			before := map[string]string{".stem": tt.stem}
+			for path, content := range tt.files {
+				before[path] = content
+			}
+			var dryRunError string
+			for _, dryRun := range []bool{true, false} {
+				op := &RenameOperation{
+					OldField: "titulo",
+					NewField: "title",
+					RootPath: filepath.Join(dir, tt.root),
+					DryRun:   dryRun,
+				}
+				result, err := op.Execute()
+				if err == nil {
+					t.Fatalf("dry-run=%v: expected collision refusal", dryRun)
+				}
+				if result != nil {
+					t.Errorf("dry-run=%v: refused rename returned a result", dryRun)
+				}
+				if !strings.Contains(err.Error(), tt.collidingPath) || !strings.Contains(err.Error(), `"title"`) {
+					t.Errorf("dry-run=%v: error must name colliding path and destination key: %v", dryRun, err)
+				}
+				if dryRun {
+					dryRunError = err.Error()
+				} else if err.Error() != dryRunError {
+					t.Errorf("real refusal %q differs from dry-run %q", err.Error(), dryRunError)
+				}
+				for path, want := range before {
+					content, readErr := os.ReadFile(filepath.Join(dir, path))
+					if readErr != nil {
+						t.Fatal(readErr)
+					}
+					if string(content) != want {
+						t.Errorf("dry-run=%v: %s changed on collision refusal", dryRun, path)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestRenameDestinationWithoutSource(t *testing.T) {
+	const stem = "version: 2\nroot: true\nschema:\n    titulo:\n        type: string\n"
+	files := map[string]string{
+		"a.md":      "---\ntitulo: Rename me\n---\n# First\n",
+		"z.md":      "---\ntitle: Keep me\n---\n# Last\n",
+		"sub/.stem": "version: 2\nschema:\n  title:\n    type: string\n",
+	}
+	dir := setupTestDir(t, stem, files)
+	op := &RenameOperation{OldField: "titulo", NewField: "title", RootPath: dir}
+	result, err := op.Execute()
+	if err != nil {
+		t.Fatalf("destination without source must not collide: %v", err)
+	}
+	if result.Summary.FilesUpdated != 1 || result.Summary.StemsUpdated != 1 {
+		t.Fatalf("unexpected update counts: %+v", result.Summary)
+	}
+	for _, path := range []string{"a.md", "z.md", ".stem", "sub/.stem"} {
+		want := files[path]
+		switch path {
+		case "a.md":
+			want = strings.Replace(want, "titulo:", "title:", 1)
+		case ".stem":
+			want = strings.Replace(stem, "titulo:", "title:", 1)
+		}
+		content, err := os.ReadFile(filepath.Join(dir, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(content) != want {
+			t.Errorf("%s = %q, want %q", path, content, want)
+		}
+	}
+}
+
 func TestRenameNonexistentField(t *testing.T) {
 	stem := `version: 2
 schema:
