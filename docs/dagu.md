@@ -37,9 +37,10 @@ a background server.
 
 ## Modes and commands
 
-Choose a unique run ID and space ID; use simple identifiers rather than paths.
-The recipe arguments are `RUN_ID [MODE [SPACE_ID [ISSUE_NUMBER]]]`, with defaults
-`shadow`, `local`, and `0`:
+Choose a unique logical run ID and space ID; use simple identifiers rather than
+paths. The initial Dagu execution ID equals that logical `RUN_ID`. The recipe
+arguments are `RUN_ID [MODE [SPACE_ID [ISSUE_NUMBER]]]`, with defaults `shadow`,
+`local`, and `0`:
 
 ```sh
 just dagu-start pilot-001
@@ -170,8 +171,9 @@ failed step and evidence before retrying; never bypass preconditions to obtain
 a green result. If terminal cleanup already removed the worktree, the retry
 recreates it at the immutable `tested.sha` and phase checkpoints prevent
 successful upstream gate work from rerunning. A changed source SHA or a dirty
-worktree is not recoverable evidence: commit the intended source change and
-start a fresh run ID instead.
+worktree is not recoverable evidence. Commit the intended source change; for an
+existing PR use the fresh-attempt command below, not a different logical run ID
+(which would select a different branch and PR).
 
 Normal success, exhausted failure, and abort clean up the owned
 local worktree, branch, and lock. After a process crash or interrupted cleanup,
@@ -179,6 +181,74 @@ local worktree, branch, and lock. After a process crash or interrupted cleanup,
 `cleanup.sh SPACE_ID RUN_ID`; it must refuse to release another owner's lock or
 remove another owner's resources. Evidence remains in the run directory for
 inspection. Recovery does not undo remote branches, PRs, or published statuses.
+
+### Fresh execution of an existing PR
+
+After a failed forge or hosted-CI attempt has completed terminal cleanup, keep
+its logical `RUN_ID` and choose a new, unique Dagu execution ID:
+
+```sh
+just dagu-fresh-attempt pilot-003 pilot-003-attempt2 pr team-a 261
+# Arguments: RUN_ID EXECUTION_ID MODE SPACE_ID ISSUE_NUMBER
+```
+
+`MODE` is explicit: `shadow`, `pr`, or `merge`, with the same behavior as an
+initial start (`merge` still authorizes automatic guarded merge). The issue
+must match the prior attempt's immutable `issue`, and the prior attempt must
+have recorded a PR number and tested SHA (or retain the linkage from a fresh
+launch that failed before testing). Shadow-only **prior** attempts, unbound,
+merged, non-cleaned, occupied, and symlinked state are refused. The
+repository lock must be absent even when it names this same owner. The command
+acquires it exclusively and retains it until normal DAG cleanup; simultaneous
+fresh launches cannot both reset the live evidence.
+
+The command reserves a previously nonexistent archive container and atomically
+renames the entire old live state into it, without copying or overwriting:
+
+```text
+$DAGU_HOME/data/rootline-attempts/<space>/<logical-run>/<new-execution>/state/
+$DAGU_HOME/data/rootline-runs/<space>/<logical-run>/
+    owner       # unchanged logical ownership record
+    issue       # unchanged issue number
+    pr          # unchanged PR binding
+    attempt     # new Dagu execution ID
+    previous    # data-relative path to the archived prior state
+```
+
+Archive containers are append-only through this command: existing IDs and
+symlinked archive paths are refused, and no recovery command deletes archives.
+Each archive contains the **prior** attempt, keyed by the execution that retired
+it. New live state has no tested SHA, checkpoints, local gate seal, or CI evidence;
+the feature DAG must produce all of those anew.
+
+The launcher uses `dagu start --run-id <new-execution>` with
+`RUN_ID=<unchanged-logical-run>`, so the external worktree and
+`dagu/<space>/<logical-run>` branch remain stable. PR lookup must retain the
+recorded number. Commit the new source on clean local `master` as a descendant
+of the existing PR head: the existing forge ancestry check refuses divergence
+before pushing, rather than force-pushing or creating a second PR. No branch
+renaming, rebase, or ancestry bypass is performed.
+
+Use the **execution** ID for Dagu retry and the **logical** ID for owner recovery:
+
+```sh
+just dagu-retry pilot-003-attempt2 FAILED_STEP
+just dagu-recover pilot-003 team-a
+```
+
+If launching fails before Dagu's normal exit cleanup, the command exits nonzero
+and leaves the owner lock and all archived evidence intact. Inspect that
+execution before recovery; do not recover a still-running execution. Run
+owner-bound recovery, then choose another unique execution ID for the next
+fresh attempt. A failure during the filesystem transition likewise retains the
+lock: inspect the reserved archive and live directory. New linkage is prepared
+in the reserved container's `live/` before either rename. If interrupted between
+renames, the old evidence is safely in `state/` and the complete new record is
+still in `live/`; after ensuring no execution is running, publish that prepared
+`live/` to the missing logical live path, then run owner-bound recovery. If the
+old live path still exists, leave it untouched and recover that owner instead.
+Never delete or overwrite archived `state/`, and never reuse a reserved
+execution ID, even when launch did not reach the DAG.
 
 Advance deliberately. Phase 1 requires five successful `shadow` runs plus
 restart/checkpoint, injected E2E crash, lock-contention, stale-SHA, and

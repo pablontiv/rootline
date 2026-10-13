@@ -28,6 +28,9 @@ lookup_pr() {
         IFS=$'\t' read -r PR HEAD_SHA PR_STATE PR_URL <<< "$row"
         [[ "$PR" =~ ^[1-9][0-9]*$ && "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || fail 'invalid PR response'
     fi
+    if [[ -f "$STATE/pr" ]]; then
+        [[ "$(cat "$STATE/pr")" == "$PR" ]] || fail 'run PR binding changed or disappeared'
+    fi
 }
 ci_evidence_valid() {
     [[ -f "$STATE/ci.owner" && -f "$STATE/ci.sha" && -s "$STATE/ci.checks" ]] &&

@@ -126,6 +126,10 @@ dagu-validate:
 dagu-start run_id mode="shadow" space_id="local" issue_number="0":
     .workspace/dagu/bin/dagu start --run-id "{{run_id}}" .workspace/dagu/dags/rootline-feature.yaml -- SPACE_ID="{{space_id}}" RUN_ID="{{run_id}}" MODE="{{mode}}" ISSUE_NUMBER="{{issue_number}}"
 
+# Archive a cleaned PR-bound attempt and launch new execution under the same owner
+dagu-fresh-attempt run_id execution_id mode space_id issue_number:
+    bash .workspace/dagu/scripts/fresh-attempt.sh "{{run_id}}" "{{execution_id}}" "{{mode}}" "{{space_id}}" "{{issue_number}}"
+
 # Retry one named failed step with the original run's parameters
 dagu-retry run_id step:
     .workspace/dagu/bin/dagu retry --run-id "{{run_id}}" --step "{{step}}" --downstream .workspace/dagu/dags/rootline-feature.yaml
