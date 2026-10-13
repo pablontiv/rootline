@@ -39,9 +39,9 @@ type StatsResult struct {
 func runStats(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
-	scanRoot := statsFrom
-	if len(args) > 0 {
-		scanRoot = args[0]
+	scanRoot, err := commandScanRoot(cmd, args)
+	if err != nil {
+		return err
 	}
 
 	absRoot, err := filepath.Abs(scanRoot)

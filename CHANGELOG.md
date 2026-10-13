@@ -55,6 +55,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Fixed
 
+- Boundary preflight now checks the effective `query`/`stats` target (positional path before `--from`) and the resolved `repair apply` root (`--root`, report `root`, report `path`, then report directory). Repair application consumes the same invocation-scoped report snapshot and absolute root authorized by preflight, so a changed report cannot redirect writes. Closes #263.
 - `repair apply` now post-validates and atomically rolls back invalid `set_section` edits, retracting only the reverted target's changes while preserving unrelated repairs. Section, frontmatter, and link proposals share aligned change ledgers in real and dry-run modes, and successive same-file repairs retain earlier mutations. Closes #276.
 - `set` now restores original document bytes atomically after post-mutation extraction, schema resolution, or validation failure, preserving file mode. A failed restore reports the original cause, absolute unreverted path, and restore error without falsely claiming rollback. Closes #271.
 - Report-selected repair and schema targets now resolve existing symlinks before containment checks. Directory and file aliases that escape the scan root are rejected before access, while aliases and missing targets that remain physically inside the root retain their existing behavior.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -56,38 +57,68 @@ func init() {
 	rootCmd.AddCommand(repairCmd)
 }
 
-func runRepairApply(cmd *cobra.Command, _ []string) error {
-	if reportPath == "" {
-		return fmt.Errorf("--report is required")
+type repairInvocationKey struct{}
+
+// repairInvocation binds the report snapshot and absolute root authorized by
+// preflight. RunE must not reread a report that could now name another tree.
+type repairInvocation struct {
+	report proposal.Report
+	root   string
+}
+
+func prepareRepairInvocation(cmd *cobra.Command) (*repairInvocation, error) {
+	if cmd.Flags().Lookup("report") == nil {
+		return nil, fmt.Errorf("--report is required")
+	}
+	reportFile, err := cmd.Flags().GetString("report")
+	if err != nil {
+		return nil, err
+	}
+	if reportFile == "" {
+		return nil, fmt.Errorf("--report is required")
 	}
 
 	// Read report from file.
-	reportData, err := os.ReadFile(reportPath)
+	reportData, err := os.ReadFile(reportFile)
 	if err != nil {
-		return fmt.Errorf("reading report %s: %w", reportPath, err)
+		return nil, fmt.Errorf("reading report %s: %w", reportFile, err)
 	}
 
 	var report proposal.Report
 	if err := json.Unmarshal(reportData, &report); err != nil {
-		return fmt.Errorf("parsing report: %w", err)
+		return nil, fmt.Errorf("parsing report: %w", err)
 	}
 
 	// Validate report version and kind.
 	if report.Version != 1 {
-		return fmt.Errorf("unsupported report version: %d (expected 1)", report.Version)
+		return nil, fmt.Errorf("unsupported report version: %d (expected 1)", report.Version)
 	}
 	if report.Kind != "rootline/proposals" {
-		return fmt.Errorf("wrong report kind: %s (expected rootline/proposals)", report.Kind)
+		return nil, fmt.Errorf("wrong report kind: %s (expected rootline/proposals)", report.Kind)
 	}
 
 	// Determine the root directory using the four-level precedence chain.
-	root, err := resolveReportRoot(repairRoot, report.Root, report.Path, reportPath)
+	explicitRoot, err := cmd.Flags().GetString("root")
 	if err != nil {
-		return fmt.Errorf("resolving report root: %w", err)
+		return nil, err
+	}
+	root, err := resolveReportRoot(explicitRoot, report.Root, report.Path, reportFile)
+	if err != nil {
+		return nil, fmt.Errorf("resolving report root: %w", err)
+	}
+	return &repairInvocation{report: report, root: root}, nil
+}
+
+func runRepairApply(cmd *cobra.Command, _ []string) error {
+	invocation, _ := cmd.Context().Value(repairInvocationKey{}).(*repairInvocation)
+	// Consume authorization even if applying or rendering fails.
+	cmd.SetContext(context.WithValue(cmd.Context(), repairInvocationKey{}, (*repairInvocation)(nil)))
+	if invocation == nil {
+		return fmt.Errorf("repair invocation was not authorized by boundary preflight")
 	}
 
-	// Apply repair.
-	result, err := fix.ApplyRepair(report.Proposals, repairDryRun, root, repairFillMissing)
+	// Apply exactly the report and root inspected by preflight.
+	result, err := fix.ApplyRepair(invocation.report.Proposals, repairDryRun, invocation.root, repairFillMissing)
 	if err != nil {
 		return fmt.Errorf("applying repair: %w", err)
 	}
