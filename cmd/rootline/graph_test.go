@@ -117,6 +117,54 @@ func TestGraphCheck_CyclesOptInFails(t *testing.T) {
 	}
 }
 
+func TestGraphCheck_OverlappingCycleMembershipOptIn(t *testing.T) {
+	tests := []struct {
+		name       string
+		optIn      string
+		flags      []string
+		wantFailed bool
+	}{
+		{name: "omitted cyclic member", optIn: "d", wantFailed: true},
+		{name: "acyclic member", optIn: "e"},
+		{name: "explicit false overrides cyclic opt-in", optIn: "d", flags: []string{"--fail-cycles=false"}},
+		{name: "explicit true overrides acyclic opt-in", optIn: "e", flags: []string{"--fail-cycles=true"}, wantFailed: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\nroot: true\n"), 0644)
+			for _, child := range []string{"d", "e"} {
+				if err := os.Mkdir(filepath.Join(dir, child), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			mustWriteFile(t, filepath.Join(dir, tt.optIn, ".stem"), []byte("version: 2\nlinks:\n  checks:\n    cycles: true\n"), 0644)
+			mustWriteFile(t, filepath.Join(dir, "a.md"), []byte("---\n---\n# A\n[[b.md]]\n[[d/d.md]]\n[[e/e.md]]\n"), 0644)
+			mustWriteFile(t, filepath.Join(dir, "b.md"), []byte("---\n---\n# B\n[[c.md]]\n"), 0644)
+			mustWriteFile(t, filepath.Join(dir, "c.md"), []byte("---\n---\n# C\n[[a.md]]\n"), 0644)
+			mustWriteFile(t, filepath.Join(dir, "d", "d.md"), []byte("---\n---\n# D\n[[../b.md]]\n"), 0644)
+			mustWriteFile(t, filepath.Join(dir, "e", "e.md"), []byte("---\n---\n# E\n"), 0644)
+
+			args := append([]string{"graph", "--check", "--quiet-cycles=false"}, tt.flags...)
+			out, err := runCmd(t, append(args, dir)...)
+			header := "Cycles found (informational): 1"
+			if tt.wantFailed {
+				if err != ErrValidationFailed {
+					t.Fatalf("expected ErrValidationFailed, got: %v\noutput: %s", err, out)
+				}
+				header = "Cycles found: 1"
+			} else if err != nil {
+				t.Fatalf("expected informational success, got: %v\noutput: %s", err, out)
+			}
+			// d belongs to a cycle, but the canonical report must still omit it.
+			wantReport := header + "\n  1: a.md → b.md → c.md → a.md\n"
+			if !strings.Contains(out, wantReport) {
+				t.Errorf("expected unchanged cycle report %q, got: %s", wantReport, out)
+			}
+		})
+	}
+}
+
 func TestGraphCheck_InformationalCyclesDontMaskBrokenLinks(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)

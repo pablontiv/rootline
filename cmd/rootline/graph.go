@@ -129,9 +129,26 @@ func runGraph(cmd *cobra.Command, args []string) error {
 
 	g := graph.Build(ctx, records)
 	cycles := g.DetectCycles()
-	failCycles := anyCycleOptsIn(cycles, cycleScope)
-	if cmd.Flags().Changed("fail-cycles") {
-		failCycles = graphFailCycles
+	failCycles := graphFailCycles
+	if !cmd.Flags().Changed("fail-cycles") {
+		failCycles = false
+		if graphCheck && len(cycles) > 0 {
+			var members map[string]bool
+			for path, optedIn := range cycleScope {
+				if !optedIn {
+					continue
+				}
+				// Reported back-edge paths can omit members of overlapping
+				// cycles. Resolve complete membership only when scope needs it.
+				if members == nil {
+					members = g.CycleMembers()
+				}
+				if members[path] {
+					failCycles = true
+					break
+				}
+			}
+		}
 	}
 	broken := g.BrokenLinks()
 
@@ -266,23 +283,6 @@ func renderDOT(cmd *cobra.Command, g *graph.Graph) {
 		_, _ = fmt.Fprintf(w, "  %q -> %q [label=%q];\n", e.Source, e.Target, e.Type)
 	}
 	_, _ = fmt.Fprintln(w, "}")
-}
-
-// anyCycleOptsIn reports whether any detected cycle passes through a record
-// whose schema asked for cycles to fail.
-//
-// Deciding per cycle rather than per run means hardening declared in one
-// subtree fails the cycles that actually run through it, without failing
-// unrelated cycles in a tree that never opted in.
-func anyCycleOptsIn(cycles [][]string, scope map[string]bool) bool {
-	for _, cycle := range cycles {
-		for _, node := range cycle {
-			if scope[node] {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func renderMermaid(cmd *cobra.Command, g *graph.Graph) {
