@@ -509,3 +509,28 @@ func TestClassifier_MultipleBreakingWithCounts(t *testing.T) {
 		}
 	}
 }
+
+func TestClassifier_AttributeSurfaces(t *testing.T) {
+	records := []*extract.Record{
+		{Path: "a.md", Frontmatter: map[string]any{"id": "T001"}},
+		{Path: "b.md", Frontmatter: map[string]any{}},
+	}
+	for _, tt := range []struct {
+		kind ChangeKind
+		want int
+	}{
+		{PrefixChanged, 1},
+		{DigitsChanged, 1},
+		{MatchChanged, 2},
+		{RequiredMatchChanged, 2},
+		{ExcludesChanged, 2},
+	} {
+		t.Run(string(tt.kind), func(t *testing.T) {
+			result := &DiffResult{Changes: []Change{{Kind: tt.kind, Field: "id", Breaking: true}}}
+			Classify(result, records)
+			if result.Changes[0].AffectedFiles != tt.want {
+				t.Fatalf("affected files = %d, want %d", result.Changes[0].AffectedFiles, tt.want)
+			}
+		})
+	}
+}

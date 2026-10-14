@@ -5,9 +5,13 @@
 package migrate
 
 import (
+	"encoding/json"
+	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/pablontiv/rootline/internal/rules"
+	"gopkg.in/yaml.v3"
 )
 
 // ChangeKind classifies a schema change.
@@ -26,6 +30,14 @@ const (
 	SourceChanged    ChangeKind = "source_changed"
 	RuleAdded        ChangeKind = "rule_added"
 	RuleRemoved      ChangeKind = "rule_removed"
+)
+
+const (
+	PrefixChanged        ChangeKind = "prefix_changed"
+	DigitsChanged        ChangeKind = "digits_changed"
+	MatchChanged         ChangeKind = "match_changed"
+	RequiredMatchChanged ChangeKind = "required_match_changed"
+	ExcludesChanged      ChangeKind = "excludes_changed"
 )
 
 // Change represents a single schema change between two .stem versions.
@@ -165,6 +177,23 @@ func diffSchemaField(result *DiffResult, name string, before, after rules.Schema
 		})
 	}
 
+	// Sequence formatting and applicability changes can invalidate existing records.
+	if before.Prefix != after.Prefix {
+		diffFieldAttribute(result, name, "prefix", PrefixChanged, before.Prefix, after.Prefix)
+	}
+	if before.Digits != after.Digits {
+		diffFieldAttribute(result, name, "digits", DigitsChanged, before.Digits, after.Digits)
+	}
+	if !reflect.DeepEqual(before.Match, after.Match) {
+		diffFieldAttribute(result, name, "match", MatchChanged, before.Match, after.Match)
+	}
+	if !reflect.DeepEqual(before.RequiredMatch, after.RequiredMatch) {
+		diffFieldAttribute(result, name, "required_match", RequiredMatchChanged, before.RequiredMatch, after.RequiredMatch)
+	}
+	if !reflect.DeepEqual(before.Excludes, after.Excludes) {
+		diffFieldAttribute(result, name, "excludes", ExcludesChanged, before.Excludes, after.Excludes)
+	}
+
 	// Enum value changes (only for enum type fields).
 	if before.Type == "enum" && after.Type == "enum" {
 		diffEnumValues(result, name, before.Values, after.Values)
@@ -193,6 +222,22 @@ func diffSchemaField(result *DiffResult, name string, before, after rules.Schema
 			Message:  "field " + name + " severity changed from " + before.Severity + " to " + after.Severity,
 		})
 	}
+}
+
+func diffFieldAttribute(result *DiffResult, field, attribute string, kind ChangeKind, before, after any) {
+	oldValue := diffValue(map[string]any{attribute: before})
+	newValue := diffValue(map[string]any{attribute: after})
+	if oldValue == newValue {
+		return
+	}
+	result.addChange(Change{
+		Kind:     kind,
+		Field:    field,
+		Breaking: true,
+		Before:   oldValue,
+		After:    newValue,
+		Message:  "field " + field + " " + attribute + " changed from " + oldValue + " to " + newValue,
+	})
 }
 
 func diffEnumValues(result *DiffResult, field string, before, after []string) {
@@ -230,47 +275,62 @@ func diffEnumValues(result *DiffResult, field string, before, after []string) {
 }
 
 func diffValidationRules(result *DiffResult, before, after []rules.ValidationRule) {
-	// Simple comparison: serialize each rule to a key and compare sets.
+	// Compare complete declared constraints; cache keys for ordered removals.
+	beforeValues := make([]string, len(before))
 	beforeKeys := make(map[string]bool, len(before))
-	for _, r := range before {
-		beforeKeys[ruleKey(r)] = true
+	for i, r := range before {
+		beforeValues[i] = ruleKey(r)
+		beforeKeys[beforeValues[i]] = true
 	}
 	afterKeys := make(map[string]bool, len(after))
 	for _, r := range after {
-		afterKeys[ruleKey(r)] = true
-	}
-
-	for _, r := range after {
-		if !beforeKeys[ruleKey(r)] {
+		key := ruleKey(r)
+		afterKeys[key] = true
+		if !beforeKeys[key] {
 			result.addChange(Change{
 				Kind:     RuleAdded,
 				Field:    r.Field,
 				Breaking: false,
-				After:    r.Rule,
-				Message:  "validation rule added: " + r.Rule,
+				After:    key,
+				Message:  "validation rule added: " + key,
 			})
 		}
 	}
-	for _, r := range before {
-		if !afterKeys[ruleKey(r)] {
+	for i, r := range before {
+		if !afterKeys[beforeValues[i]] {
 			result.addChange(Change{
 				Kind:     RuleRemoved,
 				Field:    r.Field,
 				Breaking: true,
-				Before:   r.Rule,
-				Message:  "validation rule removed: " + r.Rule,
+				Before:   beforeValues[i],
+				Message:  "validation rule removed: " + beforeValues[i],
 			})
 		}
 	}
 }
 
 func ruleKey(r rules.ValidationRule) string {
-	// Build a simple unique key for comparison.
-	key := r.Rule + "|" + r.Field
-	if r.Severity != "" {
-		key += "|" + r.Severity
+	// Source is provenance, not part of the declared constraint.
+	return diffValue(map[string]any{
+		"rule": r.Rule, "field": r.Field, "severity": r.Severity,
+		"if": r.If, "then": r.Then,
+	})
+}
+
+// diffValue keeps snapshots named and deterministic, including absent values.
+func diffValue(value any) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		// Parsed YAML can contain values JSON cannot represent, such as non-string
+		// map keys. YAML's sorted encoding preserves those values without pointer
+		// addresses or an empty comparison key.
+		data, yamlErr := yaml.Marshal(value)
+		if yamlErr != nil {
+			panic("migrate diff: cannot encode parsed YAML value: " + yamlErr.Error())
+		}
+		return strings.TrimSpace(string(data))
 	}
-	return key
+	return string(data)
 }
 
 func schemaOrEmpty(s *rules.StemFile) map[string]rules.SchemaField {

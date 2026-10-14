@@ -1,6 +1,9 @@
 package migrate
 
 import (
+	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/rules"
@@ -534,5 +537,292 @@ func TestDiff_DeterministicOrder(t *testing.T) {
 	}
 	if result.Changes[2].Field != "z_field" {
 		t.Errorf("expected third change on z_field, got %s", result.Changes[2].Field)
+	}
+}
+
+func TestDiff_FieldAttributeSurfaces(t *testing.T) {
+	tests := []struct {
+		name        string
+		kind        ChangeKind
+		before      rules.SchemaField
+		after       rules.SchemaField
+		wantBefore  string
+		wantAfter   string
+		wantMissing string
+	}{
+		{
+			name: "prefix", kind: PrefixChanged,
+			before:     rules.SchemaField{Type: "sequence", Prefix: "T"},
+			after:      rules.SchemaField{Type: "sequence", Prefix: "F"},
+			wantBefore: `{"prefix":"T"}`, wantAfter: `{"prefix":"F"}`, wantMissing: `{"prefix":""}`,
+		},
+		{
+			name: "digits", kind: DigitsChanged,
+			before:     rules.SchemaField{Type: "sequence", Digits: 3},
+			after:      rules.SchemaField{Type: "sequence", Digits: 2},
+			wantBefore: `{"digits":3}`, wantAfter: `{"digits":2}`, wantMissing: `{"digits":0}`,
+		},
+		{
+			name: "match", kind: MatchChanged,
+			before:     rules.SchemaField{Type: "string", Match: &rules.FieldMatch{Patterns: []string{"T*"}}},
+			after:      rules.SchemaField{Type: "string", Match: &rules.FieldMatch{Patterns: []string{"F*"}}},
+			wantBefore: `{"match":{"patterns":["T*"]}}`, wantAfter: `{"match":{"patterns":["F*"]}}`, wantMissing: `{"match":null}`,
+		},
+		{
+			name: "match configs", kind: MatchChanged,
+			before: rules.SchemaField{Type: "sequence", Match: &rules.FieldMatch{Configs: map[string]any{
+				"T*": map[string]any{"prefix": "T", "digits": 3},
+			}}},
+			after: rules.SchemaField{Type: "sequence", Match: &rules.FieldMatch{Configs: map[string]any{
+				"T*": map[string]any{"prefix": "T", "digits": 2},
+			}}},
+			wantBefore: `{"match":{"configs":{"T*":{"digits":3,"prefix":"T"}}}}`,
+			wantAfter:  `{"match":{"configs":{"T*":{"digits":2,"prefix":"T"}}}}`, wantMissing: `{"match":null}`,
+		},
+		{
+			name: "required_match", kind: RequiredMatchChanged,
+			before:     rules.SchemaField{Type: "string", RequiredMatch: &rules.FieldMatch{Patterns: []string{"T*"}}},
+			after:      rules.SchemaField{Type: "string", RequiredMatch: &rules.FieldMatch{Patterns: []string{"F*"}}},
+			wantBefore: `{"required_match":{"patterns":["T*"]}}`, wantAfter: `{"required_match":{"patterns":["F*"]}}`, wantMissing: `{"required_match":null}`,
+		},
+		{
+			name: "excludes", kind: ExcludesChanged,
+			before:     rules.SchemaField{Type: "string", Excludes: &rules.ExcludeRule{Match: "README.md"}},
+			after:      rules.SchemaField{Type: "string", Excludes: &rules.ExcludeRule{Match: "index.md"}},
+			wantBefore: `{"excludes":{"match":"README.md"}}`, wantAfter: `{"excludes":{"match":"index.md"}}`, wantMissing: `{"excludes":null}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			missing := rules.SchemaField{Type: tt.before.Type}
+			cases := []struct {
+				name       string
+				before     rules.SchemaField
+				after      rules.SchemaField
+				wantBefore string
+				wantAfter  string
+			}{
+				{"edited", tt.before, tt.after, tt.wantBefore, tt.wantAfter},
+				{"added", missing, tt.after, tt.wantMissing, tt.wantAfter},
+				{"removed", tt.before, missing, tt.wantBefore, tt.wantMissing},
+				{"unchanged", tt.before, tt.before, "", ""},
+			}
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					before := &rules.StemFile{Schema: map[string]rules.SchemaField{"id": tc.before}}
+					after := &rules.StemFile{Schema: map[string]rules.SchemaField{"id": tc.after}}
+					got := Diff(".stem", before, after)
+					if tc.name == "unchanged" {
+						if got.TotalCount != 0 || got.BreakingCount != 0 || len(got.Changes) != 0 {
+							t.Fatalf("unchanged attribute produced changes: %+v", got)
+						}
+						return
+					}
+					if got.TotalCount != 1 || got.BreakingCount != 1 || len(got.Changes) != 1 {
+						t.Fatalf("expected one breaking attribute change: %+v", got)
+					}
+					change := got.Changes[0]
+					if change.Kind != tt.kind || change.Field != "id" || !change.Breaking ||
+						change.Before != tc.wantBefore || change.After != tc.wantAfter {
+						t.Fatalf("unexpected attribute change: %+v", change)
+					}
+					if !strings.Contains(change.Message, tc.wantBefore) || !strings.Contains(change.Message, tc.wantAfter) {
+						t.Fatalf("table message omits before/after: %s", change.Message)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestDiff_ConditionalRuleSurfaces(t *testing.T) {
+	rule := func(condition, required string) rules.ValidationRule {
+		return rules.ValidationRule{
+			Rule: "requires", Severity: "error",
+			If: map[string]any{"status": condition}, Then: map[string]any{"fields": []string{required}},
+		}
+	}
+	tests := []struct {
+		name   string
+		before rules.ValidationRule
+		after  rules.ValidationRule
+		count  int
+	}{
+		{"if only", rule("draft", "owner"), rule("published", "owner"), 2},
+		{"then only", rule("published", "owner"), rule("published", "reviewer"), 2},
+		{"if and then", rule("draft", "owner"), rule("published", "reviewer"), 2},
+		{"if removed", rule("draft", "owner"), rules.ValidationRule{Rule: "requires", Severity: "error", Then: map[string]any{"fields": []string{"owner"}}}, 2},
+		{"then removed", rule("draft", "owner"), rules.ValidationRule{Rule: "requires", Severity: "error", If: map[string]any{"status": "draft"}}, 2},
+		{"if added", rules.ValidationRule{Rule: "requires", Severity: "error"}, rules.ValidationRule{Rule: "requires", Severity: "error", If: map[string]any{"status": "draft"}}, 2},
+		{"then added", rules.ValidationRule{Rule: "requires", Severity: "error"}, rules.ValidationRule{Rule: "requires", Severity: "error", Then: map[string]any{"fields": []string{"owner"}}}, 2},
+		{"last if removed", rules.ValidationRule{Rule: "requires", Severity: "error", If: map[string]any{"status": "draft"}}, rules.ValidationRule{Rule: "requires", Severity: "error"}, 2},
+		{"last then removed", rules.ValidationRule{Rule: "requires", Severity: "error", Then: map[string]any{"fields": []string{"owner"}}}, rules.ValidationRule{Rule: "requires", Severity: "error"}, 2},
+		{"unchanged", rule("published", "owner"), rule("published", "owner"), 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			before := &rules.StemFile{Validate: []rules.ValidationRule{tt.before}}
+			after := &rules.StemFile{Validate: []rules.ValidationRule{tt.after}}
+			got := Diff(".stem", before, after)
+			if got.TotalCount != tt.count || len(got.Changes) != tt.count {
+				t.Fatalf("unexpected conditional diff: %+v", got)
+			}
+			if tt.count == 0 {
+				if got.BreakingCount != 0 {
+					t.Fatalf("unchanged rule has breaking changes: %+v", got)
+				}
+				return
+			}
+			if got.BreakingCount != 1 || got.Changes[0].Kind != RuleAdded || got.Changes[1].Kind != RuleRemoved {
+				t.Fatalf("conditional edits must be an added/removed pair: %+v", got)
+			}
+			for i, expected := range []rules.ValidationRule{tt.after, tt.before} {
+				change := got.Changes[i]
+				snapshot := change.After
+				if change.Kind == RuleRemoved {
+					snapshot = change.Before
+				}
+				var values map[string]json.RawMessage
+				if err := json.Unmarshal([]byte(snapshot), &values); err != nil {
+					t.Fatalf("invalid named rule snapshot %q: %v", snapshot, err)
+				}
+				for name, value := range map[string]any{"rule": expected.Rule, "field": expected.Field, "severity": expected.Severity, "if": expected.If, "then": expected.Then} {
+					want, err := json.Marshal(value)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if string(values[name]) != string(want) {
+						t.Errorf("%s snapshot = %s, want %s", name, values[name], want)
+					}
+				}
+				if !strings.Contains(change.Message, snapshot) {
+					t.Fatalf("table message omits conditional snapshot: %s", change.Message)
+				}
+			}
+		})
+	}
+}
+
+func TestDiff_AttributeSurfaceDeterminism(t *testing.T) {
+	stem := func(changed bool) *rules.StemFile {
+		prefix, digits, pattern, status, required := "T", 3, "T*", "draft", "owner"
+		if changed {
+			prefix, digits, pattern, status, required = "F", 2, "F*", "published", "reviewer"
+		}
+		return &rules.StemFile{
+			Schema: map[string]rules.SchemaField{
+				"z_field": {Type: "sequence", Prefix: prefix, Digits: digits},
+				"a_field": {
+					Type: "string", Match: &rules.FieldMatch{Configs: map[string]any{
+						"T*": map[string]any{"prefix": prefix, "digits": digits},
+						"F*": map[string]any{"digits": digits, "prefix": prefix},
+					}},
+					RequiredMatch: &rules.FieldMatch{Patterns: []string{pattern}},
+					Excludes:      &rules.ExcludeRule{Match: pattern},
+				},
+			},
+			Validate: []rules.ValidationRule{
+				{Rule: "requires", If: map[string]any{"status": status}, Then: map[string]any{"fields": []string{required}}},
+				{Rule: "requires", If: map[string]any{"status": status, "kind": "task"}, Then: map[string]any{"fields": []string{required, "title"}}},
+			},
+		}
+	}
+	want := Diff(".stem", stem(false), stem(true))
+	if want.TotalCount != 9 || want.BreakingCount != 7 {
+		t.Fatalf("unexpected combined diff: %+v", want)
+	}
+	wantKinds := []ChangeKind{RuleAdded, RuleAdded, RuleRemoved, RuleRemoved, ExcludesChanged, MatchChanged, RequiredMatchChanged, DigitsChanged, PrefixChanged}
+	for i, kind := range wantKinds {
+		if want.Changes[i].Kind != kind {
+			t.Fatalf("change[%d] = %s, want %s", i, want.Changes[i].Kind, kind)
+		}
+	}
+	for i := range 30 {
+		got := Diff(".stem", stem(false), stem(true))
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("run %d changed diff order/values: got %+v, want %+v", i, got, want)
+		}
+		Classify(got, nil)
+		classified := Diff(".stem", stem(false), stem(true))
+		Classify(classified, nil)
+		if !reflect.DeepEqual(got, classified) {
+			t.Fatalf("run %d changed classified order/values", i)
+		}
+	}
+}
+
+func TestDiff_ConditionalRuleProvenanceUnchanged(t *testing.T) {
+	before := &rules.StemFile{Validate: []rules.ValidationRule{{
+		Rule: "requires", Source: "/before/.stem",
+		If: map[string]any{"status": "published"}, Then: map[string]any{"fields": []string{"owner"}},
+	}}}
+	after := &rules.StemFile{Validate: []rules.ValidationRule{{
+		Rule: "requires", Source: "/after/.stem",
+		If: map[string]any{"status": "published"}, Then: map[string]any{"fields": []string{"owner"}},
+	}}}
+	if got := Diff(".stem", before, after); got.TotalCount != 0 || got.BreakingCount != 0 {
+		t.Fatalf("provenance-only change altered rule identity: %+v", got)
+	}
+}
+
+func TestDiff_YAMLOnlyAttributeValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		stem  func(string) *rules.StemFile
+		count int
+	}{
+		{
+			name: "match",
+			stem: func(value string) *rules.StemFile {
+				return &rules.StemFile{Schema: map[string]rules.SchemaField{
+					"field": {Type: "string", Match: &rules.FieldMatch{Configs: map[string]any{
+						"T*": map[string]any{"labels": map[any]any{true: value}},
+					}}},
+				}}
+			},
+			count: 1,
+		},
+		{
+			name: "if",
+			stem: func(value string) *rules.StemFile {
+				return &rules.StemFile{Validate: []rules.ValidationRule{{
+					Rule: "requires", If: map[string]any{"labels": map[any]any{true: value}},
+					Then: map[string]any{"fields": []string{"owner"}},
+				}}}
+			},
+			count: 2,
+		},
+		{
+			name: "then",
+			stem: func(value string) *rules.StemFile {
+				return &rules.StemFile{Validate: []rules.ValidationRule{{
+					Rule: "requires", If: map[string]any{"status": "published"},
+					Then: map[string]any{"labels": map[any]any{true: value}},
+				}}}
+			},
+			count: 2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			want := Diff(".stem", tt.stem("before"), tt.stem("after"))
+			if want.TotalCount != tt.count {
+				t.Fatalf("YAML-only values were not compared: %+v", want)
+			}
+			var before, after string
+			for _, change := range want.Changes {
+				before += change.Before
+				after += change.After
+			}
+			if !strings.Contains(before, "true: before") || !strings.Contains(after, "true: after") {
+				t.Fatalf("YAML-only values were lost: before=%q after=%q", before, after)
+			}
+			for i := range 20 {
+				got := Diff(".stem", tt.stem("before"), tt.stem("after"))
+				if !reflect.DeepEqual(got, want) {
+					t.Fatalf("run %d changed YAML-only snapshots: got %+v, want %+v", i, got, want)
+				}
+			}
+		})
 	}
 }

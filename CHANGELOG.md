@@ -56,6 +56,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Fixed
 
+- `migrate` diff now reports sequence `prefix`/`digits` and field `match`/`required_match`/`excludes` edits with named before/after snapshots in the existing version-1 change list. Conditional rule identity includes `if` and `then`, so if-only and then-only edits emit removed/added rules with full snapshots instead of disappearing; JSON and table output retain deterministic ordering. Closes #268.
 - `schema propose` bootstrap patches now declare `root: true` only when the scan root has no ancestor governance boundary. Standalone flat and hierarchical proposals establish a usable governed root after apply, while already-governed subtrees retain inheritance without a nested marker; `init` is unchanged. Closes #267.
 - `validate --all` now applies existing structural rules to governed root and intermediate directories with descendant records even when they contain no direct Markdown records. Directory selection retains record filters and scan/governance boundaries, with lexically ordered trailing-slash paths in the unchanged v2 envelope. Closes #266.
 - `schema apply` now skips empty-value `untyped_field` and `sequence_incomplete` diagnostics explicitly and rejects malformed sequence completion values, including empty prefixes. These entries no longer write empty types, mutate sequence formats, or abort valid same-field and unrelated siblings; dry-run and write modes share sorted decision ledgers without inventing missing values. Closes #264.

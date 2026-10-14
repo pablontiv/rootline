@@ -38,6 +38,8 @@ Diff mode compares `.stem` files and classifies each change:
 | `field_removed` | Yes | Field deleted from schema |
 | `type_changed` | Yes | Field type changed (for example string → enum) |
 | `source_changed` | Yes | A body-source binding changed or was removed |
+| `prefix_changed` / `digits_changed` | Yes | Sequence format changed |
+| `match_changed` / `required_match_changed` / `excludes_changed` | Yes | Field applicability changed |
 | `enum_value_added` | No | New allowed value |
 | `enum_value_removed` | Yes | Value no longer valid |
 | `required_added` | Yes | Field now required |
@@ -45,6 +47,26 @@ Diff mode compares `.stem` files and classifies each change:
 | `default_changed` | No | Default value changed |
 | `severity_changed` | Depends | Severity tightened or loosened |
 | `rule_added` / `rule_removed` | Depends | Validation rule added or removed |
+
+Sequence and applicability edits stay in the existing `changes[]` array. Their
+`before` and `after` strings contain compact, named JSON snapshots, for example
+`{"prefix":"T"}` → `{"prefix":"F"}` or `{"match":null}` →
+`{"match":{"patterns":["T*"]}}`. Missing values are explicit (`""`, `0`, or
+`null`), and map keys are ordered deterministically. These changes are
+conservatively breaking because existing records may be governed or interpreted
+differently. Table output includes the same before/after values in its messages.
+Values YAML can represent but JSON cannot (such as maps with non-string keys)
+use deterministic named YAML snapshots instead, without discarding their data.
+
+Conditional validation rules compare `if` and `then` as well as `rule`, `field`,
+and `severity`; provenance does not affect identity. Changing only `if` or only
+`then` produces the existing `rule_removed` / `rule_added` pair, not a zero diff.
+The removed rule's `before` and added rule's `after` contain complete named
+snapshots including both `if` and `then`, so the pair exposes the exact edit.
+Rule snapshots include explicit `null` values for absent `if` and `then`, including
+unconditional rules, so adding or removing the last condition remains observable.
+Unchanged rules and attributes produce no changes. The version-1 envelopes and
+their existing top-level keys are unchanged.
 
 ## Result Shape
 
