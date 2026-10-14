@@ -305,6 +305,114 @@ func TestFetchTemplate_InvalidYAML(t *testing.T) {
 	}
 }
 
+func TestFetchFromURL_RejectsInvalidStem(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		reason  string
+	}{
+		{"unsupported", "foo: bar\n", "stem version 0 is no longer supported"},
+		{"legacy", "version: 1\n", "stem version 1 is no longer supported"},
+		{"schema_shape", "version: 2\nschema: []\n", "cannot unmarshal"},
+		{"null_field", "version: 2\nschema:\n  title: null\n", `schema field "title" is null`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repoDir := makeFixtureRepo(t, map[string]string{"nested/.stem": tc.content})
+			for _, mode := range []struct {
+				name   string
+				dryRun bool
+			}{
+				{"install", false},
+				{"dry_run", true},
+			} {
+				t.Run(mode.name, func(t *testing.T) {
+					dest := filepath.Join(t.TempDir(), "destination")
+					files, err := FetchFromURL("file://"+repoDir, "", dest, false, mode.dryRun)
+					if err == nil {
+						t.Fatal("expected production parser rejection")
+					}
+					relPath := filepath.Join("nested", ".stem")
+					if !strings.Contains(err.Error(), "invalid .stem file "+relPath) ||
+						!strings.Contains(err.Error(), tc.reason) {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					if strings.Contains(err.Error(), "rootline-template-") {
+						t.Fatalf("error should use the relative source path: %v", err)
+					}
+					if files != nil {
+						t.Fatalf("rejected template returned files: %v", files)
+					}
+					if _, err := os.Stat(dest); !os.IsNotExist(err) {
+						t.Fatalf("rejected template should not create destination: %v", err)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestFetchFromURL_ValidatesAllBeforeCopy(t *testing.T) {
+	repoDir := makeFixtureRepo(t, map[string]string{
+		".stem":         "version: 2\n",
+		"a-valid/.stem": "version: 2\n",
+		"m-bad/.stem":   "foo: bar\n",
+		"z-bad/.stem":   "version: 1\n",
+	})
+	for _, mode := range []struct {
+		name   string
+		dryRun bool
+	}{
+		{"install", false},
+		{"dry_run", true},
+	} {
+		t.Run(mode.name, func(t *testing.T) {
+			dest := t.TempDir()
+			existingStem := filepath.Join(dest, ".stem")
+			if err := os.WriteFile(existingStem, []byte("existing schema\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			sentinel := filepath.Join(dest, "keep.txt")
+			if err := os.WriteFile(sentinel, []byte("untouched\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			// WalkDir visits the valid files before m-bad, then z-bad.
+			// Even --force must not overwrite or create anything before parsing all stems.
+			files, err := FetchFromURL("file://"+repoDir, "", dest, true, mode.dryRun)
+			if err == nil {
+				t.Fatal("expected invalid template rejection")
+			}
+			if !strings.Contains(err.Error(), "invalid .stem file "+filepath.Join("m-bad", ".stem")) ||
+				!strings.Contains(err.Error(), "stem version 0 is no longer supported") {
+				t.Fatalf("expected first invalid file in deterministic walk order: %v", err)
+			}
+			if files != nil {
+				t.Fatalf("rejected template returned files: %v", files)
+			}
+			for path, want := range map[string]string{
+				existingStem: "existing schema\n",
+				sentinel:     "untouched\n",
+			} {
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(data) != want {
+					t.Fatalf("destination file %s changed: got %q, want %q", path, data, want)
+				}
+			}
+			entries, err := os.ReadDir(dest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 2 || entries[0].Name() != ".stem" || entries[1].Name() != "keep.txt" {
+				t.Fatalf("destination changed: %v", entries)
+			}
+		})
+	}
+}
+
 // ── Additional tests for uncovered branches ─────────────────────────────────
 
 func TestFetchFromURL_WithTag(t *testing.T) {
@@ -392,7 +500,7 @@ func TestFetchFromURL_DestReadOnlyError(t *testing.T) {
 
 func TestFetchFromURL_MultipleStemFiles(t *testing.T) {
 	// Test repo with multiple .stem files in different directories.
-	stemContent := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"
+	stemContent := "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\nfoo: bar\n"
 	repoDir := makeFixtureRepo(t, map[string]string{
 		".stem":          stemContent,
 		"dir1/.stem":     stemContent,
@@ -409,12 +517,19 @@ func TestFetchFromURL_MultipleStemFiles(t *testing.T) {
 		t.Fatalf("expected 4 files, got %d: %v", len(files), files)
 	}
 
-	// Verify all files exist.
+	// Valid v2 stems still copy verbatim, including parser-accepted unknown sections.
 	expectedPaths := []string{".stem", "dir1/.stem", "dir2/.stem", "dir2/sub/.stem"}
-	for _, p := range expectedPaths {
+	for i, p := range expectedPaths {
+		if files[i] != filepath.FromSlash(p) {
+			t.Fatalf("files[%d] = %q, want %q", i, files[i], filepath.FromSlash(p))
+		}
 		fullPath := filepath.Join(dest, p)
-		if _, err := os.Stat(fullPath); err != nil {
-			t.Fatalf("expected file %s to exist: %v", p, err)
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			t.Fatalf("reading copied file %s: %v", p, err)
+		}
+		if string(data) != stemContent {
+			t.Fatalf("copied file %s changed: got %q, want %q", p, data, stemContent)
 		}
 	}
 }

@@ -25,6 +25,27 @@ a transaction; files completed before a later error remain installed.
 | `--dry-run` | Print inferred `.stem` to stdout without writing |
 | `--force` | Overwrite existing `.stem` file |
 
+## Remote Templates
+
+```bash
+rootline init --template owner/repo[@tag] docs/
+rootline init --template owner/repo[@tag] --dry-run docs/
+```
+
+Rootline clones the repository and parses every `.stem` with the same production
+parser used when loading local schemas, before copying any template files. Both
+installation and `--dry-run` reject parser-invalid stems, including syntactically
+valid YAML without a supported version (such as `foo: bar`). Errors identify the
+source path relative to the template repository. If any stem fails parsing, no
+destination files or directories are created or changed, even with `--force`.
+Parser-accepted unknown sections remain allowed; template installation does not
+add schema lint checks.
+
+Accepted templates preserve their relative directory layout and file contents.
+`--dry-run` lists their paths without copying. After parser validation succeeds,
+writes retain the per-file atomicity described above; a later copy error does
+not roll back earlier completed copies.
+
 ## Flat Mode
 
 When no hierarchical naming pattern is detected, init produces a simple schema:
