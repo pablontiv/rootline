@@ -2,6 +2,7 @@
 package fix
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -699,30 +700,29 @@ func applyRepairCorrectLink(p *proposal.Proposal, targets map[string]*repairTarg
 		if !ok {
 			continue
 		}
+		var content []byte
 		if dryRun {
-			tgt.setContent(replaceOnce(tgt.currentContent(), p.From, p.To))
-			result.recordChange(path,
-				fmt.Sprintf("correct link: %s -> %s in %s", p.From, p.To, path))
+			content = []byte(tgt.currentContent())
+		} else {
+			var err error
+			content, err = os.ReadFile(tgt.abs)
+			if err != nil {
+				return fmt.Errorf("reading %s: %w", path, err)
+			}
+		}
+		candidate, changed := replaceOnce(content, p.From, p.To)
+		if !changed {
+			result.Skipped = append(result.Skipped,
+				fmt.Sprintf("link %q in %s: no content change", p.From, path))
 			continue
 		}
-
-		// Read file, replace link, write back.
-		content, err := os.ReadFile(tgt.abs)
-		if err != nil {
-			return fmt.Errorf("reading %s: %w", path, err)
+		if !dryRun {
+			if err := fsx.WriteFileAtomic(tgt.abs, candidate, newFileMode); err != nil {
+				return fmt.Errorf("writing %s: %w", path, err)
+			}
+			tgt.written = true
 		}
-
-		newContent := string(content)
-		// Simple string replace — assumes link appears once.
-		if idx := len(newContent); idx > 0 {
-			newContent = replaceOnce(newContent, p.From, p.To)
-		}
-
-		if err := fsx.WriteFileAtomic(tgt.abs, []byte(newContent), newFileMode); err != nil {
-			return fmt.Errorf("writing %s: %w", path, err)
-		}
-		tgt.setContent(newContent)
-		tgt.written = true
+		tgt.setContent(string(candidate))
 
 		result.recordChange(path,
 			fmt.Sprintf("correct link: %s -> %s in %s", p.From, p.To, path))
@@ -730,17 +730,19 @@ func applyRepairCorrectLink(p *proposal.Proposal, targets map[string]*repairTarg
 	return nil
 }
 
-// replaceOnce replaces the first occurrence of old with new in s.
-func replaceOnce(s, old, new string) string {
-	idx := len(s) // sentinel: not found
-	for i := 0; i < len(s)-(len(old)-1); i++ {
-		if s[i:i+len(old)] == old {
-			idx = i
-			break
-		}
+// replaceOnce returns candidate bytes and whether replacing the first occurrence
+// changes the content. Empty sources and identical replacements are no-ops.
+func replaceOnce(content []byte, from, to string) ([]byte, bool) {
+	if from == "" || from == to {
+		return content, false
 	}
-	if idx < len(s)-(len(old)-1) {
-		return s[:idx] + new + s[idx+len(old):]
+	idx := bytes.Index(content, []byte(from))
+	if idx < 0 {
+		return content, false
 	}
-	return s
+	candidate := make([]byte, 0, len(content)-len(from)+len(to))
+	candidate = append(candidate, content[:idx]...)
+	candidate = append(candidate, to...)
+	candidate = append(candidate, content[idx+len(from):]...)
+	return candidate, true
 }

@@ -370,9 +370,12 @@ func TestApplyCorrectLink_Unit(t *testing.T) {
 		Paths: []string{"T001-task.md"},
 	}
 
-	err := applyCorrectLink(p, dir)
+	changed, skipped, err := applyCorrectLink(p, dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(changed) != 1 || len(skipped) != 0 {
+		t.Fatalf("changed=%v skipped=%v", changed, skipped)
 	}
 
 	content, _ := os.ReadFile(filepath.Join(dir, "T001-task.md"))
@@ -399,7 +402,7 @@ func TestApplyCorrectLink_Expand(t *testing.T) {
 		Paths: []string{"T002-validate.md"},
 	}
 
-	err := applyCorrectLink(p, dir)
+	_, _, err := applyCorrectLink(p, dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -421,7 +424,7 @@ func TestApplyCorrectLink_FileNotFound(t *testing.T) {
 		Paths: []string{"nonexistent.md"},
 	}
 
-	err := applyCorrectLink(p, dir)
+	_, _, err := applyCorrectLink(p, dir)
 	if err == nil {
 		t.Error("expected error for nonexistent file")
 	}
