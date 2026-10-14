@@ -219,6 +219,18 @@ rootline migrate --split --dry-run docs/   # Preview without writing
 5. Each level gets a `sequence` id field matching its prefix/digits
 6. `derive`, `aggregate`, `links`, `structural`, and `validate` rules are preserved at root
 
+Root governance survives a production `.stem` parse after splitting:
+`structural.subdirs` retains `require_index`, `min_children`, `max_children`, and
+`severity`, including a declaration containing only `max_children` or severity.
+`links` retains `allowed`, `styles`, all supported `checks` (including explicit
+`resolve: false`), `basename_fallback`, and each typed rule's `target`, `field`,
+and `value_field`. Link governance is preserved even when `allowed` is empty or
+omitted; empty lists and a checks block without `resolve` retain their meaning.
+These sections are not copied into child `.stem` files: children contain only
+their level-specific schema. Generated stems remain version 2, the existing
+root marker is preserved rather than invented, and the child overwrite policy
+is unchanged (`--force` is still required to replace existing child stems).
+
 ### Example
 
 Given a flat `.stem` with fields used across `E##/F##/S###/T###` directories:

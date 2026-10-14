@@ -3,6 +3,7 @@ package migrate
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -258,8 +259,147 @@ func TestBuildSplitStems_PreservesLinks(t *testing.T) {
 	if !strings.Contains(root, "links:") {
 		t.Errorf("root should preserve links section, got:\n%s", root)
 	}
-	if !strings.Contains(root, "allowed: [blocks, reference]") {
-		t.Errorf("root should preserve allowed links, got:\n%s", root)
+	parsed, err := rules.ParseStem(result.Stems[0].Path, []byte(root))
+	if err != nil {
+		t.Fatalf("root did not parse: %v\n%s", err, root)
+	}
+	if strings.Join(parsed.Links.Allowed, ",") != "blocks,reference" {
+		t.Errorf("root should preserve allowed links, got: %+v", parsed.Links)
+	}
+}
+
+func TestBuildSplitStems_RoundTripsRootGovernance(t *testing.T) {
+	tests := []struct {
+		name       string
+		governance string
+	}{
+		{
+			name: "all structural fields",
+			governance: `structural:
+  subdirs:
+    require_index: "README: governance #1.md"
+    min_children: 2
+    max_children: 7
+    severity: warn
+`,
+		},
+		{name: "max children only", governance: "structural:\n  subdirs:\n    max_children: 3\n"},
+		{name: "severity only", governance: "structural:\n  subdirs:\n    severity: off\n"},
+		{
+			name: "all links fields",
+			governance: `links:
+  allowed: ["blocks: #1", reference]
+  styles: [wikilink, markdown]
+  checks:
+    resolve: false
+    anchors: true
+    encoding: true
+    cycles: true
+  basename_fallback: true
+  "blocks: #1":
+    target: "../tasks: active #1/*.md"
+    field: "blocked_by: #1"
+    value_field: "id: #1"
+`,
+		},
+		{name: "styles without allowed", governance: "links:\n  styles: [markdown]\n"},
+		{name: "fallback without allowed", governance: "links:\n  basename_fallback: true\n"},
+		{name: "rule without allowed", governance: "links:\n  parent:\n    target: '../*.md'\n    field: parent\n    value_field: id\n"},
+		{name: "explicit empty allowed", governance: "links:\n  allowed: []\n  styles: [markdown]\n  checks:\n    resolve: false\n"},
+		{
+			name: "all links fields with empty allowed",
+			governance: `links:
+  allowed: []
+  styles: [wikilink, markdown]
+  checks:
+    resolve: false
+    anchors: true
+    encoding: true
+    cycles: true
+  basename_fallback: true
+  parent:
+    target: "../*.md"
+    field: parent
+    value_field: id
+`,
+		},
+		{name: "empty allowed only", governance: "links:\n  allowed: []\n"},
+		{name: "empty lists", governance: "links:\n  allowed: []\n  styles: []\n"},
+		{name: "empty checks", governance: "links:\n  checks: {}\n"},
+		{name: "checks without resolve", governance: "links:\n  checks:\n    anchors: true\n"},
+		{name: "explicit true resolve", governance: "links:\n  checks:\n    resolve: true\n"},
+		{
+			name: "explicit false checks",
+			governance: `links:
+  checks:
+    resolve: false
+    anchors: false
+    encoding: false
+    cycles: false
+  basename_fallback: false
+`,
+		},
+	}
+	hierarchy := makeHierarchy(
+		map[string]rules.SchemaField{"title": {Type: "string"}},
+		[]infer.LevelSchema{
+			{Level: infer.Level{Prefix: "E", Digits: 2, DirPaths: []string{"E01", "E02"}}, OnlyHere: map[string]rules.SchemaField{"id": {Type: "sequence", Prefix: "E", Digits: 2}}},
+			{Level: infer.Level{Prefix: "F", Digits: 2, DirPaths: []string{"E01/F01", "E02/F01"}}, OnlyHere: map[string]rules.SchemaField{"id": {Type: "sequence", Prefix: "F", Digits: 2}}},
+		},
+	)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			existing, err := rules.ParseStem("source.stem", []byte(`version: 2
+root: true
+scope:
+  match: "*.md"
+schema:
+  title:
+    type: string
+derive:
+  title: 'title'
+aggregate:
+  title: '"root"'
+validate:
+  - rule: required
+    field: title
+`+tt.governance))
+			if err != nil {
+				t.Fatalf("fixture did not production-parse: %v", err)
+			}
+			result := mustBuildSplitStems(t, "/tmp/test", existing, hierarchy)
+			if len(result.Stems) != 3 {
+				t.Fatalf("expected root and two children, got %d", len(result.Stems))
+			}
+			root := result.Stems[0]
+			parsed, err := rules.ParseStem(root.Path, []byte(root.Content))
+			if err != nil {
+				t.Fatalf("root did not production-parse: %v\n%s", err, root.Content)
+			}
+			if parsed.Structural != existing.Structural || !reflect.DeepEqual(parsed.Links, existing.Links) {
+				t.Fatalf("root governance changed:\nstructural: got %+v, want %+v\nlinks: got %+v, want %+v\n%s",
+					parsed.Structural, existing.Structural, parsed.Links, existing.Links, root.Content)
+			}
+			if parsed.Version != 2 || !parsed.Root || parsed.Scope != existing.Scope {
+				t.Fatalf("root version/boundary/scope changed: %+v", parsed)
+			}
+			for _, child := range result.Stems[1:] {
+				parsedChild, err := rules.ParseStem(child.Path, []byte(child.Content))
+				if err != nil {
+					t.Fatalf("child did not production-parse: %v\n%s", err, child.Content)
+				}
+				if parsedChild.Version != 2 || parsedChild.Root || parsedChild.Structural != (rules.StructuralRules{}) ||
+					!reflect.DeepEqual(parsedChild.Links, rules.LinkSchema{}) || len(parsedChild.Derive) != 0 ||
+					len(parsedChild.Aggregate) != 0 || len(parsedChild.Validate) != 0 {
+					t.Fatalf("root governance leaked into child: %+v\n%s", parsedChild, child.Content)
+				}
+				for _, section := range []string{"root:", "structural:", "links:", "derive:", "aggregate:", "validate:"} {
+					if strings.Contains(child.Content, section) {
+						t.Fatalf("%s leaked into child:\n%s", section, child.Content)
+					}
+				}
+			}
+		})
 	}
 }
 
