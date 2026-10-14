@@ -18,6 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Added
 
+- GoReleaser now defines the PR snapshot version template `<next-patch>-pr.<number>.g<short-sha>`. This trusted-base prerequisite must land before adopting Crossbeam's candidate workflow, which reads `.goreleaser.yml` from the PR base SHA rather than its head. Stable release versions and publishing remain unchanged. Closes #322.
 - Optional Dagu v2.19.2 local pilot with isolated worktrees, exact-SHA gate evidence, default shadow mode, opt-in PR and automatic guarded merge modes, explicit hosted-CI waiting and revalidation, owner-bound recovery, and contributor recipes. Hosted CI and release workflows remain unchanged.
 - `just dagu-fresh-attempt RUN_ID EXECUTION_ID MODE SPACE_ID ISSUE_NUMBER` archives a cleaned PR-bound Dagu attempt under a unique execution ID while retaining its logical owner, issue, branch, and PR; old exact-SHA evidence stays separate from the new gate.
 
