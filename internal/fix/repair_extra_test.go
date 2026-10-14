@@ -256,10 +256,16 @@ func TestReplaceOnce(t *testing.T) {
 		{"abc", "x", "y", "abc"},
 		{"abcabc", "abc", "X", "Xabc"},
 		{"", "x", "y", ""},
+		{"abc", "abc", "abc", "abc"},
+		{"abc", "", "x", "abc"},
+		{"abc", "abc", "", ""},
+		{"abc", "longer", "x", "abc"},
 	}
 	for _, c := range cases {
-		if got := replaceOnce(c.s, c.old, c.new); got != c.want {
-			t.Errorf("replaceOnce(%q,%q,%q) = %q, want %q", c.s, c.old, c.new, got, c.want)
+		got, changed := replaceOnce([]byte(c.s), c.old, c.new)
+		if string(got) != c.want || changed != (c.s != c.want) {
+			t.Errorf("replaceOnce(%q,%q,%q) = (%q,%t), want (%q,%t)",
+				c.s, c.old, c.new, got, changed, c.want, c.s != c.want)
 		}
 	}
 }

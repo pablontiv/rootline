@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/pablontiv/rootline/internal/fix"
 	"github.com/pablontiv/rootline/internal/proposal"
 )
 
@@ -103,6 +106,104 @@ func TestRenderProposalTable_WithSchemaSuggestions(t *testing.T) {
 	output := buf.String()
 	if !strings.Contains(output, "Schema suggestions") {
 		t.Errorf("expected 'Schema suggestions' section, got: %s", output)
+	}
+}
+
+func TestRenderFixTableSkippedProposalReasons(t *testing.T) {
+	link := proposal.Proposal{
+		Type: proposal.CorrectLink, Field: "links", Paths: []string{"stale.md"},
+		From: "[[old]]", To: "[[new]]",
+	}
+	missing := proposal.Proposal{
+		Type: proposal.AddField, Field: "estado", Paths: []string{"missing.md"},
+		Value: "Pending", ValueSource: "enum_first",
+	}
+	for _, tc := range []struct {
+		name    string
+		skipped []proposal.Proposal
+		missing bool
+		link    bool
+	}{
+		{"link", []proposal.Proposal{link}, false, true},
+		{"missing", []proposal.Proposal{missing}, true, false},
+		{"mixed", []proposal.Proposal{missing, link}, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			oldOut := rootCmd.OutOrStdout()
+			t.Cleanup(func() { rootCmd.SetOut(oldOut) })
+			buf := new(bytes.Buffer)
+			rootCmd.SetOut(buf)
+			if err := renderFixTable(rootCmd, &BatchFixResult{SkippedProposals: tc.skipped}); err != nil {
+				t.Fatal(err)
+			}
+			out := buf.String()
+			if tc.missing {
+				for _, want := range []string{
+					"Note: 1 required field(s) left unfilled; schema declares no default:",
+					"[missing.md]: estado (engine would have written \"Pending\")",
+					"Invalid on purpose. Pass --fill-missing to write them.",
+				} {
+					if !strings.Contains(out, want) {
+						t.Errorf("missing %q in output:\n%s", want, out)
+					}
+				}
+			} else if strings.Contains(out, "--fill-missing") || strings.Contains(out, "left unfilled") || strings.Contains(out, "engine would") {
+				t.Errorf("link skip incorrectly offers missing-field guidance:\n%s", out)
+			}
+			if tc.link {
+				for _, want := range []string{
+					"Skipped link proposals: 1 (no content change)",
+					"[stale.md]: [[old]] -> [[new]] (no content change)",
+				} {
+					if !strings.Contains(out, want) {
+						t.Errorf("missing %q in output:\n%s", want, out)
+					}
+				}
+			} else if strings.Contains(out, "Skipped link proposals") {
+				t.Errorf("missing-field skip incorrectly identified as a link skip:\n%s", out)
+			}
+		})
+	}
+}
+
+func TestFixJSONPreservesStaleCorrectLinkSkip(t *testing.T) {
+	dir := t.TempDir()
+	original := "See [[new]].\n"
+	path := filepath.Join(dir, "stale.md")
+	mustWriteFile(t, path, []byte(original), 0o644)
+	p := proposal.Proposal{
+		Type: proposal.CorrectLink, Field: "links", Paths: []string{"stale.md"},
+		From: "[[old]]", To: "[[new]]",
+	}
+	report := &proposal.Report{Proposals: []proposal.Proposal{p}}
+	skipped, err := fix.ApplyProposals(context.Background(), report, dir, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Proposals) != 0 {
+		t.Fatalf("stale proposal reported as applied: %v", report.Proposals)
+	}
+	resetFlags()
+	oldOut := rootCmd.OutOrStdout()
+	t.Cleanup(func() { rootCmd.SetOut(oldOut) })
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	batch := &BatchFixResult{
+		Version: 1, Kind: "rootline/fix-batch", SkippedProposals: skipped,
+	}
+	if err := outputJSON(rootCmd, batch, false); err != nil {
+		t.Fatal(err)
+	}
+	var decoded BatchFixResult
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, buf)
+	}
+	if !reflect.DeepEqual(decoded.SkippedProposals, []proposal.Proposal{p}) ||
+		decoded.Summary.Fixed != 0 || len(decoded.Results) != 0 {
+		t.Fatalf("batch=%+v, want skipped correct_link evidence and no successful changes", decoded)
+	}
+	if got := mustReadFile(t, path); string(got) != original {
+		t.Fatalf("stale target changed: %q", got)
 	}
 }
 

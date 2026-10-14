@@ -93,10 +93,20 @@ func ApplyProposals(_ context.Context, report *proposal.Report, root string, rec
 			}
 			applied = append(applied, p)
 		case proposal.CorrectLink:
-			if err := applyCorrectLink(p, root); err != nil {
-				return nil, fmt.Errorf("correct_link %s: %w", p.Paths[0], err)
+			changedPaths, skippedPaths, err := applyCorrectLink(p, root)
+			if err != nil {
+				return nil, fmt.Errorf("correct_link %s: %w", p.Paths, err)
 			}
-			applied = append(applied, p)
+			if len(changedPaths) > 0 {
+				changed := p
+				changed.Paths = changedPaths
+				applied = append(applied, changed)
+			}
+			if len(skippedPaths) > 0 {
+				unchanged := p
+				unchanged.Paths = skippedPaths
+				skipped = append(skipped, unchanged)
+			}
 		}
 	}
 
@@ -572,19 +582,32 @@ func transformSetSection(content string, p proposal.Proposal, relPath string) (s
 	}
 }
 
-func applyCorrectLink(p proposal.Proposal, root string) error {
-	for _, path := range p.Paths {
-		absPath := filepath.Join(root, path)
-		content, err := os.ReadFile(absPath)
+func applyCorrectLink(p proposal.Proposal, root string) (changed, skipped []string, err error) {
+	// Validate the whole proposal before reading or writing any target, matching
+	// repair apply's containment gate while retaining legacy absolute inputs.
+	targets := make([]string, len(p.Paths))
+	for i, path := range p.Paths {
+		targets[i], err = ContainPath(root, path, PolicyAcceptAbsolute)
 		if err != nil {
-			return err
-		}
-		newContent := strings.Replace(string(content), p.From, p.To, 1)
-		if err := fsx.WriteFileAtomic(absPath, []byte(newContent), newFileMode); err != nil {
-			return err
+			return nil, nil, err
 		}
 	}
-	return nil
+	for i, path := range p.Paths {
+		content, err := os.ReadFile(targets[i])
+		if err != nil {
+			return changed, skipped, err
+		}
+		candidate, contentChanged := replaceOnce(content, p.From, p.To)
+		if !contentChanged {
+			skipped = append(skipped, path)
+			continue
+		}
+		if err := fsx.WriteFileAtomic(targets[i], candidate, newFileMode); err != nil {
+			return changed, skipped, err
+		}
+		changed = append(changed, path)
+	}
+	return changed, skipped, nil
 }
 
 // removeStemSchemaField removes a field from the schema section of a .stem file.

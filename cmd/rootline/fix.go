@@ -35,9 +35,9 @@ type BatchFixResult struct {
 	Summary           FixSummary   `json:"summary"`
 	Errors            []string     `json:"errors,omitempty"`
 	SchemaSuggestions int          `json:"schema_suggestions,omitempty"`
-	// SkippedProposals holds add_field proposals declined because the engine,
-	// not the schema, chose their value. Carried so the operator can see the
-	// field was left unfilled deliberately.
+	// SkippedProposals holds proposals deliberately left unapplied, including
+	// engine-chosen add_field values and correct_link targets with no content
+	// change. Each proposal retains its type and the paths that were skipped.
 	SkippedProposals []proposal.Proposal `json:"skipped_proposals,omitempty"`
 
 	// LinkFindings reports link problems fix will not repair. Rewriting a
@@ -653,13 +653,33 @@ func renderFixTable(cmd *cobra.Command, batch *BatchFixResult) error {
 	}
 	renderTable(cmd.OutOrStdout(), headers, rows)
 
-	if len(batch.SkippedProposals) > 0 {
+	var missingCount, linkCount int
+	for _, sp := range batch.SkippedProposals {
+		switch {
+		case sp.Type == proposal.AddField && proposal.IsEngineChosen(sp.ValueSource):
+			missingCount++
+		case sp.Type == proposal.CorrectLink:
+			linkCount++
+		}
+	}
+	if missingCount > 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note: %d required field(s) left unfilled; schema declares no default:.\n", len(batch.SkippedProposals))
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Note: %d required field(s) left unfilled; schema declares no default:.\n", missingCount)
 		for _, sp := range batch.SkippedProposals {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %v: %s (engine would have written %q)\n", sp.Paths, sp.Field, sp.Value)
+			if sp.Type == proposal.AddField && proposal.IsEngineChosen(sp.ValueSource) {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %v: %s (engine would have written %q)\n", sp.Paths, sp.Field, sp.Value)
+			}
 		}
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Invalid on purpose. Pass --fill-missing to write them.")
+	}
+	if linkCount > 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout())
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skipped link proposals: %d (no content change)\n", linkCount)
+		for _, sp := range batch.SkippedProposals {
+			if sp.Type == proposal.CorrectLink {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %v: %s -> %s (no content change)\n", sp.Paths, sp.From, sp.To)
+			}
+		}
 	}
 
 	// Note about schema suggestions if present

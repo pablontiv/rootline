@@ -16,10 +16,30 @@ Link findings: 1 (reported, not repaired)
   a.md: link target "guied.md" does not resolve to an existing file (case-sensitive) (link_resolve) — did you mean "guide.md"?
 ```
 
-`fix` does not rewrite link bodies. Correcting a link on a fuzzy guess is a destructive edit
-outside its data-repair contract — the suggestion is offered so a human can make the call. Before
-this, a record `validate` failed with `link_resolve` came back from `fix` as a clean run, which
-read as a tool bug.
+`link_resolve` findings do not trigger automatic body rewrites. Correcting a link on a fuzzy
+guess is a destructive edit outside the data-repair contract — the suggestion is offered so
+a human can make the call. Before this, a record `validate` failed with `link_resolve` came
+back from `fix` as a clean run, which read as a tool bug.
+
+### Stored `correct_link` reports
+
+Historical `correct_link` proposals remain accepted by `repair apply` and the legacy
+proposal-application path. `fix` surfaces link-check findings separately, while internally
+generated legacy link proposals can still be applied. Each proposal replaces only the
+first exact occurrence of `from` with `to`. An absent or empty `from`, or identical
+`from` and `to`, produces no write and no successful-change
+entry: `repair apply` reports the target in `skipped[]`, and the legacy path exposes
+the skipped proposal paths in `skipped_proposals[]` instead of counting them as applied.
+Table output identifies these as no content change, without `--fill-missing` guidance.
+Reapplying a report after its source disappeared leaves both file bytes and
+modification time untouched.
+
+`repair apply --dry-run` uses the same content-change decision and composes successive
+same-file proposals in its preview. Real changes retain post-validation and rollback.
+Both application paths check every target for lexical and physical containment before
+reading any document in a proposal; escaping paths and symlinks are refused. Repair
+reports reject absolute paths, while the legacy path accepts absolute targets only
+inside its root, matching its existing containment policy.
 
 ## Type representation repairs
 
@@ -61,7 +81,7 @@ Rootline categorizes issues into specific proposal types to preserve semantic me
 | **infer_from_siblings** | Uses statistical majority of a directory to fill missing values | Setting `tipo: software` because 90% of files are software |
 | **correct_outlier** | Identifies values that differ from a strong consensus in a folder | Flagging a task as "manual" in a "deploy" folder |
 | **infer_from_children** | Historical type retained in the JSON counters, but no detector currently emits it; configure parent rollups with `.stem` `aggregate:` expressions instead | Summary counter remains `0` |
-| **correct_link** | Historical proposal type; current `fix` reports link problems under `link_findings` and does not rewrite link bodies | Human reviews the `link_resolve` suggestion |
+| **correct_link** | Historical link correction supported by stored reports and internal legacy proposals; `link_findings` remain report-only | Replace the first exact source occurrence, or skip when content is unchanged |
 | **add_aggregate** | Schema-surface suggestion to add an aggregate expression to a `.stem`; current generation uses a conservative quoted default, not semantic `len(filter(...))` logic | Adding `estado: "Completed"` to `.stem` for review |
 | **remove_stem_field** | Removes invalid fields from `.stem` detected by stem health checks | Removing a field that references a non-existent type |
 | **propagate_aggregate** | Detects stale aggregate values in index files and corrects them | Updating `completed` count after child status changes |
