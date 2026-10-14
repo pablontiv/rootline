@@ -49,8 +49,6 @@ context/
 # CodeGraph index
 .codegraph/
 
-# Dagu pilot mutable runtime (config and bootstrap wrapper stay tracked)
-!/.workspace/dagu/bin/
-!/.workspace/dagu/bin/dagu
+# Local debris from the retired repository-level Dagu runtime
 /.workspace/dagu/data/
 /.workspace/dagu/logs/

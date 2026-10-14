@@ -1,0 +1,183 @@
+labels:
+  - workspace=rootline
+queue: rootline
+type: graph
+dotenv: []
+shell: bash
+max_active_steps: 1
+max_clean_up_time_sec: 120
+params:
+  - name: ISSUE
+    type: string
+    required: true
+    pattern: '^[1-9][0-9]*$'
+  - name: PR_NUMBER
+    type: string
+    default: ""
+  - name: PRIMARY
+    type: string
+    required: true
+  - name: WORKTREE
+    type: string
+    required: true
+  - name: BRANCH
+    type: string
+    required: true
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._/-]*$'
+  - name: SOURCE_REF
+    type: string
+    default: origin/master
+steps:
+  - id: start_gate
+    run: |
+      set -euo pipefail
+      umask 0022
+      test -n "$PRIMARY" && test -n "$WORKTREE" && test "$PRIMARY" != "$WORKTREE"
+      test "$(git -C "$PRIMARY" rev-parse --show-toplevel)" = "$PRIMARY"
+      test "$(git -C "$PRIMARY" branch --show-current)" = master
+      test -z "$(git -C "$PRIMARY" status --porcelain)"
+      git -C "$PRIMARY" fetch origin
+      git -C "$PRIMARY" merge --ff-only origin/master
+      if test -e "$WORKTREE"; then
+        test "$(git -C "$WORKTREE" rev-parse --show-toplevel)" = "$WORKTREE"
+        test "$(git -C "$WORKTREE" branch --show-current)" = "$BRANCH"
+        test -z "$(git -C "$WORKTREE" status --porcelain)"
+      elif git -C "$PRIMARY" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+        git -C "$PRIMARY" worktree add "$WORKTREE" "$BRANCH"
+      else
+        git -C "$PRIMARY" rev-parse --verify "$SOURCE_REF^{commit}" >/dev/null
+        git -C "$PRIMARY" worktree add -b "$BRANCH" "$WORKTREE" "$SOURCE_REF"
+      fi
+      printf 'issue=%s\nbranch=%s\nworktree=%s\nbase_sha=%s\n' \
+        "$ISSUE" "$BRANCH" "$WORKTREE" "$(git -C "$WORKTREE" rev-parse HEAD)"
+
+  - id: implement
+    depends: start_gate
+    action: human.task
+    with:
+      prompt: "Implement issue #${ISSUE} in ${WORKTREE}, commit it on ${BRANCH}, then complete this task."
+
+  - id: checkpoint_push
+    depends: implement
+    run: |
+      set -euo pipefail
+      umask 0022
+      test "$(git -C "$WORKTREE" branch --show-current)" = "$BRANCH"
+      test -z "$(git -C "$WORKTREE" status --porcelain)"
+      git -C "$WORKTREE" push --force-with-lease --set-upstream origin "HEAD:$BRANCH"
+      printf 'checkpoint_sha=%s\n' "$(git -C "$WORKTREE" rev-parse HEAD)"
+
+  - id: rebase
+    depends: checkpoint_push
+    run: |
+      set -euo pipefail
+      umask 0022
+      test "$(git -C "$WORKTREE" branch --show-current)" = "$BRANCH"
+      test -z "$(git -C "$WORKTREE" status --porcelain)"
+      git -C "$WORKTREE" fetch origin
+      git -C "$WORKTREE" rebase origin/master
+      test "$(git -C "$WORKTREE" rev-list --count origin/master..HEAD)" -eq 1
+      printf 'rebased_sha=%s\n' "$(git -C "$WORKTREE" rev-parse HEAD)"
+
+  - id: gate
+    depends: rebase
+    run: |
+      set -euo pipefail
+      umask 0022
+      cd "$WORKTREE"
+      env -u GH_TOKEN -u GITHUB_TOKEN just check
+      env -u GH_TOKEN -u GITHUB_TOKEN just test
+      test -z "$(git status --porcelain)"
+      printf 'tested_sha=%s\n' "$(git rev-parse HEAD)"
+
+  - id: push
+    depends: gate
+    run: |
+      set -euo pipefail
+      umask 0022
+      git -C "$WORKTREE" push --force-with-lease --set-upstream origin "HEAD:$BRANCH"
+
+  - id: pr
+    depends: push
+    run: |
+      set -euo pipefail
+      cd "$WORKTREE"
+      if test -n "$PR_NUMBER"; then
+        test "$(gh pr view "$PR_NUMBER" --json state --jq .state)" = OPEN
+        test "$(gh pr view "$PR_NUMBER" --json headRefName --jq .headRefName)" = "$BRANCH"
+        gh pr view "$PR_NUMBER" --json number,url,headRefOid
+      elif gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+        gh pr view "$BRANCH" --json number,url,headRefOid
+      else
+        gh pr create --base master --head "$BRANCH" --fill --body "Closes #${ISSUE}"
+      fi
+
+  - id: required_check
+    depends: pr
+    run: |
+      set -euo pipefail
+      cd "$WORKTREE"
+      pr_ref=${PR_NUMBER:-$BRANCH}
+      for attempt in $(seq 1 240); do
+        if test "$(gh pr checks "$pr_ref" --json name --jq 'any(.[]; .name == "candidate")' 2>/dev/null || true)" = true; then
+          printf 'candidate_registered_for=%s\n' "$pr_ref"
+          exit 0
+        fi
+        sleep 5
+      done
+      printf 'required candidate check was not registered for %s\n' "$pr_ref" >&2
+      exit 1
+
+  - id: auto_merge
+    depends: required_check
+    run: |
+      set -euo pipefail
+      cd "$WORKTREE"
+      sha=$(git rev-parse HEAD)
+      pr_ref=${PR_NUMBER:-$BRANCH}
+      test "$(gh pr view "$pr_ref" --json headRefOid --jq .headRefOid)" = "$sha"
+      gh pr merge "$pr_ref" --auto --squash --match-head-commit "$sha"
+      printf 'pr=%s\nhead_sha=%s\n' \
+        "$(gh pr view "$pr_ref" --json number --jq .number)" "$sha"
+
+  - id: await_merge
+    depends: auto_merge
+    action: human.task
+    with:
+      prompt: "Reconciler: complete on MERGED; push back with the expected iteration on BEHIND; leave OPEN/CLEAN waiting."
+      push_back:
+        rewind_to: rebase
+
+  - id: close_gate
+    depends: await_merge
+    run: |
+      set -euo pipefail
+      umask 0022
+      cd "$WORKTREE"
+      sha=$(git rev-parse HEAD)
+      pr_ref=${PR_NUMBER:-$BRANCH}
+      pr=$(gh pr view "$pr_ref" --json number --jq .number)
+      test "$(gh pr view "$pr" --json state --jq .state)" = MERGED
+      test "$(gh pr view "$pr" --json headRefOid --jq .headRefOid)" = "$sha"
+      test "$(gh pr checks "$pr" --required --json name,state --jq 'any(.[]; .name == "candidate" and .state == "SUCCESS")')" = true
+      test "$(git -C "$PRIMARY" branch --show-current)" = master
+      test -z "$(git -C "$PRIMARY" status --porcelain)"
+      git -C "$PRIMARY" fetch origin
+      git -C "$PRIMARY" merge --ff-only origin/master
+      test "$(git -C "$PRIMARY" rev-parse HEAD)" = "$(git -C "$PRIMARY" rev-parse origin/master)"
+      printf 'pr=%s\ntested_sha=%s\nmaster_sha=%s\n' \
+        "$pr" "$sha" "$(git -C "$PRIMARY" rev-parse HEAD)"
+
+handler_on:
+  wait:
+    run: printf 'waiting_steps=%s issue=%s branch=%s worktree=%s\n' "$DAG_WAITING_STEPS" "$ISSUE" "$BRANCH" "$WORKTREE"
+  exit:
+    run: |
+      set -euo pipefail
+      if test -e "$WORKTREE"; then
+        git -C "$PRIMARY" worktree remove --force "$WORKTREE"
+      fi
+      git -C "$PRIMARY" worktree prune
+      if git -C "$PRIMARY" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+        git -C "$PRIMARY" branch -D "$BRANCH"
+      fi
