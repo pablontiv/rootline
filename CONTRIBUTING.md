@@ -106,6 +106,60 @@ All PRs must pass:
 - `golangci-lint run`
 - `govulncheck ./...`
 - `rootline validate --all docs/roadmap/`
+- Secret scanning (`gitleaks`)
+- Installer resolver tests on Linux, macOS, and Windows
+- Native atomic-write and repair-rollback durability tests on Linux, macOS, and Windows (the Bash step must discover exactly 14 matching tests before running them with `-count=1`)
+- The packaged PR candidate gate described below
+
+### Packaged PR candidates
+
+On `pull_request` events targeting `main` or `master`, `candidate-build` waits
+for `ci`, `gitleaks`, `docs-validate`, `installer-tests`, and `durability`. It calls
+[`go-candidate.yml`](https://github.com/pablontiv/crossbeam/blob/b012cf53f083e637a013080ef8c677d1af5e0161/.github/workflows/go-candidate.yml)
+at the immutable Crossbeam revision
+`b012cf53f083e637a013080ef8c677d1af5e0161`, with Go `1.26.2` and the event's
+exact head repository, head SHA, base SHA, and PR number. Crossbeam reads the
+trusted `.goreleaser.yml` from the base SHA, not the PR head; the snapshot template
+must already exist at that base. The candidate version is
+`<next-patch>-pr.<number>.g<short-sha>`, derived from a stable tag reachable from
+the base. A stale base or a head that does not descend from it fails the build;
+rebase before regenerating the candidate.
+
+The PR-only `candidate` job runs even when dependencies fail or are skipped and
+requires every dependency to succeed. It checks the returned artifact ID, name,
+SHA-256 digest, source SHA, current workflow-run ID, and `expired: false` against
+GitHub's artifact REST metadata, then downloads that exact ID rather than
+searching by name. The pinned producer retains candidate artifacts for seven
+days; an expired artifact cannot pass this gate.
+It requires exactly eight regular files: `candidate.json`, `checksums.txt`,
+and six `rootline_<candidate-version>_<os>_<arch>` archives for Linux, macOS
+(`darwin`), and Windows on amd64 and arm64 (`.tar.gz` on Unix, `.zip` on Windows).
+The manifest must match the PR, head SHA, base SHA, and candidate version; every
+archive must match its manifest declaration and the exact checksum inventory.
+
+The pinned Crossbeam producer already checks packaged `--version` in a
+network-isolated smoke. The consumer independently extracts the declared Linux
+amd64 archive and invokes its absolute, executable `rootline` binary, not a
+source build. It requires `--version` to contain the exact candidate version
+and rejects `dev`. An isolated working directory, HOME, TMPDIR, and XDG
+directories are provided through `env -i` with only `/usr/bin:/bin` on PATH;
+this consumer smoke isolates state, not the network. A temporary fixture
+declares a `root: true` schema with a required string `title` and one valid
+Markdown record. The packaged `validate --all` must return the version-2
+`rootline/validate-batch` envelope, exactly one valid record and no invalid
+records, structural errors, stem-health errors, or error notices. Temporary
+smoke state is removed on exit. Both the consumer gate and native durability
+jobs have 20-minute timeouts.
+
+### Stable releases
+
+Candidates are PR artifacts only: they do not create tags or GitHub Releases.
+The stable release job remains on pushes to `main`/`master` and deliberate
+major-release dispatches on `master`, using Crossbeam's `go-release.yml@v2`.
+It requires the same five quality gates (`ci`, `gitleaks`, `docs-validate`,
+`installer-tests`, and `durability`) and declares all five in
+`quality-gate-jobs`. The existing post-release installer smoke matrix still
+installs the published release on native Linux, macOS, and Windows runners.
 
 ## Reporting Issues
 

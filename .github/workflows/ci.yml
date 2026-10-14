@@ -3,7 +3,8 @@ name: CI
 on:
   push:
     branches: [main, master]
-  pull_request: {}
+  pull_request:
+    branches: [main, master]
   workflow_dispatch:
     inputs:
       force-bump:
@@ -39,6 +40,8 @@ jobs:
 
   docs-validate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
@@ -53,6 +56,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Test install.sh resolver
@@ -64,12 +69,350 @@ jobs:
         shell: pwsh
         run: ./tests/installers/install-ps1-test.ps1
 
+  durability:
+    name: durability (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Test atomic writes and repair rollback on native filesystems
+        shell: bash
+        env:
+          DURABILITY_PATTERN: '^(TestWriteFileAtomicLeavesOriginalIntactAfterPartialWrite|TestWriteFileAtomicCleansUpWhenRenameFails|TestWriteFileAtomicRejectsFileAsParentDuringStat|TestWriteFileAtomicRejectsMissingParent|TestWriteFileAtomicRootCleansUpWhenRenameFails|TestWriteFileAtomicRootLeavesOriginalAfterPartialWrite|TestCopyFileAtomicLeavesDestinationUntouched.*|TestApplyRepair_RollsBackOnPostValidationFailure|TestApplyRepair_RolledBackFileIsNotReportedAsChanged|TestApplyRepair_UnrelatedErrorDoesNotDisablePostValidation|TestApplyRepair_ValidWriteSurvivesAlongsideRollback|TestApplyRepair_CorrectLinkIsPostValidatedAndRolledBack|TestApplyRepairLeavesNoStagingFiles)$'
+        run: |
+          set -euo pipefail
+          count=$(go test ./internal/fsx ./internal/fix -list "$DURABILITY_PATTERN" | grep -c '^Test')
+          if [[ "$count" != 14 ]]; then
+            echo "::error::expected exactly 14 durability tests, found $count"
+            exit 1
+          fi
+          go test ./internal/fsx ./internal/fix -run "$DURABILITY_PATTERN" -count=1
+
+  candidate-build:
+    needs: [ci, gitleaks, docs-validate, installer-tests, durability]
+    if: github.event_name == 'pull_request'
+    uses: >-
+      pablontiv/crossbeam/.github/workflows/go-candidate.yml@b012cf53f083e637a013080ef8c677d1af5e0161
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      source-repository: ${{ github.event.pull_request.head.repo.full_name }}
+      source-sha: ${{ github.event.pull_request.head.sha }}
+      base-sha: ${{ github.event.pull_request.base.sha }}
+      pr-number: ${{ github.event.number }}
+      binary-name: rootline
+      go-version: '1.26.2'
+
+  candidate:
+    needs: [ci, gitleaks, docs-validate, installer-tests, durability, candidate-build]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+    steps:
+      - name: Require every candidate gate to succeed
+        env:
+          CI_RESULT: ${{ needs.ci.result }}
+          GITLEAKS_RESULT: ${{ needs.gitleaks.result }}
+          DOCS_VALIDATE_RESULT: ${{ needs.docs-validate.result }}
+          INSTALLER_TESTS_RESULT: ${{ needs.installer-tests.result }}
+          DURABILITY_RESULT: ${{ needs.durability.result }}
+          CANDIDATE_BUILD_RESULT: ${{ needs.candidate-build.result }}
+        run: |
+          set -euo pipefail
+          for result in \
+            "$CI_RESULT" \
+            "$GITLEAKS_RESULT" \
+            "$DOCS_VALIDATE_RESULT" \
+            "$INSTALLER_TESTS_RESULT" \
+            "$DURABILITY_RESULT" \
+            "$CANDIDATE_BUILD_RESULT"; do
+            if [[ "$result" != success ]]; then
+              echo "::error::required candidate dependency was $result"
+              exit 1
+            fi
+          done
+
+      - name: Verify candidate artifact identity through REST
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          PR_NUMBER: ${{ github.event.number }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          ARTIFACT_ID: ${{ needs.candidate-build.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ needs.candidate-build.outputs.artifact-digest }}
+          ARTIFACT_NAME: ${{ needs.candidate-build.outputs.artifact-name }}
+          SOURCE_SHA: ${{ needs.candidate-build.outputs.source-sha }}
+        run: |
+          set -euo pipefail
+          response=$(curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL%/}/repos/$REPOSITORY/actions/artifacts/$ARTIFACT_ID")
+          ARTIFACT_RESPONSE="$response" python3 - <<'PY'
+          import json
+          import os
+          import re
+
+          artifact_id = os.environ["ARTIFACT_ID"]
+          digest = os.environ["ARTIFACT_DIGEST"]
+          name = os.environ["ARTIFACT_NAME"]
+          source_sha = os.environ["SOURCE_SHA"].lower()
+          pr_sha = os.environ["PR_SHA"].lower()
+          pr_number = os.environ["PR_NUMBER"]
+          expected_name = f"go-candidate-pr-{pr_number}-{pr_sha}"
+          if not re.fullmatch(r"[1-9][0-9]*", artifact_id):
+              raise SystemExit("::error::candidate artifact ID is invalid")
+          if not re.fullmatch(r"[0-9a-f]{64}", digest):
+              raise SystemExit("::error::candidate artifact digest is invalid")
+          if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
+              raise SystemExit("::error::candidate source SHA is invalid")
+          if source_sha != pr_sha or name != expected_name:
+              raise SystemExit("::error::candidate outputs do not match the PR")
+          try:
+              payload = json.loads(os.environ["ARTIFACT_RESPONSE"])
+              rest_identity = (
+                  str(payload["id"]), payload["name"], payload["digest"],
+                  payload["workflow_run"]["head_sha"].lower(),
+                  str(payload["workflow_run"]["id"]), payload["expired"],
+              )
+          except (AttributeError, KeyError, TypeError,
+                  json.JSONDecodeError) as error:
+              raise SystemExit(f"::error::invalid artifact REST payload: {error}")
+          output_identity = (
+              artifact_id, name, f"sha256:{digest}", source_sha,
+              os.environ["RUN_ID"], False,
+          )
+          if rest_identity != output_identity:
+              raise SystemExit(
+                  "::error::candidate outputs differ from artifact REST metadata"
+              )
+          PY
+
+      - name: Download exact candidate artifact
+        # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.candidate-build.outputs.artifact-id }}
+          path: candidate
+          merge-multiple: true
+
+      - name: Verify candidate inventory and hashes
+        id: inventory
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CANDIDATE_VERSION: >-
+            ${{ needs.candidate-build.outputs.candidate-version }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import stat
+
+          root = Path("candidate").resolve()
+          entries = list(root.iterdir())
+          if (len(entries) != 8
+                  or any(path.is_symlink() or not path.is_file()
+                         or not stat.S_ISREG(
+                             path.stat(follow_symlinks=False).st_mode)
+                         for path in entries)):
+              raise SystemExit("::error::candidate must contain eight files")
+          manifest_path = root / "candidate.json"
+          checksum_path = root / "checksums.txt"
+          if manifest_path not in entries or checksum_path not in entries:
+              raise SystemExit("::error::candidate controls are missing")
+          manifest = json.loads(manifest_path.read_text())
+          expected_keys = {
+              "archives", "base", "base_version", "candidate_version",
+              "pr", "schema", "sha",
+          }
+          if not isinstance(manifest, dict) or set(manifest) != expected_keys:
+              raise SystemExit("::error::candidate manifest shape is invalid")
+          version = os.environ["CANDIDATE_VERSION"]
+          source_sha = os.environ["PR_SHA"].lower()
+          base_sha = os.environ["BASE_SHA"].lower()
+          if (manifest["schema"], manifest["pr"], manifest["sha"],
+                  manifest["base"], manifest["candidate_version"]) != (
+                  1, int(os.environ["PR_NUMBER"]), source_sha, base_sha,
+                  version):
+              raise SystemExit("::error::candidate manifest identity mismatch")
+          base_version = manifest["base_version"]
+          match = re.fullmatch(
+              r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)",
+              base_version,
+          )
+          if not match:
+              raise SystemExit("::error::candidate base version is invalid")
+          major, minor, patch = map(int, match.groups())
+          expected_version = (
+              f"{major}.{minor}.{patch + 1}-pr."
+              f"{os.environ['PR_NUMBER']}.g{source_sha[:7]}"
+          )
+          if version != expected_version:
+              raise SystemExit("::error::candidate version does not match its base/PR/SHA")
+
+          matrix = {
+              ("linux", "amd64"), ("linux", "arm64"),
+              ("darwin", "amd64"), ("darwin", "arm64"),
+              ("windows", "amd64"), ("windows", "arm64"),
+          }
+          archives = manifest["archives"]
+          if not isinstance(archives, list) or len(archives) != 6:
+              raise SystemExit("::error::candidate archive count is invalid")
+          declared = {}
+          platforms = set()
+          for archive in archives:
+              archive_keys = {"file", "goarch", "goos", "name", "sha256"}
+              if not isinstance(archive, dict) or set(archive) != archive_keys:
+                  raise SystemExit("::error::candidate archive shape invalid")
+              platform = (archive["goos"], archive["goarch"])
+              suffix = ".zip" if archive["goos"] == "windows" else ".tar.gz"
+              expected = (
+                  f"rootline_{version}_{archive['goos']}_"
+                  f"{archive['goarch']}{suffix}"
+              )
+              digest = archive["sha256"]
+              if (platform not in matrix or platform in platforms
+                      or archive["name"] != "rootline"
+                      or archive["file"] != expected
+                      or not re.fullmatch(r"[0-9a-f]{64}", digest)):
+                  raise SystemExit("::error::archive declaration invalid")
+              platforms.add(platform)
+              declared[expected] = digest
+          if platforms != matrix:
+              raise SystemExit("::error::candidate target matrix is incomplete")
+          expected_files = {"candidate.json", "checksums.txt", *declared}
+          if {path.name for path in entries} != expected_files:
+              raise SystemExit("::error::candidate file names are not exact")
+
+          checksums = {}
+          for line in checksum_path.read_text().splitlines():
+              match = re.fullmatch(
+                  r"([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._-]*)", line
+              )
+              if not match or match.group(2) in checksums:
+                  raise SystemExit("::error::checksum line is invalid")
+              checksums[match.group(2)] = match.group(1)
+          if checksums != declared:
+              raise SystemExit("::error::checksums differ from manifest")
+          for filename, expected_digest in declared.items():
+              payload = (root / filename).read_bytes()
+              if hashlib.sha256(payload).hexdigest() != expected_digest:
+                  raise SystemExit("::error::candidate archive hash mismatch")
+          linux_archive = f"rootline_{version}_linux_amd64.tar.gz"
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+              print(f"linux_archive={linux_archive}", file=output)
+          PY
+          (cd candidate && sha256sum --check --strict checksums.txt)
+
+      - name: Smoke packaged Linux amd64 against an isolated Rootline fixture
+        env:
+          LINUX_ARCHIVE: ${{ steps.inventory.outputs.linux_archive }}
+          CANDIDATE_VERSION: ${{ needs.candidate-build.outputs.candidate-version }}
+        run: |
+          set -euo pipefail
+          smoke_root=$(mktemp -d)
+          trap 'rm -rf "$smoke_root"' EXIT
+          mkdir -p \
+            "$smoke_root/extract" \
+            "$smoke_root/home" \
+            "$smoke_root/config" \
+            "$smoke_root/cache" \
+            "$smoke_root/data" \
+            "$smoke_root/state" \
+            "$smoke_root/tmp" \
+            "$smoke_root/fixture" \
+            "$smoke_root/work"
+          tar -xzf "candidate/$LINUX_ARCHIVE" -C "$smoke_root/extract"
+          binary="$smoke_root/extract/rootline"
+          test -x "$binary"
+          run_candidate() (
+            cd "$smoke_root/work"
+            env -i \
+              PATH=/usr/bin:/bin \
+              HOME="$smoke_root/home" \
+              TMPDIR="$smoke_root/tmp" \
+              XDG_CONFIG_HOME="$smoke_root/config" \
+              XDG_CACHE_HOME="$smoke_root/cache" \
+              XDG_DATA_HOME="$smoke_root/data" \
+              XDG_STATE_HOME="$smoke_root/state" \
+              "$binary" "$@"
+          )
+          version_output=$(run_candidate --version)
+          VERSION_OUTPUT="$version_output" python3 - <<'PY'
+          import os
+          import re
+
+          output = os.environ["VERSION_OUTPUT"]
+          expected = re.escape(os.environ["CANDIDATE_VERSION"])
+          if (re.search(r"\bdev\b", output, re.IGNORECASE)
+                  or not re.search(
+                      rf"(?<![0-9A-Za-z.+-])v?{expected}(?![0-9A-Za-z.+-])",
+                      output,
+                  )):
+              raise SystemExit("::error::packaged binary version does not match candidate")
+          PY
+          cat > "$smoke_root/fixture/.stem" <<'STEM'
+          version: 2
+          root: true
+          scope:
+            match: "*.md"
+          schema:
+            title:
+              type: string
+              required: true
+          STEM
+          cat > "$smoke_root/fixture/record.md" <<'RECORD'
+          ---
+          title: Candidate validation fixture
+          ---
+          # Candidate validation fixture
+          RECORD
+          output=$(run_candidate validate --all "$smoke_root/fixture")
+          VALIDATION_OUTPUT="$output" python3 - <<'PY'
+          import json
+          import os
+
+          report = json.loads(os.environ["VALIDATION_OUTPUT"])
+          if (report["version"], report["kind"]) != (
+                  2, "rootline/validate-batch"):
+              raise SystemExit("::error::packaged validation envelope is invalid")
+          summary = report["summary"]
+          if (summary["total"], summary["valid"], summary["invalid"]) != (1, 1, 0):
+              raise SystemExit("::error::packaged binary did not validate exactly one record")
+          if any(result["errors"] for result in report["structural"]):
+              raise SystemExit("::error::packaged validation has structural errors")
+          for key in ("stem_health", "notices"):
+              if any(item["severity"] == "error" for item in report[key]):
+                  raise SystemExit(f"::error::packaged validation has {key} errors")
+          PY
+
   release:
     uses: pablontiv/crossbeam/.github/workflows/go-release.yml@v2
-    needs: [ci, gitleaks, docs-validate, installer-tests]
+    needs: [ci, gitleaks, docs-validate, installer-tests, durability]
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
     with:
-      quality-gate-jobs: '["ci","gitleaks","docs-validate","installer-tests"]'
+      quality-gate-jobs: '["ci","gitleaks","docs-validate","installer-tests","durability"]'
       binary-name: rootline
       force-bump: ${{ inputs['force-bump'] }}
     permissions:
@@ -98,6 +441,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: install.sh smoke (Unix)
