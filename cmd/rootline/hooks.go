@@ -52,12 +52,11 @@ func init() {
 }
 
 func gitHooksDir() (string, error) {
-	out, err := exec.Command("git", "rev-parse", "--git-dir").Output()
+	out, err := exec.Command("git", "rev-parse", "--path-format=absolute", "--git-path", "hooks").Output()
 	if err != nil {
 		return "", fmt.Errorf("not a git repository")
 	}
-	gitDir := strings.TrimSpace(string(out))
-	return filepath.Join(gitDir, "hooks"), nil
+	return strings.TrimSpace(string(out)), nil
 }
 
 func preCommitPath() (string, error) {

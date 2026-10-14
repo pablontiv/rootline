@@ -260,6 +260,8 @@ Analyze patterns and manage schema evolution.
   - `rootline hooks install` — Enable pre-commit validation
   - `rootline hooks status` — Check installation status
   - `rootline hooks uninstall` — Remove hook
+  - All three commands use Git's effective hooks directory: `.git/hooks` by default, or the absolute or repository-relative directory configured by `core.hooksPath`. They also work from repository subdirectories and ignore hooks in an unused `.git/hooks` directory.
+  - Existing non-Rootline hooks are preserved unless installation uses `--force`; uninstall removes only Rootline-managed hooks.
 
 Commands with JSON envelopes support `--output json` and `--field` for dot-path extraction; `query` also supports `jsonl` and `csv` with `--select`. Commands that emit only human text or write files reject `--field`:
 
