@@ -306,7 +306,7 @@ rootline graph docs/epics/ --where 'tipo != "feature"' --check
 
 ### Query Expressions
 
-Queries use [expr-lang/expr](https://expr-lang.org/) syntax. Multiple `--where` flags are combined with AND:
+Queries use [expr-lang/expr](https://expr-lang.org/) syntax. Use bare metadata names (such as `estado` or `impact_score`) consistently in `--where`, `--sort`, and `--select`, not `frontmatter.<field>` or `derived.<field>` namespace paths. These names are separate from JSON output paths used by `--field`. See [CLI field names and lower-level query APIs](docs/query.md#cli-field-names). Multiple `--where` flags are combined with AND:
 
 ```bash
 rootline query --where 'estado == "Pending"'
