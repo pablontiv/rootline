@@ -131,6 +131,15 @@ opt-in: a schema declaring none reports nothing extra.
 
 Prints a text report and exits 1 when a blocking problem is found (broken links always block; cycles block only with `--fail-cycles` or `links.checks.cycles: true`, otherwise they are informational):
 
+The schema opt-in is resolved per record: `links.checks.cycles: true` blocks the
+check only when that record belongs to a directed cycle, including a self-loop.
+An opted-in acyclic record does not make unrelated cycles fail. Membership is
+computed from strongly connected components, independently of the reported
+back-edge paths, so an opted-in record in an overlapping cycle still blocks even
+when its path is omitted from the numbered report. Explicit `--fail-cycles=true`
+forces all cycles to block; explicit `--fail-cycles=false` keeps them informational
+even when a cyclic record's schema opts in.
+
 ```text
 Broken links: 1
   T002-task.md:7 → T999-nonexistent (blocks) — did you mean: T005-deploy.md?
@@ -165,6 +174,10 @@ so one rotation is picked as the printed representation.
 forest, not an exhaustive enumeration of every elementary circuit. Cycles that overlap are
 represented, not individually listed. `cycles` is stable and reproducible, but read its length as
 a count of detected back edges, not as the number of distinct circuits in the graph.
+
+This reporting limitation does not limit the schema failure gate: every member
+of any directed cycle is considered for per-record opt-in, without changing the
+reported paths, ordering, or back-edge count.
 
 ### With --field (Field Projection)
 

@@ -764,6 +764,78 @@ func TestDetectCycles_OverlappingCyclesAreStable(t *testing.T) {
 	}
 }
 
+// The canonical DFS finishes b and c before visiting d, so d's edge to b
+// contributes no reported back edge even though d belongs to a directed cycle.
+func TestCycleMembers_OverlappingCycleOmitsReportedMember(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("a.md", []extract.Link{
+			{Target: "b.md", Type: "reference", Line: 1},
+			{Target: "d.md", Type: "reference", Line: 2},
+			{Target: "e.md", Type: "reference", Line: 3},
+		}),
+		makeRecord("b.md", []extract.Link{{Target: "c.md", Type: "reference", Line: 1}}),
+		makeRecord("c.md", []extract.Link{{Target: "a.md", Type: "reference", Line: 1}}),
+		makeRecord("d.md", []extract.Link{{Target: "b.md", Type: "reference", Line: 1}}),
+		makeRecord("e.md", nil),
+		makeRecord("f.md", []extract.Link{{Target: "a.md", Type: "reference", Line: 1}}),
+	}
+	g := Build(context.Background(), records)
+	wantCycles := [][]string{{"a.md", "b.md", "c.md", "a.md"}}
+	if got := g.DetectCycles(); !cyclesEqual(got, wantCycles) {
+		t.Fatalf("DetectCycles() = %v, want unchanged report %v", got, wantCycles)
+	}
+	members := g.CycleMembers()
+	if len(members) != 4 {
+		t.Fatalf("CycleMembers() = %v, want exactly a, b, c, d", members)
+	}
+	for _, path := range []string{"a.md", "b.md", "c.md", "d.md"} {
+		if !members[path] {
+			t.Errorf("CycleMembers() omits %s: %v", path, members)
+		}
+	}
+	for _, path := range []string{"e.md", "f.md"} {
+		if members[path] {
+			t.Errorf("CycleMembers() includes acyclic %s: %v", path, members)
+		}
+	}
+	if got := g.DetectCycles(); !cyclesEqual(got, wantCycles) {
+		t.Fatalf("CycleMembers() changed DetectCycles(): %v, want %v", got, wantCycles)
+	}
+}
+
+func TestCycleMembers_SelfLoopAndBrokenLinks(t *testing.T) {
+	records := []*extract.Record{
+		makeRecord("self.md", []extract.Link{
+			{Target: "self.md", Type: "reference", Line: 1},
+			{Target: "self.md", Type: "reference", Line: 2},
+			{Target: "missing.md", Type: "reference", Line: 3},
+		}),
+		makeRecord("acyclic.md", []extract.Link{
+			{Target: "self.md", Type: "reference", Line: 1},
+			{Target: "missing.md", Type: "reference", Line: 2},
+		}),
+		makeRecord("isolated.md", nil),
+	}
+	members := Build(context.Background(), records).CycleMembers()
+	if len(members) != 1 || !members["self.md"] {
+		t.Fatalf("CycleMembers() = %v, want only self.md", members)
+	}
+}
+
+func TestCycleMembers_NoCycles(t *testing.T) {
+	for _, records := range [][]*extract.Record{
+		nil,
+		{
+			makeRecord("a.md", []extract.Link{{Target: "b.md", Type: "reference", Line: 1}}),
+			makeRecord("b.md", nil),
+		},
+	} {
+		if members := Build(context.Background(), records).CycleMembers(); len(members) != 0 {
+			t.Errorf("CycleMembers() = %v, want no members", members)
+		}
+	}
+}
+
 // cyclesEqual compares two cycle lists element by element.
 func cyclesEqual(a, b [][]string) bool {
 	return slices.EqualFunc(a, b, slices.Equal[[]string])

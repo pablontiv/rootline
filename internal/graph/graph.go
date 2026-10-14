@@ -216,6 +216,81 @@ func (g *Graph) DetectCycles() [][]string {
 	return dedupeCycles(cycles)
 }
 
+// CycleMembers returns every node belonging to a directed cycle, including
+// self-loops. Unlike DetectCycles' back-edge paths, strongly connected components
+// include members omitted from the report when cycles overlap.
+func (g *Graph) CycleMembers() map[string]bool {
+	adjacency := g.sortedAdjacency()
+	type state struct {
+		path    string
+		index   int
+		low     int
+		onStack bool
+	}
+	states := make([]state, len(g.Nodes))
+	positions := make(map[string]int, len(g.Nodes))
+	position := 0
+	for path := range g.Nodes {
+		positions[path] = position
+		states[position].path = path
+		position++
+	}
+	stack := make([]int, 0, len(states))
+	var members map[string]bool
+	nextIndex := 1 // zero marks an unvisited node
+
+	// Tarjan's traversal is O(V+E) over the shared, de-duplicated adjacency.
+	// Indexed state and a reusable stack avoid allocations per node or SCC.
+	var visit func(int)
+	visit = func(v int) {
+		node := &states[v]
+		node.index = nextIndex
+		node.low = nextIndex
+		nextIndex++
+		node.onStack = true
+		stack = append(stack, v)
+		selfLoop := false
+		for _, target := range adjacency[node.path] {
+			w := positions[target]
+			if w == v {
+				selfLoop = true
+			}
+			if states[w].index == 0 {
+				visit(w)
+				node.low = min(node.low, states[w].low)
+			} else if states[w].onStack {
+				node.low = min(node.low, states[w].index)
+			}
+		}
+		if node.low != node.index {
+			return
+		}
+
+		start := len(stack) - 1
+		for stack[start] != v {
+			start--
+		}
+		if len(stack)-start > 1 || selfLoop {
+			if members == nil {
+				members = make(map[string]bool)
+			}
+			for _, member := range stack[start:] {
+				members[states[member].path] = true
+			}
+		}
+		for _, member := range stack[start:] {
+			states[member].onStack = false
+		}
+		stack = stack[:start]
+	}
+	for v := range states {
+		if states[v].index == 0 {
+			visit(v)
+		}
+	}
+	return members
+}
+
 // sortedAdjacency returns, for each node, the distinct in-graph targets it
 // links to, in lexical order. Broken links are skipped, exactly as the raw edge
 // walk skipped them.
