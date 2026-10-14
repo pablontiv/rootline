@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/pablontiv/rootline/internal/extract"
 	"gopkg.in/yaml.v3"
@@ -390,6 +391,24 @@ type ValidationRule struct {
 	Source   string         `yaml:"-" json:"source,omitempty"`
 }
 
+const (
+	validationRuleNonEmpty = "non_empty"
+	validationRuleExists   = "exists"
+	validationRuleRequires = "requires"
+	validationRuleEnum     = "enum"
+)
+
+var supportedValidationRuleNames = [...]string{
+	validationRuleNonEmpty,
+	validationRuleExists,
+	validationRuleRequires,
+	validationRuleEnum,
+}
+
+func isSupportedValidationRule(name string) bool {
+	return slices.Contains(supportedValidationRuleNames[:], name)
+}
+
 // severityOrder defines the ordering for severity levels.
 // Higher value = stricter.
 var severityOrder = map[string]int{
@@ -473,8 +492,13 @@ func ParseStem(path string, content []byte) (*StemFile, error) {
 		stem.Schema[name] = field
 	}
 
-	// Tag source and default severity on validation rules
+	// Reject unknown validation rules, then tag source and default severity.
 	for i := range stem.Validate {
+		rule := stem.Validate[i]
+		if !isSupportedValidationRule(rule.Rule) {
+			reason := fmt.Sprintf("validation field %q has unknown rule %q; supported rules are: %s", rule.Field, rule.Rule, strings.Join(supportedValidationRuleNames[:], ", "))
+			return nil, newStemParseError(path, stemParseCheckSchemaValid, rule.Field, reason, nil)
+		}
 		stem.Validate[i].Source = path
 		if stem.Validate[i].Severity == "" {
 			stem.Validate[i].Severity = "error"
