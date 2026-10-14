@@ -58,6 +58,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Fixed
 
+- `explain` now propagates sibling filesystem scan failures for index-file aggregation as contextual errors, exiting non-zero without partial stdout or a successful null aggregate trace. Readable inputs still aggregate normally, and malformed sibling frontmatter retains its existing record-extraction semantics. Closes #280.
 - `analyze` now validates link types against each record's effective inherited or overridden `links.allowed`, rather than the scan root's list. Child-only allowances no longer produce false violations, and child-only restrictions are reported. Findings remain diagnostic and schema-apply routing is unchanged; records without an allowed list retain global consensus inference. Closes #279.
 - `init --template` now parses every remote `.stem` with the production schema parser before copying any files, rejecting parser-invalid YAML in installation and dry-run modes with template-relative source paths. Invalid templates leave the destination untouched, including with `--force`; parser-accepted v2 templates still copy unchanged without extra lint checks. Closes #278.
 - `hooks install`, `hooks status`, and `hooks uninstall` now use Git's effective absolute hooks directory, honoring repository-local absolute and relative `core.hooksPath` settings and working from repository subdirectories. A managed hook in an unused `.git/hooks` directory no longer reports as installed. Closes #277.

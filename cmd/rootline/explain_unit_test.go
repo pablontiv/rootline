@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/rules"
@@ -116,5 +119,89 @@ func TestExplain_DirectoryArgumentError(t *testing.T) {
 	want := target + " is a directory; use 'rootline explain <file>'"
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestExplain_SiblingScanFailure(t *testing.T) {
+	root := setupValidateProject(t, map[string]string{
+		".stem":     "version: 2\naggregate:\n  total: len(descendants)\n",
+		"README.md": "# Root\n",
+		"good.md":   "# Readable sibling\n",
+	})
+	brokenPath := filepath.Join(root, "broken.md")
+	// A dangling link makes os.ReadFile fail without relying on permission bits
+	// (which do not prevent reads when the tests run as a privileged user).
+	if err := os.Symlink("missing.md", brokenPath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	for _, format := range []string{"json", "table"} {
+		t.Run(format, func(t *testing.T) {
+			out, err := runTask9CmdStdoutOnly(t, "explain", filepath.Join(root, "README.md"), "-o", format)
+			if err == nil {
+				t.Fatal("explain must fail when a sibling cannot be read")
+			}
+			if !strings.Contains(err.Error(), "scanning aggregate input records in "+root) {
+				t.Fatalf("error lacks aggregate scan context: %v", err)
+			}
+			if !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("error must preserve the missing sibling cause: %v", err)
+			}
+			var pathErr *os.PathError
+			if !errors.As(err, &pathErr) || pathErr.Path != brokenPath {
+				t.Fatalf("error must identify the unreadable sibling %s: %v", brokenPath, err)
+			}
+			if out != "" {
+				t.Fatalf("failed scan must emit no stdout, got %q", out)
+			}
+		})
+	}
+}
+
+func TestExplain_SiblingExtractionSemantics(t *testing.T) {
+	tests := []struct {
+		name    string
+		sibling string
+		want    float64
+	}{
+		{
+			name:    "readable",
+			sibling: "---\nstatus: pending\n---\n# Sibling\n",
+			want:    1,
+		},
+		{
+			name:    "malformed frontmatter retains fallback values",
+			sibling: "---\nstatus: done\nbroken: [\n---\n# Sibling\n",
+			want:    2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := setupValidateProject(t, map[string]string{
+				".stem":     "version: 2\nschema:\n  status:\n    type: string\naggregate:\n  done_total: 'len(filter(descendants, {.status == \"done\"}))'\n",
+				"README.md": "# Root\n",
+				"good.md":   "---\nstatus: done\n---\n# Readable sibling\n",
+				"other.md":  tt.sibling,
+			})
+			out, err := runTask9CmdStdoutOnly(t, "explain", filepath.Join(root, "README.md"), "-o", "json")
+			if err != nil {
+				t.Fatalf("sibling extraction must not fail the scan: %v", err)
+			}
+			var result struct {
+				Fields []map[string]any `json:"fields"`
+			}
+			if err := json.Unmarshal([]byte(out), &result); err != nil {
+				t.Fatalf("invalid explain JSON: %v\n%s", err, out)
+			}
+			for _, field := range result.Fields {
+				if field["name"] == "done_total" {
+					if field["value"] != tt.want || field["origin"] != "aggregate" {
+						t.Fatalf("done_total = %#v, want aggregate count %v", field, tt.want)
+					}
+					return
+				}
+			}
+			t.Fatalf("explain fields missing done_total: %#v", result.Fields)
+		})
 	}
 }
