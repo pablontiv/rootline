@@ -88,7 +88,7 @@ func TestLivingDocumentationStatesBehaviorSpecificContract(t *testing.T) {
 		"CLAUDE.md":                               {"internal/extract/body_source.go", "internal/rules/field_source.go", "logical `source`", "physical `defined_in`"},
 		"docs/init.md":                            {"0.80 threshold", "analyze` default threshold of 0.60", "Headings below the 0.80 threshold are omitted", "source: body.section[\"## Summary\"]"},
 		"docs/new.md":                             {"--dry-run", "--force", "# New Endpoint", "tipo:  # [outcome, task]", "Required enum fields without a default are not written as a successful scaffold. `new` renders no invented first value, then prospective validation refuses the command before dry-run output or disk write", "optional enum fields with no default are omitted", "schema.id.next"},
-		"docs/migrate.md":                         {"Content Priority", "lexical heading order", "+ ## Summary", "Sections are inserted at the end"},
+		"docs/migrate.md":                         {"Content Priority", "lexical heading order", "Sections are inserted at the end"},
 		"docs/extensibility.md":                   {"without changing the core model", "YAML / JSON / TOML", "source: body.section[\"## Summary\"]"},
 		"docs/describe.md":                        {"\"source\": \"body.section", "\"defined_in\": \"docs/.stem\""},
 		"docs/explain.md":                         {"\"name\": \"notes\"", "\"source\": \"body.section", "\"defined_in\": \"docs/.stem\""},

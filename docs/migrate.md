@@ -16,6 +16,7 @@ rootline migrate --from old.stem          # Compare against specific .stem file
 rootline migrate --rename old_field=new   # Rename field across all documents + .stem files
 rootline migrate --split                  # Split flat .stem into hierarchical per-level files
 rootline migrate --split --dry-run        # Preview split without writing files
+rootline migrate --split --force          # Allow replacement of existing child .stem files
 ```
 
 ### Flags
@@ -26,6 +27,7 @@ rootline migrate --split --dry-run        # Preview split without writing files
 | `--from` | Compare against specified `.stem` file instead of git HEAD |
 | `--rename old=new` | Rename a field across all documents and `.stem` files |
 | `--split` | Split a flat `.stem` into hierarchical `.stem` files per level |
+| `--force` | With `--split`, allow overwriting existing child `.stem` files |
 | `--scaffold` | Scaffold missing required source-backed sections into documents using schema defaults |
 
 ### Baseline failures
@@ -61,8 +63,15 @@ Diff mode compares `.stem` files and classifies each change:
 | `required_added` | Yes | Field now required |
 | `required_removed` | No | Field no longer required |
 | `default_changed` | No | Default value changed |
-| `severity_changed` | Depends | Severity tightened or loosened |
-| `rule_added` / `rule_removed` | Depends | Validation rule added or removed |
+| `severity_changed` | No | Schema field severity tightened or loosened |
+| `rule_added` | No | Validation rule added |
+| `rule_removed` | Yes | Validation rule removed |
+
+These are the migration diff classifications, not a guarantee that records remain
+valid or that monotonic constraints accept the edit. In particular, `rule_added`
+can report affected records while remaining non-breaking. A validation rule
+severity edit changes rule identity and yields a breaking `rule_removed` plus a
+non-breaking `rule_added`; `severity_changed` applies to schema field severity.
 
 Sequence and applicability edits stay in the existing `changes[]` array. Their
 `before` and `after` strings contain compact, named JSON snapshots, for example
@@ -131,8 +140,7 @@ A single-stem diff carries `stem_path`, the absolute path of the `.stem` it desc
       "field": "prioridad",
       "breaking": true,
       "before": "enum",
-      "after": null,
-      "message": "field 'prioridad' removed",
+      "message": "field prioridad removed",
       "affected_files": 12
     }
   ],
@@ -167,6 +175,7 @@ the shape you get from `rootline migrate docs --dry-run -o json`:
 ```
 
 `changes` is `null`, not `[]`, when a `.stem` has no changes to report.
+Empty `before` and `after` strings are omitted, not emitted as `null`.
 
 ## Rename Mode
 
@@ -207,8 +216,31 @@ files completed before a later write error are not rolled back.
 
 ```bash
 rootline migrate --split docs/epics/       # Split into per-level .stem files
-rootline migrate --split --dry-run docs/   # Preview without writing
+rootline migrate --split --dry-run docs/epics/ # Preview without writing
+rootline migrate --split --force docs/epics/   # Replace existing child stems deliberately
 ```
+
+### Overwrite safety
+
+Before writing, split checks every generated child `.stem` target. If any already
+exists and `--force` is absent, it exits non-zero before changing any file,
+including the root `.stem`. A single collision reports
+`<child>/.stem already exists (use --force to overwrite)`; multiple collisions
+report `cannot split: <path1>, <path2> already exist (use --force to overwrite)`
+with target-relative paths sorted lexically. Existing children not targeted by
+the split are not overwritten and do not block it.
+
+`--force` explicitly permits replacing those generated child targets; it does
+not merge their existing contents. The target directory's root `.stem` is the
+input rewritten in place and is never a collision, so its existence alone does
+not require `--force`.
+
+`--dry-run` never writes or refuses because of existing child targets, even
+without `--force`. It prints generated YAML under `# --- <relative-path> ---`
+headers and annotates colliding children with
+`# (existing file will be overwritten)`. Review that preview before authorizing
+replacement. Collision refusal is pre-write protection, not a transactional
+rollback guarantee: a later write failure can leave earlier writes in place.
 
 ### How it works
 
@@ -276,15 +308,11 @@ schema:
     required: true
 ```
 
-Running `rootline migrate --scaffold` on a file missing both sections produces:
-
-```
-~ docs/epics/E03/README.md
-  + ## Summary
-    Describe the purpose of this document.
-  + ## References
-    <!-- TODO -->
-```
+Running `rootline migrate --scaffold docs/epics/ --output table` on a file
+missing both sections reports `Sections added:`, a table with `File` and
+`Heading` columns, and `Summary: 2 section(s) added to 1 file(s)`. The inserted
+`## References` section contains `<!-- TODO -->`, while `## Summary` contains
+`Describe the purpose of this document.`
 
 Sections are inserted at the end of the document body only when they use simple selectors and need materialization. Multiple simple additions are appended in lexical heading order. A frontmatter override or an empty-present section needs no materialization. Ambiguous source resolution and invalid declarations fail rather than becoming a successful no-op.
 
@@ -301,7 +329,7 @@ When running under monotonic constraints (O10), some destructive schema changes 
 - Remove enum values
 - Reduce severity levels
 
-These changes can still be legitimate during migrations (e.g., field deprecation, schema redesigns). Schema evolution proposals represent these breaking changes as explicit, reviewable operations with migration rationale.
+These changes can still be legitimate during migrations (e.g., field deprecation, schema redesigns). Schema evolution proposals represent these governance changes as explicit, reviewable operations with migration rationale. Monotonic violations and migration diff breaking classifications are separate: required loosening and schema field severity edits are non-breaking in the diff table above.
 
 ### Evolution Proposal Types
 
