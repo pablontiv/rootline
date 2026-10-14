@@ -328,6 +328,299 @@ schema:
 	}
 }
 
+func TestMigrateDiffAffectedFilesScanFailure(t *testing.T) {
+	const current = "version: 2\nroot: true\nschema: {}\n"
+	dir := setupMigrateDir(t, current, map[string]string{
+		"doc.md": "---\nremoved: Present\n---\n",
+	})
+	beforePath := filepath.Join(dir, "before.stem")
+	mustWriteFile(t, beforePath, []byte("version: 2\nschema:\n  removed:\n    type: string\n"), 0644)
+	docPath := filepath.Join(dir, "doc.md")
+	if err := os.Chmod(docPath, 0); err != nil {
+		t.Skipf("permission restrictions unavailable: %v", err)
+	}
+	defer func() {
+		if err := os.Chmod(docPath, 0600); err != nil {
+			t.Error(err)
+		}
+	}()
+	if _, err := os.ReadFile(docPath); !errors.Is(err, os.ErrPermission) {
+		t.Skip("platform or privileges do not enforce unreadable file permissions")
+	}
+	for _, format := range []string{"json", "table"} {
+		for _, dryRun := range []bool{false, true} {
+			args := []string{"migrate", dir, "--from", beforePath, "-o", format}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			stdout, _, err := runCmdWithSeparateOutput(t, args...)
+			if err == nil || !strings.Contains(err.Error(), "scanning records for "+filepath.Join(dir, ".stem")) {
+				t.Fatalf("expected record scan error, got %v, stdout %q", err, stdout)
+			}
+			if stdout != "" {
+				t.Errorf("scan failure emitted fabricated counts or partial stdout: %s", stdout)
+			}
+		}
+	}
+}
+
+func TestMigrateDiffBatchBaselineFailurePrecedesScan(t *testing.T) {
+	dir := t.TempDir()
+	runFixtureGit(t, dir, "init", "--quiet")
+	rootStem := filepath.Join(dir, ".stem")
+	subDir := filepath.Join(dir, "sub")
+	if err := os.Mkdir(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	subStem := filepath.Join(subDir, ".stem")
+	mustWriteFile(t, rootStem, []byte("version: 2\nroot: true\n"), 0644)
+	mustWriteFile(t, subStem, []byte("version: 1\n"), 0644)
+	runFixtureGit(t, dir, "add", ".stem", "sub/.stem")
+	runFixtureGit(t, dir, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "-m", "baseline")
+	mustWriteFile(t, rootStem, []byte("version: 2\nroot: true\nschema:\n  added:\n    type: string\n"), 0644)
+	mustWriteFile(t, subStem, []byte("version: 2\n"), 0644)
+	docPath := filepath.Join(dir, "doc.md")
+	mustWriteFile(t, docPath, []byte("---\ninvalid: [\n---\n"), 0644)
+	for _, format := range []string{"json", "table"} {
+		assertMigrateBaselineRejected(t, []string{"migrate", dir, "-o", format},
+			"parsing git HEAD:sub/.stem baseline", rootStem, subStem, docPath)
+	}
+}
+
+func TestMigrateDiffAffectedFiles(t *testing.T) {
+	const beforeStem = `version: 2
+root: true
+scope:
+  match: "T*.md"
+schema:
+  estado:
+    type: enum
+    values: [Pending, Done, Cancelled]
+  owner:
+    type: string
+  tipo:
+    type: string
+  unused:
+    type: string
+`
+	const afterStem = `version: 2
+root: true
+scope:
+  match: "T*.md"
+schema:
+  a_note:
+    type: string
+  estado:
+    type: enum
+    values: [Pending, Done]
+  owner:
+    type: string
+    required: true
+  tipo:
+    type: integer
+`
+	dir := setupMigrateDir(t, afterStem, map[string]string{
+		"T001.md":             "---\nestado: Cancelled\ntipo: task\n---\n",
+		"T002.md":             "---\nestado: Done\ntipo: task\nowner: Ana\n---\n",
+		"sub/.stem":           "version: 2\n",
+		"sub/T003.md":         "---\nestado: Cancelled\nowner: Ana\n---\n",
+		"T004-ignored.md":     "---\nestado: Cancelled\ntipo: task\n---\n",
+		".stemignore":         "T004-ignored.md\n",
+		"outside.md":          "---\nestado: Cancelled\ntipo: task\n---\n",
+		"independent/.stem":   "version: 2\nroot: true\n",
+		"independent/T005.md": "---\nestado: Cancelled\ntipo: task\n---\n",
+		"narrow/.stem":        "version: 2\nscope:\n  match: \"README.md\"\n",
+		"narrow/T006.md":      "---\nestado: Cancelled\ntipo: task\n---\n",
+		"narrow/README.md":    "---\nestado: Done\nowner: Ana\n---\n",
+	})
+	beforePath := filepath.Join(dir, "before.stem")
+	mustWriteFile(t, beforePath, []byte(beforeStem), 0644)
+	stemPath := filepath.Join(dir, ".stem")
+	wantChanges := []struct {
+		kind     string
+		field    string
+		affected int
+	}{
+		{"enum_value_removed", "estado", 2},
+		{"required_added", "owner", 1},
+		{"type_changed", "tipo", 2},
+		{"field_removed", "unused", 0},
+		{"field_added", "a_note", 0},
+	}
+	for _, dryRun := range []bool{false, true} {
+		t.Run(fmt.Sprintf("dry-run=%v", dryRun), func(t *testing.T) {
+			args := []string{"migrate", stemPath, "--from", beforePath, "-o", "json"}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			var first string
+			for i := range 3 {
+				stdout, stderr, err := runCmdWithSeparateOutput(t, args...)
+				if err != nil {
+					t.Fatalf("migrate failed: %v, stderr %q", err, stderr)
+				}
+				if i == 0 {
+					first = stdout
+				} else if stdout != first {
+					t.Fatalf("JSON order changed on run %d:\n%s\nwant:\n%s", i, stdout, first)
+				}
+				var result struct {
+					Version       int    `json:"version"`
+					Kind          string `json:"kind"`
+					StemPath      string `json:"stem_path"`
+					BreakingCount int    `json:"breaking_count"`
+					TotalCount    int    `json:"total_count"`
+					Changes       []struct {
+						Kind          string `json:"kind"`
+						Field         string `json:"field"`
+						AffectedFiles int    `json:"affected_files"`
+					} `json:"changes"`
+				}
+				if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+					t.Fatal(err)
+				}
+				if result.Version != 1 || result.Kind != "rootline/migrate-diff" || result.StemPath != stemPath ||
+					result.BreakingCount != 4 || result.TotalCount != len(wantChanges) || len(result.Changes) != len(wantChanges) {
+					t.Fatalf("unexpected diff envelope: %s", stdout)
+				}
+				for j, want := range wantChanges {
+					got := result.Changes[j]
+					if got.Kind != want.kind || got.Field != want.field || got.AffectedFiles != want.affected {
+						t.Errorf("change %d = %+v, want %s/%s affected_files=%d", j, got, want.kind, want.field, want.affected)
+					}
+				}
+			}
+		})
+	}
+
+	var firstTable string
+	for i := range 3 {
+		out, err := runCmd(t, "migrate", stemPath, "--from", beforePath, "-o", "table")
+		if err != nil {
+			t.Fatalf("table failed: %v\n%s", err, out)
+		}
+		if i == 0 {
+			firstTable = out
+		} else if out != firstTable {
+			t.Fatalf("table changed on run %d:\n%s\nwant:\n%s", i, out, firstTable)
+		}
+		var lines []string
+		for _, line := range strings.Split(out, "\n") {
+			if fields := strings.Fields(line); len(fields) > 0 {
+				lines = append(lines, strings.Join(fields, " "))
+			}
+		}
+		want := strings.Join([]string{
+			"Schema changes in " + stemPath + ":",
+			"Kind Field Breaking Message",
+			"- - - -",
+			"enum_value_removed estado YES enum value Cancelled removed from estado",
+			"required_added owner YES field owner is now required",
+			"type_changed tipo YES field tipo type changed from string to integer",
+			"field_removed unused YES field unused removed",
+			"field_added a_note no field a_note added (type: string)",
+			"Total: 5 changes (4 breaking)",
+		}, "\n")
+		if got := strings.Join(lines, "\n"); got != want {
+			t.Fatalf("table text or ordering changed:\n%s\nwant:\n%s", got, want)
+		}
+	}
+}
+
+func TestMigrateDiffAffectedFilesBatch(t *testing.T) {
+	dir := t.TempDir()
+	runFixtureGit(t, dir, "init", "--quiet")
+	before := map[string]string{
+		".stem":   "version: 2\nroot: true\nschema:\n  parent:\n    type: string\n",
+		"a/.stem": "version: 2\nschema:\n  local:\n    type: string\n",
+		"z/.stem": "version: 2\nroot: true\nschema:\n  local:\n    type: string\n",
+	}
+	for name, content := range before {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		mustWriteFile(t, path, []byte(content), 0644)
+	}
+	runFixtureGit(t, dir, "add", ".stem", "a/.stem", "z/.stem")
+	runFixtureGit(t, dir, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "-m", "baseline")
+	for name, content := range map[string]string{
+		".stem":   "version: 2\nroot: true\nschema:\n  added:\n    type: string\n",
+		"a/.stem": "version: 2\nschema:\n  added:\n    type: string\n",
+		"z/.stem": "version: 2\nroot: true\nschema:\n  added:\n    type: string\n",
+		"doc.md":  "---\nparent: Root\nlocal: Outside child scope\n---\n",
+		"a/1.md":  "---\nparent: Inherited\nlocal: First\n---\n",
+		"a/2.md":  "---\nlocal: Second\n---\n",
+		"z/1.md":  "---\nparent: Independent\nlocal: Separate\n---\n",
+	} {
+		mustWriteFile(t, filepath.Join(dir, name), []byte(content), 0644)
+	}
+	var first string
+	for i := range 3 {
+		out, err := runCmd(t, "migrate", dir)
+		if err != nil {
+			t.Fatalf("batch failed: %v\n%s", err, out)
+		}
+		if i == 0 {
+			first = out
+		} else if out != first {
+			t.Fatalf("batch order changed on run %d:\n%s\nwant:\n%s", i, out, first)
+		}
+		var batch MigrateBatchResult
+		if err := json.Unmarshal([]byte(out), &batch); err != nil {
+			t.Fatal(err)
+		}
+		if batch.Version != 1 || batch.Kind != "rootline/migrate-batch" || len(batch.Results) != 3 ||
+			batch.Summary != (MigrateBatchSummary{StemsChecked: 3, TotalChanges: 6, BreakingCount: 3}) {
+			t.Fatalf("unexpected batch envelope: %s", out)
+		}
+		for j, want := range []struct {
+			path     string
+			field    string
+			affected int
+		}{
+			{".stem", "parent", 2},
+			{"a/.stem", "local", 2},
+			{"z/.stem", "local", 1},
+		} {
+			result := batch.Results[j]
+			if result.StemPath != filepath.Join(dir, want.path) || len(result.Changes) != 2 {
+				t.Fatalf("unexpected stem ordering or changes: %+v", result)
+			}
+			removed, added := result.Changes[0], result.Changes[1]
+			if string(removed.Kind) != "field_removed" || removed.Field != want.field || removed.AffectedFiles != want.affected ||
+				string(added.Kind) != "field_added" || added.AffectedFiles != 0 {
+				t.Errorf("%s: unexpected affected counts/order: %+v", want.path, result.Changes)
+			}
+		}
+	}
+}
+
+func TestMigrateDiffAlternateSchemaFilename(t *testing.T) {
+	dir := t.TempDir()
+	current := filepath.Join(dir, "current.yaml")
+	before := filepath.Join(dir, "before.yaml")
+	mustWriteFile(t, current, []byte("version: 2\nschema: {}\n"), 0644)
+	mustWriteFile(t, before, []byte("version: 2\nschema:\n  removed:\n    type: string\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "doc.md"), []byte("---\nremoved: Present\n---\n"), 0644)
+	out, err := runCmd(t, "migrate", current, "--from", before)
+	if err != nil {
+		t.Fatalf("alternate schema filename was rejected: %v\n%s", err, out)
+	}
+	var result struct {
+		Changes []struct {
+			Kind          string `json:"kind"`
+			AffectedFiles int    `json:"affected_files"`
+		} `json:"changes"`
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Changes) != 1 || result.Changes[0].Kind != "field_removed" || result.Changes[0].AffectedFiles != 0 {
+		t.Fatalf("non-governing schema input changed behavior: %s", out)
+	}
+}
+
 func TestMigrateDiffRejectsExplicitBaseline(t *testing.T) {
 	const current = "version: 2\nschema:\n  title:\n    type: string\n"
 	for _, tc := range []struct {

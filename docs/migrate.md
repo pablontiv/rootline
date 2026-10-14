@@ -84,6 +84,30 @@ unconditional rules, so adding or removing the last condition remains observable
 Unchanged rules and attributes produce no changes. The version-1 envelopes and
 their existing top-level keys are unchanged.
 
+### Affected files
+
+Each change's `affected_files` is computed from existing records in the target
+`.stem` directory and its inheriting descendants, using the effective
+`scope.match` and the scanner's `.stemignore` filters. A child `.stem` still
+inherits the parent; a descendant with its own `root: true` does not, so its
+records are excluded from the parent's counts. Batch mode classifies each
+target independently: sibling records never inflate a child's count.
+
+The existing classifier counts field removals, type changes, and sequence
+format changes where the frontmatter field is present; enum removals where
+the removed value is used; and newly required fields where the field is
+missing. Rule and applicability changes conservatively count every scoped
+record. Non-impacting changes and changes with no affected records retain
+zero. These are classifier counts, not a post-change validation verdict:
+body-source changes and other unhandled change kinds still report zero.
+
+Classified changes are ordered breaking-first, then by field and change kind.
+JSON envelopes remain version 1, and table columns and messages are unchanged.
+All baselines are loaded before record scanning; a baseline or record-scan
+failure emits no partial JSON or table output. Alternate schema filenames
+remain accepted as diff inputs, but without `.stem` governance they retain
+zero counts.
+
 ## Result Shape
 
 `migrate` emits three `kind` values, one per mode:
