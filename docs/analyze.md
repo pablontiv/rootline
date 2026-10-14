@@ -68,6 +68,15 @@ list (including ungoverned bootstrap records) contribute to one global
 `link_type_suggestion` when an observed type reaches 80% consensus among their
 links; records with an allowed list do not contribute to that suggestion.
 
+Back-reference detection builds a graph from unchecked extracted links.
+Extension-bearing wikilinks resolve to a record in the source document's
+directory first: `docs/source.md` linking to `[[reference:peer.md]]` selects
+`docs/peer.md`, even when `other/peer.md` also exists. A missing reciprocal
+link is then reported on `docs/peer.md`; a reciprocal pair produces no finding.
+When the direct relative record is absent, the historical unique-basename
+fallback uses the original `peer.md` target. Ambiguous matches remain broken
+and do not produce back-reference findings.
+
 ### Governance Detectors
 
 | Detector | Description |

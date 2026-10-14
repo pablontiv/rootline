@@ -93,6 +93,16 @@ that asked for it, leaving unrelated cycles in never-opted-in subtrees informati
 
 `graph` resolves links through the same engine `validate` uses, so they agree when basename fallback is off. Wikilinks infer `.md` (`[[b]]`→`b.md`, `[[sub/README]]`→`sub/README.md`), markdown targets resolve literally, and `/x.md` resolves against the scan root. A path-less target matches a uniquely named record anywhere only when `links.basename_fallback: true`; `graph` and query traversal have the full index needed for that lookup, while `validate` reports `link_unverifiable` instead of guessing. A resolved target is never reported broken **even when the schema does not govern it** — `scope.match` and `.stemignore` declare what is *governed*, not what *exists*, so such a link is an edge to a non-node. Unresolved targets are reported verbatim.
 
+In-memory callers that pass **unchecked** links to `graph.Build` (including
+`analyze` back-reference detection) retain the historical basename fallback.
+An extension-bearing wikilink such as `[[peer.md]]` first selects
+`docs/peer.md` when linked from `docs/source.md`, even if another directory
+contains its own `peer.md`. If that relative node is absent, the original
+`peer.md` target still matches a unique basename anywhere in the record set;
+multiple matches remain broken. This unchecked compatibility path does not
+rewrite prepared targets or Markdown paths, and does not change the schema
+resolver policy used by the `graph` command and query traversal.
+
 When the effective `.stem` declares `links.checks`, `--check` also reports the anchor and
 encoding failures `validate` reports, so a green `graph --check` now means what it looks like it
 means. Resolution failures stay under "Broken links" rather than being listed twice. Checks are

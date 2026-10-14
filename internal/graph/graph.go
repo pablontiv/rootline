@@ -52,9 +52,8 @@ type BrokenLink struct {
 //
 // Targets are expected to be resolved already, by rules.PrepareLinks, which
 // rewrites them to root-relative node keys and records whether each resolved.
-// Build no longer does any resolution of its own beyond a directory join for
-// links nothing has looked at, so graph and validate cannot disagree about
-// which links are broken (issue #62).
+// Prepared targets and resolution outcomes remain authoritative. Unchecked
+// wikilinks retain directory-relative resolution and unique-basename fallback.
 func Build(_ context.Context, records []*extract.Record) *Graph {
 	g := &Graph{
 		Nodes: make(map[string]*extract.Record, len(records)),
@@ -68,10 +67,10 @@ func Build(_ context.Context, records []*extract.Record) *Graph {
 	for _, rec := range records {
 		for _, link := range rec.Links {
 			target := link.Target
-			// An unprepared wikilink still gets the directory join it always
-			// had; a prepared one already carries its root-relative key.
+			// Prepared keys and Markdown paths are authoritative; only unchecked
+			// wikilinks get directory-relative resolution before basename fallback.
 			if link.Resolution == extract.LinkUnchecked && link.Style != extract.StyleMarkdown {
-				target = resolveTarget(rec.Path, link.Target)
+				target = resolveTarget(rec.Path, link.Target, g.Nodes)
 			}
 			g.Edges[rec.Path] = append(g.Edges[rec.Path], Edge{
 				Source:     rec.Path,
@@ -465,13 +464,20 @@ func (g *Graph) Trace(start string, opts TraceOptions) *TraceResult {
 	return result
 }
 
-// resolveTarget resolves a link target relative to the source record's directory.
-// If the target already looks like a path (contains / or .), it's resolved
-// relative to the source's directory. Otherwise it's used as-is.
-func resolveTarget(sourcePath, target string) string {
+// resolveTarget resolves unchecked wikilinks relative to the source directory.
+// Explicit paths retain their directory join. A filename with an extension uses
+// the relative node when present; otherwise its original target is preserved for
+// the historical unique-basename fallback.
+func resolveTarget(sourcePath, target string, nodes map[string]*extract.Record) string {
 	if strings.Contains(target, "/") || strings.Contains(target, "..") {
 		dir := filepath.Dir(sourcePath)
 		return filepath.Clean(filepath.Join(dir, target))
+	}
+	if filepath.Ext(target) != "" {
+		relative := filepath.Join(filepath.Dir(sourcePath), target)
+		if _, exists := nodes[relative]; exists {
+			return relative
+		}
 	}
 	return target
 }
