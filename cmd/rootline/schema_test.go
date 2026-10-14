@@ -2046,10 +2046,136 @@ func TestPostApplyValidationErrorPropagation(t *testing.T) {
 		if result.ValidationSummary.TotalFiles != 2 {
 			t.Errorf("total_files = %d, want 2", result.ValidationSummary.TotalFiles)
 		}
-		// b.md violates the enum the patch just introduced, so a green summary
-		// here would mean validation ran against something that cannot fail.
-		if result.ValidationSummary.InvalidFiles == 0 || result.ValidationSummary.TotalErrors == 0 {
-			t.Errorf("summary = %+v, want the enum violation in b.md counted", result.ValidationSummary)
+		if result.ValidationSummary.ValidFiles != 1 || result.ValidationSummary.InvalidFiles != 1 || result.ValidationSummary.TotalErrors != 1 {
+			t.Errorf("summary = %+v, want exactly one valid document and one enum-invalid document/error", result.ValidationSummary)
+		}
+	})
+}
+
+func TestSchemaApplyPostValidationSurfaceParity(t *testing.T) {
+	const basePatch = "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"
+	tests := []struct {
+		name       string
+		body       string
+		extraRules string
+		wantRule   string
+		directory  bool
+	}{
+		{
+			name:       "broken wikilink",
+			body:       "---\ntitle: Broken\n---\n# Broken\n\n[[missing.md]]\n",
+			extraRules: "links:\n  checks:\n    resolve: true\n",
+			wantRule:   "link_resolve",
+		},
+		{
+			name:       "broken markdown link",
+			body:       "---\ntitle: Broken\n---\n# Broken\n\n[Missing](missing.md)\n",
+			extraRules: "links:\n  styles: [markdown]\n  checks:\n    resolve: true\n",
+			wantRule:   "link_resolve",
+		},
+		{
+			name:     "malformed frontmatter",
+			body:     "---\ntitle: Foo: Bar\n---\n# Broken\n",
+			wantRule: "malformed_yaml",
+		},
+		{
+			name:     "multiple frontmatter documents",
+			body:     "---\ntitle: First\n...\nother: Second\n---\n# Broken\n",
+			wantRule: "multiple_yaml_documents",
+		},
+		{
+			name:       "directory structure",
+			body:       "---\ntitle: Valid\n---\n# Valid\n",
+			extraRules: "structural:\n  subdirs:\n    min_children: 1\n    severity: error\n",
+			wantRule:   "min_children",
+			directory:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := setupValidateProject(t, map[string]string{
+				".stem":   basePatch,
+				"good.md": "---\ntitle: Good\n---\n# Good\n",
+				"bad.md":  tt.body,
+			})
+			patch := basePatch + tt.extraRules
+			target := filepath.Join(root, ".stem")
+			reportPath := writeSchemaApplyContractReport(t, root, []SchemaProposal{{
+				ID:        "post-validation-surface",
+				Operation: "create_stem",
+				Target:    target,
+				Patch:     patch,
+			}})
+
+			out, err := executeSchemaApply(t, "--report", reportPath, "--force")
+			if err != nil {
+				t.Fatalf("validation findings must not become apply failures: %v\noutput: %s", err, out)
+			}
+			result := decodeSchemaApplyResult(t, out)
+			if result.Kind != "rootline/schema-apply" || result.Version != 1 || !result.Complete || len(result.Errors) != 0 || len(result.Applied) != 1 {
+				t.Fatalf("unexpected apply contract: %+v", result)
+			}
+			if got := string(mustReadFile(t, target)); got != patch {
+				t.Fatalf("post-validation must not roll back applied schema: got %q, want %q", got, patch)
+			}
+			summary := result.ValidationSummary
+			if summary == nil || summary.TotalFiles != 2 || summary.ValidFiles != 1 || summary.InvalidFiles != 1 || summary.TotalErrors == 0 {
+				t.Fatalf("validation_summary = %+v, want two documents with one invalid and nonzero errors", summary)
+			}
+
+			// The same corpus must still expose the original validate --all
+			// surface, with directories kept out of its document population.
+			validateOut, validateErr := executeValidate(t, "--all", root)
+			if validateErr == nil {
+				t.Fatalf("validate --all accepted %s: %s", tt.wantRule, validateOut)
+			}
+			var batch rules.BatchValidationResult
+			if err := json.Unmarshal([]byte(validateOut), &batch); err != nil {
+				t.Fatalf("decoding validate envelope: %v\noutput: %s", err, validateOut)
+			}
+			if batch.Summary.Total != summary.TotalFiles || batch.Summary.ErrorsCount+batch.Summary.StructuralErrorsCount != summary.TotalErrors {
+				t.Fatalf("schema summary %+v differs from validate summary %+v", summary, batch.Summary)
+			}
+			wantInvalid := 1
+			findings := batch.Results
+			if tt.directory {
+				wantInvalid = 0
+				findings = batch.Structural
+			}
+			if batch.Summary.Invalid != wantInvalid {
+				t.Fatalf("validate invalid documents = %d, want %d", batch.Summary.Invalid, wantInvalid)
+			}
+			found := false
+			for _, finding := range findings {
+				for _, validationErr := range finding.Errors {
+					found = found || validationErr.Rule == tt.wantRule
+				}
+			}
+			if !found {
+				t.Fatalf("validate envelope missing %s: %s", tt.wantRule, validateOut)
+			}
+		})
+	}
+}
+
+func TestPostApplyValidationOperationalFailures(t *testing.T) {
+	t.Run("scan failure has no summary", func(t *testing.T) {
+		root := filepath.Join(t.TempDir(), "missing")
+		summary, err := runPostApplyValidation(context.Background(), root)
+		if err == nil || !strings.Contains(err.Error(), "post-apply validation scan") || summary != nil {
+			t.Fatalf("summary, error = %+v, %v; want scan error and no summary", summary, err)
+		}
+	})
+	t.Run("resilient scan does not hide malformed child schema", func(t *testing.T) {
+		root := setupValidateProject(t, map[string]string{
+			".stem":         "version: 2\nroot: true\nscope:\n  match: \"*.md\"\n",
+			"good.md":       "# Good\n",
+			"sub/.stem":     "version: 2\nschema: [unclosed\n",
+			"sub/broken.md": "# Broken\n",
+		})
+		summary, err := runPostApplyValidation(context.Background(), root)
+		if err == nil || summary != nil {
+			t.Fatalf("summary, error = %+v, %v; want resolution error and no summary", summary, err)
 		}
 	})
 }

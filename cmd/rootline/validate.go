@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -377,67 +378,9 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("filtering records: %w", err)
 	}
 
-	visitedDirs := make(map[string]bool)
-	linkCache := rules.NewHeadingCache()
-
-	for _, rec := range records {
-		absPath := filepath.Join(root, rec.Path)
-		dir := filepath.Dir(absPath)
-		recCtx, resolveErr := resolveValidationRecordContext(absPath, rec.Path)
-		if resolveErr != nil {
-			results, notices = appendSkippedSchemaResolutionResult(results, notices, rec.Path, fmt.Sprintf("resolving .stem for %s: %v", rec.Path, resolveErr))
-			continue
-		}
-		errs := rules.Validate(ctx, rec, recCtx.effective)
-		errs = append(errs, rules.CheckLinks(rec.Links, recCtx.effective.Links, absPath, root, linkCache)...)
-		errs = append(errs, rules.ExtractionErrors(rec)...)
-		if content, readErr := os.ReadFile(absPath); readErr == nil {
-			errs = append(errs, rules.ValidateStructure(content, rec.Path)...)
-		}
-		results, notices = appendNormalizedValidationResult(results, notices, rules.NewValidationResult(rec.Path, errs), rec.Path, absPath, recCtx.governanceRoot)
-
-		// Include record-bearing ancestors without another filesystem traversal.
-		// Never leave the scan scope or cross this record's governance boundary.
-		for !visitedDirs[dir] {
-			visitedDirs[dir] = true
-			if dir == root || dir == recCtx.governanceRoot {
-				break
-			}
-			dir = filepath.Dir(dir)
-		}
-	}
-
-	// Structural directory validation. A directory is not a record either, so
-	// its verdict travels beside the documents rather than among them.
-	var structural []*rules.ValidationResult
-	structuralDirs := make([]string, 0, len(visitedDirs))
-	for dir := range visitedDirs {
-		structuralDirs = append(structuralDirs, dir)
-	}
-	sort.Strings(structuralDirs)
-	for _, dir := range structuralDirs {
-		entries, walkErr := rules.WalkUp(dir)
-		if walkErr != nil {
-			notices = append(notices, rules.Notice{
-				Severity: rules.SeverityError,
-				Code:     "schema_resolution_failed",
-				Message:  fmt.Sprintf("resolving schema for structural validation in %s: %v", dir, walkErr),
-			})
-			continue
-		}
-		effective := rules.MergeStemFiles(entries)
-		if effective.Structural.IsEmpty() {
-			continue
-		}
-
-		structErrs := rules.ValidateDirectory(ctx, dir, effective)
-		relDir, _ := filepath.Rel(root, dir)
-		if relDir == "" || relDir == "." {
-			relDir = ""
-		}
-		dirPath := relDir + "/"
-		structural = append(structural, rules.NewValidationResult(dirPath, structErrs))
-	}
+	corpus := validateCorpusSurfaces(ctx, records, root)
+	results = corpus.Results
+	notices = append(notices, corpus.Notices...)
 
 	// Drift detection: group records by parent directory and detect drift
 	// for each index file against its direct children.
@@ -474,11 +417,74 @@ func runValidateAll(cmd *cobra.Command, args []string) error {
 
 	return emitValidateEnvelope(cmd, rules.NewValidationEnvelope(rules.ValidationEnvelopeInput{
 		Results:       results,
-		Structural:    structural,
+		Structural:    corpus.Structural,
 		StemHealth:    health,
 		DriftWarnings: driftWarnings,
 		Notices:       notices,
 	}))
+}
+
+// validateCorpusSurfaces validates scanned, derived records and their visited
+// directories. Keep the document and directory surfaces shared with schema
+// apply; drift and stem health remain separate validate --all diagnostics.
+func validateCorpusSurfaces(ctx context.Context, records []*extract.Record, root string) rules.ValidationEnvelopeInput {
+	var corpus rules.ValidationEnvelopeInput
+	visitedDirs := make(map[string]bool)
+	linkCache := rules.NewHeadingCache()
+
+	for _, rec := range records {
+		absPath := filepath.Join(root, rec.Path)
+		dir := filepath.Dir(absPath)
+		recCtx, resolveErr := resolveValidationRecordContext(absPath, rec.Path)
+		if resolveErr != nil {
+			corpus.Results, corpus.Notices = appendSkippedSchemaResolutionResult(corpus.Results, corpus.Notices, rec.Path, fmt.Sprintf("resolving .stem for %s: %v", rec.Path, resolveErr))
+			continue
+		}
+		errs := rules.Validate(ctx, rec, recCtx.effective)
+		errs = append(errs, rules.CheckLinks(rec.Links, recCtx.effective.Links, absPath, root, linkCache)...)
+		errs = append(errs, rules.ExtractionErrors(rec)...)
+		if content, readErr := os.ReadFile(absPath); readErr == nil {
+			errs = append(errs, rules.ValidateStructure(content, rec.Path)...)
+		}
+		corpus.Results, corpus.Notices = appendNormalizedValidationResult(corpus.Results, corpus.Notices, rules.NewValidationResult(rec.Path, errs), rec.Path, absPath, recCtx.governanceRoot)
+
+		// Include record-bearing ancestors without another filesystem traversal.
+		// Never leave the scan scope or cross this record's governance boundary.
+		for !visitedDirs[dir] {
+			visitedDirs[dir] = true
+			if dir == root || dir == recCtx.governanceRoot {
+				break
+			}
+			dir = filepath.Dir(dir)
+		}
+	}
+
+	// Directory verdicts are separate from the document population.
+	structuralDirs := make([]string, 0, len(visitedDirs))
+	for dir := range visitedDirs {
+		structuralDirs = append(structuralDirs, dir)
+	}
+	sort.Strings(structuralDirs)
+	for _, dir := range structuralDirs {
+		entries, walkErr := rules.WalkUp(dir)
+		if walkErr != nil {
+			corpus.Notices = appendSchemaResolutionNotice(corpus.Notices, fmt.Sprintf("resolving schema for structural validation in %s: %v", dir, walkErr))
+			continue
+		}
+		effective := rules.MergeStemFiles(entries)
+		if effective.Structural.IsEmpty() {
+			continue
+		}
+
+		structErrs := rules.ValidateDirectory(ctx, dir, effective)
+		relDir, _ := filepath.Rel(root, dir)
+		if relDir == "" || relDir == "." {
+			relDir = ""
+		}
+		dirPath := relDir + "/"
+		corpus.Structural = append(corpus.Structural, rules.NewValidationResult(dirPath, structErrs))
+	}
+	return corpus
 }
 
 func runValidateStaged(cmd *cobra.Command) error {
