@@ -756,15 +756,15 @@ func TestGraphMermaidNodeOrder(t *testing.T) {
 			t.Fatalf("run %d: unexpected error: %v\noutput: %s", run, err, out)
 		}
 		got := mermaidNodeIDs(out)
-		want := []string{"r1_md", "r2_md", "r3_md", "r6_md"}
+		want := []string{"n_72312e6d64", "n_72322e6d64", "n_72332e6d64", "n_72362e6d64"}
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Fatalf("run %d: mermaid nodes = %v, want %v\nraw: %s", run, got, want, out)
 		}
 	}
 }
 
-// mermaidNodeIDs returns the sanitized node IDs declared by a Mermaid diagram,
-// in order. Declarations look like `  r1_md["r1.md"];`; edges carry ` --> `.
+// mermaidNodeIDs returns the encoded node IDs declared by a Mermaid diagram,
+// in order. Declarations look like `  n_72312e6d64["r1.md"];`; edges carry ` --> `.
 func mermaidNodeIDs(out string) []string {
 	var ids []string
 	for _, line := range strings.Split(out, "\n") {
@@ -776,6 +776,80 @@ func mermaidNodeIDs(out string) []string {
 		ids = append(ids, line[:idx])
 	}
 	return ids
+}
+
+func TestGraphMermaidDistinctPathIDs(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
+	if err := os.Mkdir(filepath.Join(dir, "foo"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Both pairs collided under punctuation replacement. Give each node
+	// different edges so an ID collision cannot hide behind identical labels.
+	for _, file := range []struct {
+		path string
+		body string
+	}{
+		{"foo_bar.md", "# Flat\n[[blocks:/foo/bar.md]]\n"},
+		{"a_b.md", "# Underscore\n[[blocks:/foo_bar.md]]\n"},
+		{"foo/bar.md", "# Nested\n[[blocks:/a-b.md]]\n"},
+		{"a-b.md", "# Hyphen\n[[blocks:/a_b.md]]\n[[blocks:/foo/bar.md]]\n"},
+	} {
+		mustWriteFile(t, filepath.Join(dir, file.path), []byte("---\n---\n"+file.body), 0644)
+	}
+
+	const want = `graph TD;
+  n_612d622e6d64["a-b.md"];
+  n_615f622e6d64["a_b.md"];
+  n_666f6f2f6261722e6d64["foo/bar.md"];
+  n_666f6f5f6261722e6d64["foo_bar.md"];
+  n_612d622e6d64 --> |blocks| n_615f622e6d64;
+  n_612d622e6d64 --> |blocks| n_666f6f2f6261722e6d64;
+  n_615f622e6d64 --> |blocks| n_666f6f5f6261722e6d64;
+  n_666f6f2f6261722e6d64 --> |blocks| n_612d622e6d64;
+  n_666f6f5f6261722e6d64 --> |blocks| n_666f6f2f6261722e6d64;
+`
+	for run := 1; run <= 5; run++ {
+		out, err := runCmd(t, "graph", dir, "--format", "mermaid", "-o", "table")
+		if err != nil {
+			t.Fatalf("run %d: unexpected error: %v\noutput: %s", run, err, out)
+		}
+		if out != want {
+			t.Fatalf("run %d: Mermaid declarations, labels, or edges differ\nwant:\n%s\ngot:\n%s", run, want, out)
+		}
+	}
+}
+
+func TestGraphMermaidBrokenTargetLabels(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte("version: 2\n"), 0644)
+	declareTestBoundary(t, dir)
+	mustWriteFile(t, filepath.Join(dir, "source.md"),
+		[]byte("---\n---\n# Source\n[[blocks:z-missing.md]]\n[[blocks:a_missing.md]]\n"), 0644)
+	mustWriteFile(t, filepath.Join(dir, "other.md"),
+		[]byte("---\n---\n# Other\n[[blocks:z-missing.md]]\n"), 0644)
+
+	// Broken targets follow the real nodes in lexical order, with the shared
+	// target declared once. Their labels must not default to opaque encoded IDs.
+	const want = `graph TD;
+  n_6f746865722e6d64["other.md"];
+  n_736f757263652e6d64["source.md"];
+  n_615f6d697373696e672e6d64["a_missing.md"];
+  n_7a2d6d697373696e672e6d64["z-missing.md"];
+  n_6f746865722e6d64 --> |blocks| n_7a2d6d697373696e672e6d64;
+  n_736f757263652e6d64 --> |blocks| n_615f6d697373696e672e6d64;
+  n_736f757263652e6d64 --> |blocks| n_7a2d6d697373696e672e6d64;
+`
+	for run := 1; run <= 5; run++ {
+		out, err := runCmd(t, "graph", dir, "--format", "mermaid", "-o", "table")
+		if err != nil {
+			t.Fatalf("run %d: unexpected error: %v\noutput: %s", run, err, out)
+		}
+		if out != want {
+			t.Fatalf("run %d: Mermaid broken-target labels or ordering differ\nwant:\n%s\ngot:\n%s", run, want, out)
+		}
+	}
 }
 
 func TestGraphEdgeOrder(t *testing.T) {

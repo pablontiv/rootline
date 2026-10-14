@@ -40,6 +40,21 @@ rootline graph docs/epics/ --format dot -o table       # Graphviz DOT diagram
 rootline graph docs/epics/ --check                     # Validate only: cycles + broken links (text + exit code)
 ```
 
+### Mermaid Node IDs
+
+Mermaid diagrams use `n_` followed by the lowercase hexadecimal encoding of each
+path's UTF-8 bytes as the node ID. The encoding is deterministic and collision-free:
+`a-b.md` becomes `n_612d622e6d64`, while `a_b.md` becomes `n_615f622e6d64`;
+`foo/bar.md` and `foo_bar.md` likewise remain distinct nodes. IDs contain only
+letters, digits, and an underscore, including for paths with spaces or Unicode.
+
+Visible node labels retain the original paths, and edges use the same encoded
+IDs as their endpoint declarations. Edge targets outside the record node set,
+including broken links, receive explicit original-path labels too: unique targets
+are declared in lexical order after the record nodes and before the edges.
+Record nodes and edges retain their sorted traversal order. This encoding affects
+Mermaid diagrams only; DOT and JSON output are unchanged.
+
 ### Flags
 
 | Flag | Description |

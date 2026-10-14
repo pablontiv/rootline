@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/derive"
@@ -292,17 +293,46 @@ func renderMermaid(cmd *cobra.Command, g *graph.Graph) {
 func mermaidGraphText(g *graph.Graph) string {
 	var sb strings.Builder
 
-	// Sanitize node IDs for mermaid (replace special chars).
+	paths := g.SortedNodes()
+	edges := g.SortedEdges()
+	ids := make(map[string]string, len(paths))
+	// Encode every path byte: replacing punctuation can merge distinct nodes.
+	// Cache within this render so declarations and edge endpoints share IDs.
 	id := func(path string) string {
-		r := strings.NewReplacer("/", "_", ".", "_", "-", "_", " ", "_")
-		return r.Replace(path)
+		if cached, ok := ids[path]; ok {
+			return cached
+		}
+		const digits = "0123456789abcdef"
+		var encoded strings.Builder
+		encoded.Grow(2 + 2*len(path))
+		encoded.WriteString("n_")
+		for i := range len(path) {
+			encoded.WriteByte(digits[path[i]>>4])
+			encoded.WriteByte(digits[path[i]&0xf])
+		}
+		value := encoded.String()
+		ids[path] = value
+		return value
 	}
 
 	_, _ = fmt.Fprintln(&sb, "graph TD;")
-	for _, path := range g.SortedNodes() {
+	for _, path := range paths {
 		_, _ = fmt.Fprintf(&sb, "  %s[%q];\n", id(path), path)
 	}
-	for _, e := range g.SortedEdges() {
+	// Targets outside the node set still need their original visible labels.
+	// The ID cache also deduplicates these additional declarations.
+	var externalTargets []string
+	for _, e := range edges {
+		if _, declared := ids[e.Target]; !declared {
+			id(e.Target)
+			externalTargets = append(externalTargets, e.Target)
+		}
+	}
+	slices.Sort(externalTargets)
+	for _, path := range externalTargets {
+		_, _ = fmt.Fprintf(&sb, "  %s[%q];\n", id(path), path)
+	}
+	for _, e := range edges {
 		_, _ = fmt.Fprintf(&sb, "  %s --> |%s| %s;\n", id(e.Source), e.Type, id(e.Target))
 	}
 	return sb.String()
