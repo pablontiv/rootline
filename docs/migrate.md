@@ -28,6 +28,22 @@ rootline migrate --split --dry-run        # Preview split without writing files
 | `--split` | Split a flat `.stem` into hierarchical `.stem` files per level |
 | `--scaffold` | Scaffold missing required source-backed sections into documents using schema defaults |
 
+### Baseline failures
+
+An explicit `--from` baseline must be readable and accepted by the current
+`.stem` parser. A missing path, unreadable file, malformed YAML, unsupported
+schema version, or other parser rejection exits non-zero with a diagnostic
+naming the requested baseline. It never substitutes an empty schema.
+
+Without `--from`, a genuinely absent Git baseline (no repository, an unborn
+HEAD, or a `.stem` path not present in HEAD) still compares against an empty
+schema and reports current fields as additions. An existing HEAD blob that the
+parser rejects, or another Git read failure, exits non-zero instead.
+
+Baseline errors produce no stdout payload in either JSON or table mode, leave
+files untouched, and follow the same contract with `--dry-run`. A directory
+comparison also emits no partial batch if any baseline fails.
+
 ## Change Detection
 
 Diff mode compares `.stem` files and classifies each change:

@@ -1,9 +1,11 @@
 package migrate
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pablontiv/rootline/internal/gitenv"
@@ -138,6 +140,67 @@ func TestLoadPreviousStemFromInvalidFile(t *testing.T) {
 	}
 }
 
+func TestLoadPreviousStemExplicitFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{"missing", ""},
+		{"unreadable-directory", ""},
+		{"malformed", "version: 2\nschema: [\n"},
+		{"unsupported-version", "version: 1\nschema: {}\n"},
+		{"refused-null-field", "version: 2\nschema:\n  title: null\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "previous.stem")
+			if tc.name == "unreadable-directory" {
+				if err := os.Mkdir(path, 0755); err != nil {
+					t.Fatal(err)
+				}
+			} else if tc.content != "" {
+				if err := os.WriteFile(path, []byte(tc.content), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			stem, err := LoadPreviousStem("current.stem", path)
+			if err == nil || stem != nil {
+				t.Fatalf("got stem %v, error %v; want rejected baseline", stem, err)
+			}
+			if errors.Is(err, ErrPreviousStemNotFound) {
+				t.Fatalf("explicit baseline failure classified as implicit absence: %v", err)
+			}
+			if !strings.Contains(err.Error(), "--from baseline "+path) {
+				t.Errorf("missing requested baseline context: %v", err)
+			}
+			if tc.name == "missing" && !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("missing path cause lost: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadPreviousStemExplicitPermissionDenied(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "previous.stem")
+	if err := os.WriteFile(path, []byte("version: 2\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0); err != nil {
+		t.Skipf("permission restrictions unavailable: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(path, 0600); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := os.ReadFile(path); !errors.Is(err, os.ErrPermission) {
+		t.Skip("platform or privileges do not enforce unreadable file permissions")
+	}
+	stem, err := LoadPreviousStem("current.stem", path)
+	if stem != nil || !errors.Is(err, os.ErrPermission) || errors.Is(err, ErrPreviousStemNotFound) {
+		t.Fatalf("got stem %v, error %v; want explicit permission failure", stem, err)
+	}
+}
+
 func TestLoadPreviousStemFromGitFails(t *testing.T) {
 	// When no --from is specified and we're not in a real git repo,
 	// loadFromGit should fail.
@@ -244,5 +307,59 @@ schema:
 	}
 	if _, ok := stem.Schema["estado"]; !ok {
 		t.Errorf("expected estado in schema, got %v", stem.Schema)
+	}
+}
+
+func TestLoadPreviousStemGitRejectsInvalidBlob(t *testing.T) {
+	for _, content := range []string{
+		"version: 2\nschema: [\n",
+		"version: 1\nschema: {}\n",
+	} {
+		t.Run(content, func(t *testing.T) {
+			path := makeStemRepo(t, content)
+			if err := os.WriteFile(path, []byte("version: 2\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			stem, err := LoadPreviousStem(path, "")
+			if stem != nil || err == nil || errors.Is(err, ErrPreviousStemNotFound) {
+				t.Fatalf("got stem %v, error %v; want rejected HEAD baseline", stem, err)
+			}
+			if !strings.Contains(err.Error(), "parsing git HEAD:.stem baseline") {
+				t.Errorf("missing Git baseline context: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadPreviousStemGitAbsent(t *testing.T) {
+	for _, scenario := range []string{"no-repository", "unborn-head", "missing-path"} {
+		t.Run(scenario, func(t *testing.T) {
+			dir := t.TempDir()
+			switch scenario {
+			case "unborn-head":
+				runGitForTest(t, dir, "init")
+			case "missing-path":
+				dir = filepath.Dir(makeStemRepo(t, "version: 2\n"))
+			}
+			path := filepath.Join(dir, "new.stem")
+			if err := os.WriteFile(path, []byte("version: 2\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			stem, err := LoadPreviousStem(path, "")
+			if stem != nil || !errors.Is(err, ErrPreviousStemNotFound) {
+				t.Fatalf("got stem %v, error %v; want absent implicit baseline", stem, err)
+			}
+		})
+	}
+}
+
+func TestLoadPreviousStemGitFailureIsNotAbsence(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	stem, err := LoadPreviousStem(filepath.Join(dir, ".stem"), "")
+	if stem != nil || err == nil || errors.Is(err, ErrPreviousStemNotFound) {
+		t.Fatalf("got stem %v, error %v; want invalid repository error", stem, err)
 	}
 }
