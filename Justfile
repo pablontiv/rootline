@@ -109,35 +109,22 @@ validate:
 fix-docs:
     rootline fix --all docs/roadmap/
 
-# Bootstrap the pinned local Dagu binary without starting a run
-dagu-bootstrap:
-    .workspace/dagu/bin/dagu version
-
-# Report the pinned Dagu version
+# Report the user-level Dagu version
 dagu-version:
-    .workspace/dagu/bin/dagu version
+    dagu version
 
-# Validate the feature and owner-bound recovery DAGs
+# Validate the repo-owned lifecycle DAG
 dagu-validate:
-    .workspace/dagu/bin/dagu validate .workspace/dagu/dags/rootline-feature.yaml
-    .workspace/dagu/bin/dagu validate .workspace/dagu/dags/rootline-recovery.yaml
+    dagu validate .workspace/dagu/dags/feature.yaml
 
-# Run locally; forge mutations require an explicit pr or merge mode
-dagu-start run_id mode="shadow" space_id="local" issue_number="0":
-    .workspace/dagu/bin/dagu start --run-id "{{run_id}}" .workspace/dagu/dags/rootline-feature.yaml -- SPACE_ID="{{space_id}}" RUN_ID="{{run_id}}" MODE="{{mode}}" ISSUE_NUMBER="{{issue_number}}"
+# Enqueue one issue lifecycle on the user-level Dagu daemon
+dagu-enqueue run_id issue primary worktree branch pr_number="":
+    dagu enqueue --run-id "{{run_id}}" .workspace/dagu/dags/feature.yaml -- ISSUE="{{issue}}" PR_NUMBER="{{pr_number}}" PRIMARY="{{primary}}" WORKTREE="{{worktree}}" BRANCH="{{branch}}"
 
-# Archive a cleaned PR-bound attempt and launch new execution under the same owner
-dagu-fresh-attempt run_id execution_id mode space_id issue_number:
-    bash .workspace/dagu/scripts/fresh-attempt.sh "{{run_id}}" "{{execution_id}}" "{{mode}}" "{{space_id}}" "{{issue_number}}"
+# Complete a waiting checkpoint after its external condition is satisfied
+dagu-complete run_id step:
+    dagu human-task complete --run-id "{{run_id}}" --step "{{step}}" feature
 
-# Retry one named failed step with the original run's parameters
-dagu-retry run_id step:
-    .workspace/dagu/bin/dagu retry --run-id "{{run_id}}" --step "{{step}}" --downstream .workspace/dagu/dags/rootline-feature.yaml
-
-# Recover only resources belonging to this exact space/run owner
-dagu-recover run_id space_id="local":
-    bash .workspace/dagu/scripts/cleanup.sh "{{space_id}}" "{{run_id}}"
-
-# Exercise offline pilot contracts and injected failures
-test-dagu:
-    bash tests/dagu-pilot-test.sh
+# Rewind a BEHIND remote checkpoint to the rebase gate
+dagu-push-back run_id iteration:
+    dagu human-task push-back --run-id "{{run_id}}" --step await_merge --expected-iteration "{{iteration}}" feature

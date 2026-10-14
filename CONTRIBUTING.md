@@ -37,12 +37,11 @@ Run `just --list` to see all available recipes. Key ones:
 | `just validate` | Validate docs/roadmap with rootline |
 | `just fix-docs` | Fix and propagate doc aggregates |
 | `just test-install` | Offline installer tests (PowerShell when available) |
-| `just dagu-bootstrap` / `just dagu-version` | Bootstrap / report pinned Dagu v2.19.2 |
-| `just dagu-validate` | Validate both local pilot DAGs |
-| `just dagu-start RUN_ID` | Run the local pilot in safe default shadow mode |
-| `just dagu-retry RUN_ID STEP` | Retry a named failed pilot step using stored parameters |
-| `just dagu-recover RUN_ID SPACE_ID` | Recover only the exact owner's local resources |
-| `just test-dagu` | Run the pilot's offline fault/contract tests |
+| `just dagu-version` | Report the user-level Dagu version |
+| `just dagu-validate` | Validate the repo-owned lifecycle DAG |
+| `just dagu-enqueue RUN_ID ISSUE PRIMARY WORKTREE BRANCH` | Enqueue one issue lifecycle |
+| `just dagu-complete RUN_ID STEP` | Complete a satisfied durable checkpoint |
+| `just dagu-push-back RUN_ID ITERATION` | Rewind a `BEHIND` merge checkpoint to the rebase gate |
 
 ## Workflow
 
@@ -53,17 +52,13 @@ Run `just --list` to see all available recipes. Key ones:
 5. Commit using [Conventional Commits](https://www.conventionalcommits.org/)
 6. Open a Pull Request
 
-### Optional local Dagu pilot
+### Optional Dagu lifecycle
 
-The [Dagu pilot](docs/dagu.md) runs the full local gate in an isolated external
-worktree. Start with `just dagu-start my-run`; the default `shadow` mode never
-pushes, creates a PR, publishes status, or merges. Explicit `pr` and `merge`
-modes are opt-in; both wait for all hosted CI and bind its evidence to the
-tested SHA. In `merge` mode, Dagu revalidates that evidence and automatically
-squash-merges the exact tested SHA. Read the prerequisites, exact-SHA evidence
-contract, and recovery instructions before using either forge mode. Local macOS
-results do not replace hosted Linux/Windows checks; hosted CI and release
-workflows are unchanged.
+The [Dagu workflow](docs/dagu.md) runs the repo-owned
+`.workspace/dagu/dags/feature.yaml` on a generic user-level daemon. One durable
+run owns the start gate, implementation handoff, local gate, guarded auto-merge,
+primary synchronization, and terminal cleanup. The `candidate` GitHub check
+remains the required remote merge gate.
 
 ## Releasing
 
