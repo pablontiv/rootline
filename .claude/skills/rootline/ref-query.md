@@ -18,6 +18,8 @@ Supported operators: `==`, `!=`, `in`, `not in`, `contains`, `&&`, `||`. Use `fi
 
 Use `query` to return records matching frontmatter, derived, aggregated, body, or built-in fields.
 
+Without any discovered `.stem`, `query` works on Markdown records, frontmatter, and built-in fields. Schema-derived and aggregated fields are unavailable. `query --sort` requires a `.stem` schema, even for built-in fields such as `path`; omit `--sort` for schemaless queries. Any discovered schema chain must be parseable and terminate at `root: true` — a broken or undeclared chain is not schemaless mode.
+
 ### Usage
 
 ```bash
@@ -173,6 +175,8 @@ Rules:
 
 Use `tree` to show hierarchy and recursive record totals.
 
+`tree` works without any discovered `.stem`; any discovered schema chain must be parseable and terminate at `root: true`.
+
 ```bash
 rootline tree <dir> -o table
 rootline tree <dir> --where "estado != 'Completed'" -o table
@@ -183,18 +187,22 @@ Use table output for humans and JSON for programmatic handling. Table format (`-
 
 ## stats
 
-Use `stats` for aggregate counts.
+Use `stats` for the total record count after any `--where` filters.
+
+`stats` requires a `.stem` schema with a declared `root: true` boundary; it does not support schemaless counting. Use `rootline query <dir> --count -o json` to count records without a schema.
 
 ```bash
 rootline stats <dir> -o json
 rootline stats <dir> --where "tipo == 'task'" -o json
 ```
 
-JSON contains counts grouped by `estado`, `tipo`, and total records.
+JSON emits the version 2 contract `{version, kind, total}` with kind `rootline/stats`; it does not group counts by `estado` or `tipo`.
 
 ## explain
 
 Use `explain` when the user asks why a field has a value, where a schema-backed field is defined, or how derived/aggregate values are computed.
+
+`explain` requires a `.stem` schema with a declared `root: true` boundary.
 
 ```bash
 rootline explain <file.md> -o json

@@ -29,15 +29,31 @@ Use `rootline skill status --source <primary-rootline-checkout>` before remediat
 
 ## Governance Boundary (root marker)
 
-Schema discovery walks up from the target collecting `.stem` files and stops at a `.stem` that declares `root: true`, or at the filesystem root. `.git` is not a boundary. A project must declare where it starts with a `root: true` marker in its top-level `.stem`.
+Schema discovery walks up from the target collecting `.stem` files and stops at a `.stem` that declares `root: true`, or at the filesystem root. `.git` is not a boundary. A schema-governed project must declare where it starts with a `root: true` marker in its top-level `.stem`.
 
-- Governed commands (`validate`, `fix`, `query`, `tree`, `graph`, `describe`, `explain`, `set`, `stats`) fail on a tree with no `.stem` or an unparseable one. Without a terminal they exit non-zero; the error names the exact one-line fix.
-- If a governed command reports "Schema discovery reached the filesystem root without finding a declared boundary", the fix is to add `root: true` to the project's top-level `.stem` (one line). Then retry. Do **not** use `init --force` to migrate an existing project — it re-infers and overwrites the schema.
+- **Schemaless exploration**: `query` without `--sort`, `tree`, `graph`, and `graph --check` work when no `.stem` files are discovered. They read Markdown records, frontmatter, and links without creating a schema; schema-derived and aggregated fields are unavailable.
+- **Schema-required commands**: `validate`, `fix`, `describe`, `explain`, `new`, `set`, and `stats` require a `.stem` schema and fail or report diagnostics when none exists. `stats` is not a schemaless counting alternative.
+- **Query sorting**: `query --sort` requires a `.stem` schema, even when sorting a built-in field such as `path`. Omit `--sort` for schemaless queries.
+- **Existing schema chains**: for non-exempt commands, any discovered `.stem` chain must be parseable and terminate at `root: true`. A malformed `.stem` always fails, including for exploration commands; it is not schemaless mode.
+- **Missing declared boundary**: an existing chain without `root: true` is not schemaless mode. Without a terminal (non-TTY), the command exits non-zero. On a terminal (TTY), Rootline offers to add the marker; accepting writes `root: true` to the proposed project root's `.stem` and continues. Do not accept that prompt or write the marker without explicit user authorization.
+- If a command reports "Schema discovery reached the filesystem root without finding a declared boundary", the fix is to add `root: true` to the project's top-level `.stem` (one line), with explicit user authorization, then retry; accepting the authorized TTY prompt performs that repair and continues automatically. Do **not** use `init --force` to migrate an existing project — it re-infers and overwrites the schema.
 - `rootline init` writes `root: true` for new projects, so they never hit this.
 - `init`, template installation, and write-producing `migrate` modes replace each
   generated file atomically. This is a per-file guarantee, not rollback for an
   entire multi-file run.
 - Bootstrap commands (`schema propose`, `analyze`) work without any `.stem` — they derive one. `init` and `migrate` also run without a marker.
+
+For a small schemaless example, use a temporary directory whose ancestors have no `.stem` files:
+
+```bash
+dir="$(mktemp -d)"
+printf '%s\n' '# First' '[[second]]' > "$dir/first.md"
+printf '%s\n' '# Second' > "$dir/second.md"
+rootline query "$dir" --where "type == 'markdown'" --select path -o json
+rootline tree "$dir" -o json
+rootline graph "$dir" -o json
+rootline graph "$dir" --check
+```
 
 ## Inheritance: a child never removes
 
