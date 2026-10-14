@@ -938,6 +938,62 @@ func TestQuerySort_Path(t *testing.T) {
 	}
 }
 
+func TestQuerySort_YAMLNullAndMissingLast(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, ".stem"), []byte(`version: 2
+root: true
+scope:
+  match: "*.md"
+schema:
+  score:
+    type: integer
+`), 0644)
+	for _, record := range []struct {
+		path string
+		body string
+	}{
+		{"a-null.md", "---\nscore: null\n---\n# Null\n"},
+		{"b-missing.md", "---\ntitle: Missing\n---\n# Missing\n"},
+		{"c-zero.md", "---\nscore: 0\n---\n# Zero\n"},
+		{"d-high.md", "---\nscore: 10\n---\n# High\n"},
+		{"e-low.md", "---\nscore: -2\n---\n# Low\n"},
+	} {
+		mustWriteFile(t, filepath.Join(dir, record.path), []byte(record.body), 0644)
+	}
+
+	for _, tc := range []struct {
+		sort string
+		want []string
+	}{
+		{"score:asc,path:asc", []string{"e-low.md", "c-zero.md", "d-high.md", "a-null.md", "b-missing.md"}},
+		{"score:desc,path:asc", []string{"d-high.md", "c-zero.md", "e-low.md", "a-null.md", "b-missing.md"}},
+	} {
+		t.Run(tc.sort, func(t *testing.T) {
+			// The secondary key makes null/missing peer order independent of scanning.
+			out, err := runCmd(t, "query", dir, "--sort", tc.sort, "-o", "json")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var result struct {
+				Rows []struct {
+					Path string `json:"path"`
+				} `json:"rows"`
+			}
+			if err := json.Unmarshal([]byte(out), &result); err != nil {
+				t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+			}
+			if len(result.Rows) != len(tc.want) {
+				t.Fatalf("expected %d rows, got %d", len(tc.want), len(result.Rows))
+			}
+			for i, want := range tc.want {
+				if result.Rows[i].Path != want {
+					t.Errorf("row %d path = %q, want %q", i, result.Rows[i].Path, want)
+				}
+			}
+		})
+	}
+}
+
 func TestQuerySort_MultiKey(t *testing.T) {
 	dir := setupSortTestDir(t)
 	out, err := runCmd(t, "query", "--from", dir, "--sort", "prioridad:asc,impact_score:desc")

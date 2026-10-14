@@ -105,17 +105,17 @@ func SortRecords(records []*extract.Record, keys []SortKey, schema map[string]ru
 
 	sort.SliceStable(records, func(i, j int) bool {
 		for _, key := range keys {
-			// Check nil/missing first -- nil always sorts last regardless of direction.
+			// Check absent/null first -- both always sort last regardless of direction.
 			va, okA := sortValue(records[i], key.Field)
 			vb, okB := sortValue(records[j], key.Field)
 			if !okA && !okB {
 				continue
 			}
 			if !okA {
-				return false // a is nil, sorts after b
+				return false // a is absent/null, sorts after b
 			}
 			if !okB {
-				return true // b is nil, sorts after a
+				return true // b is absent/null, sorts after a
 			}
 
 			cmp := compareField(va, vb, enumIndexes[key.Field])
@@ -141,7 +141,11 @@ func sortValue(record *extract.Record, field string) (any, bool) {
 	case "type":
 		return record.Type, true
 	default:
-		return record.EffectiveField(field)
+		value, ok := record.EffectiveField(field)
+		if !ok || value == nil {
+			return nil, false
+		}
+		return value, true
 	}
 }
 

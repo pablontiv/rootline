@@ -282,47 +282,68 @@ func TestSortRecords_MultiKeyEnumThenNumericDesc(t *testing.T) {
 	}
 }
 
-func TestSortRecords_NilValuesLast(t *testing.T) {
-	records := []*extract.Record{
-		{Path: "a.md", Frontmatter: map[string]any{"score": 5}},
-		{Path: "b.md", Frontmatter: map[string]any{}}, // missing score
-		{Path: "c.md", Frontmatter: map[string]any{"score": 3}},
-	}
-	keys := []SortKey{{Field: "score", Desc: false}}
+func TestSortRecords_NullAndMissingValuesLast(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		desc bool
+		want []string
+	}{
+		{"asc", false, []string{"low.md", "zero.md", "mid.md", "high.md", "null.md", "derived-null.md", "missing.md"}},
+		{"desc", true, []string{"high.md", "mid.md", "zero.md", "low.md", "null.md", "derived-null.md", "missing.md"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			records := []*extract.Record{
+				{Path: "null.md", Frontmatter: map[string]any{"score": nil}},
+				{Path: "high.md", Frontmatter: map[string]any{"score": 10}},
+				{
+					Path:        "derived-null.md",
+					Frontmatter: map[string]any{"score": -100},
+					Derived:     map[string]any{"score": nil},
+				},
+				{Path: "mid.md", Frontmatter: map[string]any{"score": 3.5}},
+				{Path: "missing.md", Frontmatter: map[string]any{}},
+				{Path: "zero.md", Frontmatter: map[string]any{"score": 0}},
+				{Path: "low.md", Frontmatter: map[string]any{"score": -2}},
+			}
 
-	SortRecords(records, keys, nil)
+			SortRecords(records, []SortKey{{Field: "score", Desc: tc.desc}}, nil)
 
-	// 3, 5, nil-last
-	if records[0].Path != "c.md" {
-		t.Errorf("position 0: got %s, want c.md", records[0].Path)
-	}
-	if records[1].Path != "a.md" {
-		t.Errorf("position 1: got %s, want a.md", records[1].Path)
-	}
-	if records[2].Path != "b.md" {
-		t.Errorf("position 2: got %s, want b.md (nil last)", records[2].Path)
+			// Null and missing peers keep their input order; derived null
+			// shadows the non-null frontmatter value rather than sorting as -100.
+			for i, want := range tc.want {
+				if records[i].Path != want {
+					t.Errorf("position %d: got %s, want %s", i, records[i].Path, want)
+				}
+			}
+		})
 	}
 }
 
-func TestSortRecords_NilValuesLastEvenWithDesc(t *testing.T) {
-	records := []*extract.Record{
-		{Path: "a.md", Frontmatter: map[string]any{"score": 5}},
-		{Path: "b.md", Frontmatter: map[string]any{}}, // missing score
-		{Path: "c.md", Frontmatter: map[string]any{"score": 3}},
-	}
-	keys := []SortKey{{Field: "score", Desc: true}}
+func TestSortRecords_BooleanOrder(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		desc bool
+		want []string
+	}{
+		{"asc", false, []string{"false-first.md", "false-second.md", "true-first.md", "true-second.md"}},
+		{"desc", true, []string{"true-first.md", "true-second.md", "false-first.md", "false-second.md"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			records := []*extract.Record{
+				{Path: "true-first.md", Frontmatter: map[string]any{"enabled": true}},
+				{Path: "false-first.md", Frontmatter: map[string]any{"enabled": false}},
+				{Path: "true-second.md", Frontmatter: map[string]any{"enabled": true}},
+				{Path: "false-second.md", Frontmatter: map[string]any{"enabled": false}},
+			}
 
-	SortRecords(records, keys, nil)
+			SortRecords(records, []SortKey{{Field: "enabled", Desc: tc.desc}}, nil)
 
-	// desc: 5, 3, nil-last
-	if records[0].Path != "a.md" {
-		t.Errorf("position 0: got %s, want a.md", records[0].Path)
-	}
-	if records[1].Path != "c.md" {
-		t.Errorf("position 1: got %s, want c.md", records[1].Path)
-	}
-	if records[2].Path != "b.md" {
-		t.Errorf("position 2: got %s, want b.md (nil last)", records[2].Path)
+			for i, want := range tc.want {
+				if records[i].Path != want {
+					t.Errorf("position %d: got %s, want %s", i, records[i].Path, want)
+				}
+			}
+		})
 	}
 }
 
