@@ -1,6 +1,10 @@
 package rules
 
-import "slices"
+import (
+	"fmt"
+	"path/filepath"
+	"slices"
+)
 
 // Resolution holds the complete resolution context for a file path:
 // the stem chain (root-to-leaf), the effective merged schema, and per-field provenance.
@@ -24,25 +28,45 @@ type Resolution struct {
 	Provenance map[string]string
 }
 
+func absoluteResolverPath(path, root string) (string, error) {
+	if filepath.IsAbs(path) {
+		return path, nil
+	}
+	absolutePath, err := filepath.Abs(filepath.Join(root, path))
+	if err != nil {
+		return "", fmt.Errorf("resolving resolver path %s against root %s: %w", path, root, err)
+	}
+	return absolutePath, nil
+}
+
 // StemChain returns the stem files from root to leaf that apply to the given path.
-// The path may be a directory or file; the returned entries are guaranteed to be
-// ordered root-to-leaf (top-down merge order).
+// The path may be a directory or file. Relative paths are resolved against root;
+// an empty root uses the current working directory, and a relative root is itself
+// relative to that directory. Absolute paths are used unchanged. Root is a path
+// base, not a discovery boundary. Entries are ordered root-to-leaf (top-down merge order).
 //
 // This is a convenience wrapper around WalkUp that returns StemEntry objects
 // for transparent integration with existing code.
 func StemChain(path string, root string) ([]StemEntry, error) {
-	// If path is relative, assume it's relative to root; otherwise use as-is.
-	// For now, we just delegate to WalkUp which handles both cases.
+	path, err := absoluteResolverPath(path, root)
+	if err != nil {
+		return nil, err
+	}
 	return WalkUp(path)
 }
 
 // EffectiveSchema returns the merged schema for a path, with match-based field
 // filtering applied. This is the schema that actually applies to the record.
+// Relative paths use root as their base, following StemChain's path semantics.
 //
 // Fields without Match constraints apply everywhere. Fields with Match constraints
 // only apply when the record's path matches one of the patterns. RequiredMatch
 // is resolved based on the specific record path.
 func EffectiveSchema(path string, root string) (map[string]SchemaField, error) {
+	path, err := absoluteResolverPath(path, root)
+	if err != nil {
+		return nil, err
+	}
 	entries, err := WalkUp(path)
 	if err != nil {
 		return nil, err
@@ -79,6 +103,7 @@ func EffectiveSchema(path string, root string) (map[string]SchemaField, error) {
 
 // Resolve returns the complete resolution context for a file path:
 // the stem chain, the effective merged schema, and field provenance.
+// Relative paths use root as their base, following StemChain's path semantics.
 //
 // Provenance tracks which .stem file defined each field, enabling callers
 // to understand the inheritance hierarchy and identify where schema changes
@@ -87,6 +112,10 @@ func EffectiveSchema(path string, root string) (map[string]SchemaField, error) {
 // This is the new central resolver API that replaces ad-hoc combinations
 // of WalkUp + MergeStemFiles + FilterSchemaByMatch throughout the codebase.
 func Resolve(path string, root string) (*Resolution, error) {
+	path, err := absoluteResolverPath(path, root)
+	if err != nil {
+		return nil, err
+	}
 	entries, err := WalkUp(path)
 	if err != nil {
 		return nil, err
@@ -177,7 +206,12 @@ type LayeredResolution struct {
 // the .stem chain and validates monotonic narrowing. Conflicts records
 // violations such as type widening, required loosening, enum extension,
 // severity loosening, and structural loosening.
+// Relative paths use root as their base, following StemChain's path semantics.
 func ResolveLayered(path string, root string) (*LayeredResolution, error) {
+	path, err := absoluteResolverPath(path, root)
+	if err != nil {
+		return nil, err
+	}
 	entries, err := WalkUp(path)
 	if err != nil {
 		return nil, err
