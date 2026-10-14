@@ -87,7 +87,10 @@ func runExplain(cmd *cobra.Command, args []string) error {
 		scanDir := filepath.Dir(absPath)
 		reg2 := extract.NewASTRegistry()
 		siblings, scanErr := index.Scan(ctx, scanDir, reg2)
-		if scanErr == nil && len(siblings) > 0 {
+		if scanErr != nil {
+			return fmt.Errorf("scanning aggregate input records in %s: %w", scanDir, scanErr)
+		}
+		if len(siblings) > 0 {
 			if err := derive.DeriveAllSimple(ctx, siblings, scanDir); err != nil {
 				return fmt.Errorf("deriving aggregate input records: %w", err)
 			}

@@ -90,4 +90,6 @@ The `stem_chain` is emitted in resolution order, root-to-target/leaf. A chain th
 
 For a source-backed field, `source` is the logical directive and `defined_in` is the physical `.stem` declaration. Explain resolves the same effective value as validation and query; frontmatter remains an override, empty-present sections remain present, and duplicate matching headings are reported as errors.
 
+For index files with aggregate expressions, `explain` scans the containing directory for aggregate input records before rendering. A filesystem failure during that scan returns a contextual error, exits non-zero, and emits no stdout in either JSON or table mode; it does not report a successful trace with a null aggregate value. Malformed sibling frontmatter retains the scanner's existing record-extraction behavior: it is represented as a record with extraction errors rather than failing the scan.
+
 `explain` supports `-o json` and `-o table` only — see [Output Formats](output.md).
