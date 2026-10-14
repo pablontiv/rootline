@@ -144,32 +144,38 @@ func buildSplitRootYAML(existing *rules.StemFile, rootFields map[string]rules.Sc
 		}
 	}
 
-	// Preserve structural.
-	if existing.Structural.Subdirs.RequireIndex != "" || existing.Structural.Subdirs.MinChildren > 0 {
-		b.WriteString("\nstructural:\n  subdirs:\n")
-		if existing.Structural.Subdirs.RequireIndex != "" {
-			fmt.Fprintf(&b, "    require_index: %s\n", existing.Structural.Subdirs.RequireIndex)
-		}
-		if existing.Structural.Subdirs.MinChildren > 0 {
-			fmt.Fprintf(&b, "    min_children: %d\n", existing.Structural.Subdirs.MinChildren)
-		}
-		if existing.Structural.Subdirs.Severity != "" {
-			fmt.Fprintf(&b, "    severity: %s\n", existing.Structural.Subdirs.Severity)
-		}
+	// Marshal supported root governance through its typed fields. LinkSchema's
+	// custom YAML layout flattens per-type rules alongside reserved settings.
+	governance := make(map[string]any)
+	if existing.Structural.Subdirs != (rules.SubdirRules{}) {
+		governance["structural"] = existing.Structural
 	}
-
-	// Preserve links.
-	if len(existing.Links.Allowed) > 0 {
-		fmt.Fprintf(&b, "\nlinks:\n  allowed: [%s]\n", strings.Join(existing.Links.Allowed, ", "))
-		for name, rule := range existing.Links.Rules {
-			fmt.Fprintf(&b, "  %s:\n", name)
-			if rule.Target != "" {
-				fmt.Fprintf(&b, "    target: %q\n", rule.Target)
-			}
-			if rule.Field != "" {
-				fmt.Fprintf(&b, "    field: %s\n", rule.Field)
-			}
+	links := make(map[string]any)
+	if existing.Links.Allowed != nil {
+		links["allowed"] = existing.Links.Allowed
+	}
+	if existing.Links.Styles != nil {
+		links["styles"] = existing.Links.Styles
+	}
+	if existing.Links.Checks != nil {
+		links["checks"] = existing.Links.Checks
+	}
+	if existing.Links.BasenameFallback {
+		links["basename_fallback"] = true
+	}
+	for name, rule := range existing.Links.Rules {
+		links[name] = rule
+	}
+	if len(links) > 0 {
+		governance["links"] = links
+	}
+	if len(governance) > 0 {
+		content, err := yaml.Marshal(governance)
+		if err != nil {
+			return "", fmt.Errorf("serializing root governance: %w", err)
 		}
+		b.WriteString("\n")
+		b.Write(content)
 	}
 
 	// Preserve derive.
