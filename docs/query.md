@@ -152,14 +152,32 @@ rootline query --select path,estado,owner --output csv
 
 Column order in `jsonl` and `csv` output follows the order specified in `--select`.
 
-### Queryable Fields
+### CLI Field Names
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `frontmatter.<field>` | any | Any frontmatter key, addressed by explicit field name |
+| `<field>` (e.g., `estado`, `impact_score`) | any | Bare frontmatter, derived, or aggregate field name; derived values override same-named frontmatter |
+| `path` | string | Record path |
+| `type` | string | Record type |
 | `body` | string | Full document body text |
 | `sections` | map[string]string | Map of heading → section body (requires AST extraction) |
-| `derived.<field>` | any | Computed derived field addressed by explicit field name |
+
+Use bare metadata names consistently in `--where`, `--sort`, and `--select`:
+
+```bash
+rootline query docs/ --where 'estado == "Pending" && impact_score > 0' --sort "impact_score:desc" --select path,estado,impact_score
+```
+
+The CLI expression environment promotes frontmatter and derived keys to top-level
+names; it does not expose `frontmatter` or `derived` namespace maps. Do not use
+`frontmatter.estado` or `derived.impact_score` as namespace paths in these flags.
+The scalar builtins `path`, `body`, and `type` are available for filtering and
+sorting; `sections` is filterable but not sortable. Projection supports `path`,
+`links`, and bare metadata names as described above.
+
+This input contract is separate from `--field`, which extracts paths from the
+JSON output envelope: `--field 'rows[].frontmatter.estado'` is valid for full
+records without `--select`.
 
 ### Section Queries
 
@@ -215,23 +233,33 @@ Standard expr-lang operators apply:
 | `&&` | AND | `tipo == "lxc" && estado == "Pending"` |
 | `\|\|` | OR | `estado == "Pending" \|\| estado == "Bloqueada"` |
 
-## Query Request Contract (JSON)
+## Lower-Level Query API (Condition Trees)
 
-```json
-{
-  "version": 1,
-  "from": "docs/",
-  "where": {
-    "and": [
-      {"eq": ["frontmatter.status", "published"]},
-      {"exists": "frontmatter.owner"}
-    ]
-  },
-  "limit": 50
-}
+The internal `query.Execute` API accepts Go `Condition` trees, **not** CLI
+`--where` expressions or a CLI JSON input option. Its field resolver accepts
+explicit `frontmatter.<field>` paths; bare metadata names are expanded to those
+paths. It does not resolve `derived.<field>` paths.
+
+```go
+result, err := query.Execute(records, &query.Query{
+    Where: &query.Condition{
+        Op: query.OpAnd,
+        Children: []query.Condition{
+            {Op: query.OpEq, Field: "frontmatter.status", Value: "published"},
+            {Op: query.OpExists, Field: "frontmatter.owner"},
+        },
+    },
+    Limit: 50,
+})
 ```
 
-The JSON contract uses declarative operators (`eq`, `ne`, `in`, `contains`, `exists`, `and`) for programmatic use. The CLI `--where` flag uses expr-lang syntax instead.
+Condition trees use declarative operators (`eq`, `ne`, `in`, `contains`,
+`exists`, `and`). For CLI filtering, use bare names instead, for example
+`--where 'status == "published" && owner != nil'`. Do not copy the condition
+field paths above into CLI expressions.
+
+The separate `query.ExecuteExpr` API uses the same bare-name expression
+environment as CLI filtering, not prefixed namespace maps.
 
 ## Query Result Shape
 
