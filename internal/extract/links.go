@@ -109,18 +109,23 @@ func parseWikilinkInner(inner string) (Link, bool) {
 func ParseLinks(body string) []Link {
 	lines := strings.Split(body, "\n")
 	var links []Link
-	inFenced := false
+	var fenceChar byte
+	var fenceLen int
 
 	for i, line := range lines {
 		lineNum := i + 1
 
-		// Track fenced code blocks.
+		// Close a fenced block only with its marker and at least its run length.
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			inFenced = !inFenced
+		if char, runLen, isFence := fenceInfo(trimmed); isFence {
+			if fenceChar == 0 {
+				fenceChar, fenceLen = char, runLen
+			} else if char == fenceChar && runLen >= fenceLen {
+				fenceChar, fenceLen = 0, 0
+			}
 			continue
 		}
-		if inFenced {
+		if fenceChar != 0 {
 			continue
 		}
 
