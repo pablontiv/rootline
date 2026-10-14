@@ -41,6 +41,9 @@ func rootPreflight(cmd *cobra.Command, args []string) error {
 	if err := validateFieldFlag(cmd); err != nil {
 		return err
 	}
+	if err := validateQueryOutputCombination(cmd); err != nil {
+		return err
+	}
 	return boundaryPreflight(cmd, args)
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pablontiv/rootline/internal/derive"
@@ -63,10 +64,6 @@ func init() {
 }
 
 func runQuery(cmd *cobra.Command, args []string) error {
-	if queryCount && querySelect != "" {
-		return fmt.Errorf("--select cannot be used with --count")
-	}
-
 	ctx := cmd.Context()
 
 	// Determine scan root
@@ -218,15 +215,9 @@ func runQuery(cmd *cobra.Command, args []string) error {
 		return renderQueryTable(cmd, result, selectFields)
 	}
 	if outputFormat == "jsonl" {
-		if querySelect == "" {
-			return fmt.Errorf("jsonl output requires --select flag")
-		}
 		return outputQueryJSONL(cmd, result, selectFields)
 	}
 	if outputFormat == "csv" {
-		if querySelect == "" {
-			return fmt.Errorf("csv output requires --select flag")
-		}
 		return outputQueryCSV(cmd, result, selectFields)
 	}
 	return outputJSON(cmd, result, false)
@@ -314,9 +305,14 @@ func renderQueryTable(cmd *cobra.Command, result any, selectedFields []string) e
 		return nil
 	}
 
+	if count, ok := result.(*query.CountResult); ok {
+		renderTable(cmd.OutOrStdout(), []string{"Count"}, [][]string{{strconv.Itoa(count.Count)}})
+		return nil
+	}
+
 	qr, ok := result.(*query.QueryResult)
 	if !ok {
-		return outputJSON(cmd, result, false)
+		return fmt.Errorf("unsupported query table result type %T", result)
 	}
 
 	// Collect all effective field keys across rows (frontmatter + derived)

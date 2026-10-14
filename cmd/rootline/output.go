@@ -90,6 +90,25 @@ func validateOutputFormat(cmd *cobra.Command) error {
 	return nil
 }
 
+// validateQueryOutputCombination checks the conditional query format contract
+// before boundary discovery or scanning. Generic output and --field validation
+// run first; the conflicting query modes take precedence over row-format checks.
+func validateQueryOutputCombination(cmd *cobra.Command) error {
+	if cmd.CommandPath() != "rootline query" {
+		return nil
+	}
+	if queryCount && querySelect != "" {
+		return fmt.Errorf("--select cannot be used with --count")
+	}
+	if queryCount && outputFormat != "json" && outputFormat != "table" {
+		return fmt.Errorf("--count does not support output format %q (use json or table)", outputFormat)
+	}
+	if (outputFormat == "jsonl" || outputFormat == "csv") && querySelect == "" {
+		return fmt.Errorf("%s output requires --select flag", outputFormat)
+	}
+	return nil
+}
+
 // effectiveFieldPaths returns the --field values the caller actually asked for.
 //
 // Cobra can leave empty strings behind when a command is re-executed in the
