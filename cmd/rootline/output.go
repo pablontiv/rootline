@@ -47,7 +47,7 @@ var commandOutputFormats = map[string][]string{
 	"rootline migrate":         {"json", "table"},
 	"rootline new":             formatAgnostic,
 	"rootline query":           {"json", "jsonl", "csv", "table"},
-	"rootline repair":          {"json", "table"},
+	"rootline repair":          formatAgnostic,
 	"rootline repair apply":    {"json", "table"},
 	"rootline schema":          formatAgnostic,
 	"rootline schema apply":    {"json", "table"},
