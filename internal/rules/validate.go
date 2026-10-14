@@ -194,13 +194,13 @@ func Validate(_ context.Context, record *extract.Record, effective *StemFile) []
 		}
 		var ruleErrs []ValidationError
 		switch rule.Rule {
-		case "non_empty":
+		case validationRuleNonEmpty:
 			ruleErrs = checkNonEmpty(record, effective, rule)
-		case "exists":
+		case validationRuleExists:
 			ruleErrs = checkExists(record, effective, rule)
-		case "requires":
+		case validationRuleRequires:
 			ruleErrs = checkRequires(record, effective, rule)
-		case "enum":
+		case validationRuleEnum:
 			ruleErrs = checkEnum(record, effective, rule)
 		}
 		for i := range ruleErrs {

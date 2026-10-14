@@ -1,6 +1,8 @@
 package rules
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -160,6 +162,75 @@ schema:
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not name exit %q", err, want)
 		}
+	}
+}
+
+func TestParseStem_RejectsUnknownValidationRule(t *testing.T) {
+	for _, severity := range []string{"error", "off"} {
+		t.Run(severity, func(t *testing.T) {
+			content := []byte("version: 2\nvalidate:\n  - field: status\n    rule: exists\n  - field: status\n    rule: non_empy\n    severity: " + severity + "\n")
+			stem, err := ParseStem("project/.stem", content)
+			if err == nil {
+				t.Fatal("expected unknown validation rule to be rejected")
+			}
+			if stem != nil {
+				t.Fatal("rejected schema must not return a parsed stem")
+			}
+			var parseErr *stemParseError
+			if !errors.As(err, &parseErr) {
+				t.Fatalf("error = %T, want classified stem parse error: %v", err, err)
+			}
+			diag := parseErr.Diagnostic()
+			if diag.Check != "schema-valid" || diag.Field != "status" || diag.Path != "project/.stem" {
+				t.Fatalf("diagnostic = %+v, want schema-valid for status in project/.stem", diag)
+			}
+			want := `validation field "status" has unknown rule "non_empy"; supported rules are: non_empty, exists, requires, enum`
+			if diag.Reason != want {
+				t.Errorf("reason = %q, want %q", diag.Reason, want)
+			}
+		})
+	}
+}
+
+func TestParseStem_SupportedValidationRulesDispatch(t *testing.T) {
+	tests := []struct {
+		rule        string
+		frontmatter map[string]any
+	}{
+		{rule: "non_empty", frontmatter: map[string]any{"status": ""}},
+		{rule: "exists", frontmatter: map[string]any{}},
+		{rule: "requires", frontmatter: map[string]any{"trigger": true}},
+		{rule: "enum", frontmatter: map[string]any{"status": "Unknown"}},
+	}
+	if len(tests) != len(supportedValidationRuleNames) {
+		t.Fatalf("dispatch table covers %d rules, want all of %v", len(tests), supportedValidationRuleNames)
+	}
+	for _, tt := range tests {
+		t.Run(tt.rule, func(t *testing.T) {
+			// Disable the schema's enum check so only the explicit rule can fail.
+			content := []byte("version: 2\nschema:\n  status:\n    type: enum\n    values: [Pending]\n    severity: off\nvalidate:\n  - field: status\n    rule: " + tt.rule + "\n    if:\n      trigger: true\n    then:\n      fields: [status]\n")
+			stem, err := ParseStem("project/.stem", content)
+			if err != nil {
+				t.Fatalf("supported rule failed to parse: %v", err)
+			}
+			if len(stem.Validate) != 1 {
+				t.Fatalf("validate length = %d, want 1", len(stem.Validate))
+			}
+			rule := stem.Validate[0]
+			if rule.Rule != tt.rule || rule.Source != "project/.stem" || rule.Severity != "error" {
+				t.Fatalf("parsed rule = %+v, want %s with source and default error severity", rule, tt.rule)
+			}
+			errs := Validate(context.Background(), makeRecord(tt.frontmatter), stem)
+			if len(errs) != 1 {
+				t.Fatalf("validation errors = %+v, want one explicit %s failure", errs, tt.rule)
+			}
+			if errs[0].Rule != tt.rule || errs[0].Field != "status" || errs[0].Source != "project/.stem" || errs[0].Severity != "error" {
+				t.Errorf("validation error = %+v, want %s failure on status with source and default severity", errs[0], tt.rule)
+			}
+			if errs := Validate(context.Background(), makeRecord(map[string]any{"status": "Pending", "trigger": true}), stem); len(errs) != 0 {
+				t.Errorf("valid record errors = %+v, want none", errs)
+			}
+		})
 	}
 }
 

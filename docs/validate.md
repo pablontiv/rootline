@@ -38,7 +38,7 @@ Batch validation runs four phases in order:
    the envelope:
    - `stem-files-exist` — the scanned tree contains at least one `.stem` file
    - `yaml-valid` — valid YAML syntax
-   - `schema-valid` — semantic `.stem` validity at parse time (for example unsupported version or null schema field refusal)
+   - `schema-valid` — semantic `.stem` validity at parse time (for example unsupported version, null schema field refusal, or an unknown `validate[].rule`)
    - `scope-match` — scope patterns match at least one file
    - `type-consistency` — field types are consistent across hierarchy
    - `field-declaration` — schema fields use supported canonical types, values, and source declarations
@@ -55,6 +55,18 @@ Batch validation runs four phases in order:
 4. **Drift Detection** — Warns when an index file's field value contradicts its children (e.g., parent says "Completed" but children are "Pending").
 
 `require_index` follows symlinks: a link to a regular file satisfies the rule, a link to a directory does not, and a dangling link is reported as missing. Missing paths retain the `require_index` missing-file diagnostic; directories and other non-regular entries produce a `require_index` diagnostic stating `not a regular file`. Other failures to stat the index path surface as `structural` I/O diagnostics rather than silently passing or being reported as missing. These findings use the configured structural severity.
+
+### Explicit validation rule names
+
+The `validate` section accepts exactly four `rule` names: `non_empty`, `exists`,
+`requires`, and `enum`. An unknown name (for example `non_empy`) rejects the `.stem`
+at parse time, including when the rule has `severity: off`. The `schema-valid`
+diagnostic names the affected field, the unknown rule, and the supported names.
+`validate --all` reports it in `stem_health[]` with error severity and exits non-zero
+before that schema can reach document validation.
+
+These input rule names are separate from `links.checks` keys, stem-health check
+names, query operators, and rule names emitted in document validation errors.
 
 ## Link resolution
 

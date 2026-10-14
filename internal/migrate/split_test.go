@@ -361,7 +361,7 @@ derive:
 aggregate:
   title: '"root"'
 validate:
-  - rule: required
+  - rule: non_empty
     field: title
 `+tt.governance))
 			if err != nil {

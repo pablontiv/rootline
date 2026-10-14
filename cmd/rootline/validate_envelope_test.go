@@ -484,6 +484,54 @@ func TestValidateAll_CorruptStemStillEmitsEnvelope(t *testing.T) {
 	}
 }
 
+func TestValidateAll_UnknownValidationRuleFailsBeforeDocuments(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, ".stem"), []byte("version: 2\nroot: true\nscope:\n  match: \"*.md\"\nschema:\n  status:\n    type: string\nvalidate:\n  - field: status\n    rule: non_empy\n"), 0o644)
+	mustWriteFile(t, filepath.Join(root, "doc.md"), []byte("---\nstatus: \"\"\n---\n# Document\n"), 0o644)
+	mustChdir(t, root)
+
+	stdout, err := executeValidate(t, "--all")
+	if err != ErrValidationFailed {
+		t.Fatalf("err = %v, want ErrValidationFailed\noutput: %s", err, stdout)
+	}
+	env := decodeEnvelope(t, stdout)
+	if env["kind"] != "rootline/validate-batch" || env["version"] != float64(2) {
+		t.Fatalf("unexpected validate envelope: %s", stdout)
+	}
+	var schemaValid map[string]any
+	for _, h := range stemHealthChecks(t, env) {
+		if h["check"] == "schema-valid" {
+			if schemaValid != nil {
+				t.Fatalf("duplicate schema-valid diagnostics: %v", env["stem_health"])
+			}
+			schemaValid = h
+		}
+		if h["check"] == "yaml-valid" {
+			t.Errorf("unknown rule must not be classified as invalid YAML: %v", h)
+		}
+	}
+	if schemaValid == nil {
+		t.Fatalf("schema-valid missing from stem_health: %v", env["stem_health"])
+	}
+	// Stem-health fail status is projected as error severity in the envelope.
+	if schemaValid["severity"] != "error" || schemaValid["field"] != "status" || schemaValid["path"] != ".stem" {
+		t.Errorf("schema-valid diagnostic = %v, want error for status in .stem", schemaValid)
+	}
+	message, ok := schemaValid["message"].(string)
+	if !ok || !strings.Contains(message, "status") || !strings.Contains(message, "non_empy") {
+		t.Errorf("schema-valid message = %v, want field and unknown rule", schemaValid["message"])
+	}
+	assertSkippedResultPaths(t, env, []string{"doc.md"})
+	assertNoticeCodes(t, env, []string{"schema_resolution_failed"})
+	assertSummaryCounts(t, env, map[string]float64{
+		"total":                    1,
+		"valid":                    0,
+		"invalid":                  1,
+		"errors_count":             1,
+		"stem_health_errors_count": 1,
+	})
+}
+
 func TestValidateAll_UnknownLinkRuleKeysWarningStrictness(t *testing.T) {
 	root := setupValidateProject(t, map[string]string{
 		".stem": "version: 2\nroot: true\nscope:\n  match: \"*.md\"\nlinks:\n  blocks:\n    target: \"../tasks/*.md\"\n    targte: \"../tasks/*.md\"\n",

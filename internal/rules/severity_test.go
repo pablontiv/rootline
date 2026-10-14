@@ -63,7 +63,7 @@ func TestParseValidationRuleSeverityDefault(t *testing.T) {
 version: 2
 validate:
   - field: estado
-    rule: required
+    rule: exists
 `)
 	stem, err := ParseStem("test.stem", content)
 	if err != nil {
