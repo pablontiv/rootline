@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -837,5 +838,156 @@ func TestWalkUp_AbsPathConversion(t *testing.T) {
 	// Should find the .stem file
 	if len(entries) == 0 {
 		t.Fatal("expected to find .stem with relative path")
+	}
+}
+
+// Both discovery paths must distinguish an absent entry from a broken one,
+// including on repeated lookups where the cache might otherwise hide errors.
+func TestWalkUp_IOErrorsAreNotAbsence(t *testing.T) {
+	walkers := []struct {
+		name string
+		new  func() func(string) ([]StemEntry, error)
+	}{
+		{name: "uncached", new: func() func(string) ([]StemEntry, error) { return WalkUp }},
+		{name: "cached", new: func() func(string) ([]StemEntry, error) { return NewStemCache().WalkUp }},
+	}
+	for _, walker := range walkers {
+		t.Run(walker.name, func(t *testing.T) {
+			assertIOError := func(t *testing.T, walk func(string) ([]StemEntry, error), target, failedPath string, cause error) {
+				t.Helper()
+				if cause == nil {
+					t.Fatal("fixture must produce an I/O error")
+				}
+				var original *os.PathError
+				if !errors.As(cause, &original) {
+					t.Fatalf("fixture error is not a path error: %v", cause)
+				}
+				for attempt := range 2 {
+					entries, err := walk(target)
+					if !IsRealSchemaError(err) {
+						t.Fatalf("attempt %d: expected real schema error, got entries %v, error %v", attempt, entries, err)
+					}
+					if len(entries) != 0 {
+						t.Fatalf("attempt %d: error returned ancestor entries: %v", attempt, entries)
+					}
+					if !strings.Contains(err.Error(), failedPath) {
+						t.Errorf("error %q does not name failed path %q", err, failedPath)
+					}
+					var wrapped *os.PathError
+					if !errors.As(err, &wrapped) || !errors.Is(err, original.Err) {
+						t.Errorf("error %v does not preserve original I/O cause %v", err, cause)
+					}
+				}
+			}
+
+			t.Run("target traverses file", func(t *testing.T) {
+				root := setupTree(t, []string{"repo/.stem"}, "repo/.stem")
+				blocker := filepath.Join(root, "repo", "file")
+				if err := os.WriteFile(blocker, []byte("not a directory"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				target := filepath.Join(blocker, "child")
+				_, cause := os.Stat(target)
+				assertIOError(t, walker.new(), target, target, cause)
+			})
+
+			t.Run("self-referential child stem", func(t *testing.T) {
+				root := setupTree(t, []string{"repo/.stem"}, "repo/.stem")
+				child := filepath.Join(root, "repo", "child")
+				if err := os.Mkdir(child, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				stemPath := filepath.Join(child, ".stem")
+				if err := os.Symlink(".stem", stemPath); err != nil {
+					t.Skipf("symlinks unavailable: %v", err)
+				}
+				_, cause := os.ReadFile(stemPath)
+				walk := walker.new()
+				assertIOError(t, walk, child, stemPath, cause)
+
+				// An I/O failure must not become a cached absence.
+				if err := os.Remove(stemPath); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(stemPath, []byte("version: 2\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				entries, err := walk(child)
+				if err != nil || len(entries) != 2 {
+					t.Fatalf("repaired child must be discovered, got entries %v, error %v", entries, err)
+				}
+				if entries[1].Path != stemPath {
+					t.Errorf("leaf schema = %q, want %q", entries[1].Path, stemPath)
+				}
+			})
+
+			t.Run("dangling child stem", func(t *testing.T) {
+				root := setupTree(t, []string{"repo/.stem"}, "repo/.stem")
+				child := filepath.Join(root, "repo", "child")
+				if err := os.Mkdir(child, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				stemPath := filepath.Join(child, ".stem")
+				if err := os.Symlink("missing.stem", stemPath); err != nil {
+					t.Skipf("symlinks unavailable: %v", err)
+				}
+				_, cause := os.ReadFile(stemPath)
+				assertIOError(t, walker.new(), child, stemPath, cause)
+			})
+
+			t.Run("dangling target", func(t *testing.T) {
+				root := setupTree(t, []string{"repo/.stem"}, "repo/.stem")
+				target := filepath.Join(root, "repo", "missing")
+				if err := os.Symlink("missing-target", target); err != nil {
+					t.Skipf("symlinks unavailable: %v", err)
+				}
+				_, cause := os.Stat(target)
+				assertIOError(t, walker.new(), target, target, cause)
+			})
+
+			t.Run("child stem is directory", func(t *testing.T) {
+				root := setupTree(t, []string{"repo/.stem"}, "repo/.stem")
+				child := filepath.Join(root, "repo", "child")
+				stemPath := filepath.Join(child, ".stem")
+				if err := os.MkdirAll(stemPath, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				_, cause := os.ReadFile(stemPath)
+				assertIOError(t, walker.new(), child, stemPath, cause)
+			})
+
+			t.Run("absent target inherits", func(t *testing.T) {
+				root := setupTree(t, []string{"repo/.stem"}, "repo/.stem")
+				stemPath := filepath.Join(root, "repo", ".stem")
+				target := filepath.Join(root, "repo", "missing", "doc.md")
+				walk := walker.new()
+				for attempt := range 2 {
+					entries, err := walk(target)
+					if err != nil || len(entries) != 1 {
+						t.Fatalf("attempt %d: absent target must inherit, got entries %v, error %v", attempt, entries, err)
+					}
+					if entries[0].Path != stemPath {
+						t.Errorf("inherited schema = %q, want %q", entries[0].Path, stemPath)
+					}
+				}
+			})
+
+			t.Run("no schema retains sentinel", func(t *testing.T) {
+				target := filepath.Join(t.TempDir(), "missing", "doc.md")
+				walk := walker.new()
+				for attempt := range 2 {
+					entries, err := walk(target)
+					if err != ErrNoSchemaFound {
+						t.Fatalf("attempt %d: expected exact ErrNoSchemaFound, got entries %v, error %v", attempt, entries, err)
+					}
+					if err.Error() != "no .stem file found in the directory chain; run 'rootline init' to create one" {
+						t.Errorf("no-schema message changed: %q", err)
+					}
+					if IsRealSchemaError(err) || len(entries) != 0 {
+						t.Errorf("absence must return no entries and no real schema error")
+					}
+				}
+			})
+		})
 	}
 }

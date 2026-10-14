@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 )
@@ -33,14 +32,9 @@ func (c *StemCache) Hits() int {
 // directory so repeated calls for files in the same tree skip disk I/O.
 // Returns entries ordered root-to-leaf (ready for top-down merge).
 func (c *StemCache) WalkUp(targetPath string) ([]StemEntry, error) {
-	absTarget, err := filepath.Abs(targetPath)
+	dir, err := discoveryStartDir(targetPath)
 	if err != nil {
 		return nil, err
-	}
-
-	dir := absTarget
-	if info, err := os.Stat(absTarget); err == nil && !info.IsDir() {
-		dir = filepath.Dir(absTarget)
 	}
 
 	var entries []StemEntry
@@ -86,17 +80,14 @@ func (c *StemCache) loadStem(dir string) (*StemEntry, error) {
 	}
 
 	stemPath := filepath.Join(dir, stemFileName)
-	content, err := os.ReadFile(stemPath)
-	if err != nil {
-		c.parsed[dir] = &stemCacheEntry{ok: false}
-		return nil, nil
-	}
-
-	stem, err := ParseStem(stemPath, content)
+	stem, err := loadOptionalStem(stemPath)
 	if err != nil {
 		return nil, err
 	}
-
+	if stem == nil {
+		c.parsed[dir] = &stemCacheEntry{ok: false}
+		return nil, nil
+	}
 	c.parsed[dir] = &stemCacheEntry{stem: stem, ok: true}
 	return &StemEntry{Path: stemPath, Stem: stem}, nil
 }

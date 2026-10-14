@@ -290,6 +290,12 @@ verdict on the same tree, undeclared boundary included, so a pre-commit hook tha
 changed files and a CI job that validates the tree cannot disagree. With several files the
 notice is reported once per distinct `.stem` chain rather than once per file.
 
+Schema discovery skips only genuinely absent `.stem` entries. An unreadable
+child schema, a dangling `.stem` symlink, or a symlink loop cannot be hidden by
+an ancestor's valid schema. Target-path I/O failures also stop resolution.
+These failures retain their underlying I/O cause and failed path and surface
+as error notices, not successful validation against an ancestor.
+
 ### `notices[]`
 
 ```json
@@ -299,7 +305,7 @@ notice is reported once per distinct `.stem` chain rather than once per file.
 | Code | Severity | Meaning |
 |------|----------|---------|
 | `scan_failed` | error | The corpus could not be scanned. `stem_health` explains why. |
-| `schema_resolution_failed` | error | A `.stem` chain failed to resolve: during structural or drift checks, for a file target whose `.stem` is missing or unparseable, or because no `.stem` in the chain declares the governance boundary. |
+| `schema_resolution_failed` | error | A `.stem` chain failed to resolve: during structural or drift checks, for a target whose schema is missing, unreadable, unparseable, or a broken symlink, because the target path cannot be inspected, or because no `.stem` in the chain declares the governance boundary. |
 | `stem_health_unavailable` | warn | Stem health itself could not run. |
 | `no_records` | warn | `--all` scanned the path and found no records. |
 

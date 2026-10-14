@@ -28,6 +28,77 @@ type StemEntry struct {
 	Stem *StemFile
 }
 
+// discoveryPathError returns nil only when path is genuinely absent. Stat and
+// ReadFile follow symlinks, so ENOENT alone does not prove the entry is missing.
+func discoveryPathError(op, path string, err error) error {
+	if errors.Is(err, fs.ErrNotExist) {
+		for entryPath := path; ; {
+			info, lstatErr := os.Lstat(entryPath)
+			if lstatErr == nil {
+				if entryPath != path {
+					// Some platforms report traversal through a file as ENOENT.
+					// A missing suffix is skippable only beneath a real directory.
+					if info.Mode()&os.ModeSymlink != 0 {
+						var statErr error
+						info, statErr = os.Stat(entryPath)
+						if statErr != nil {
+							return fmt.Errorf("checking schema discovery path %s: %w", path, statErr)
+						}
+					}
+					if info.IsDir() {
+						return nil
+					}
+				}
+				break
+			}
+			if !errors.Is(lstatErr, fs.ErrNotExist) {
+				return fmt.Errorf("checking schema discovery path %s: %w", path, lstatErr)
+			}
+			parent := filepath.Dir(entryPath)
+			if parent == entryPath {
+				return nil
+			}
+			entryPath = parent
+		}
+	}
+	return fmt.Errorf("%s schema discovery path %s: %w", op, path, err)
+}
+
+// discoveryStartDir allows absent targets to inherit a schema, but never treats
+// an inaccessible target or a broken symlink as a directory to walk past.
+func discoveryStartDir(targetPath string) (string, error) {
+	absTarget, err := filepath.Abs(targetPath)
+	if err != nil {
+		return "", fmt.Errorf("resolving schema discovery target %s: %w", targetPath, err)
+	}
+	info, err := os.Stat(absTarget)
+	if err != nil {
+		if err := discoveryPathError("statting", absTarget, err); err != nil {
+			return "", err
+		}
+	} else if !info.IsDir() {
+		return filepath.Dir(absTarget), nil
+	}
+	return absTarget, nil
+}
+
+// loadOptionalStem skips only absent entries. A broken or unreadable child
+// schema must not disappear from the chain in favor of an ancestor's rules.
+func loadOptionalStem(stemPath string) (*StemFile, error) {
+	content, err := os.ReadFile(stemPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			if _, lstatErr := os.Lstat(stemPath); errors.Is(lstatErr, fs.ErrNotExist) {
+				return nil, nil
+			} else if lstatErr != nil {
+				return nil, fmt.Errorf("checking schema discovery path %s: %w", stemPath, lstatErr)
+			}
+		}
+		return nil, fmt.Errorf("reading schema discovery path %s: %w", stemPath, err)
+	}
+	return ParseStem(stemPath, content)
+}
+
 // WalkUp walks from targetPath upward, collecting every .stem file it finds,
 // and terminates at a .stem that declares `root: true`.
 //
@@ -37,7 +108,8 @@ type StemEntry struct {
 // records inherit from above unchanged.
 //
 // The ONLY stop conditions are a `root: true` marker (the marker's own .stem IS
-// collected before stopping) and the filesystem root.
+// collected before stopping) and the filesystem root. I/O and parse failures
+// abort discovery; a broken child schema never falls back to ancestor rules.
 //
 // Return semantics:
 //   - entries (non-empty): every .stem from the boundary down to targetPath,
@@ -70,31 +142,20 @@ type StemEntry struct {
 //	    return ErrNoSchemaFound
 //	return entries
 func WalkUp(targetPath string) ([]StemEntry, error) {
-	absTarget, err := filepath.Abs(targetPath)
+	dir, err := discoveryStartDir(targetPath)
 	if err != nil {
 		return nil, err
 	}
 
 	var entries []StemEntry
-	dir := absTarget
-
-	// If targetPath is a file, start from its directory.
-	if info, err := os.Stat(absTarget); err == nil && !info.IsDir() {
-		dir = filepath.Dir(absTarget)
-	}
 
 	for {
-		// Check if .stem exists in this directory.
 		stemPath := filepath.Join(dir, stemFileName)
-		if _, err := os.Stat(stemPath); err == nil {
-			content, err := os.ReadFile(stemPath)
-			if err != nil {
-				return nil, err
-			}
-			stem, err := ParseStem(stemPath, content)
-			if err != nil {
-				return nil, err
-			}
+		stem, err := loadOptionalStem(stemPath)
+		if err != nil {
+			return nil, err
+		}
+		if stem != nil {
 			entries = append(entries, StemEntry{Path: stemPath, Stem: stem})
 
 			// If this .stem has root: true, stop the walk.
