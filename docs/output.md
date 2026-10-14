@@ -33,13 +33,21 @@ Error: rootline stats does not support output format "csv" (use json or table)
 
 | Command | Supported |
 |---------|-----------|
-| `query` | `json`, `jsonl`, `csv`, `table` |
+| `query` | `json`, `table`; `jsonl` and `csv` require `--select` |
 | `analyze`, `describe`, `explain`, `fix`, `graph`, `migrate`, `repair`, `schema propose`, `schema apply`, `stats`, `tree`, `validate` | `json`, `table` |
 | `completion`, `hooks`, `init`, `new`, `set` | none — these emit human text or write files and never consult `--output` |
 
 The matrix is declared in one table (`cmd/rootline/output.go`) and a test walks the
 whole command tree asserting every command has an entry, so a new command cannot ship
 without deciding what it supports.
+
+`query --count` supports only `json` and `table`, and cannot be combined with
+`--select`. These conditional format checks run before schema discovery or scanning:
+
+```console
+$ rootline query docs/ --count -o csv
+Error: --count does not support output format "csv" (use json or table)
+```
 
 ## What `table` means per command
 
@@ -49,6 +57,16 @@ without deciding what it supports.
 - `tree` — the ASCII tree
 - `graph` — the diagram selected by `--format dot|mermaid`
 - `query`, `validate`, `describe`, `explain` — a text table or report
+
+`query --count -o table` renders a single `Count` column and one decimal row,
+instead of the JSON `rootline/count` envelope returned by `-o json`:
+
+```console
+$ rootline query docs/ --count -o table
+Count
+-
+12
+```
 
 `tree` and `graph` previously produced their diagram for any value that was not `json`,
 so `-o jsonl` returned box-drawing characters or Graphviz DOT at exit 0. The diagram is

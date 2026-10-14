@@ -121,7 +121,7 @@ The `--output` flag supports multiple formats:
 | `jsonl` | One JSON object per line | **Yes** | Streaming processors, log ingestion |
 | `csv` | RFC 4180 CSV with headers | **Yes** | Spreadsheets, SQL import, `awk`/`cut` pipelines |
 
-> **Constraint**: `jsonl` and `csv` formats **require** `--select` to specify which columns to output. Without `--select`, they produce an error.
+> **Constraint**: `jsonl` and `csv` formats **require** `--select` to specify which columns to output. `--count` supports only `json` and `table` and cannot be combined with `--select`. Invalid combinations are rejected before schema discovery or scanning.
 
 `query` is the only command that implements all four formats; every other command declares `json` and `table` and rejects the rest. An unknown value such as `-o sdlkfj` is rejected everywhere. See [Output Formats](output.md).
 
@@ -262,6 +262,8 @@ Rows include `derived` when the effective `.stem` defines `derive:` or `aggregat
 
 ## Count Result Shape
 
+`rootline query <path> --count` supports `json` (default) and `table` only. JSON preserves the versioned count envelope:
+
 ```json
 {
   "version": 1,
@@ -269,6 +271,15 @@ Rows include `derived` when the effective `.stem` defines `derive:` or `aggregat
   "meta": { "count": 12 },
   "count": 12
 }
+```
+
+With `--output table`, the same count is one decimal row under a `Count` column:
+
+```console
+$ rootline query docs/ --count --output table
+Count
+-
+12
 ```
 
 ## AI Agent Compatibility

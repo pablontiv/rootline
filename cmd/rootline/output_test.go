@@ -141,6 +141,95 @@ func TestOutput_QueryAcceptsEveryAdvertisedFormat(t *testing.T) {
 	}
 }
 
+func TestOutput_QueryCountTable(t *testing.T) {
+	docs := setupFormatProject(t)
+	cases := []struct {
+		name  string
+		where string
+		count string
+	}{
+		{"all", "", "2"},
+		{"filtered", "estado == 'Pending'", "1"},
+		{"empty", "estado == 'Missing'", "0"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{"query", docs, "--count", "-o", "table"}
+			if tc.where != "" {
+				args = append(args, "--where", tc.where)
+			}
+			out, err := runCmd(t, args...)
+			if err != nil {
+				t.Fatalf("query count table: %v\n%s", err, out)
+			}
+			if json.Valid([]byte(out)) {
+				t.Fatalf("table count rendered JSON: %s", out)
+			}
+			lines := strings.Split(strings.TrimSpace(out), "\n")
+			if len(lines) != 3 {
+				t.Fatalf("table = %q, want header, separator, and one count row", out)
+			}
+			for i, want := range []string{"Count", "-", tc.count} {
+				if got := strings.TrimSpace(lines[i]); got != want {
+					t.Errorf("line %d = %q, want %q", i, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestOutput_QueryCountJSONEnvelope(t *testing.T) {
+	docs := setupFormatProject(t)
+	out, err := runCmd(t, "query", docs, "--count", "-o", "json")
+	if err != nil {
+		t.Fatalf("query count JSON: %v\n%s", err, out)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid count JSON: %v\n%s", err, out)
+	}
+	if len(result) != 4 || result["version"] != float64(1) || result["kind"] != "rootline/count" || result["count"] != float64(2) {
+		t.Fatalf("count envelope = %#v, want version 1, rootline/count, meta, and count 2", result)
+	}
+	meta, ok := result["meta"].(map[string]any)
+	if !ok || len(meta) != 1 || meta["count"] != float64(2) {
+		t.Fatalf("count meta = %#v, want only count 2", result["meta"])
+	}
+}
+
+func TestOutput_QueryConditionalFormatsRejectBeforeBoundaryOrScan(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	cases := []struct {
+		name  string
+		flags []string
+		want  string
+	}{
+		{"jsonl without select", []string{"-o", "jsonl"}, "jsonl output requires --select flag"},
+		{"csv without select", []string{"-o", "csv"}, "csv output requires --select flag"},
+		{"count jsonl", []string{"--count", "-o", "jsonl"}, `--count does not support output format "jsonl" (use json or table)`},
+		{"count csv", []string{"--count", "-o", "csv"}, `--count does not support output format "csv" (use json or table)`},
+		{"count table field", []string{"--count", "-o", "table", "--field", "count"}, `--field requires --output json: extraction reads the JSON envelope, and "table" has none`},
+		{"field before count select", []string{"--count", "--select", "path", "-o", "table", "--field", "count"}, `--field requires --output json: extraction reads the JSON envelope, and "table" has none`},
+		{"field before count format", []string{"--count", "-o", "csv", "--field", "count"}, `--field requires --output json: extraction reads the JSON envelope, and "csv" has none`},
+		{"generic format before field", []string{"--count", "-o", "bogus", "--field", "count"}, `unknown output format "bogus" (use json, jsonl, csv or table)`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append([]string{"query", missing}, tc.flags...)
+			stdout, stderr, err := runCmdWithSeparateOutput(t, args...)
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("error = %v, want %q", err, tc.want)
+			}
+			if stdout != "" {
+				t.Fatalf("stdout = %q, want empty output", stdout)
+			}
+			if !strings.Contains(stderr, tc.want) {
+				t.Fatalf("stderr = %q, want diagnostic %q", stderr, tc.want)
+			}
+		})
+	}
+}
+
 func TestOutput_QueryCountSelectRejectsBeforeScanningForEveryFormat(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 	const want = "--select cannot be used with --count"
