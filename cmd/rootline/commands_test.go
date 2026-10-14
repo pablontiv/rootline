@@ -904,6 +904,40 @@ func TestQuerySort_SingleKey(t *testing.T) {
 	}
 }
 
+func TestQuerySort_Path(t *testing.T) {
+	dir := setupSortTestDir(t)
+	for _, tc := range []struct {
+		sort string
+		want []string
+	}{
+		{"path:asc", []string{"item1.md", "item2.md", "item3.md"}},
+		{"path:desc", []string{"item3.md", "item2.md", "item1.md"}},
+	} {
+		t.Run(tc.sort, func(t *testing.T) {
+			out, err := runCmd(t, "query", "--from", dir, "--sort", tc.sort)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var result struct {
+				Rows []struct {
+					Path string `json:"path"`
+				} `json:"rows"`
+			}
+			if err := json.Unmarshal([]byte(out), &result); err != nil {
+				t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+			}
+			if len(result.Rows) != len(tc.want) {
+				t.Fatalf("expected %d rows, got %d", len(tc.want), len(result.Rows))
+			}
+			for i, want := range tc.want {
+				if result.Rows[i].Path != want {
+					t.Errorf("row %d path = %q, want %q", i, result.Rows[i].Path, want)
+				}
+			}
+		})
+	}
+}
+
 func TestQuerySort_MultiKey(t *testing.T) {
 	dir := setupSortTestDir(t)
 	out, err := runCmd(t, "query", "--from", dir, "--sort", "prioridad:asc,impact_score:desc")

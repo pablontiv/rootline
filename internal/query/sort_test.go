@@ -145,6 +145,46 @@ func makeSortRecords() []*extract.Record {
 	}
 }
 
+func TestSortRecords_ScalarBuiltins(t *testing.T) {
+	for _, field := range []string{"path", "body", "type"} {
+		for _, metadata := range []string{"none", "frontmatter", "derived"} {
+			for _, direction := range []struct {
+				name string
+				desc bool
+				want []string
+			}{
+				{"asc", false, []string{"a.md", "b.md", "c.md"}},
+				{"desc", true, []string{"c.md", "b.md", "a.md"}},
+			} {
+				t.Run(field+"/"+metadata+"/"+direction.name, func(t *testing.T) {
+					records := []*extract.Record{
+						{Path: "c.md", Body: "Charlie\n", Type: "text"},
+						{Path: "a.md", Body: "Alpha\n", Type: "json"},
+						{Path: "b.md", Body: "Bravo\n", Type: "markdown"},
+					}
+					// Same-named metadata deliberately reverses the builtin order.
+					for i, value := range []string{"a", "c", "b"} {
+						switch metadata {
+						case "frontmatter":
+							records[i].Frontmatter = map[string]any{field: value}
+						case "derived":
+							records[i].Derived = map[string]any{field: value}
+						}
+					}
+
+					SortRecords(records, []SortKey{{Field: field, Desc: direction.desc}}, nil)
+
+					for i, want := range direction.want {
+						if records[i].Path != want {
+							t.Errorf("position %d: got %s, want %s", i, records[i].Path, want)
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestSortRecords_SingleEnumAsc(t *testing.T) {
 	records := makeSortRecords()
 	schema := map[string]rules.SchemaField{
@@ -392,8 +432,8 @@ func TestSortRecords_NumericStringValues(t *testing.T) {
 }
 
 func TestValidateSortKeys_AcceptsKnownFields(t *testing.T) {
-	known := []string{"estado", "path", "titulo"}
-	keys := []SortKey{{Field: "estado"}, {Field: "path", Desc: true}}
+	known := []string{"estado", "path", "body", "type", "titulo"}
+	keys := []SortKey{{Field: "estado"}, {Field: "path", Desc: true}, {Field: "body"}, {Field: "type"}}
 
 	if err := ValidateSortKeys(keys, known); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -420,6 +460,26 @@ func TestValidateSortKeys_RejectsUnknownFieldWithoutSuggestion(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "did you mean") {
 		t.Errorf("error = %v, want no suggestion when nothing is close", err)
+	}
+}
+
+func TestValidateSortKeys_RejectsSections(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		known []string
+	}{
+		{"populated", []string{"path", "body", "type", "sections"}},
+		{"empty", []string{}},
+		{"nil", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			keys := []SortKey{{Field: "path"}, {Field: "sections", Desc: true}}
+			err := ValidateSortKeys(keys, tc.known)
+			const want = `unsupported sort field "sections": complex builtin fields cannot be sorted`
+			if err == nil || err.Error() != want {
+				t.Errorf("error = %v, want %q", err, want)
+			}
+		})
 	}
 }
 
