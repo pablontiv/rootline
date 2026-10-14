@@ -120,6 +120,19 @@ Resolving a record under `subproject/` stops at the closest marker and never rea
 
 `schema propose` and `analyze` work without any `.stem` — they derive one from your documents. The governed commands (`validate`, `query`, `describe`, and the rest) fail, which is correct: there is no schema to work against.
 
+### What if a child `.stem` is broken or unreadable?
+
+Only an absent `.stem` is skipped during upward discovery. An unreadable file,
+a symlink loop, or a dangling `.stem` symlink is an error naming the failed path;
+Rootline never substitutes an ancestor's schema for that broken child. Target-path
+I/O failures (including traversing a file as a directory) likewise stop discovery.
+Fix the named path rather than adding a root marker elsewhere.
+
+This also applies to request-scoped cached discovery: I/O failures are not cached
+as missing schemas. A genuinely absent target can still inherit an ancestor's
+schema, and a chain containing no `.stem` retains the existing no-schema error
+and `rootline init` guidance.
+
 ### What about auto-update?
 
 rootline applies staged updates on the next run without prompting, so you may receive this change without choosing to upgrade. The next governed command will either prompt you (with a terminal) or fail with the exact fix (without one). That is why this note leads with the one-line fix and the error message carries the remedy itself.
