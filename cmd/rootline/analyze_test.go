@@ -179,3 +179,44 @@ func TestAnalyzeLinkTypesUseEffectiveNestedStem(t *testing.T) {
 		})
 	}
 }
+
+func TestAnalyzeBackReferencesUseSameDirectoryWithDuplicateBasenames(t *testing.T) {
+	for _, reciprocal := range []bool{false, true} {
+		t.Run(fmt.Sprintf("reciprocal=%v", reciprocal), func(t *testing.T) {
+			peerBody := "---\ntitle: Peer\n---\n# Peer\n"
+			if reciprocal {
+				peerBody += "\n[[reference:source.md]]\n"
+			}
+			root := setupValidateProject(t, map[string]string{
+				".stem":          "version: 2\nroot: true\n",
+				"docs/source.md": "---\ntitle: Source\n---\n# Source\n\n[[reference:peer.md]]\n",
+				"docs/peer.md":   peerBody,
+				"other/peer.md":  "---\ntitle: Other Peer\n---\n# Other Peer\n",
+			})
+			var report infer.AnalyzeReport
+			if err := json.Unmarshal(executeAnalyze(t, root, "-o", "json"), &report); err != nil {
+				t.Fatalf("decode analyze JSON: %v", err)
+			}
+			for _, category := range report.Categories {
+				if category.ID != "back_references" {
+					continue
+				}
+				if reciprocal {
+					if len(category.Inferences) != 0 {
+						t.Fatalf("reciprocal links produced back-reference findings: %+v", category.Inferences)
+					}
+				} else {
+					if len(category.Inferences) != 1 {
+						t.Fatalf("back-reference findings = %+v, want one for docs/peer.md", category.Inferences)
+					}
+					finding := category.Inferences[0]
+					if finding.Type != "missing_back_reference" || filepath.ToSlash(finding.Source) != "docs/peer.md" || filepath.ToSlash(finding.Value) != "docs/source.md" {
+						t.Fatalf("unexpected back-reference finding: %+v", finding)
+					}
+				}
+				return
+			}
+			t.Fatal("analyze report omitted back_references category")
+		})
+	}
+}

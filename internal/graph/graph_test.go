@@ -159,6 +159,87 @@ func TestResolveTarget_BasenameFallback_WithExtension(t *testing.T) {
 	}
 }
 
+func TestBuild_UncheckedFilenameRelativeBeforeBasename(t *testing.T) {
+	tests := []struct {
+		name       string
+		nodes      []string
+		wantTarget string
+		wantBroken int
+	}{
+		{
+			name:       "same directory beats duplicate basenames",
+			nodes:      []string{"docs/peer.md", "other/peer.md", "peer.md"},
+			wantTarget: "docs/peer.md",
+		},
+		{
+			name:       "missing relative node keeps unique fallback",
+			nodes:      []string{"other/peer.md"},
+			wantTarget: "other/peer.md",
+		},
+		{
+			name:       "missing relative node keeps ambiguous fallback broken",
+			nodes:      []string{"other/peer.md", "elsewhere/peer.md"},
+			wantTarget: "peer.md",
+			wantBroken: 1,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, style := range []string{"", extract.StyleWikilink} {
+				records := []*extract.Record{
+					makeRecord(filepath.Join("docs", "source.md"), []extract.Link{
+						{Target: "peer.md", Style: style, Type: "reference", Line: 3},
+					}),
+				}
+				for _, path := range tt.nodes {
+					records = append(records, makeRecord(filepath.FromSlash(path), nil))
+				}
+				g := Build(context.Background(), records)
+				edges := g.Edges[filepath.Join("docs", "source.md")]
+				if len(edges) != 1 || edges[0].Target != filepath.FromSlash(tt.wantTarget) {
+					t.Fatalf("style=%q: edges = %+v, want one edge to %q", style, edges, filepath.FromSlash(tt.wantTarget))
+				}
+				if broken := g.BrokenLinks(); len(broken) != tt.wantBroken {
+					t.Fatalf("style=%q: broken = %+v, want %d", style, broken, tt.wantBroken)
+				}
+				if records[0].Links[0].Target != "peer.md" {
+					t.Fatal("Build mutated the original link target")
+				}
+			}
+		})
+	}
+}
+
+func TestBuild_AuthoritativeFilenameNotRejoined(t *testing.T) {
+	tests := []struct {
+		name       string
+		style      string
+		resolution string
+		wantBroken int
+	}{
+		{name: "unchecked markdown", style: extract.StyleMarkdown, wantBroken: 1},
+		{name: "prepared resolved wikilink", style: extract.StyleWikilink, resolution: extract.LinkResolved},
+		{name: "prepared unresolved wikilink", style: extract.StyleWikilink, resolution: extract.LinkUnresolved, wantBroken: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			records := []*extract.Record{
+				makeRecord(filepath.Join("docs", "source.md"), []extract.Link{
+					{Target: "peer.md", Style: tt.style, Resolution: tt.resolution, Line: 1},
+				}),
+				makeRecord(filepath.Join("docs", "peer.md"), nil),
+			}
+			g := Build(context.Background(), records)
+			if edges := g.Edges[filepath.Join("docs", "source.md")]; len(edges) != 1 || edges[0].Target != "peer.md" {
+				t.Fatalf("edges = %+v, want authoritative target peer.md", edges)
+			}
+			if broken := g.BrokenLinks(); len(broken) != tt.wantBroken {
+				t.Fatalf("broken = %+v, want %d", broken, tt.wantBroken)
+			}
+		})
+	}
+}
+
 func TestResolveTarget_BasenameFallback_Ambiguous(t *testing.T) {
 	records := []*extract.Record{
 		makeRecord("dir1/T001-task.md", nil),
