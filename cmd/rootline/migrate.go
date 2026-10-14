@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -181,11 +182,7 @@ func runMigrateDiff(cmd *cobra.Command, args []string) error {
 	for _, stemPath := range stemPaths {
 		result, diffErr := diffSingleStem(stemPath)
 		if diffErr != nil {
-			current, parseErr := rules.ParseStemFile(stemPath)
-			if parseErr != nil {
-				return fmt.Errorf("parsing %s: %w", stemPath, parseErr)
-			}
-			result = migrate.Diff(stemPath, nil, current)
+			return diffErr
 		}
 		results = append(results, result)
 	}
@@ -203,8 +200,8 @@ func diffSingleStem(stemPath string) (*migrate.DiffResult, error) {
 	}
 
 	previous, err := migrate.LoadPreviousStem(stemPath, migrateFrom)
-	if err != nil {
-		return nil, err
+	if err != nil && !errors.Is(err, migrate.ErrPreviousStemNotFound) {
+		return nil, fmt.Errorf("loading previous %s: %w", stemPath, err)
 	}
 
 	return migrate.Diff(stemPath, previous, current), nil

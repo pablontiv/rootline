@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -327,6 +328,181 @@ schema:
 	}
 }
 
+func TestMigrateDiffRejectsExplicitBaseline(t *testing.T) {
+	const current = "version: 2\nschema:\n  title:\n    type: string\n"
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{"missing", ""},
+		{"unreadable-directory", ""},
+		{"permission-denied", "version: 2\n"},
+		{"malformed", "version: 2\nschema: [\n"},
+		{"unsupported-version", "version: 1\nschema: {}\n"},
+		{"refused-null-field", "version: 2\nschema:\n  title: null\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			stemPath := filepath.Join(dir, ".stem")
+			docPath := filepath.Join(dir, "doc.md")
+			fromPath := filepath.Join(dir, "previous.stem")
+			mustWriteFile(t, stemPath, []byte(current), 0644)
+			mustWriteFile(t, docPath, []byte("---\ntitle: Original\n---\n# Body\n"), 0644)
+			if tc.name == "unreadable-directory" {
+				if err := os.Mkdir(fromPath, 0755); err != nil {
+					t.Fatal(err)
+				}
+			} else if tc.content != "" {
+				mustWriteFile(t, fromPath, []byte(tc.content), 0644)
+			}
+			if tc.name == "permission-denied" {
+				if err := os.Chmod(fromPath, 0); err != nil {
+					t.Skipf("permission restrictions unavailable: %v", err)
+				}
+				t.Cleanup(func() {
+					if err := os.Chmod(fromPath, 0600); err != nil {
+						t.Error(err)
+					}
+				})
+				if _, err := os.ReadFile(fromPath); !errors.Is(err, os.ErrPermission) {
+					t.Skip("platform or privileges do not enforce unreadable file permissions")
+				}
+			}
+			for _, target := range []string{stemPath, dir} {
+				for _, format := range []string{"json", "table"} {
+					for _, dryRun := range []bool{false, true} {
+						args := []string{"migrate", target, "--from", fromPath, "-o", format}
+						if dryRun {
+							args = append(args, "--dry-run")
+						}
+						assertMigrateBaselineRejected(t, args, "--from baseline "+fromPath, stemPath, docPath)
+					}
+				}
+			}
+			if tc.content != "" && tc.name != "permission-denied" {
+				content, err := os.ReadFile(fromPath)
+				if err != nil || string(content) != tc.content {
+					t.Fatalf("baseline changed: content %q, error %v", content, err)
+				}
+			}
+		})
+	}
+}
+
+func assertMigrateBaselineRejected(t *testing.T, args []string, context string, paths ...string) {
+	t.Helper()
+	before := make(map[string][]byte, len(paths))
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		before[path] = content
+	}
+	stdout, stderr, err := runCmdWithSeparateOutput(t, args...)
+	if err == nil {
+		t.Fatalf("%v: expected baseline error, stdout %q", args, stdout)
+	}
+	if stdout != "" {
+		t.Errorf("%v: fabricated or partial stdout %q", args, stdout)
+	}
+	if !strings.Contains(err.Error(), context) || !strings.Contains(stderr, context) {
+		t.Errorf("%v: missing baseline context %q: error %v, stderr %q", args, context, err, stderr)
+	}
+	for path, content := range before {
+		after, readErr := os.ReadFile(path)
+		if readErr != nil || !bytes.Equal(after, content) {
+			t.Errorf("%v: file %s changed after refusal: %v", args, path, readErr)
+		}
+	}
+}
+
+func TestMigrateDiffRejectsGitBaseline(t *testing.T) {
+	const current = "version: 2\nschema:\n  title:\n    type: string\n"
+	for _, baseline := range []string{"version: 2\nschema: [\n", "version: 1\nschema: {}\n"} {
+		t.Run(baseline, func(t *testing.T) {
+			dir := t.TempDir()
+			runFixtureGit(t, dir, "init", "--quiet")
+			rootStem := filepath.Join(dir, ".stem")
+			subDir := filepath.Join(dir, "sub")
+			if err := os.Mkdir(subDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			stemPath := filepath.Join(subDir, ".stem")
+			docPath := filepath.Join(subDir, "doc.md")
+			mustWriteFile(t, rootStem, []byte("version: 2\n"), 0644)
+			mustWriteFile(t, stemPath, []byte(baseline), 0644)
+			runFixtureGit(t, dir, "add", ".stem", "sub/.stem")
+			runFixtureGit(t, dir, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "-m", "baseline")
+			mustWriteFile(t, stemPath, []byte(current), 0644)
+			mustWriteFile(t, docPath, []byte("---\ntitle: Original\n---\n# Body\n"), 0644)
+			for _, target := range []string{stemPath, dir} {
+				for _, format := range []string{"json", "table"} {
+					for _, dryRun := range []bool{false, true} {
+						args := []string{"migrate", target, "-o", format}
+						if dryRun {
+							args = append(args, "--dry-run")
+						}
+						assertMigrateBaselineRejected(t, args, "parsing git HEAD:sub/.stem baseline", rootStem, stemPath, docPath)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestMigrateDiffImplicitBaselineAbsent(t *testing.T) {
+	const current = "version: 2\nschema:\n  title:\n    type: string\n"
+	for _, scenario := range []string{"no-repository", "unborn-head", "missing-path"} {
+		t.Run(scenario, func(t *testing.T) {
+			dir := t.TempDir()
+			if scenario != "no-repository" {
+				runFixtureGit(t, dir, "init", "--quiet")
+			}
+			if scenario == "missing-path" {
+				mustWriteFile(t, filepath.Join(dir, "tracked.txt"), []byte("baseline\n"), 0644)
+				runFixtureGit(t, dir, "add", "tracked.txt")
+				runFixtureGit(t, dir, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "-m", "baseline")
+			}
+			stemPath := filepath.Join(dir, ".stem")
+			mustWriteFile(t, stemPath, []byte(current), 0644)
+			stdout, stderr, err := runCmdWithSeparateOutput(t, "migrate", stemPath)
+			if err != nil {
+				t.Fatalf("absent implicit baseline failed: %v, stderr %q", err, stderr)
+			}
+			var result struct {
+				Kind       string `json:"kind"`
+				TotalCount int    `json:"total_count"`
+				Changes    []struct {
+					Kind  string `json:"kind"`
+					Field string `json:"field"`
+				} `json:"changes"`
+			}
+			if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Kind != "rootline/migrate-diff" || result.TotalCount != 1 || len(result.Changes) != 1 ||
+				result.Changes[0].Kind != "field_added" || result.Changes[0].Field != "title" {
+				t.Fatalf("absent-baseline behavior changed: %s", stdout)
+			}
+			after, readErr := os.ReadFile(stemPath)
+			if readErr != nil || string(after) != current {
+				t.Fatalf("diff changed current stem: %q, error %v", after, readErr)
+			}
+		})
+	}
+}
+
+func TestMigrateDiffGitFailureIsNotAbsence(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	stemPath := filepath.Join(dir, ".stem")
+	mustWriteFile(t, stemPath, []byte("version: 2\nschema:\n  title:\n    type: string\n"), 0644)
+	assertMigrateBaselineRejected(t, []string{"migrate", stemPath}, "git show HEAD:.stem", stemPath)
+}
+
 func TestMigrateDiffTableOutput(t *testing.T) {
 	stem := `version: 2
 schema:
@@ -606,9 +782,7 @@ schema:
 
 func TestMigrateBatchDiffJSON(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, ".git"), 0755); err != nil {
-		t.Fatal(err)
-	}
+	runFixtureGit(t, dir, "init", "--quiet")
 
 	stem1 := `version: 2
 schema:
@@ -633,8 +807,7 @@ schema:
 	mustWriteFile(t, filepath.Join(sub1, ".stem"), []byte(stem1), 0644)
 	mustWriteFile(t, filepath.Join(sub2, ".stem"), []byte(stem2), 0644)
 
-	// Without --from, it uses git which may fail — that's OK,
-	// the code handles the error path and produces a diff with nil "before".
+	// An unborn Git HEAD has no baseline, so current fields are additions.
 	out, err := runCmd(t, "migrate", dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\noutput: %s", err, out)
@@ -657,9 +830,7 @@ schema:
 
 func TestMigrateBatchDiffTable(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, ".git"), 0755); err != nil {
-		t.Fatal(err)
-	}
+	runFixtureGit(t, dir, "init", "--quiet")
 
 	stem1 := `version: 2
 schema:
@@ -689,9 +860,7 @@ schema:
 
 func TestMigrateBatchDiffFieldExtraction(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, ".git"), 0755); err != nil {
-		t.Fatal(err)
-	}
+	runFixtureGit(t, dir, "init", "--quiet")
 
 	stem := `version: 2
 schema:
