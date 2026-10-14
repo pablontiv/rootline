@@ -73,6 +73,198 @@ schema:
 	return root
 }
 
+func TestResolvers_RelativePathUsesRootOutsideCWD(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(base, "governed")
+	outside := filepath.Join(base, "outside")
+	relativePath := filepath.Join("docs", "roadmap", "plan.md")
+	targetPath := filepath.Join(root, relativePath)
+	stemPaths := []string{
+		filepath.Join(root, ".stem"),
+		filepath.Join(root, "docs", ".stem"),
+		filepath.Join(root, "docs", "roadmap", ".stem"),
+	}
+	contents := []string{
+		`version: 2
+root: true
+schema:
+  title:
+    type: string
+    required: true
+  status:
+    type: enum
+    values: [draft]
+  scoped:
+    type: string
+    required: true
+    match: governed
+  excluded:
+    type: string
+    match: not-in-target
+`,
+		`version: 2
+schema:
+  author:
+    type: string
+    required: true
+`,
+		`version: 2
+schema:
+  status:
+    type: enum
+    values: [draft, published]
+`,
+	}
+	for i, path := range stemPaths {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(contents[i]), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(targetPath, []byte("# Plan\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	originalCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(originalCWD); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
+	if err := os.Chdir(outside); err != nil {
+		t.Fatal(err)
+	}
+
+	assertChain := func(t *testing.T, entries []StemEntry) {
+		t.Helper()
+		paths := make([]string, len(entries))
+		for i, entry := range entries {
+			paths[i] = entry.Path
+		}
+		if !reflect.DeepEqual(paths, stemPaths) {
+			t.Fatalf("chain paths = %v, want %v", paths, stemPaths)
+		}
+	}
+	assertSchema := func(t *testing.T, schema map[string]SchemaField) {
+		t.Helper()
+		if len(schema) != 4 {
+			t.Fatalf("schema = %+v, want title, status, scoped, author", schema)
+		}
+		for _, name := range []string{"title", "scoped", "author"} {
+			if field, ok := schema[name]; !ok || field.Type != "string" || !field.Required {
+				t.Errorf("schema[%q] = %+v, want required string", name, field)
+			}
+		}
+		if field := schema["status"]; field.Type != "enum" || !reflect.DeepEqual(field.Values, []string{"draft", "published"}) {
+			t.Errorf("schema[status] = %+v, want enum [draft published]", field)
+		}
+	}
+	wantProvenance := map[string]string{
+		"title":    stemPaths[0],
+		"status":   stemPaths[2],
+		"scoped":   stemPaths[0],
+		"excluded": stemPaths[0],
+		"author":   stemPaths[1],
+	}
+	assertResolution := func(t *testing.T, res *Resolution) {
+		t.Helper()
+		if res.Path != targetPath || !filepath.IsAbs(res.Path) {
+			t.Errorf("Resolution.Path = %q, want absolute %q", res.Path, targetPath)
+		}
+		assertChain(t, res.Chain)
+		assertSchema(t, res.EffectiveSchema)
+		if !reflect.DeepEqual(res.Provenance, wantProvenance) {
+			t.Errorf("provenance = %v, want %v", res.Provenance, wantProvenance)
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		path string
+		root string
+	}{
+		{"absolute root", relativePath, root},
+		{"relative root", relativePath, filepath.Join("..", "governed")},
+		{"empty root", filepath.Join("..", "governed", relativePath), ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			chain, err := StemChain(tc.path, tc.root)
+			if err != nil {
+				t.Fatalf("relative StemChain: %v", err)
+			}
+			assertChain(t, chain)
+			absoluteChain, err := StemChain(targetPath, tc.root)
+			if err != nil {
+				t.Fatalf("absolute StemChain: %v", err)
+			}
+			if !reflect.DeepEqual(chain, absoluteChain) {
+				t.Error("relative and absolute StemChain differ")
+			}
+
+			schema, err := EffectiveSchema(tc.path, tc.root)
+			if err != nil {
+				t.Fatalf("relative EffectiveSchema: %v", err)
+			}
+			assertSchema(t, schema)
+			absoluteSchema, err := EffectiveSchema(targetPath, tc.root)
+			if err != nil {
+				t.Fatalf("absolute EffectiveSchema: %v", err)
+			}
+			if !reflect.DeepEqual(schema, absoluteSchema) {
+				t.Error("relative and absolute EffectiveSchema differ")
+			}
+
+			res, err := Resolve(tc.path, tc.root)
+			if err != nil {
+				t.Fatalf("relative Resolve: %v", err)
+			}
+			assertResolution(t, res)
+			absoluteRes, err := Resolve(targetPath, tc.root)
+			if err != nil {
+				t.Fatalf("absolute Resolve: %v", err)
+			}
+			if !reflect.DeepEqual(res, absoluteRes) {
+				t.Error("relative and absolute Resolve differ")
+			}
+
+			layered, err := ResolveLayered(tc.path, tc.root)
+			if err != nil {
+				t.Fatalf("relative ResolveLayered: %v", err)
+			}
+			assertResolution(t, layered.Resolution)
+			if len(layered.Layers) == 0 || !hasLayerConflict(layered, "status.values", "extension") {
+				t.Fatalf("missing layers or expected enum extension conflict: %+v", layered)
+			}
+			for _, constraints := range [][]LayerConstraint{layered.Layers, layered.Conflicts} {
+				for _, constraint := range constraints {
+					path := constraint.StemPath
+					if !filepath.IsAbs(path) || (path != stemPaths[0] && path != stemPaths[1] && path != stemPaths[2]) {
+						t.Errorf("constraint stem path = %q, want an absolute expected stem path", path)
+					}
+				}
+			}
+			absoluteLayered, err := ResolveLayered(targetPath, tc.root)
+			if err != nil {
+				t.Fatalf("absolute ResolveLayered: %v", err)
+			}
+			if !reflect.DeepEqual(layered, absoluteLayered) {
+				t.Error("relative and absolute ResolveLayered differ")
+			}
+		})
+	}
+}
+
 func TestStemChain_RootToLeafOrdering(t *testing.T) {
 	root := setupResolverTest(t)
 
