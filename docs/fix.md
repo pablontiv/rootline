@@ -405,6 +405,25 @@ of resolving `path` against the caller's working directory. Post-apply validatio
 that root, and a scan that fails surfaces in `errors[]` rather than as an all-zero
 `validation_summary`, which reads identically to a clean run.
 
+**Post-apply validation coverage.** After a non-dry-run apply, `validation_summary`
+uses the same corpus validation as `validate --all`: effective field rules, governed
+link checks, extraction errors (including malformed YAML), leading-frontmatter
+structure, and structural rules for record-bearing directories and their ancestors
+within the scan scope. The scan uses the AST-enabled extractor and honors the same
+scope exclusions. Drift diagnostics remain specific to `validate --all`.
+
+`total_files` counts documents only, and `valid_files + invalid_files` always equals
+`total_files`. `total_errors` includes both document errors and directory structural
+errors. If only directory errors exist, one otherwise-valid document is conservatively
+counted as invalid so the compact summary cannot appear green; directories never
+increase `total_files`. Warning-only findings do not count as errors.
+
+Validation findings are summary-only: they do not roll back the applied schema,
+populate `errors[]`, change `complete`, or cause a non-zero exit. Operational scan,
+derivation, or schema-resolution failures instead populate `errors[]`, omit the
+summary, and fail the command. Use `rootline validate --all <root>` for individual
+findings and a corpus-validity exit status.
+
 **Path containment.** As with `repair apply`, a report is untrusted input: every `create_stem`
 target is checked against the scan root before a `.stem` is written, so neither
 `<root>/../../outside/.stem` nor an in-root symlink to an external directory can scaffold

@@ -891,23 +891,9 @@ func validateProspectiveSchemaPatch(path, content string) error {
 // ValidationSummary is indistinguishable from a clean run, so swallowing the
 // scan error here would report a green result for a root that was never read.
 func runPostApplyValidation(ctx context.Context, root string) (*ValidationSummary, error) {
-	reg := extract.NewRegistry()
-	resolver := func(dir string) (*rules.StemFile, error) {
-		entries, err := rules.WalkUp(dir)
-		if err != nil || len(entries) == 0 {
-			return nil, err
-		}
-		return rules.MergeStemFiles(entries), nil
-	}
-
-	// Bootstrap scan: this command derives a schema from documents that may
-	// not have one yet, so a missing schema must not stop it.
-	records, err := index.Scan(ctx, root, reg, index.WithScopeResolver(resolver), index.AllowUngoverned())
+	records, err := index.Scan(ctx, root, extract.NewASTRegistry(), index.WithScopeResolver(resilientValidateAllScopeResolver()))
 	if err != nil {
 		return nil, fmt.Errorf("post-apply validation scan of %s: %w", root, err)
-	}
-	if err := ensureRecordsResolve(ctx, records, root); err != nil {
-		return nil, fmt.Errorf("resolving .stem: %w", err)
 	}
 
 	if err := derive.DeriveAllSimple(ctx, records, root); err != nil {
@@ -920,33 +906,36 @@ func runPostApplyValidation(ctx context.Context, root string) (*ValidationSummar
 		return nil, fmt.Errorf("aggregating records: %w", err)
 	}
 
-	validCount := 0
-	invalidCount := 0
-	totalErrors := 0
-
-	for _, rec := range records {
-		absPath := filepath.Join(root, rec.Path)
-		dir := filepath.Dir(absPath)
-		effective, resolveErr := rules.ResolveForRecord(dir, rec.Path)
-		if resolveErr != nil {
-			invalidCount++
-			continue
-		}
-		errs := rules.Validate(ctx, rec, effective)
-		if len(errs) > 0 {
-			invalidCount++
-			totalErrors += len(errs)
-		} else {
-			validCount++
+	corpus := validateCorpusSurfaces(ctx, records, root)
+	var validationErrors []error
+	for _, notice := range corpus.Notices {
+		if notice.Severity == rules.SeverityError {
+			validationErrors = append(validationErrors, fmt.Errorf("%s: %s", notice.Code, notice.Message))
 		}
 	}
+	if err := errors.Join(validationErrors...); err != nil {
+		return nil, fmt.Errorf("post-apply validation: %w", err)
+	}
 
-	return &ValidationSummary{
-		TotalFiles:   len(records),
-		ValidFiles:   validCount,
-		InvalidFiles: invalidCount,
-		TotalErrors:  totalErrors,
-	}, nil
+	summary := &ValidationSummary{TotalFiles: len(records)}
+	for _, result := range corpus.Results {
+		if len(result.Errors) > 0 {
+			summary.InvalidFiles++
+			summary.TotalErrors += len(result.Errors)
+		} else {
+			summary.ValidFiles++
+		}
+	}
+	for _, result := range corpus.Structural {
+		summary.TotalErrors += len(result.Errors)
+	}
+	// Directories are not documents. Preserve the document count while making
+	// a directory-only failure non-green in this compact legacy summary.
+	if summary.TotalErrors > 0 && summary.InvalidFiles == 0 && summary.ValidFiles > 0 {
+		summary.ValidFiles--
+		summary.InvalidFiles++
+	}
+	return summary, nil
 }
 
 // generateSchemaProposals analyzes records and generates schema proposals.
