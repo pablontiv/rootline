@@ -34,7 +34,13 @@ aggregate:
 | `upper(s)` | Uppercase | `upper("abc")` → `"ABC"` |
 | `trim(s)` | Trim whitespace | `trim("  hi  ")` → `"hi"` |
 | `strlen(s)` | String length | `strlen("abc")` → `3` |
-| `concat(...)` | Concatenate | `concat("a", "-", "b")` → `"a-b"` |
+| `concat(...)` | Concatenate strings, integers (base-10), and booleans (`true`/`false`) | `concat("task-", 42, "-", true)` → `"task-42-true"` |
+
+`concat` preserves string contents unchanged and treats `nil` as empty text:
+`concat("a", nil, "b")` yields `"ab"`. Unsupported argument types, including
+lists, maps, and floating-point values, fail expression evaluation with
+`concat: unsupported argument type <Go type>`; they are never implicitly
+formatted or flattened.
 
 Standard expr-lang builtins are also available: `len`, `filter`, `map`, `any`, `all`, `contains`, `startsWith`, `endsWith`, `split`, `replace`.
 
