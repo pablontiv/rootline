@@ -118,3 +118,64 @@ func TestAnalyzeJSONOutputIsDeterministic(t *testing.T) {
 		}
 	}
 }
+
+func TestAnalyzeLinkTypesUseEffectiveNestedStem(t *testing.T) {
+	tests := []struct {
+		name         string
+		rootAllowed  string
+		childAllowed string
+		wantSources  []string
+	}{
+		{
+			name:         "root forbids child allows",
+			rootAllowed:  "reference",
+			childAllowed: "blocks",
+			wantSources:  []string{"inherited/record.md", "root.md"},
+		},
+		{
+			name:         "root allows child forbids",
+			rootAllowed:  "blocks",
+			childAllowed: "reference",
+			wantSources:  []string{"child/deep/record.md", "child/record.md"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := setupValidateProject(t, map[string]string{
+				".stem":       fmt.Sprintf("version: 2\nroot: true\nlinks:\n  allowed: [%s]\n", tt.rootAllowed),
+				"child/.stem": fmt.Sprintf("version: 2\nlinks:\n  allowed: [%s]\n", tt.childAllowed),
+				"target.md":   "---\ntitle: Target\n---\n# Target\n",
+			})
+			for _, path := range []string{"root.md", "inherited/record.md", "child/record.md", "child/deep/record.md"} {
+				writeAnalyzeFile(t, filepath.Join(root, path), "---\ntitle: Record\n---\n# Record\n\n[[blocks:target]] [[blocks:target]]\n")
+			}
+			for _, incremental := range []bool{false, true} {
+				args := []string{root, "-o", "json"}
+				if incremental {
+					args = append(args, "--incremental")
+				}
+				var report infer.AnalyzeReport
+				if err := json.Unmarshal(executeAnalyze(t, args...), &report); err != nil {
+					t.Fatalf("decode analyze JSON: %v", err)
+				}
+				var sources []string
+				foundCategory := false
+				for _, category := range report.Categories {
+					if category.ID != "link_types" {
+						continue
+					}
+					foundCategory = true
+					for _, finding := range category.Inferences {
+						if finding.Type != "link_type_violation" || finding.Field != "links.allowed" || finding.Value != "blocks" {
+							t.Fatalf("unexpected link finding: %+v", finding)
+						}
+						sources = append(sources, filepath.ToSlash(finding.Source))
+					}
+				}
+				if !foundCategory || !slices.Equal(sources, tt.wantSources) {
+					t.Fatalf("incremental=%v: violation sources = %v, want %v", incremental, sources, tt.wantSources)
+				}
+			}
+		})
+	}
+}

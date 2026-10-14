@@ -63,7 +63,7 @@ func runAnalyze(t *testing.T, root string) *infer.AnalyzeReport {
 	report.AddCategory("invariants", "Invariant Extraction", infer.DetectInvariants(records), agentTypes)
 	report.AddCategory("formal_deps", "Formal Dependencies", infer.DetectFormalDependencies(records), agentTypes)
 	report.AddCategory("traceability", "Traceability Links", infer.DetectTraceabilityLinks(records), agentTypes)
-	report.AddCategory("link_types", "Link Types", infer.DetectLinkTypes(records, rules.LinkSchema{}), agentTypes)
+	report.AddCategory("link_types", "Link Types", infer.DetectLinkTypes(records, nil), agentTypes)
 	report.AddCategory("back_refs", "Back References", infer.DetectMissingBackReferences(g), agentTypes)
 	report.AddCategory("cross_refs", "Cross References", infer.DetectCrossReferences(records, root), agentTypes)
 

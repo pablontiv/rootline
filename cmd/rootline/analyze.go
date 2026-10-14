@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -84,8 +85,18 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("aggregating records: %w", err)
 	}
 
-	// Load stem for link schema.
-	linkSchema := resolveLinkSchema(root)
+	// Resolve inherited and overridden link governance for each record.
+	linkSchemas := make(map[string]rules.LinkSchema, len(records))
+	for _, rec := range records {
+		effective, err := rules.ResolveForRecord(filepath.Dir(filepath.Join(root, rec.Path)), rec.Path)
+		if err != nil {
+			if errors.Is(err, rules.ErrNoSchemaFound) {
+				continue // Bootstrap records have no link restrictions.
+			}
+			return fmt.Errorf("resolving links for %s: %w", rec.Path, err)
+		}
+		linkSchemas[rec.Path] = effective.Links
+	}
 
 	// Build graph for back-reference analysis.
 	g := graph.Build(ctx, records)
@@ -119,7 +130,7 @@ func runAnalyze(cmd *cobra.Command, args []string) error {
 			return infer.DetectConstantFields(records), nil
 		}},
 		{"link_types", "Link Type Validation", func() ([]infer.Inference, error) {
-			return infer.DetectLinkTypes(records, linkSchema), nil
+			return infer.DetectLinkTypes(records, linkSchemas), nil
 		}},
 		{"back_references", "Back Reference Detection", func() ([]infer.Inference, error) {
 			return infer.DetectMissingBackReferences(g), nil
@@ -235,19 +246,6 @@ func enumInferences(schema *infer.InferredSchema) []infer.Inference {
 		}
 	}
 	return inferences
-}
-
-// resolveLinkSchema loads the link schema from the root's effective stem.
-func resolveLinkSchema(root string) rules.LinkSchema {
-	entries, err := rules.WalkUp(root)
-	if err != nil || len(entries) == 0 {
-		return rules.LinkSchema{}
-	}
-	effective := rules.MergeStemFiles(entries)
-	if effective == nil {
-		return rules.LinkSchema{}
-	}
-	return effective.Links
 }
 
 // renderAnalyzeTable renders the analyze report in table format.

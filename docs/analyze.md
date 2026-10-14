@@ -49,7 +49,7 @@ formal dependencies, traceability links, structural rules.
 | Required Field Detection | Identify fields present in >80% of records |
 | Enum Value Detection | Extract discrete value sets for enum fields |
 | Constant Field Detection | Find fields with only one value across all records |
-| Link Type Validation | Validate wiki-links against link schema rules |
+| Link Type Validation | Validate observed link types against each record's effective inherited or overridden `links.allowed` |
 | Back Reference Detection | Identify missing reciprocal link declarations |
 | Cross Reference Detection | Detect broken document-internal cross-references |
 | Body Section Patterns | Identify section headings in markdown bodies |
@@ -57,6 +57,16 @@ formal dependencies, traceability links, structural rules.
 | Formal Dependency Extraction | Extract semantic wiki-link dependencies with the built-in prefixes `blocks`, `relates`, and `extends` |
 | Traceability Link Extraction | Identify traceability field claims (`Contribuye a`, `Cubre`, `Satisface`) |
 | Structural Rule Detection | Infer directory naming patterns and hierarchy rules |
+
+Link-type validation resolves the effective `.stem` chain separately for each
+record. A child `links.allowed` replaces the inherited list, so a type allowed
+only by the child does not produce a false violation, and a type forbidden only
+by the child does produce `link_type_violation`. Violations are diagnostic,
+deduplicated by source record and link type, and do not instruct `schema apply`
+to change a schema or repair a document. Records without an effective allowed
+list (including ungoverned bootstrap records) contribute to one global
+`link_type_suggestion` when an observed type reaches 80% consensus among their
+links; records with an allowed list do not contribute to that suggestion.
 
 ### Governance Detectors
 
