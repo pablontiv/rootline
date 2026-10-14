@@ -42,7 +42,7 @@ Sort type detection per field:
 2. **Numeric fields**: If both values parse as float64, sorts numerically.
 3. **String fields**: Fallback to lexicographic comparison.
 
-Missing/nil values always sort last, regardless of direction. Sort applies after filtering and before limit.
+Missing keys and nil values (including explicit YAML `null`) always sort last, regardless of direction. Null/missing peers retain input order when all sort keys are equal; a derived nil value shadows any frontmatter value. Sort applies after filtering and before limit.
 
 Unlike `--where`, an unknown `--sort` field is an **error**, matching the treatment a bad direction already got:
 

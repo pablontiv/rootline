@@ -51,7 +51,7 @@ func TestTask9QueryFormatsPreserveSourceBackedOrderAndCounts(t *testing.T) {
 	if full.Version != 1 || full.Kind != "rootline/query" || full.Meta.Count != 4 || len(full.Rows) != 4 {
 		t.Fatalf("full identity/count = v%d %q meta %d rows %d", full.Version, full.Kind, full.Meta.Count, len(full.Rows))
 	}
-	wantFullOrder := []string{"override.md", "body.md", "nil.md", "empty.md"}
+	wantFullOrder := []string{"override.md", "body.md", "empty.md", "nil.md"}
 	if got := task9FullPaths(full.Rows); !reflect.DeepEqual(got, wantFullOrder) {
 		t.Fatalf("full query order = %v, want %v", got, wantFullOrder)
 	}
@@ -121,9 +121,9 @@ func TestTask9QueryFormatsPreserveSourceBackedOrderAndCounts(t *testing.T) {
 	}
 	wantSelected := []map[string]any{
 		{"path": "empty.md", "notes": ""},
-		{"path": "nil.md", "notes": nil},
 		{"path": "body.md", "notes": "body value"},
 		{"path": "override.md", "notes": "fm value"},
+		{"path": "nil.md", "notes": nil},
 	}
 	if !reflect.DeepEqual(selected.Rows, wantSelected) {
 		t.Fatalf("selected rows = %#v, want %#v", selected.Rows, wantSelected)

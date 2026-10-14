@@ -59,6 +59,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Rel
 
 ### Fixed
 
+- Query sorting now treats explicit YAML `null` and derived nil values as absent, placing them with missing keys after all non-null values in both ascending and descending order. Null/missing peers retain input order when otherwise equal, and derived nil continues to shadow frontmatter; non-null comparisons and scalar builtin sorting are unchanged. Closes #291.
 - Unknown `validate[].rule` names now reject the `.stem` at parse time as `schema-valid`, naming the field, unknown rule, and supported names instead of silently skipping the constraint. `validate --all` reports the failure in `stem_health[]` and exits non-zero before document validation; `non_empty`, `exists`, `requires`, and `enum` remain supported. Closes #290.
 - Query sorting now resolves the scalar builtins `path`, `body`, and `type` directly from records before same-named metadata, making `--sort path:asc` and `--sort path:desc` order paths correctly. The complex builtin `sections` is rejected explicitly even with no known fields; derived-before-frontmatter precedence for other fields, schema enum ordering, and missing-values-last behavior are unchanged. Closes #289.
 - Structural `require_index` now accepts only regular files (including symlink targets), reports directories and other non-regular entries explicitly, and surfaces non-not-found stat failures as structural I/O diagnostics. Missing-file diagnostics remain unchanged. Closes #288.
