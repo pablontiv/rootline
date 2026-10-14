@@ -67,7 +67,9 @@ func ValidateDirectory(_ context.Context, dir string, stem *StemFile) []Validati
 	if rules.RequireIndex != "" {
 		for _, subdir := range subdirs {
 			indexPath := filepath.Join(dir, subdir, rules.RequireIndex)
-			if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+			info, err := os.Stat(indexPath)
+			switch {
+			case os.IsNotExist(err):
 				errs = append(errs, ValidationError{
 					Rule:     "require_index",
 					Field:    "directory",
@@ -75,6 +77,24 @@ func ValidateDirectory(_ context.Context, dir string, stem *StemFile) []Validati
 					Source:   stem.Path,
 					Severity: severity,
 				})
+			case err != nil:
+				errs = append(errs, ValidationError{
+					Rule:     "structural",
+					Field:    "directory",
+					Message:  fmt.Sprintf("cannot stat required index file %q in subdirectory %q: %v", rules.RequireIndex, subdir, err),
+					Source:   stem.Path,
+					Severity: severity,
+				})
+			case !info.Mode().IsRegular():
+				errs = append(errs, ValidationError{
+					Rule:     "require_index",
+					Field:    "directory",
+					Message:  fmt.Sprintf("subdirectory %q required index file %q is not a regular file", subdir, rules.RequireIndex),
+					Source:   stem.Path,
+					Severity: severity,
+				})
+			default:
+				// A regular file satisfies the requirement.
 			}
 		}
 	}
