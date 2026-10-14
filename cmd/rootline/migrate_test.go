@@ -359,6 +359,117 @@ schema:
 	}
 }
 
+func TestMigrateDiffAttributeSurfaces(t *testing.T) {
+	const beforeStem = `version: 2
+schema:
+  id:
+    type: sequence
+    prefix: T
+    digits: 3
+    match: [T*]
+    required: {match: [T*]}
+    excludes: {match: README.md}
+validate:
+  - rule: requires
+    if: {status: draft}
+    then: {fields: [owner]}
+    severity: error
+`
+	const afterStem = `version: 2
+schema:
+  id:
+    type: sequence
+    prefix: F
+    digits: 2
+    match: [F*]
+    required: {match: [F*]}
+    excludes: {match: index.md}
+validate:
+  - rule: requires
+    if: {status: published}
+    then: {fields: [reviewer]}
+    severity: error
+`
+	dir := setupMigrateDir(t, afterStem, nil)
+	beforePath := filepath.Join(dir, "before.stem")
+	mustWriteFile(t, beforePath, []byte(beforeStem), 0644)
+	stemPath := filepath.Join(dir, ".stem")
+	snapshots := []struct {
+		kind   string
+		before string
+		after  string
+	}{
+		{"prefix_changed", `{"prefix":"T"}`, `{"prefix":"F"}`},
+		{"digits_changed", `{"digits":3}`, `{"digits":2}`},
+		{"match_changed", `{"match":{"patterns":["T*"]}}`, `{"match":{"patterns":["F*"]}}`},
+		{"required_match_changed", `{"required_match":{"patterns":["T*"]}}`, `{"required_match":{"patterns":["F*"]}}`},
+		{"excludes_changed", `{"excludes":{"match":"README.md"}}`, `{"excludes":{"match":"index.md"}}`},
+		{"rule_removed", `{"field":"","if":{"status":"draft"},"rule":"requires","severity":"error","then":{"fields":["owner"]}}`, ""},
+		{"rule_added", "", `{"field":"","if":{"status":"published"},"rule":"requires","severity":"error","then":{"fields":["reviewer"]}}`},
+	}
+	for _, format := range []string{"json", "table"} {
+		t.Run(format, func(t *testing.T) {
+			var first string
+			for i := range 5 {
+				out, err := runCmd(t, "migrate", stemPath, "--from", beforePath, "-o", format)
+				if err != nil {
+					t.Fatalf("unexpected error: %v\noutput: %s", err, out)
+				}
+				if i == 0 {
+					first = out
+				} else if out != first {
+					t.Fatalf("run %d changed output:\n%s\nwant:\n%s", i, out, first)
+				}
+				if format == "table" {
+					for _, snapshot := range snapshots {
+						for _, value := range []string{snapshot.kind, snapshot.before, snapshot.after} {
+							if !strings.Contains(out, value) {
+								t.Errorf("table omits %q:\n%s", value, out)
+							}
+						}
+					}
+					continue
+				}
+				var envelope map[string]json.RawMessage
+				if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+					t.Fatal(err)
+				}
+				if len(envelope) != 6 || string(envelope["version"]) != "1" || string(envelope["kind"]) != `"rootline/migrate-diff"` {
+					t.Fatalf("diff envelope changed: %s", out)
+				}
+				if string(envelope["total_count"]) != "7" || string(envelope["breaking_count"]) != "6" {
+					t.Fatalf("attribute changes were lost: %s", out)
+				}
+				var changes []struct {
+					Kind   string `json:"kind"`
+					Before string `json:"before"`
+					After  string `json:"after"`
+				}
+				if err := json.Unmarshal(envelope["changes"], &changes); err != nil {
+					t.Fatal(err)
+				}
+				if len(changes) != len(snapshots) {
+					t.Fatalf("changes = %d, want %d", len(changes), len(snapshots))
+				}
+				for _, snapshot := range snapshots {
+					found := false
+					for _, change := range changes {
+						if change.Kind == snapshot.kind {
+							found = true
+							if change.Before != snapshot.before || change.After != snapshot.after {
+								t.Errorf("%s snapshots = %q → %q, want %q → %q", change.Kind, change.Before, change.After, snapshot.before, snapshot.after)
+							}
+						}
+					}
+					if !found {
+						t.Errorf("missing %s", snapshot.kind)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestMigrateDiffNoChanges(t *testing.T) {
 	stem := `version: 2
 schema:

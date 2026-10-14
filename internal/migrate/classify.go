@@ -54,7 +54,7 @@ func isAffected(c Change, r *extract.Record) bool {
 		}
 		return fmt.Sprintf("%v", val) == c.Before
 
-	case TypeChanged:
+	case TypeChanged, PrefixChanged, DigitsChanged:
 		// Files that have this field are affected (their values may become invalid).
 		_, exists := r.Frontmatter[c.Field]
 		return exists
@@ -71,6 +71,10 @@ func isAffected(c Change, r *extract.Record) bool {
 
 	case RuleAdded:
 		// New rules could affect all existing records.
+		return true
+
+	case MatchChanged, RequiredMatchChanged, ExcludesChanged:
+		// Applicability edits can expose any record to a different constraint set.
 		return true
 
 	case FieldAdded, EnumValueAdded, RequiredRemoved, DefaultChanged, SeverityChanged:
