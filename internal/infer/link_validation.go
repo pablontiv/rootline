@@ -8,69 +8,53 @@ import (
 	"github.com/pablontiv/rootline/internal/rules"
 )
 
-// DetectLinkTypes validates observed link types against a schema's allowed list.
-// If LinkSchema.Allowed is defined, it validates observed link types against the list.
-// If Allowed is empty, it infers allowed types from observed links using consensus ≥80%.
-func DetectLinkTypes(records []*extract.Record, schema rules.LinkSchema) []Inference {
-	// Collect all link types across all records.
+// DetectLinkTypes validates each record's links against its effective allowed list.
+// Records without an allowed list contribute to a global ≥80% consensus suggestion.
+func DetectLinkTypes(records []*extract.Record, schemas map[string]rules.LinkSchema) []Inference {
 	typeCounts := make(map[string]int)
 	totalLinks := 0
-	type linkOccurrence struct {
-		source   string
-		linkType string
-	}
-	var allLinks []linkOccurrence
+	var inferences []Inference
+	seen := make(map[string]map[string]bool)
 
 	for _, rec := range records {
+		schema := schemas[rec.Path]
 		for _, link := range rec.Links {
-			typeCounts[link.Type]++
-			totalLinks++
-			allLinks = append(allLinks, linkOccurrence{
-				source:   rec.Path,
-				linkType: link.Type,
-			})
-		}
-	}
-
-	if totalLinks == 0 {
-		return nil
-	}
-
-	var inferences []Inference
-
-	if len(schema.Allowed) > 0 {
-		// Validate mode: check observed types against allowed list.
-		allowed := make(map[string]bool, len(schema.Allowed))
-		for _, a := range schema.Allowed {
-			allowed[a] = true
-		}
-
-		// Track violations per source to avoid duplicates.
-		seen := make(map[string]map[string]bool)
-		for _, occ := range allLinks {
-			if allowed[occ.linkType] {
+			if len(schema.Allowed) == 0 {
+				typeCounts[link.Type]++
+				totalLinks++
 				continue
 			}
-			if seen[occ.source] == nil {
-				seen[occ.source] = make(map[string]bool)
+
+			allowed := false
+			for _, linkType := range schema.Allowed {
+				if link.Type == linkType {
+					allowed = true
+					break
+				}
 			}
-			if seen[occ.source][occ.linkType] {
+			if allowed {
 				continue
 			}
-			seen[occ.source][occ.linkType] = true
+			if seen[rec.Path] == nil {
+				seen[rec.Path] = make(map[string]bool)
+			}
+			if seen[rec.Path][link.Type] {
+				continue
+			}
+			seen[rec.Path][link.Type] = true
 
 			inferences = append(inferences, Inference{
 				Type:    "link_type_violation",
-				Source:  occ.source,
+				Source:  rec.Path,
 				Field:   "links.allowed",
-				Value:   occ.linkType,
-				Message: fmt.Sprintf("link type %q is not in allowed list %v", occ.linkType, schema.Allowed),
+				Value:   link.Type,
+				Message: fmt.Sprintf("link type %q is not in allowed list %v", link.Type, schema.Allowed),
 			})
 		}
-	} else {
-		// Inference mode: suggest allowed types based on consensus ≥80%.
-		threshold := float64(totalLinks) * 0.8
+	}
 
+	if totalLinks > 0 {
+		threshold := float64(totalLinks) * 0.8
 		var suggested []string
 		for linkType, count := range typeCounts {
 			if float64(count) >= threshold {

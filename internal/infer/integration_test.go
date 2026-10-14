@@ -41,7 +41,7 @@ func TestIntegrationLinkValidationWithFixtures(t *testing.T) {
 	records := loadFixtures(t, "testdata/fixtures")
 
 	// Inference mode (no allowed list): "reference" is the only link type in fixtures.
-	got := DetectLinkTypes(records, rules.LinkSchema{})
+	got := DetectLinkTypes(records, nil)
 	// All links are type "reference" (wiki-links default), so 100% consensus.
 	found := false
 	for _, inf := range got {
@@ -54,8 +54,11 @@ func TestIntegrationLinkValidationWithFixtures(t *testing.T) {
 	}
 
 	// Validate mode: only "reference" allowed — should produce no violations.
-	schema := rules.LinkSchema{Allowed: []string{"reference"}}
-	violations := DetectLinkTypes(records, schema)
+	schemas := make(map[string]rules.LinkSchema, len(records))
+	for _, rec := range records {
+		schemas[rec.Path] = rules.LinkSchema{Allowed: []string{"reference"}}
+	}
+	violations := DetectLinkTypes(records, schemas)
 	for _, v := range violations {
 		if v.Type == "link_type_violation" {
 			t.Errorf("unexpected violation: %s", v.Message)
@@ -147,7 +150,7 @@ func TestIntegrationEmptyRecordsNoPanic(t *testing.T) {
 	var empty []*extract.Record
 
 	// None of these should panic.
-	got5 := DetectLinkTypes(empty, rules.LinkSchema{})
+	got5 := DetectLinkTypes(empty, nil)
 	got7 := DetectMissingBackReferences(graph.Build(context.Background(), empty))
 	got8 := DetectConstantFields(empty)
 	got10 := DetectCrossReferences(empty, t.TempDir())
@@ -172,7 +175,7 @@ func TestIntegrationSingleRecordNoPanic(t *testing.T) {
 	}
 
 	// Should not panic with 1 record.
-	_ = DetectLinkTypes(records, rules.LinkSchema{})
+	_ = DetectLinkTypes(records, nil)
 	_ = DetectMissingBackReferences(graph.Build(context.Background(), records))
 	_ = DetectConstantFields(records) // <3 records, returns nil
 	_ = DetectCrossReferences(records, t.TempDir())
@@ -194,7 +197,7 @@ func TestAllDetectorsReturnSliceNotNil(t *testing.T) {
 		t.Error("ConstantFields: expected non-nil slice when inferences are produced")
 	}
 
-	got5 := DetectLinkTypes(records, rules.LinkSchema{})
+	got5 := DetectLinkTypes(records, nil)
 	if got5 == nil {
 		t.Error("LinkValidation: expected non-nil slice when inferences are produced")
 	}

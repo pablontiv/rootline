@@ -9,7 +9,7 @@ import (
 
 func TestDetectLinkTypesNoLinks(t *testing.T) {
 	records := makeRecords(map[string]any{"title": "a"})
-	got := DetectLinkTypes(records, rules.LinkSchema{})
+	got := DetectLinkTypes(records, nil)
 	if len(got) != 0 {
 		t.Errorf("expected no inferences for records without links, got %d", len(got))
 	}
@@ -28,7 +28,7 @@ func TestDetectLinkTypesViolation(t *testing.T) {
 	}
 	schema := rules.LinkSchema{Allowed: []string{"blocks", "reference"}}
 
-	got := DetectLinkTypes(records, schema)
+	got := DetectLinkTypes(records, map[string]rules.LinkSchema{"a.md": schema})
 	if len(got) != 1 {
 		t.Fatalf("expected 1 violation, got %d", len(got))
 	}
@@ -53,7 +53,7 @@ func TestDetectLinkTypesViolationDedup(t *testing.T) {
 	}
 	schema := rules.LinkSchema{Allowed: []string{"reference"}}
 
-	got := DetectLinkTypes(records, schema)
+	got := DetectLinkTypes(records, map[string]rules.LinkSchema{"a.md": schema})
 	if len(got) != 1 {
 		t.Errorf("expected 1 deduped violation, got %d", len(got))
 	}
@@ -72,7 +72,7 @@ func TestDetectLinkTypesAllAllowed(t *testing.T) {
 	}
 	schema := rules.LinkSchema{Allowed: []string{"blocks", "reference"}}
 
-	got := DetectLinkTypes(records, schema)
+	got := DetectLinkTypes(records, map[string]rules.LinkSchema{"a.md": schema})
 	if len(got) != 0 {
 		t.Errorf("expected no violations when all links are allowed, got %d", len(got))
 	}
@@ -89,9 +89,7 @@ func TestDetectLinkTypesSuggestion(t *testing.T) {
 	records := []*extract.Record{
 		{Path: "a.md", Frontmatter: map[string]any{}, Links: links},
 	}
-	schema := rules.LinkSchema{} // No Allowed defined
-
-	got := DetectLinkTypes(records, schema)
+	got := DetectLinkTypes(records, nil)
 	if len(got) != 1 {
 		t.Fatalf("expected 1 suggestion, got %d", len(got))
 	}
@@ -115,8 +113,35 @@ func TestDetectLinkTypesNoSuggestionBelowThreshold(t *testing.T) {
 		},
 	}
 
-	got := DetectLinkTypes(records, rules.LinkSchema{})
+	got := DetectLinkTypes(records, nil)
 	if len(got) != 0 {
 		t.Errorf("expected no suggestions below threshold, got %d", len(got))
+	}
+}
+
+func TestDetectLinkTypesPerRecordSchemas(t *testing.T) {
+	records := []*extract.Record{
+		{Path: "allowed.md", Links: []extract.Link{{Type: "blocks"}}},
+		{Path: "forbidden.md", Links: []extract.Link{{Type: "blocks"}, {Type: "blocks"}, {Type: "extends"}}},
+		{Path: "bootstrap.md", Links: []extract.Link{{Type: "reference"}}},
+		{Path: "empty.md", Links: []extract.Link{{Type: "reference"}}},
+	}
+	schemas := map[string]rules.LinkSchema{
+		"allowed.md":   {Allowed: []string{"blocks"}},
+		"forbidden.md": {Allowed: []string{"reference"}},
+		"empty.md":     {},
+	}
+
+	got := DetectLinkTypes(records, schemas)
+	if len(got) != 3 {
+		t.Fatalf("expected 2 deduped violations and 1 global suggestion, got %v", got)
+	}
+	for i, value := range []string{"blocks", "extends"} {
+		if got[i].Type != "link_type_violation" || got[i].Source != "forbidden.md" || got[i].Value != value {
+			t.Errorf("violation %d = %+v, want forbidden.md %s", i, got[i], value)
+		}
+	}
+	if got[2].Type != "link_type_suggestion" || got[2].Source != "" || got[2].Value != "[reference]" {
+		t.Errorf("global suggestion = %+v, want [reference] from records without allowed lists", got[2])
 	}
 }
