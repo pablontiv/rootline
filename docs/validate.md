@@ -51,8 +51,10 @@ Batch validation runs four phases in order:
    - `nested-root-marker` — reports (info) a `.stem` that declares `root: true` below another one that already does, since records under it stop inheriting the ancestor
 
 2. **Document Validation** — Checks each record against its effective schema: required fields, enum values, non_empty, exists, requires rules. When the effective `.stem` declares `links.checks`, link targets are resolved here too — see [Link resolution](#link-resolution).
-3. **Structural Validation** — Directory-level rules: `require_index` (each subdirectory must contain the configured index file), `min_children`/`max_children` constraints. Checks record-bearing directories and their governed ancestors, including a root or intermediate directory with no direct Markdown records.
+3. **Structural Validation** — Directory-level rules: `require_index` (each subdirectory must contain a regular file at the configured index path), `min_children`/`max_children` constraints. Checks record-bearing directories and their governed ancestors, including a root or intermediate directory with no direct Markdown records.
 4. **Drift Detection** — Warns when an index file's field value contradicts its children (e.g., parent says "Completed" but children are "Pending").
+
+`require_index` follows symlinks: a link to a regular file satisfies the rule, a link to a directory does not, and a dangling link is reported as missing. Missing paths retain the `require_index` missing-file diagnostic; directories and other non-regular entries produce a `require_index` diagnostic stating `not a regular file`. Other failures to stat the index path surface as `structural` I/O diagnostics rather than silently passing or being reported as missing. These findings use the configured structural severity.
 
 ## Link resolution
 
