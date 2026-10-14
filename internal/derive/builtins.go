@@ -2,8 +2,8 @@ package derive
 
 import (
 	"fmt"
-	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -77,28 +77,47 @@ func BuiltinOptions() []expr.Option {
 		),
 		expr.Function("concat",
 			func(params ...any) (any, error) {
-				parts := make([]string, len(params))
-				for i, p := range params {
-					parts[i] = toString(p)
+				var result strings.Builder
+				var digits [20]byte
+				for _, p := range params {
+					switch v := p.(type) {
+					case nil:
+						// Preserve nil as empty text.
+					case string:
+						result.WriteString(v)
+					case bool:
+						result.WriteString(strconv.FormatBool(v))
+					case int:
+						result.Write(strconv.AppendInt(digits[:0], int64(v), 10))
+					case int8:
+						result.Write(strconv.AppendInt(digits[:0], int64(v), 10))
+					case int16:
+						result.Write(strconv.AppendInt(digits[:0], int64(v), 10))
+					case int32:
+						result.Write(strconv.AppendInt(digits[:0], int64(v), 10))
+					case int64:
+						result.Write(strconv.AppendInt(digits[:0], v, 10))
+					case uint:
+						result.Write(strconv.AppendUint(digits[:0], uint64(v), 10))
+					case uint8:
+						result.Write(strconv.AppendUint(digits[:0], uint64(v), 10))
+					case uint16:
+						result.Write(strconv.AppendUint(digits[:0], uint64(v), 10))
+					case uint32:
+						result.Write(strconv.AppendUint(digits[:0], uint64(v), 10))
+					case uint64:
+						result.Write(strconv.AppendUint(digits[:0], v, 10))
+					case uintptr:
+						result.Write(strconv.AppendUint(digits[:0], uint64(v), 10))
+					default:
+						return nil, fmt.Errorf("concat: unsupported argument type %T", p)
+					}
 				}
-				return strings.Join(parts, ""), nil
+				return result.String(), nil
 			},
 			new(func(...any) string),
 		),
 	}
-}
-
-// toString converts any value to its string representation.
-func toString(v any) string {
-	if v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	rv := reflect.ValueOf(v)
-	return strings.TrimRight(strings.TrimRight(
-		strings.Replace(rv.String(), "<", "", 1), ">"), " ")
 }
 
 // NewEvaluatorWithBuiltins creates an Evaluator pre-loaded with all builtins.
