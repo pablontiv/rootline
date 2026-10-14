@@ -51,6 +51,63 @@ func TestParseLinks_TildeFencedCodeBlock(t *testing.T) {
 	}
 }
 
+func TestParseLinks_FenceMarkerAndLength(t *testing.T) {
+	cases := []struct {
+		name   string
+		open   string
+		middle string
+		close  string
+	}{
+		{name: "matching backticks", open: "```", close: "```"},
+		{name: "matching tildes", open: "~~~", close: "~~~"},
+		{name: "tildes inside backticks", open: "```", middle: "~~~~", close: "```"},
+		{name: "backticks inside tildes", open: "~~~", middle: "````", close: "~~~"},
+		{name: "shorter backticks", open: "````", middle: "```", close: "````"},
+		{name: "shorter tildes", open: "~~~~", middle: "~~~", close: "~~~~"},
+		{name: "longer backtick closer", open: "````", middle: "```", close: "`````"},
+		{name: "longer tilde closer", open: "~~~~", middle: "~~~", close: "~~~~~"},
+		{name: "unclosed backticks after tildes", open: "```", middle: "~~~"},
+		{name: "unclosed tildes after backticks", open: "~~~", middle: "```"},
+		{name: "unclosed backticks after shorter run", open: "````", middle: "```"},
+		{name: "unclosed tildes after shorter run", open: "~~~~", middle: "~~~"},
+		{name: "space indented backticks", open: "    ````go  ", middle: "  ~~~", close: "    ````  "},
+		{name: "tab indented tildes", open: "\t~~~~text\t", middle: "\t~~~", close: "\t~~~~~\t"},
+		{name: "links on fence lines", open: "``` [[opener]] [opener](opener.md)", close: "``` [[closer]] [closer](closer.md)"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := strings.Join([]string{
+				"[[before]] [before](before.md)",
+				tc.open,
+				"[[hidden-before]] [hidden-before](hidden-before.md)",
+				tc.middle,
+				"[[hidden-after]] [hidden-after](hidden-after.md)",
+				tc.close,
+				"[[after]] [after](after.md)",
+			}, "\n")
+			want := []Link{
+				{Target: "before", Type: "reference", Line: 1, Source: "body", Style: StyleWikilink},
+				{Target: "before.md", Type: "reference", Line: 1, Source: "body", Style: StyleMarkdown},
+			}
+			if tc.close != "" {
+				want = append(want,
+					Link{Target: "after", Type: "reference", Line: 7, Source: "body", Style: StyleWikilink},
+					Link{Target: "after.md", Type: "reference", Line: 7, Source: "body", Style: StyleMarkdown},
+				)
+			}
+			links := ParseLinks(body)
+			if len(links) != len(want) {
+				t.Fatalf("expected %d links, got %d: %+v", len(want), len(links), links)
+			}
+			for i, expected := range want {
+				if links[i] != expected {
+					t.Errorf("link %d: got %+v, want %+v", i, links[i], expected)
+				}
+			}
+		})
+	}
+}
+
 func TestParseLinks_InlineCode(t *testing.T) {
 	links := ParseLinks("use `[[ignored]]` here")
 	if len(links) != 0 {

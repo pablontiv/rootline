@@ -17,6 +17,12 @@ Links are declared inline in document body:
 
 Format: `[[type:target]]` or `[[target]]` (untyped). Links inside fenced code blocks and inline code are ignored.
 
+Both wiki-links and Markdown links remain ignored until a fenced block closes
+with the same marker (backticks or tildes) and at least as many marker characters
+as its opening fence. A different marker or shorter run is still code content,
+not a closing fence. Fence detection continues to accept surrounding whitespace,
+including indented fence lines.
+
 ## Link Schema in .stem
 
 ```yaml
