@@ -1,5 +1,8 @@
 version: 2
 
+snapshot:
+  version_template: "{{ incpatch .Version }}-pr.{{ .Env.PR_NUMBER }}.g{{ .ShortCommit }}"
+
 before:
   hooks:
     - go mod tidy
