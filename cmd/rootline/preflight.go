@@ -117,7 +117,7 @@ func commandScanRoot(cmd *cobra.Command, args []string) (string, error) {
 }
 
 func isRepairApplyCommand(cmd *cobra.Command) bool {
-	return cmd.Name() == "repair" || (cmd.Name() == "apply" && cmd.Parent() != nil && cmd.Parent().Name() == "repair")
+	return cmd.Name() == "apply" && cmd.Parent() != nil && cmd.Parent().Name() == "repair"
 }
 
 func boundaryPreflightTarget(cmd *cobra.Command, args []string) (string, *repairInvocation, error) {

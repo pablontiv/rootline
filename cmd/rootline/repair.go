@@ -19,19 +19,17 @@ var (
 )
 
 var repairCmd = &cobra.Command{
-	Use:   "repair apply --report <file> [--dry-run]",
-	Short: "Apply data-only repair fixes to document frontmatter",
-	Long: `Apply repair proposals from a fix report (produced by 'rootline fix --all <dir> --dry-run -o json') to document frontmatter.
+	Use:   "repair",
+	Short: "Data-only repair operations for document frontmatter",
+	Long: `Apply data-only repairs to document frontmatter with:
+  rootline repair apply --report <file>
 
-Only version 1 rootline/proposals reports are accepted; analyze reports contain
-schema and diagnostic inferences rather than document repair proposals.
+Only version 1 rootline/proposals reports are accepted. Generate a fix report with:
+  rootline fix --all <dir> --dry-run -o json
 
-Repair-surface proposals (correct_value, add_field, migrate_value, etc.)
-are applied. Schema proposals (extend_enum, add_aggregate, etc.) are rejected
-and appear in the output under Rejected.
-
-Use --dry-run to preview changes without modifying files.`,
-	RunE: runRepairApply,
+Analyze reports contain schema and diagnostic inferences rather than document
+repair proposals and are not accepted. Use 'rootline repair apply --help' for
+application options.`,
 }
 
 var repairApplyCmd = &cobra.Command{
@@ -67,9 +65,6 @@ type repairInvocation struct {
 }
 
 func prepareRepairInvocation(cmd *cobra.Command) (*repairInvocation, error) {
-	if cmd.Flags().Lookup("report") == nil {
-		return nil, fmt.Errorf("--report is required")
-	}
 	reportFile, err := cmd.Flags().GetString("report")
 	if err != nil {
 		return nil, err

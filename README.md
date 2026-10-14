@@ -240,7 +240,8 @@ Analyze patterns and manage schema evolution.
   - `rootline schema propose [directory]` — Generate schema proposals
   - `rootline schema apply --report <file>` — Apply schema proposals to `.stem` files
 
-- **`repair`** — Apply data-only repairs from analyze report
+- **`repair`** — Apply data-only repairs from version 1 `rootline/proposals` fix reports
+  - Generate a report with `rootline fix --all <dir> --dry-run -o json`
   - `rootline repair apply --report <file>` — Fix frontmatter only (not `.stem`)
   - `rootline repair apply --report <file> --dry-run` — Preview repairs
 
