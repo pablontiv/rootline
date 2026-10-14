@@ -11,7 +11,7 @@ import (
 
 	"github.com/pablontiv/rootline/internal/fsx"
 	"github.com/pablontiv/rootline/internal/gitenv"
-	"gopkg.in/yaml.v3"
+	"github.com/pablontiv/rootline/internal/rules"
 )
 
 // ParseRef parses "owner/repo[@tag]" or "github.com/owner/repo[@tag]".
@@ -36,7 +36,7 @@ func ParseRef(ref string) (owner, repo, tag string) {
 }
 
 // FetchFromURL clones a git repo URL to a temp dir, finds .stem files,
-// validates YAML, and copies them to dest preserving relative paths.
+// validates each with the production .stem parser, and copies them to dest preserving relative paths.
 // Supports force (overwrite existing) and dryRun (list only, no copy).
 // Uses GIT_TERMINAL_PROMPT=0 and a 30s timeout.
 func FetchFromURL(url, tag, dest string, force, dryRun bool) ([]string, error) {
@@ -102,25 +102,23 @@ func FetchFromURL(url, tag, dest string, force, dryRun bool) ([]string, error) {
 		return nil, fmt.Errorf("no .stem files found in %s", url)
 	}
 
-	// Validate YAML and compute relative paths.
+	// Parse every .stem before copying any files, including in dry-run mode.
 	type stemEntry struct {
 		absPath string
 		relPath string
 	}
 	entries := make([]stemEntry, 0, len(stemFiles))
 	for _, absPath := range stemFiles {
-		data, err := os.ReadFile(absPath)
-		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", absPath, err)
-		}
-		var v any
-		if err := yaml.Unmarshal(data, &v); err != nil {
-			relName, _ := filepath.Rel(tmpDir, absPath)
-			return nil, fmt.Errorf("invalid .stem file %s: %w", relName, err)
-		}
 		relPath, err := filepath.Rel(tmpDir, absPath)
 		if err != nil {
 			return nil, fmt.Errorf("computing relative path: %w", err)
+		}
+		data, err := os.ReadFile(absPath)
+		if err != nil {
+			return nil, fmt.Errorf("reading %s: %w", relPath, err)
+		}
+		if _, err := rules.ParseStem(relPath, data); err != nil {
+			return nil, fmt.Errorf("invalid .stem file %s: %w", relPath, err)
 		}
 		entries = append(entries, stemEntry{absPath: absPath, relPath: relPath})
 	}
