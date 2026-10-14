@@ -187,6 +187,35 @@ func runMigrateDiff(cmd *cobra.Command, args []string) error {
 		results = append(results, result)
 	}
 
+	// Resolve every baseline before scanning so a failed comparison never
+	// produces partial results or gets masked by a document extraction error.
+	reg := extract.NewRegistry()
+	for _, result := range results {
+		// Alternate schema filenames are valid diff inputs, but they do not
+		// govern records through .stem discovery.
+		if filepath.Base(result.StemPath) != ".stem" {
+			continue
+		}
+		root := filepath.Dir(result.StemPath)
+		records, scanErr := index.Scan(cmd.Context(), root, reg, index.WithScopeResolver(func(dir string) (*rules.StemFile, error) {
+			entries, err := rules.WalkUp(dir)
+			if err != nil {
+				return nil, err
+			}
+			for _, entry := range entries {
+				if entry.Path == result.StemPath {
+					return rules.MergeStemFiles(entries), nil
+				}
+			}
+			// A nested governance root does not inherit this target stem.
+			return nil, nil
+		}))
+		if scanErr != nil {
+			return fmt.Errorf("scanning records for %s: %w", result.StemPath, scanErr)
+		}
+		migrate.Classify(result, records)
+	}
+
 	if len(results) == 1 {
 		return renderMigrateResult(cmd, results[0])
 	}
