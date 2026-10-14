@@ -64,8 +64,8 @@ func ParseSortKeys(spec string) ([]SortKey, error) {
 	return keys, nil
 }
 
-// ValidateSortKeys rejects a sort key naming a field nothing in scope can
-// provide.
+// ValidateSortKeys rejects complex builtins and sort keys naming fields nothing
+// in scope can provide.
 //
 // SortRecords treats "absent on both records" as "equal", so an unknown key
 // left every comparison falling through and sort.SliceStable preserved scan
@@ -75,13 +75,13 @@ func ParseSortKeys(spec string) ([]SortKey, error) {
 // knownFields is the same set the where-expression check uses — builtins,
 // every key the corpus carries, and every field the effective schema declares.
 // An empty set means there was nothing to validate against (no records, no
-// schema), and every key passes rather than every key failing.
+// schema), so unknown keys pass, but complex builtins are still rejected.
 func ValidateSortKeys(keys []SortKey, knownFields []string) error {
-	if len(keys) == 0 || len(knownFields) == 0 {
-		return nil
-	}
 	for _, key := range keys {
-		if slices.Contains(knownFields, key.Field) {
+		if key.Field == "sections" {
+			return fmt.Errorf("unsupported sort field %q: complex builtin fields cannot be sorted", key.Field)
+		}
+		if len(knownFields) == 0 || slices.Contains(knownFields, key.Field) {
 			continue
 		}
 		if suggestion := fuzzy.Match(key.Field, knownFields); suggestion != "" {
@@ -106,8 +106,8 @@ func SortRecords(records []*extract.Record, keys []SortKey, schema map[string]ru
 	sort.SliceStable(records, func(i, j int) bool {
 		for _, key := range keys {
 			// Check nil/missing first -- nil always sorts last regardless of direction.
-			_, okA := records[i].EffectiveField(key.Field)
-			_, okB := records[j].EffectiveField(key.Field)
+			va, okA := sortValue(records[i], key.Field)
+			vb, okB := sortValue(records[j], key.Field)
 			if !okA && !okB {
 				continue
 			}
@@ -118,7 +118,7 @@ func SortRecords(records []*extract.Record, keys []SortKey, schema map[string]ru
 				return true // b is nil, sorts after a
 			}
 
-			cmp := compareField(records[i], records[j], key.Field, enumIndexes[key.Field])
+			cmp := compareField(va, vb, enumIndexes[key.Field])
 			if cmp == 0 {
 				continue
 			}
@@ -129,6 +129,20 @@ func SortRecords(records []*extract.Record, keys []SortKey, schema map[string]ru
 		}
 		return false
 	})
+}
+
+// sortValue resolves scalar builtins before derived and frontmatter fields.
+func sortValue(record *extract.Record, field string) (any, bool) {
+	switch field {
+	case "path":
+		return record.Path, true
+	case "body":
+		return record.Body, true
+	case "type":
+		return record.Type, true
+	default:
+		return record.EffectiveField(field)
+	}
 }
 
 // buildEnumIndexes creates value-to-position maps for enum sort keys.
@@ -151,24 +165,8 @@ func buildEnumIndexes(keys []SortKey, schema map[string]rules.SchemaField) map[s
 	return indexes
 }
 
-// compareField compares two records on a single field.
-// Returns -1, 0, or 1.
-// nil/missing values always compare as "greater" (sort last).
-func compareField(a, b *extract.Record, field string, enumIndex map[string]int) int {
-	va, okA := a.EffectiveField(field)
-	vb, okB := b.EffectiveField(field)
-
-	// Handle nil/missing: nil sorts last (regardless of direction -- caller handles inversion).
-	if !okA && !okB {
-		return 0
-	}
-	if !okA {
-		return 1 // a is nil, sorts after b
-	}
-	if !okB {
-		return -1 // b is nil, sorts after a
-	}
-
+// compareField compares two present field values and returns -1, 0, or 1.
+func compareField(va, vb any, enumIndex map[string]int) int {
 	// Enum ordering: if we have an index map, use positional comparison.
 	if enumIndex != nil {
 		sa := fmt.Sprintf("%v", va)

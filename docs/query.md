@@ -29,7 +29,13 @@ The `--sort` flag accepts a comma-separated list of `field:direction` pairs. Dir
 ```bash
 rootline query --sort "prioridad:asc,impact_score:desc"
 rootline query --where 'estado == "Pending"' --sort "prioridad:asc"
+rootline query docs/ --sort "path:desc"
 ```
+
+The scalar builtins `path`, `body`, and `type` sort directly from the record,
+before any same-named derived or frontmatter field. Other fields resolve derived
+values before frontmatter. Sorting by `path:asc` or `path:desc` orders record paths
+deterministically in ascending or descending order.
 
 Sort type detection per field:
 1. **Enum fields**: If the field has a `.stem` schema with `type: enum` and `values: [...]`, sorts by index position in the values list.
@@ -45,7 +51,14 @@ $ rootline query docs/ --sort "estadoo:asc"
 Error: unknown sort field "estadoo": no record carries it and no .stem in scope declares it (did you mean "estado"?)
 ```
 
-An unsortable key cannot produce a defensible result — every comparison falls through, the output is silently in scan order, and it is indistinguishable from a correct sort. The legal names are the same set `--where` checks against, taken from the corpus **before** `--where` narrows it, so a filter that matches nothing does not invalidate a valid sort key.
+The known names are the same set `--where` checks against, taken from the corpus **before** `--where` narrows it, so a filter that matches nothing does not invalidate a valid sort key. The complex builtin `sections` is not sortable and always fails explicitly, even when there are no known fields:
+
+```console
+$ rootline query docs/ --sort "sections"
+Error: unsupported sort field "sections": complex builtin fields cannot be sorted
+```
+
+When there are neither records nor schema fields to check against, unknown names remain accepted; the explicit `sections` rejection still applies.
 
 ### Link Traversal Predicates
 
