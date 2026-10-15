@@ -113,7 +113,7 @@ fix-docs:
 dagu-version:
     dagu version
 
-# Validate both repo-owned lifecycle DAGs
+# Validate both stamped @a4s/omp-dagu 0.2.0 lifecycle DAGs (a4s@3654f16)
 dagu-validate:
     dagu validate .workspace/dagu/dags/feature.yaml
     dagu validate .workspace/dagu/dags/poc.yaml

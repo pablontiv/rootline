@@ -1,5 +1,7 @@
+# dagu-feature-bundle: @a4s/omp-dagu@0.2.0 source=pablontiv/a4s@3654f1646aba40298a6cd7ade2812c91acf94a84 bootstrap=bootstrap-rootline-v0-2-0 dagu=2.19.2
 labels:
   - workspace=rootline
+  - dagu-feature-bundle=0.2.0
 queue: rootline
 type: graph
 dotenv: []
@@ -40,6 +42,7 @@ params:
 env:
   - WORKTREE: ${PRIMARY}/.workspace/worktrees/issue-${ISSUE}
   - RUN: ${context.run.id}
+  - DAGU_FEATURE_BUNDLE: "dagu-feature-bundle=0.2.0 source=pablontiv/a4s@3654f1646aba40298a6cd7ade2812c91acf94a84 bootstrap=bootstrap-rootline-v0-2-0"
 steps:
   - id: triage
     action: human.task
@@ -76,9 +79,159 @@ steps:
       - REVIEW: ${steps.triage.outputs.REVIEW}
     run: |
       set -euo pipefail
+      verify_triage_reviewer() {
+        local canonical home tmp encoded sessions_dir transcript expected_parent
+        local rest triage_count cutoff required
+        for required in PRIMARY OMP_SESSION_ID REVIEW RUN; do
+          if [[ -z "${!required:-}" ]]; then
+            printf 'check.params=FAIL name=%s\nVERIFIER=FAIL\n' "$required"
+            return 1
+          fi
+        done
+        printf 'check.params=PASS\n'
+        case "$REVIEW" in
+          ''|.|..|*[!A-Za-z0-9._-]*)
+            printf 'check.review_name=FAIL value=%q\nVERIFIER=FAIL\n' "$REVIEW"
+            return 1
+            ;;
+          *) printf 'check.review_name=PASS\n' ;;
+        esac
+
+        printf 'rest.url=http://127.0.0.1:%s/api/v1/dag-runs/feature/%s\n' "${DAGU_PORT:-8080}" "$RUN"
+        if ! rest=$(curl -fsS "http://127.0.0.1:${DAGU_PORT:-8080}/api/v1/dag-runs/feature/$RUN"); then
+          printf 'check.rest=FAIL\nVERIFIER=FAIL\n'
+          return 1
+        fi
+        if ! triage_count=$(jq -er '[.dagRunDetails.nodes[]? | select(.step.id == "triage")] | length' <<<"$rest"); then
+          printf 'check.rest_json=FAIL\nVERIFIER=FAIL\n'
+          return 1
+        fi
+        printf 'triage.node_count=%s\n' "$triage_count"
+        if [[ "$triage_count" != 1 ]]; then
+          printf 'check.rest_triage_node=FAIL\nVERIFIER=FAIL\n'
+          return 1
+        fi
+        if ! cutoff=$(jq -er '[.dagRunDetails.nodes[]? | select(.step.id == "triage")][0].startedAt | select(type == "string" and length > 0)' <<<"$rest"); then
+          printf 'triage.startedAt=<missing>\ncheck.rest_triage_startedAt=FAIL\nVERIFIER=FAIL\n'
+          return 1
+        fi
+        printf 'triage.startedAt=%s\ncheck.rest_triage_node=PASS\n' "$cutoff"
+
+        if ! canonical=$(cd "$PRIMARY" 2>/dev/null && pwd -P); then
+          printf 'check.primary=FAIL value=%q\nVERIFIER=FAIL\n' "$PRIMARY"
+          return 1
+        fi
+        if ! home=$(cd "$HOME" 2>/dev/null && pwd -P); then
+          printf 'check.home=FAIL value=%q\nVERIFIER=FAIL\n' "$HOME"
+          return 1
+        fi
+        if ! tmp=$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd -P); then
+          printf 'check.tmp=FAIL value=%q\nVERIFIER=FAIL\n' "${TMPDIR:-/tmp}"
+          return 1
+        fi
+        encode_relative() {
+          local prefix=$1 relative=$2 result
+          result=${relative//\//-}
+          result=${result//\\/-}
+          result=${result//:/-}
+          if [[ -z "$result" ]]; then
+            printf '%s' "$prefix"
+          elif [[ "$prefix" == *- ]]; then
+            printf '%s%s' "$prefix" "$result"
+          else
+            printf '%s-%s' "$prefix" "$result"
+          fi
+        }
+        if [[ "$canonical" == "$tmp" ]]; then
+          encoded=$(encode_relative -tmp '')
+        elif [[ "$canonical" == "$tmp/"* ]]; then
+          encoded=$(encode_relative -tmp "${canonical#"$tmp/"}")
+        elif [[ "$canonical" == "$home" ]]; then
+          encoded=$(encode_relative - '')
+        elif [[ "$canonical" == "$home/"* ]]; then
+          encoded=$(encode_relative - "${canonical#"$home/"}")
+        else
+          encoded=${canonical#/}
+          encoded=${encoded//\//-}
+          encoded=${encoded//\\/-}
+          encoded=${encoded//:/-}
+          encoded="--${encoded}--"
+        fi
+        sessions_dir="$HOME/.omp/agent/sessions/$encoded"
+        printf 'primary.canonical=%s\nprimary.encoded=%s\nsessions.dir=%s\n' \
+          "$canonical" "$encoded" "$sessions_dir"
+
+        shopt -s nullglob
+        matches=("$sessions_dir"/*_"$OMP_SESSION_ID"/"$REVIEW".jsonl)
+        printf 'transcript.match_count=%d\n' "${#matches[@]}"
+        if [[ ${#matches[@]} -ne 1 ]]; then
+          printf 'session.parentSession=<unavailable>\n'
+          printf 'session_init.agent=<unavailable>\n'
+          printf 'session_init.task=<unavailable>\n'
+          printf 'session_init.timestamp=<unavailable>\n'
+          printf 'last_yield.details.data.poc=<unavailable>\n'
+          printf 'check.transcript_unique=FAIL\nVERIFIER=FAIL\n'
+          return 1
+        fi
+        transcript=${matches[0]}
+        expected_parent="${transcript%/*}.jsonl"
+        printf 'transcript.path=%s\nexpected.parentSession=%s\ncheck.transcript_unique=PASS\n' \
+          "$transcript" "$expected_parent"
+
+        jq -ser --arg expected_parent "$expected_parent" --arg run "$RUN" --arg cutoff "$cutoff" '
+          def rfc3339_epoch:
+            if type != "string" then null
+            else try (
+              capture("^(?<base>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\\.(?<frac>[0-9]+))?(?<zone>Z|(?<sign>[+-])(?<hour>[0-9]{2}):(?<minute>[0-9]{2}))$")
+              | ((.base + "Z") | fromdateiso8601) as $base
+              | (("0." + (.frac // "0")) | tonumber) as $fraction
+              | (if .zone == "Z" then 0
+                 else (((.hour | tonumber) * 3600 + (.minute | tonumber) * 60) * (if .sign == "+" then 1 else -1 end))
+                 end) as $offset
+              | $base + $fraction - $offset
+            ) catch null end;
+          . as $rows
+          | ($rows | map(select(.type == "session")) | first) as $session
+          | ($rows | map(select(.type == "session_init")) | first) as $init
+          | ($rows | map(select(.type == "message" and .message.role == "toolResult" and .message.toolName == "yield")) | last) as $yield
+          | ($init.timestamp | rfc3339_epoch) as $started
+          | ($cutoff | rfc3339_epoch) as $cutoff_epoch
+          | {
+              fields: {
+                parentSession: $session.parentSession,
+                agent: $init.agent,
+                task: $init.task,
+                timestamp: $init.timestamp,
+                poc: $yield.message.details.data.poc
+              },
+              checks: {
+                parentSession: ($session.parentSession == $expected_parent),
+                agent: ($init.agent == "triage-reviewer"),
+                task: (($init.task // "") | contains("TRIAGE_REVIEW AGENT=triage-reviewer DAG=feature RUN=\($run) ")),
+                timestamp: ($started != null and $cutoff_epoch != null and $started > $cutoff_epoch),
+                poc: ($yield.message.details.data.poc == "no")
+              }
+            }
+          | .overall = ([.checks[]] | all)
+          | "session.parentSession=\(.fields.parentSession // "<missing>")",
+            "session_init.agent=\(.fields.agent // "<missing>")",
+            "session_init.task=\((.fields.task // "<missing>") | @json)",
+            "session_init.timestamp=\(.fields.timestamp // "<missing>")",
+            "last_yield.details.data.poc=\(.fields.poc // "<missing>")",
+            "cutoff=\($cutoff)",
+            "check.parentSession=\(if .checks.parentSession then "PASS" else "FAIL" end)",
+            "check.agent=\(if .checks.agent then "PASS" else "FAIL" end)",
+            "check.task_run_marker=\(if .checks.task then "PASS" else "FAIL" end)",
+            "check.timestamp_after_cutoff=\(if .checks.timestamp then "PASS" else "FAIL" end)",
+            "check.last_yield_poc_no=\(if .checks.poc then "PASS" else "FAIL" end)",
+            "VERIFIER=\(if .overall then "PASS" else "FAIL" end)",
+            (if .overall then empty else halt_error(1) end)
+        ' "$transcript"
+      }
       if [[ "$POC" == no ]]; then
-        printf '%s' "$REVIEW" | jq -eRs 'gsub("\\s";"") | length > 0 and (contains("steps.triage.outputs") | not)' >/dev/null
+        verify_triage_reviewer
       fi
+
       STATE=$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-path "dagu-feature/runs/$RUN")
       mkdir -p "$STATE"
       if test -f "$STATE/dependencies"; then
@@ -105,6 +258,7 @@ steps:
         expected: "no"
     run: |
       set -euo pipefail
+      printf '%s\n' "$DAGU_FEATURE_BUNDLE"
       umask 0022
       test -n "$PRIMARY"
       test -n "$GATE" && test -n "$REQUIRED_CHECK"
@@ -166,17 +320,20 @@ steps:
           else [] end
         '
       }
-      base_dependencies=$(
-        git -C "$repo" ls-tree -r --name-only "$base" |
+      relationships() {
+        git -C "$repo" ls-tree -r --name-only "$1" |
         jq -Rr 'select(test("(^|/)(package\\.json|go\\.mod|pyproject\\.toml|requirements[^/]*\\.txt)$|\\.(ya?ml|csproj|props)$"))' |
-        while IFS= read -r path; do blob "$base" "$path" | extract "$path"; done |
-        jq -s 'add // [] | unique'
-      )
-      git -C "$repo" diff --name-only "$base" "$head" -- '*package.json' '*go.mod' '*pyproject.toml' '*requirements*.txt' '*.yaml' '*.yml' '*.csproj' '*.props' |
-      while IFS= read -r path; do
-        after=$(blob "$head" "$path" | extract "$path")
-        jq -nr --arg path "$path" --argjson before "$base_dependencies" --argjson after "$after" '$after - $before | .[] | "dependency\t\($path)\t\(.)"'
-      done > "$STATE/dependencies"
+        while IFS= read -r path; do
+          dependencies=$(blob "$1" "$path" | extract "$path")
+          jq -nr --arg path "$path" --argjson dependencies "$dependencies" \
+            '$dependencies[] | "dependency\t\($path)\t\(.)"'
+        done |
+        jq -Rsc 'split("\n") | map(select(length > 0)) | unique'
+      }
+      base_relationships=$(relationships "$base")
+      head_relationships=$(relationships "$head")
+      jq -nr --argjson before "$base_relationships" --argjson after "$head_relationships" \
+        '$after - $before | .[]' > "$STATE/dependencies"
       dirs() {
         git -C "$repo" ls-tree -r --name-only "$1" | jq -Rrs '
           split("\n") | map(select(length > 0)) | map(
@@ -238,6 +395,9 @@ steps:
 
   - id: gate
     depends: conflict_review
+    retry_policy:
+      limit: 1
+      interval_sec: 5
     run: |
       set -euo pipefail
       umask 0022
@@ -268,24 +428,8 @@ steps:
         gh pr create --base "$BASE_BRANCH" --head "$BRANCH" --fill --body "Closes #${ISSUE}"
       fi
 
-  - id: required_check
-    depends: pr
-    run: |
-      set -euo pipefail
-      cd "$WORKTREE"
-      pr_ref=${PR_NUMBER:-$BRANCH}
-      for attempt in $(seq 1 240); do
-        if test "$(gh pr checks "$pr_ref" --json name --jq 'any(.[]; .name == env.REQUIRED_CHECK)' 2>/dev/null || true)" = true; then
-          printf 'required_check=%s\nregistered_for=%s\n' "$REQUIRED_CHECK" "$pr_ref"
-          exit 0
-        fi
-        sleep 5
-      done
-      printf 'required check %s was not registered for %s\n' "$REQUIRED_CHECK" "$pr_ref" >&2
-      exit 1
-
   - id: auto_merge
-    depends: required_check
+    depends: pr
     run: |
       set -euo pipefail
       cd "$WORKTREE"
@@ -309,20 +453,47 @@ steps:
     run: |
       set -euo pipefail
       umask 0022
+      fail() { printf 'close_gate: %s\n' "$*" >&2; exit 1; }
       cd "$WORKTREE"
       sha=$(git rev-parse HEAD)
       pr_ref=${PR_NUMBER:-$BRANCH}
-      pr=$(gh pr view "$pr_ref" --json number --jq .number)
-      test "$(gh pr view "$pr" --json state --jq .state)" = MERGED
-      test "$(gh pr view "$pr" --json headRefOid --jq .headRefOid)" = "$sha"
-      test "$(gh pr checks "$pr" --required --json name,state --jq 'any(.[]; .name == env.REQUIRED_CHECK and .state == "SUCCESS")')" = true
-      test "$(git -C "$PRIMARY" branch --show-current)" = "$BASE_BRANCH"
-      test -z "$(git -C "$PRIMARY" status --porcelain)"
-      git -C "$PRIMARY" fetch origin
-      git -C "$PRIMARY" merge --ff-only "origin/$BASE_BRANCH"
-      test "$(git -C "$PRIMARY" rev-parse HEAD)" = "$(git -C "$PRIMARY" rev-parse "origin/$BASE_BRANCH")"
-      printf 'pr=%s\ntested_sha=%s\nbase_sha=%s\n' \
-        "$pr" "$sha" "$(git -C "$PRIMARY" rev-parse HEAD)"
+      if ! pr=$(gh pr view "$pr_ref" --json number --jq .number); then
+        fail "PR lookup for $pr_ref failed, expected PR number"
+      fi
+      [[ -n "$pr" ]] || fail "PR lookup for $pr_ref returned empty, expected PR number"
+      state=$(gh pr view "$pr" --json state --jq .state) ||
+        fail "PR #$pr state lookup failed, expected MERGED"
+      [[ "$state" == MERGED ]] || fail "PR #$pr state=$state, expected MERGED"
+      head_sha=$(gh pr view "$pr" --json headRefOid --jq .headRefOid) ||
+        fail "PR #$pr headRefOid lookup failed, expected $sha"
+      [[ "$head_sha" == "$sha" ]] || fail "PR #$pr headRefOid=$head_sha, expected $sha"
+      check_state=$(gh pr checks "$pr" --required --json name,state \
+        --jq 'map(select(.name == env.REQUIRED_CHECK)) | if length == 0 then "MISSING" else .[0].state end') ||
+        fail "required check $REQUIRED_CHECK lookup failed, expected SUCCESS"
+      [[ "$check_state" == SUCCESS ]] ||
+        fail "required check $REQUIRED_CHECK state=$check_state, expected SUCCESS"
+      primary_branch=$(git -C "$PRIMARY" branch --show-current) ||
+        fail "PRIMARY $PRIMARY branch lookup failed, expected $BASE_BRANCH"
+      [[ "$primary_branch" == "$BASE_BRANCH" ]] ||
+        fail "PRIMARY $PRIMARY on branch $primary_branch, expected $BASE_BRANCH"
+      primary_status=$(git -C "$PRIMARY" status --porcelain) ||
+        fail "PRIMARY $PRIMARY status lookup failed, expected clean"
+      if [[ -n "$primary_status" ]]; then
+        printf 'close_gate: PRIMARY %s has local changes, expected clean\n' "$PRIMARY" >&2
+        printf '%s\n' "$primary_status" >&2
+        exit 1
+      fi
+      git -C "$PRIMARY" fetch origin ||
+        fail "PRIMARY $PRIMARY fetch origin failed, expected success"
+      git -C "$PRIMARY" merge --ff-only "origin/$BASE_BRANCH" ||
+        fail "PRIMARY $PRIMARY ff-only merge failed, expected origin/$BASE_BRANCH"
+      base_sha=$(git -C "$PRIMARY" rev-parse HEAD) ||
+        fail "PRIMARY $PRIMARY HEAD lookup failed, expected origin/$BASE_BRANCH"
+      origin_base_sha=$(git -C "$PRIMARY" rev-parse "origin/$BASE_BRANCH") ||
+        fail "origin/$BASE_BRANCH lookup failed, expected commit SHA"
+      [[ "$base_sha" == "$origin_base_sha" ]] ||
+        fail "PRIMARY $PRIMARY HEAD=$base_sha, expected $origin_base_sha"
+      printf 'pr=%s\ntested_sha=%s\nbase_sha=%s\n' "$pr" "$sha" "$base_sha"
 
 handler_on:
   wait:
@@ -360,11 +531,32 @@ handler_on:
   exit:
     run: |
       set -euo pipefail
-      if test -e "$WORKTREE"; then
-        git -C "$PRIMARY" worktree remove --force "$WORKTREE"
-      fi
-      git -C "$PRIMARY" worktree prune
+      published=false
       if git -C "$PRIMARY" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+        head=$(git -C "$PRIMARY" rev-parse "refs/heads/$BRANCH")
+        if git -C "$PRIMARY" fetch --prune origin; then
+          pr_ref=${PR_NUMBER:-$BRANCH}
+          if git -C "$PRIMARY" show-ref --verify --quiet "refs/remotes/origin/$BRANCH" &&
+             git -C "$PRIMARY" merge-base --is-ancestor "$head" "origin/$BRANCH"; then
+            published=true
+          elif git -C "$PRIMARY" show-ref --verify --quiet "refs/remotes/origin/$BASE_BRANCH" &&
+               git -C "$PRIMARY" merge-base --is-ancestor "$head" "origin/$BASE_BRANCH"; then
+            published=true
+          elif pr=$(cd "$PRIMARY" && gh pr view "$pr_ref" --json state,headRefOid 2>/dev/null) &&
+               [[ "$(jq -r '.state // empty' <<<"$pr")" == MERGED ]] &&
+               [[ "$(jq -r '.headRefOid // empty' <<<"$pr")" == "$head" ]]; then
+            published=true
+          fi
+        fi
+      fi
+      if [[ "$published" == true ]]; then
+        if test -e "$WORKTREE"; then
+          git -C "$PRIMARY" worktree remove --force "$WORKTREE"
+        fi
+        git -C "$PRIMARY" worktree prune
         git -C "$PRIMARY" branch -D "$BRANCH"
+      else
+        printf 'Unpublished work kept: branch %s; worktree %s\n' "$BRANCH" "$WORKTREE"
+        printf 'Recovery: push %s from %s, then re-enqueue this issue with a suffixed run ID.\n' "$BRANCH" "$WORKTREE"
       fi
 
