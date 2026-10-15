@@ -49,6 +49,5 @@ context/
 # CodeGraph index
 .codegraph/
 
-# Local debris from the retired repository-level Dagu runtime
-/.workspace/dagu/data/
-/.workspace/dagu/logs/
+# Dagu-managed issue and PoC worktrees
+/.workspace/worktrees/
