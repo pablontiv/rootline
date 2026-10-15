@@ -1,0 +1,299 @@
+labels:
+  - workspace=rootline
+queue: rootline
+type: graph
+dotenv: []
+shell: bash
+max_active_steps: 1
+max_clean_up_time_sec: 120
+params:
+  - name: ISSUE
+    type: string
+    default: ""
+  - name: QUESTION
+    type: string
+    default: ""
+  - name: PRIMARY
+    type: string
+    default: "/Users/Shared/harness/rootline"
+  - name: BASE_BRANCH
+    type: string
+    default: "master"
+  - name: OMP_SESSION_ID
+    type: string
+    default: ""
+env:
+  - RUN: ${context.run.id}
+  - WORKTREE: ${PRIMARY}/.workspace/worktrees/poc-${RUN}
+steps:
+  - id: record
+    run: |
+      set -euo pipefail
+      [[ "$RUN" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+      cd "$PRIMARY"
+      STATE=$(git rev-parse --path-format=absolute --git-path "poc/runs/$RUN")
+      mkdir -p "$STATE"
+      cat > "$STATE/sections.jq" <<'JQ'
+      def norm: gsub("\r\n"; "\n") | gsub("\\s+"; " ") | ltrimstr(" ") | rtrimstr(" ");
+      def section($heading):
+        reduce (gsub("\r\n"; "\n") | split("\n")[]) as $line
+          ({fence:null,active:false,done:false,lines:[]};
+           if ($line|test("^ {0,3}(`{3,}|~{3,})")) then
+             ($line|capture("^ {0,3}(?<f>`{3,}|~{3,})").f) as $f |
+             if .fence == null then .fence = $f
+             elif ($f[0:1] == .fence[0:1] and ($f|length) >= (.fence|length)
+               and ($line|test("^ {0,3}(`{3,}|~{3,})\\s*$"))) then .fence = null
+             else . end |
+             if .active then .lines += [$line] else . end
+           elif .fence == null and $line == $heading and (.done|not) then .active = true
+           elif .fence == null and ($line|test("^## ")) and .active then .active=false | .done=true
+           elif .active then .lines += [$line]
+           else . end) | .lines | join("\n");
+      def marker:
+        split("\n")[0] | rtrimstr("\r") |
+        capture("^<!-- poc-verdict:(?<verdict>PASS|FAIL|INCONCLUSIVE) scope:(?<scope>OK|FAIL) run:(?<run>[^\\s]+) attempt:(?<attempt>[1-9][0-9]*) base:(?<base>[^\\s]+) -->$");
+      JQ
+      gh repo view --json nameWithOwner --jq .nameWithOwner > "$STATE/repo"
+      if [[ -z "$ISSUE" ]]; then
+        test -n "$QUESTION"
+        TITLE=$(jq -nr --arg q "$QUESTION" '$q|gsub("\\s+";" ")|"PoC: " + .|.[0:200]')
+        printf '%s\n' "$QUESTION" > "$STATE/issue-body.txt"
+        URL=$(gh issue create --repo "$(cat "$STATE/repo")" --title "$TITLE" --body-file "$STATE/issue-body.txt")
+        ISSUE=${URL##*/}
+        touch "$STATE/created"
+      fi
+      [[ "$ISSUE" =~ ^[1-9][0-9]*$ ]]
+      printf '%s\n' "$ISSUE" > "$STATE/issue.number"
+      gh issue view "$ISSUE" --repo "$(cat "$STATE/repo")" --json body > "$STATE/record-body.json"
+      if [[ -z "$QUESTION" ]]; then
+        QUESTION=$(jq -r .body "$STATE/record-body.json")
+      fi
+      test -n "$QUESTION"
+      printf '%s\n' "$QUESTION" > "$STATE/question.txt"
+
+  - id: base
+    depends: record
+    run: |
+      set -euo pipefail
+      test "$(git -C "$PRIMARY" rev-parse --show-toplevel)" = "$PRIMARY"
+      test "$(git -C "$PRIMARY" rev-parse --absolute-git-dir)" = "$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-common-dir)"
+      test "$(git -C "$PRIMARY" symbolic-ref --short HEAD)" = "$BASE_BRANCH"
+      test -z "$(git -C "$PRIMARY" status --porcelain --untracked-files=all)"
+      git -C "$PRIMARY" fetch origin
+      git -C "$PRIMARY" merge --ff-only "origin/$BASE_BRANCH"
+      STATE=$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-path "poc/runs/$RUN")
+      git -C "$PRIMARY" rev-parse HEAD > "$STATE/base.sha"
+      printf 'BASE_SHA=%s\n' "$(cat "$STATE/base.sha")" >> "$DAGU_OUTPUT_FILE"
+    outputs:
+      - name: BASE_SHA
+
+  - id: worktree
+    depends: base
+    run: |
+      set -euo pipefail
+      STATE=$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-path "poc/runs/$RUN")
+      git -C "$PRIMARY" check-ignore -q "$WORKTREE"
+      git -C "$PRIMARY" worktree add -b "poc/$RUN" "$WORKTREE" "$(cat "$STATE/base.sha")"
+      RESULT=$(git -C "$WORKTREE" rev-parse --path-format=absolute --git-path poc/result.md)
+      mkdir -p "$(dirname "$RESULT")"
+      printf '%s\n' "$RESULT" > "$STATE/result.path"
+      printf 'result=%s\n' "$RESULT"
+
+  - id: run_poc
+    depends: worktree
+    action: human.task
+    with:
+      prompt: >-
+        Execute minimal commands against the real target in ${WORKTREE}; never push poc/${RUN}.
+        Write git rev-parse --git-path poc/result.md with VERDICT: PASS|FAIL|INCONCLUSIVE,
+        ## Pregunta, ## Proposición demostrada, ## Ruta ejercitada, ## Comandos y salida,
+        and ## Después del PASS for PASS. Record references or digests of every executed
+        release/image in Ruta ejercitada. Keep tests and Markdown in the cutover.
+        An empty diff is valid. Complete only after recording observed evidence.
+
+  - id: scope_gate
+    depends: run_poc
+    run: |
+      set -euo pipefail
+      STATE=$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-path "poc/runs/$RUN")
+      printf 'FAIL\n' > "$STATE/scope"
+      ATTEMPT=$(cat "$STATE/attempt" 2>/dev/null || printf 0)
+      printf '%s\n' "$((ATTEMPT + 1))" > "$STATE/attempt"
+      RESULT=$(cat "$STATE/result.path")
+      cp "$RESULT" "$STATE/result.md"
+      git -C "$WORKTREE" diff --name-only --no-renames -z "$(cat "$STATE/base.sha")" > "$STATE/tracked.paths"
+      git -C "$WORKTREE" ls-files --others --exclude-standard -z > "$STATE/untracked.paths"
+      while IFS= read -r -d '' path; do
+        if [[ "$path" == *.md || "$path" =~ _test\.go$|^tests/ ]]; then
+          printf 'Cutover path: %s\n' "$path" >&2
+          exit 1
+        fi
+      done < <(cat "$STATE/tracked.paths" "$STATE/untracked.paths")
+      jq -eRs -L "$STATE" --rawfile question "$STATE/question.txt" '
+        include "sections";
+        . as $result |
+        (split("\n")[0] | test("^VERDICT: (PASS|FAIL|INCONCLUSIVE)\\r?$")) and
+        (["## Pregunta", "## Proposición demostrada", "## Ruta ejercitada", "## Comandos y salida"] |
+          all(.[]; . as $heading | ($result|section($heading)|norm|length) > 0)) and
+        ((section("## Pregunta")|norm) == ($question|norm)) and
+        (if (split("\n")[0]|rtrimstr("\r")) == "VERDICT: PASS" then
+          (section("## Después del PASS")|norm|length) > 0 else true end)
+      ' "$STATE/result.md" >/dev/null
+      printf 'OK\n' > "$STATE/scope"
+
+  - id: publish
+    depends: scope_gate
+    run: &publish |
+      set -euo pipefail
+      STATE=$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-path "poc/runs/$RUN")
+      test -f "$STATE/issue.number" || exit 0
+      REPO=$(cat "$STATE/repo")
+      ISSUE=$(cat "$STATE/issue.number")
+      BASE_SHA=$(cat "$STATE/base.sha" 2>/dev/null || printf unknown)
+      ATTEMPT=$(cat "$STATE/attempt" 2>/dev/null || printf 1)
+      SCOPE=$(cat "$STATE/scope" 2>/dev/null || printf FAIL)
+      if [[ "${PUBLICATION_FAILURE:-}" == yes ]]; then SCOPE=FAIL; fi
+      if [[ -f "$STATE/result.path" && -f "$(cat "$STATE/result.path")" ]]; then
+        cp "$(cat "$STATE/result.path")" "$STATE/result.md"
+      fi
+      VERDICT=$(head -n 1 "$STATE/result.md" 2>/dev/null | tr -d '\r' | cut -d ' ' -f 2 || true)
+      case "$VERDICT" in PASS|FAIL|INCONCLUSIVE) ;; *) VERDICT=ORCHESTRATION_FAILURE ;; esac
+      printf '%s\n' "$VERDICT" > "$STATE/verdict"
+      : > "$STATE/full.patch"
+      : > "$STATE/diffstat"
+      if [[ -d "$WORKTREE" && "$BASE_SHA" != unknown ]]; then
+        git -C "$WORKTREE" diff --binary "$BASE_SHA" > "$STATE/full.patch"
+        git -C "$WORKTREE" diff --stat "$BASE_SHA" > "$STATE/diffstat"
+        while IFS= read -r -d '' path; do
+          (cd "$WORKTREE"; git diff --no-index --binary -- /dev/null "$path") >> "$STATE/full.patch" || test "$?" -eq 1
+          (cd "$WORKTREE"; git diff --no-index --stat -- /dev/null "$path") >> "$STATE/diffstat" || test "$?" -eq 1
+        done < <(git -C "$WORKTREE" ls-files --others --exclude-standard -z)
+      fi
+      {
+        printf '<!-- poc-verdict:%s scope:%s run:%s attempt:%s base:%s -->\n\n' "$VERDICT" "$SCOPE" "$RUN" "$ATTEMPT" "$BASE_SHA"
+        if [[ -f "$STATE/result.md" ]]; then cat "$STATE/result.md"; else printf 'Orchestration failure before a capacity verdict.\n'; fi
+        printf '\n## Diffstat\n\n```text\n'
+        cat "$STATE/diffstat"
+        printf '\n```\n\n'
+      } > "$STATE/preview"
+      {
+        cat "$STATE/preview"
+        printf '<details>\n<summary>Parche de la PoC</summary>\n\n```diff\n'
+        cat "$STATE/full.patch"
+        printf '\n```\n</details>\n'
+      } > "$STATE/comment-$ATTEMPT.txt"
+      if ! URL=$(gh issue comment "$ISSUE" --repo "$REPO" --body-file "$STATE/comment-$ATTEMPT.txt" 2> "$STATE/publish.err"); then
+        grep -Ei 'too long|maximum.*characters|body.*large' "$STATE/publish.err"
+        jq -cn --arg run "$RUN" --argjson attempt "$ATTEMPT" --rawfile evidence "$STATE/comment-$ATTEMPT.txt" '
+          ($evidence|@base64) as $encoded |
+          range(0; ($encoded|length); 60000) as $start |
+          {kind:"poc-evidence-base64",run:$run,attempt:$attempt,index:($start/60000),data:$encoded[$start:$start+60000]}
+        ' > "$STATE/chunks.jsonl"
+        : > "$STATE/chunk-links.txt"
+        while IFS= read -r chunk; do
+          INDEX=$(jq -r '.index' <<< "$chunk")
+          printf '%s\n' "$chunk" > "$STATE/chunk.txt"
+          LINK=$(gh issue comment "$ISSUE" --repo "$REPO" --body-file "$STATE/chunk.txt")
+          printf -- '- [Evidencia completa, parte %s](%s)\n' "$INDEX" "$LINK" >> "$STATE/chunk-links.txt"
+        done < "$STATE/chunks.jsonl"
+        jq -nr --rawfile preview "$STATE/preview" --rawfile links "$STATE/chunk-links.txt" '
+          ($preview[0:8000] + "\n\n[Vista truncada; resultado, diffstat y parche completos en partes enlazadas]\n\n" + $links) |
+          if length <= 48000 then . else error("Evidence index exceeds conservative comment limit") end
+        ' > "$STATE/fallback-comment.txt"
+        URL=$(gh issue comment "$ISSUE" --repo "$REPO" --body-file "$STATE/fallback-comment.txt")
+      fi
+      printf '%s\n' "$URL" > "$STATE/comment.url"
+      if [[ "$VERDICT" == PASS && "$SCOPE" == OK ]]; then
+        gh issue view "$ISSUE" --repo "$REPO" --json body > "$STATE/body.json"
+        jq -er -L "$STATE" --rawfile result "$STATE/result.md" '
+          include "sections";
+          ($result|section("## Después del PASS")) as $after |
+          if ($after|norm|length) > 0 then .body + "\n\n## Después del PASS\n" + $after
+          else error("PASS sin Después del PASS") end
+        ' "$STATE/body.json" > "$STATE/disposed-body.txt"
+        gh issue edit "$ISSUE" --repo "$REPO" --body-file "$STATE/disposed-body.txt"
+      fi
+
+  - id: decide
+    depends: publish
+    action: human.task
+    with:
+      prompt: >-
+        Review the published evidence. Push back with --expected-iteration to run_poc
+        to iterate; complete with promote=yes only for PASS, otherwise promote=no.
+        INCONCLUSIVE requires the operator to choose iteration or finish.
+      form:
+        type: object
+        properties:
+          promote:
+            type: string
+            enum: ['yes', 'no']
+        required: [promote]
+      push_back:
+        rewind_to: run_poc
+
+  - id: dispose
+    depends: decide
+    env:
+      - PROMOTE: ${steps.decide.outputs.promote}
+    run: |
+      set -euo pipefail
+      STATE=$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-path "poc/runs/$RUN")
+      ISSUE=$(cat "$STATE/issue.number")
+      REPO=$(cat "$STATE/repo")
+      VERDICT=$(cat "$STATE/verdict")
+      if [[ "$VERDICT" == PASS && "$PROMOTE" == yes ]]; then
+        test "$(cat "$STATE/scope")" = OK
+        gh issue view "$ISSUE" --repo "$REPO" --json body > "$STATE/current-body.json"
+        gh api --paginate --slurp "repos/$REPO/issues/$ISSUE/comments?per_page=100" > "$STATE/pages.json"
+        CREATED=no
+        if test -f "$STATE/created"; then CREATED=yes; fi
+        jq -er -L "$STATE" --arg created "$CREATED" --slurpfile issue "$STATE/current-body.json" '
+          include "sections";
+          [ .[][] ] as $comments |
+          [$comments[] | . as $c | (.body|marker) as $m | {comment:$c,marker:$m}] |
+          (.[-1] // error("No verdict marker")) as $last |
+          [$comments[] | .body | fromjson? | select(type == "object") |
+            select(.kind == "poc-evidence-base64" and .run == $last.marker.run
+              and (.attempt|tostring) == $last.marker.attempt)] as $chunks |
+          (if ($chunks|length) > 0 then
+            $chunks|sort_by(.index)|map(.data)|join("")|@base64d
+           else $last.comment.body end) as $result |
+          [$comments[] | select(.body|split("\n")[0]|test("^<!-- poc-triage:yes run:[^\\s]+ -->$"))] as $triages |
+          (if ($triages|length) > 0 then $triages[-1].body|section("## Pregunta")|norm
+           elif $created == "yes" then $issue[0].body|split("\n\n## Después del PASS\n")[0]|norm
+           else "" end) as $question |
+          if $last.marker.verdict == "PASS" and $last.marker.scope == "OK"
+            and ($result|marker) == $last.marker
+            and $question != "" and $question == ($result|section("## Pregunta")|norm)
+            and (["## Pregunta","## Proposición demostrada","## Ruta ejercitada","## Comandos y salida","## Después del PASS"] |
+              all(.[]; . as $heading | ($result|section($heading)|norm|length) > 0))
+            and ($issue[0].body|section("## Después del PASS")|norm|length) > 0
+          then $last.comment.html_url else error("Latest verdict is not a current, complete PASS") end
+        ' "$STATE/pages.json" > "$STATE/promotion.url"
+        dagu enqueue --run-id "feature-$RUN" "$PRIMARY/.workspace/dagu/dags/feature.yaml" -- \
+          ISSUE="$ISSUE" PRIMARY="$PRIMARY" BRANCH="dagu/issue-$ISSUE" \
+          BASE_BRANCH="$BASE_BRANCH" OMP_SESSION_ID="$OMP_SESSION_ID" \
+          POC_BASIS="$(cat "$STATE/promotion.url")"
+      elif [[ "$VERDICT" == FAIL && -f "$STATE/created" ]]; then
+        gh issue close "$ISSUE" --repo "$REPO" --reason 'not planned' --comment "VERDICT: FAIL; run:$RUN. $(cat "$STATE/comment.url")"
+      else
+        test "$PROMOTE" = no
+      fi
+
+handler_on:
+  failure:
+    env:
+      - PUBLICATION_FAILURE: "yes"
+    run: *publish
+  exit:
+    run: |
+      set -euo pipefail
+      [[ "$RUN" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]
+      WT="$PRIMARY/.workspace/worktrees/poc-$RUN"
+      BRANCH="poc/$RUN"
+      if [[ -d "$WT" ]]; then git -C "$PRIMARY" worktree remove --force "$WT"; fi
+      if git -C "$PRIMARY" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+        git -C "$PRIMARY" branch -D "$BRANCH"
+      fi
+

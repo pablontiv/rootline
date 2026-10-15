@@ -17,27 +17,104 @@ params:
   - name: PRIMARY
     type: string
     required: true
-  - name: WORKTREE
-    type: string
-    required: true
   - name: BRANCH
     type: string
     required: true
     pattern: '^[A-Za-z0-9][A-Za-z0-9._/-]*$'
-  - name: SOURCE_REF
+  - name: BASE_BRANCH
     type: string
-    default: origin/master
+    default: "master"
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._/-]*$'
+  - name: GATE
+    type: string
+    default: "just check && just test"
+  - name: REQUIRED_CHECK
+    type: string
+    default: "candidate"
+  - name: OMP_SESSION_ID
+    type: string
+    default: ""
+  - name: POC_BASIS
+    type: string
+    default: ""
+env:
+  - WORKTREE: ${PRIMARY}/.workspace/worktrees/issue-${ISSUE}
+  - RUN: ${context.run.id}
 steps:
+  - id: triage
+    action: human.task
+    with:
+      prompt: >-
+        A PoC is required when implementation depends on unexercised external or
+        runtime behavior that can change the implementation path. Reuse of demonstrated
+        behavior proceeds directly. Bug reproduction is not a PoC.
+        Provide POC=yes|no, QUESTION, BASIS (prior PASS/merged PR URL or reason),
+        and REVIEW (reviewer subagent output reference, required for POC=no).
+        For promotion cite this PASS URL as BASIS: ${POC_BASIS}.
+      form:
+        type: object
+        properties:
+          POC:
+            type: string
+            enum: ['yes', 'no']
+          QUESTION:
+            type: string
+            minLength: 1
+          BASIS:
+            type: string
+            minLength: 1
+          REVIEW:
+            type: string
+        required: [POC, QUESTION, BASIS]
+
+  - id: triage_decision
+    depends: triage
+    env:
+      - POC: ${steps.triage.outputs.POC}
+      - QUESTION: ${steps.triage.outputs.QUESTION}
+      - BASIS: ${steps.triage.outputs.BASIS}
+      - REVIEW: ${steps.triage.outputs.REVIEW}
+    run: |
+      set -euo pipefail
+      if [[ "$POC" == no ]]; then
+        printf '%s' "$REVIEW" | jq -eRs 'gsub("\\s";"") | length > 0 and (contains("steps.triage.outputs") | not)' >/dev/null
+      fi
+      STATE=$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-path "dagu-feature/runs/$RUN")
+      mkdir -p "$STATE"
+      if test -f "$STATE/dependencies"; then
+        cp "$STATE/dependencies" "$STATE/reviewed-dependencies"
+      fi
+      {
+        printf '<!-- poc-triage:%s run:%s -->\n\n' "$POC" "$RUN"
+        printf '## Pregunta\n\n%s\n\n## BASIS\n\n%s\n\n## REVIEW\n\n%s\n' "$QUESTION" "$BASIS" "${REVIEW:-}"
+      } > "$STATE/triage.md"
+      cd "$PRIMARY"
+      gh issue comment "$ISSUE" --body-file "$STATE/triage.md"
+      if [[ "$POC" == yes ]]; then
+        dagu enqueue --run-id "poc-$RUN" "$PRIMARY/.workspace/dagu/dags/poc.yaml" -- \
+          ISSUE="$ISSUE" QUESTION="$QUESTION" PRIMARY="$PRIMARY" BASE_BRANCH="$BASE_BRANCH" \
+          OMP_SESSION_ID="$OMP_SESSION_ID"
+      fi
+
   - id: start_gate
+    depends: triage_decision
+    env:
+      - POC: ${steps.triage.outputs.POC}
+    preconditions:
+      - condition: "${steps.triage.outputs.POC}"
+        expected: "no"
     run: |
       set -euo pipefail
       umask 0022
-      test -n "$PRIMARY" && test -n "$WORKTREE" && test "$PRIMARY" != "$WORKTREE"
+      test -n "$PRIMARY"
+      test -n "$GATE" && test -n "$REQUIRED_CHECK"
       test "$(git -C "$PRIMARY" rev-parse --show-toplevel)" = "$PRIMARY"
-      test "$(git -C "$PRIMARY" branch --show-current)" = master
+      test "$(git -C "$PRIMARY" rev-parse --absolute-git-dir)" = "$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-common-dir)"
+      git -C "$PRIMARY" check-ignore -q "$WORKTREE"
+      test "$(git -C "$PRIMARY" branch --show-current)" = "$BASE_BRANCH"
       test -z "$(git -C "$PRIMARY" status --porcelain)"
       git -C "$PRIMARY" fetch origin
-      git -C "$PRIMARY" merge --ff-only origin/master
+      git -C "$PRIMARY" merge --ff-only "origin/$BASE_BRANCH"
       if test -e "$WORKTREE"; then
         test "$(git -C "$WORKTREE" rev-parse --show-toplevel)" = "$WORKTREE"
         test "$(git -C "$WORKTREE" branch --show-current)" = "$BRANCH"
@@ -45,8 +122,8 @@ steps:
       elif git -C "$PRIMARY" show-ref --verify --quiet "refs/heads/$BRANCH"; then
         git -C "$PRIMARY" worktree add "$WORKTREE" "$BRANCH"
       else
-        git -C "$PRIMARY" rev-parse --verify "$SOURCE_REF^{commit}" >/dev/null
-        git -C "$PRIMARY" worktree add -b "$BRANCH" "$WORKTREE" "$SOURCE_REF"
+        git -C "$PRIMARY" rev-parse --verify "origin/$BASE_BRANCH^{commit}" >/dev/null
+        git -C "$PRIMARY" worktree add -b "$BRANCH" "$WORKTREE" "origin/$BASE_BRANCH"
       fi
       printf 'issue=%s\nbranch=%s\nworktree=%s\nbase_sha=%s\n' \
         "$ISSUE" "$BRANCH" "$WORKTREE" "$(git -C "$WORKTREE" rev-parse HEAD)"
@@ -55,7 +132,7 @@ steps:
     depends: start_gate
     action: human.task
     with:
-      prompt: "Implement issue #${ISSUE} in ${WORKTREE}, commit it on ${BRANCH}, then complete this task."
+      prompt: "Implement issue #${ISSUE} in ${WORKTREE}. Leave one commit on ${BRANCH} rebased onto origin/${BASE_BRANCH}, with conflicts resolved, and a clean worktree. After a conflict push-back, the files are listed in <git-dir>/dagu-feature/runs/${RUN}/conflict-files."
 
   - id: checkpoint_push
     depends: implement
@@ -64,29 +141,108 @@ steps:
       umask 0022
       test "$(git -C "$WORKTREE" branch --show-current)" = "$BRANCH"
       test -z "$(git -C "$WORKTREE" status --porcelain)"
+      STATE=$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-path "dagu-feature/runs/$RUN")
+      repo=$WORKTREE base=$(git -C "$WORKTREE" merge-base HEAD "origin/$BASE_BRANCH") head=HEAD
+      blob() { git -C "$repo" show "$1:$2" 2>/dev/null || true; }
+      extract() {
+        jq -Rrs --arg path "$1" '
+          def matches($r): [scan($r) | if type == "array" then .[0] else . end] | unique;
+          if $path | endswith("package.json") then
+            (fromjson? // {}) | [.dependencies, .devDependencies, .peerDependencies, .optionalDependencies] | map(. // {} | keys) | add | unique
+          elif $path | endswith("go.mod") then
+            matches("(?m)^\\s*(?:require\\s+)?([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+)\\s+v[0-9]")
+          elif $path | test("(^|/)requirements[^/]*\\.txt$") then
+            matches("(?m)^\\s*([A-Za-z0-9][A-Za-z0-9_.-]*)(?:\\[|[<>=!~; ]|$)")
+          elif $path | endswith("pyproject.toml") then
+            ([scan("(?s)(?:dependencies|optional-dependencies)\\s*=\\s*\\[(.*?)\\]") | .[0] | scan("[\"\u0027]([A-Za-z0-9][A-Za-z0-9_.-]*)") | .[0]] +
+             [scan("(?ms)^\\[(?:tool\\.poetry(?:\\.group\\.[^.]+)?\\.dependencies)\\]\\s*([^\\[]*)") | .[0] | scan("(?m)^([A-Za-z0-9_.-]+)\\s*=") | .[0]]) | unique
+          elif $path | test("\\.(csproj|props)$") then
+            matches("<(?:PackageReference|PackageVersion)\\s+Include=\"([^\"]+)\"")
+          elif $path | test("\\.ya?ml$") then
+            ([scan("(?m)^\\s*(image|chart|url):\\s*[\"\u0027]?([^\\s\"\u0027]+)") | if .[0] == "image" then .[1] | sub("(@sha256:.*|:[^/:]+)$"; "") else .[1] end] +
+             (if $path | endswith("Chart.yaml") then
+               [scan("(?ms)^dependencies:\\s*(.*)") | .[0] | scan("(?m)^\\s*-\\s*name:\\s*([^\\s]+)") | .[0]]
+              else [] end)) | unique
+          else [] end
+        '
+      }
+      base_dependencies=$(
+        git -C "$repo" ls-tree -r --name-only "$base" |
+        jq -Rr 'select(test("(^|/)(package\\.json|go\\.mod|pyproject\\.toml|requirements[^/]*\\.txt)$|\\.(ya?ml|csproj|props)$"))' |
+        while IFS= read -r path; do blob "$base" "$path" | extract "$path"; done |
+        jq -s 'add // [] | unique'
+      )
+      git -C "$repo" diff --name-only "$base" "$head" -- '*package.json' '*go.mod' '*pyproject.toml' '*requirements*.txt' '*.yaml' '*.yml' '*.csproj' '*.props' |
+      while IFS= read -r path; do
+        after=$(blob "$head" "$path" | extract "$path")
+        jq -nr --arg path "$path" --argjson before "$base_dependencies" --argjson after "$after" '$after - $before | .[] | "dependency\t\($path)\t\(.)"'
+      done > "$STATE/dependencies"
+      dirs() {
+        git -C "$repo" ls-tree -r --name-only "$1" | jq -Rrs '
+          split("\n") | map(select(length > 0)) | map(
+            if test("^(packages|apps|extensions)/[^/]+/") then split("/")[0:2] | join("/")
+            elif test("^(\\.pi|\\.omp)/extensions/[^/]+") then split("/")[0:3] | join("/")
+            elif endswith("/__init__.py") then sub("/__init__\\.py$"; "")
+            elif endswith("/package.json") or endswith("/go.mod") or endswith("/pyproject.toml") then split("/")[0:-1] | join("/")
+            else empty end) | unique'
+      }
+      before=$(dirs "$base")
+      after=$(dirs "$head")
+      jq -nr --argjson before "$before" --argjson after "$after" '$after - $before | .[] | "package-or-extension\t\(.)"' >> "$STATE/dependencies"
+      if test -s "$STATE/dependencies" && ! cmp -s "$STATE/dependencies" "$STATE/reviewed-dependencies"; then
+        printf 'rewind\n' > "$STATE/dependency-action"
+      else
+        printf 'complete\n' > "$STATE/dependency-action"
+      fi
       git -C "$WORKTREE" push --force-with-lease --set-upstream origin "HEAD:$BRANCH"
       printf 'checkpoint_sha=%s\n' "$(git -C "$WORKTREE" rev-parse HEAD)"
 
-  - id: rebase
+  - id: dependency_review
     depends: checkpoint_push
+    action: human.task
+    with:
+      prompt: "Dependency net checkpoint: the wait handler completes unchanged dependencies or pushes back to triage."
+      push_back:
+        rewind_to: triage
+
+  - id: rebase
+    depends: dependency_review
     run: |
       set -euo pipefail
       umask 0022
       test "$(git -C "$WORKTREE" branch --show-current)" = "$BRANCH"
       test -z "$(git -C "$WORKTREE" status --porcelain)"
       git -C "$WORKTREE" fetch origin
-      git -C "$WORKTREE" rebase origin/master
-      test "$(git -C "$WORKTREE" rev-list --count origin/master..HEAD)" -eq 1
-      printf 'rebased_sha=%s\n' "$(git -C "$WORKTREE" rev-parse HEAD)"
+      STATE=$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-path "dagu-feature/runs/$RUN")
+      if git -C "$WORKTREE" rebase "origin/$BASE_BRANCH"; then
+        printf 'complete\n' > "$STATE/conflict-action"
+        test "$(git -C "$WORKTREE" rev-list --count "origin/$BASE_BRANCH..HEAD")" -eq 1
+        printf 'rebased_sha=%s\n' "$(git -C "$WORKTREE" rev-parse HEAD)"
+      else
+        git -C "$WORKTREE" diff --name-only --diff-filter=U > "$STATE/conflict-files"
+        git -C "$WORKTREE" rebase --abort
+        test -z "$(git -C "$WORKTREE" status --porcelain)"
+        test -s "$STATE/conflict-files"
+        printf 'rewind\n' > "$STATE/conflict-action"
+        sed 's/^/conflict_files=/' "$STATE/conflict-files"
+        exit 0
+      fi
+
+  - id: conflict_review
+    depends: rebase
+    action: human.task
+    with:
+      prompt: "Rebase conflict checkpoint: the wait handler completes a clean rebase or pushes back to implement with the conflict files."
+      push_back:
+        rewind_to: implement
 
   - id: gate
-    depends: rebase
+    depends: conflict_review
     run: |
       set -euo pipefail
       umask 0022
       cd "$WORKTREE"
-      env -u GH_TOKEN -u GITHUB_TOKEN just check
-      env -u GH_TOKEN -u GITHUB_TOKEN just test
+      env -u GH_TOKEN -u GITHUB_TOKEN bash -euo pipefail -c "$GATE"
       test -z "$(git status --porcelain)"
       printf 'tested_sha=%s\n' "$(git rev-parse HEAD)"
 
@@ -109,7 +265,7 @@ steps:
       elif gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
         gh pr view "$BRANCH" --json number,url,headRefOid
       else
-        gh pr create --base master --head "$BRANCH" --fill --body "Closes #${ISSUE}"
+        gh pr create --base "$BASE_BRANCH" --head "$BRANCH" --fill --body "Closes #${ISSUE}"
       fi
 
   - id: required_check
@@ -119,13 +275,13 @@ steps:
       cd "$WORKTREE"
       pr_ref=${PR_NUMBER:-$BRANCH}
       for attempt in $(seq 1 240); do
-        if test "$(gh pr checks "$pr_ref" --json name --jq 'any(.[]; .name == "candidate")' 2>/dev/null || true)" = true; then
-          printf 'candidate_registered_for=%s\n' "$pr_ref"
+        if test "$(gh pr checks "$pr_ref" --json name --jq 'any(.[]; .name == env.REQUIRED_CHECK)' 2>/dev/null || true)" = true; then
+          printf 'required_check=%s\nregistered_for=%s\n' "$REQUIRED_CHECK" "$pr_ref"
           exit 0
         fi
         sleep 5
       done
-      printf 'required candidate check was not registered for %s\n' "$pr_ref" >&2
+      printf 'required check %s was not registered for %s\n' "$REQUIRED_CHECK" "$pr_ref" >&2
       exit 1
 
   - id: auto_merge
@@ -144,7 +300,7 @@ steps:
     depends: auto_merge
     action: human.task
     with:
-      prompt: "Reconciler: complete on MERGED; push back with the expected iteration on BEHIND; leave OPEN/CLEAN waiting."
+      prompt: "The scheduled reconcile DAG owns this checkpoint: complete on MERGED; push back with the expected iteration on BEHIND or DIRTY; keep OPEN with auto-merge waiting; report unreconciled states."
       push_back:
         rewind_to: rebase
 
@@ -159,18 +315,48 @@ steps:
       pr=$(gh pr view "$pr_ref" --json number --jq .number)
       test "$(gh pr view "$pr" --json state --jq .state)" = MERGED
       test "$(gh pr view "$pr" --json headRefOid --jq .headRefOid)" = "$sha"
-      test "$(gh pr checks "$pr" --required --json name,state --jq 'any(.[]; .name == "candidate" and .state == "SUCCESS")')" = true
-      test "$(git -C "$PRIMARY" branch --show-current)" = master
+      test "$(gh pr checks "$pr" --required --json name,state --jq 'any(.[]; .name == env.REQUIRED_CHECK and .state == "SUCCESS")')" = true
+      test "$(git -C "$PRIMARY" branch --show-current)" = "$BASE_BRANCH"
       test -z "$(git -C "$PRIMARY" status --porcelain)"
       git -C "$PRIMARY" fetch origin
-      git -C "$PRIMARY" merge --ff-only origin/master
-      test "$(git -C "$PRIMARY" rev-parse HEAD)" = "$(git -C "$PRIMARY" rev-parse origin/master)"
-      printf 'pr=%s\ntested_sha=%s\nmaster_sha=%s\n' \
+      git -C "$PRIMARY" merge --ff-only "origin/$BASE_BRANCH"
+      test "$(git -C "$PRIMARY" rev-parse HEAD)" = "$(git -C "$PRIMARY" rev-parse "origin/$BASE_BRANCH")"
+      printf 'pr=%s\ntested_sha=%s\nbase_sha=%s\n' \
         "$pr" "$sha" "$(git -C "$PRIMARY" rev-parse HEAD)"
 
 handler_on:
   wait:
-    run: printf 'waiting_steps=%s issue=%s branch=%s worktree=%s\n' "$DAG_WAITING_STEPS" "$ISSUE" "$BRANCH" "$WORKTREE"
+    run: |
+      set -euo pipefail
+      printf 'waiting_steps=%s issue=%s branch=%s worktree=%s\n' "$DAG_WAITING_STEPS" "$ISSUE" "$BRANCH" "$WORKTREE"
+      for SPEC in \
+        "dependency_review dependency-action dependency-transition.log" \
+        "conflict_review conflict-action conflict-transition.log"; do
+        read -r STEP ACTION LOG <<<"$SPEC"
+        if [[ ",$DAG_WAITING_STEPS," == *,"$STEP",* ]]; then
+          STATE=$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-path "dagu-feature/runs/$RUN")
+          # Dagu persists Waiting only after onWait exits; dispatch after that boundary.
+          nohup bash -c '
+            set -euo pipefail
+            STATE=$1 RUN=$2 STEP=$3 ACTION=$4
+            for attempt in $(seq 1 60); do
+              STATUS=$(dagu status feature --run-id "$RUN")
+              if grep -q "^Waiting -" <<<"$STATUS"; then
+                if [[ "$(cat "$STATE/$ACTION")" == rewind ]]; then
+                  ITERATION=$(sed -nE "s/.*push-back iteration: ([0-9]+).*/\1/p" <<<"$STATUS" | head -1)
+                  dagu human-task push-back feature --run-id "$RUN" --step "$STEP" --expected-iteration "${ITERATION:-0}"
+                else
+                  dagu human-task complete feature --run-id "$RUN" --step "$STEP"
+                fi
+                exit 0
+              fi
+              sleep 1
+            done
+            printf "%s transition did not reach Waiting; inspect this checkpoint.\n" "$STEP" >&2
+            exit 1
+          ' _ "$STATE" "$RUN" "$STEP" "$ACTION" </dev/null > "$STATE/$LOG" 2>&1 &
+        fi
+      done
   exit:
     run: |
       set -euo pipefail
@@ -181,3 +367,4 @@ handler_on:
       if git -C "$PRIMARY" show-ref --verify --quiet "refs/heads/$BRANCH"; then
         git -C "$PRIMARY" branch -D "$BRANCH"
       fi
+

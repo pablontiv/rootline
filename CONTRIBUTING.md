@@ -38,10 +38,9 @@ Run `just --list` to see all available recipes. Key ones:
 | `just fix-docs` | Fix and propagate doc aggregates |
 | `just test-install` | Offline installer tests (PowerShell when available) |
 | `just dagu-version` | Report the user-level Dagu version |
-| `just dagu-validate` | Validate the repo-owned lifecycle DAG |
-| `just dagu-enqueue RUN_ID ISSUE PRIMARY WORKTREE BRANCH` | Enqueue one issue lifecycle |
-| `just dagu-complete RUN_ID STEP` | Complete a satisfied durable checkpoint |
-| `just dagu-push-back RUN_ID ITERATION` | Rewind a `BEHIND` merge checkpoint to the rebase gate |
+| `just dagu-validate` | Validate the versioned feature and PoC DAGs |
+| `just dagu-enqueue RUN_ID ISSUE PRIMARY BRANCH OMP_SESSION_ID` | Enqueue one issue lifecycle |
+| `just dagu-complete-implementation RUN_ID` | Complete the implementation checkpoint after one clean commit |
 
 ## Workflow
 
@@ -54,11 +53,14 @@ Run `just --list` to see all available recipes. Key ones:
 
 ### Optional Dagu lifecycle
 
-The [Dagu workflow](docs/dagu.md) runs the repo-owned
-`.workspace/dagu/dags/feature.yaml` on a generic user-level daemon. One durable
-run owns the start gate, implementation handoff, local gate, guarded auto-merge,
-primary synchronization, and terminal cleanup. The `candidate` GitHub check
-remains the required remote merge gate.
+The [Dagu workflow](docs/dagu.md) runs the versioned `feature.yaml` and
+`poc.yaml` on a user-level daemon. Enqueue from a clean primary clone on
+`master`, using the `OMP_SESSION_ID` returned to the coordinating session. The
+feature run owns triage, optional feasibility PoC routing, the fixed
+`.workspace/worktrees/issue-<n>` worktree, dependency and conflict review,
+local gates, guarded auto-merge, reconciliation, primary synchronization, and
+terminal cleanup. The `candidate` GitHub check remains the required remote
+merge gate.
 
 ## Releasing
 

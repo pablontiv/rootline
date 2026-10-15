@@ -113,18 +113,15 @@ fix-docs:
 dagu-version:
     dagu version
 
-# Validate the repo-owned lifecycle DAG
+# Validate both repo-owned lifecycle DAGs
 dagu-validate:
     dagu validate .workspace/dagu/dags/feature.yaml
+    dagu validate .workspace/dagu/dags/poc.yaml
 
 # Enqueue one issue lifecycle on the user-level Dagu daemon
-dagu-enqueue run_id issue primary worktree branch pr_number="":
-    dagu enqueue --run-id "{{run_id}}" .workspace/dagu/dags/feature.yaml -- ISSUE="{{issue}}" PR_NUMBER="{{pr_number}}" PRIMARY="{{primary}}" WORKTREE="{{worktree}}" BRANCH="{{branch}}"
+dagu-enqueue run_id issue primary branch omp_session_id pr_number="":
+    dagu enqueue --run-id "{{run_id}}" .workspace/dagu/dags/feature.yaml -- ISSUE="{{issue}}" PR_NUMBER="{{pr_number}}" PRIMARY="{{primary}}" BRANCH="{{branch}}" OMP_SESSION_ID="{{omp_session_id}}"
 
-# Complete a waiting checkpoint after its external condition is satisfied
-dagu-complete run_id step:
-    dagu human-task complete --run-id "{{run_id}}" --step "{{step}}" feature
-
-# Rewind a BEHIND remote checkpoint to the rebase gate
-dagu-push-back run_id iteration:
-    dagu human-task push-back --run-id "{{run_id}}" --step await_merge --expected-iteration "{{iteration}}" feature
+# Complete the implementation checkpoint after leaving one clean commit
+dagu-complete-implementation run_id:
+    dagu human-task complete --run-id "{{run_id}}" --step implement feature
