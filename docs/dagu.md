@@ -5,6 +5,22 @@ Rootline versions two repository-owned workflows:
 - [`.workspace/dagu/dags/feature.yaml`](../.workspace/dagu/dags/feature.yaml) carries an issue from triage through merge and cleanup.
 - [`.workspace/dagu/dags/poc.yaml`](../.workspace/dagu/dags/poc.yaml) proves uncertain external or runtime behavior before implementation.
 
+The adopted bundle is `@a4s/omp-dagu@0.2.0` from
+`pablontiv/a4s@3654f1646aba40298a6cd7ade2812c91acf94a84` (`3654f16`),
+rendered by `bootstrap-rootline-v0-2-0` with Dagu `2.19.2`. Both DAGs start with
+the `# dagu-feature-bundle:` identity header and carry
+`dagu-feature-bundle=0.2.0` in their labels. `start_gate` and PoC `base` log
+the bundle, source, and bootstrap identity.
+
+Inspect the installed bundle and its adoption history with:
+
+```sh
+head -1 .workspace/dagu/dags/feature.yaml .workspace/dagu/dags/poc.yaml
+grep -n 'dagu-feature-bundle=0.2.0' .workspace/dagu/dags/*.yaml
+git log --format='%h %(trailers:key=Dagu-Feature-Bundle,valueonly)' -- .workspace/dagu/dags
+git log -G '^# dagu-feature-bundle:' -p -- .workspace/dagu/dags
+```
+
 A user-level Dagu service owns scheduling, history, queues, and logs. The shared
 scheduled `reconcile.yaml` in `DAGU_HOME/dags/` owns remote merge transitions for
 all repositories. Point the invoking shell's `DAGU_HOME` at the same home as the
@@ -21,21 +37,31 @@ hosted checks. The GitHub `candidate` job is the strict required merge check.
 
 ## Bootstrap and adoption
 
-Bootstrap runs once from the clean primary clone on `master`. It renders the two
-repository DAGs into the shared Git directory, installs the shared reconciler,
-and configures strict required-check protection. Use the absolute skill path and
-the same `DAGU_HOME` as the running service:
+Bootstrap runs from the clean primary clone on `master` for each bundle adoption
+or upgrade. It renders the repository DAGs into the shared Git directory,
+installs the shared reconciler, and configures strict required-check protection.
+Use the absolute skill path and the same `DAGU_HOME` as the running service:
 
 ```sh
 SKILL_DIR="$HOME/.omp/plugins/node_modules/@a4s/omp-dagu/skills/dagu-feature"
-dagu enqueue --run-id bootstrap-rootline "$SKILL_DIR/dagu-feature-bootstrap.yaml" -- \
+dagu enqueue --run-id bootstrap-rootline-v0-2-0 "$SKILL_DIR/dagu-feature-bootstrap.yaml" -- \
   PRIMARY="$(git rev-parse --show-toplevel)" SKILL_DIR="$SKILL_DIR"
 ```
 
 At `answers`, set `GATE='just check && just test'`,
 `REQUIRED_CHECK=candidate`, and `TEST_PATHS='_test\.go$|^tests/'`. The adoption
 issue enqueues the rendered staged `feature.yaml`; its implementation commits
-both rendered DAGs byte-for-byte. Later issues always enqueue the versioned DAG.
+both rendered DAGs byte-for-byte. Its commit ends with the three identity trailers
+printed by bootstrap `confirm`:
+
+```text
+Dagu-Feature-Bundle: 0.2.0
+Dagu-Feature-Source: pablontiv/a4s@3654f1646aba40298a6cd7ade2812c91acf94a84
+Dagu-Feature-Bootstrap: bootstrap-rootline-v0-2-0
+```
+
+Later issues always enqueue the versioned DAG. Bootstrap run IDs encode version
+periods as hyphens, as in `bootstrap-rootline-v0-2-0`.
 
 ## Enqueue one issue
 
@@ -108,8 +134,7 @@ flowchart LR
     R --> E[gate]
     E --> F[push]
     F --> G[pr]
-    G --> H[required_check]
-    H --> I[auto_merge]
+    G --> I[auto_merge]
     I --> J[await_merge]
     J --> K[close_gate]
 ```
@@ -127,22 +152,27 @@ flowchart LR
    pushed back to `implement` for resolution.
 6. `gate` runs `just check && just test` with umask `0022` and GitHub token
    variables removed. The DAG pushes the tested SHA, creates or adopts the PR,
-   waits for `candidate`, and enables auto-merge bound to that SHA.
+   and enables auto-merge bound to that SHA; GitHub requires `candidate` to succeed.
 7. `await_merge` releases the queue while the scheduled reconciler observes the
    PR. `close_gate` verifies the merged head, successful required check, and
    tested SHA before fast-forwarding the primary clone.
-8. `handler_on.exit` removes the run worktree and local branch after success,
-   failure, or abort.
+8. `handler_on.exit` removes the run worktree and local branch once their head is
+   preserved on the remote branch, contained by the remote base, or confirmed as
+   the merged PR head. Otherwise it retains both recovery locations.
 
 ## Reconcile the remote checkpoint
 
-The installed scheduled reconciler discovers waiting feature runs every two
-minutes. It completes `await_merge` after a merge and pushes `BEHIND` or `DIRTY`
+The installed scheduled reconciler discovers waiting feature runs every minute
+with `overlap_policy: skip` and an empty `catchup_window`.
+It completes `await_merge` after a merge and pushes `BEHIND` or `DIRTY`
 PRs back to `rebase` with the observed iteration. Clean, blocked, unstable, or
 unknown PRs with active auto-merge remain waiting. Closed PRs, drafts, active
 hooks, or PRs without auto-merge are reported as unreconciled and retain their
 waiting feature run. Closed issues waiting at `triage` or `implement` are
 reported as orphans.
+Each tick also compares managed worktrees and local `dagu/*` branches with active
+feature and PoC runs. Unowned resources produce `LEFTOVER` diagnostics for the
+operator to inspect and recover or remove.
 
 Inspect the feature run and the scheduled reconcile history when a transition
 needs evidence:

@@ -54,7 +54,10 @@ Run `just --list` to see all available recipes. Key ones:
 ### Optional Dagu lifecycle
 
 The [Dagu workflow](docs/dagu.md) runs the versioned `feature.yaml` and
-`poc.yaml` on a user-level daemon. Enqueue from a clean primary clone on
+`poc.yaml` from bundle `@a4s/omp-dagu@0.2.0`
+(`pablontiv/a4s@3654f16`, bootstrap `bootstrap-rootline-v0-2-0`) on a user-level
+daemon. Their identity headers, labels, and adoption commit trailers identify
+the installed bundle. Enqueue from a clean primary clone on
 `master`, using the `OMP_SESSION_ID` returned to the coordinating session. The
 feature run owns triage, optional feasibility PoC routing, the fixed
 `.workspace/worktrees/issue-<n>` worktree, dependency and conflict review,

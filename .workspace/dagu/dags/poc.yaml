@@ -1,5 +1,7 @@
+# dagu-feature-bundle: @a4s/omp-dagu@0.2.0 source=pablontiv/a4s@3654f1646aba40298a6cd7ade2812c91acf94a84 bootstrap=bootstrap-rootline-v0-2-0 dagu=2.19.2
 labels:
   - workspace=rootline
+  - dagu-feature-bundle=0.2.0
 queue: rootline
 type: graph
 dotenv: []
@@ -22,9 +24,13 @@ params:
   - name: OMP_SESSION_ID
     type: string
     default: ""
+  - name: TEST_PATHS
+    type: string
+    default: "_test\\.go$|^tests/"
 env:
   - RUN: ${context.run.id}
   - WORKTREE: ${PRIMARY}/.workspace/worktrees/poc-${RUN}
+  - DAGU_FEATURE_BUNDLE: "dagu-feature-bundle=0.2.0 source=pablontiv/a4s@3654f1646aba40298a6cd7ade2812c91acf94a84 bootstrap=bootstrap-rootline-v0-2-0"
 steps:
   - id: record
     run: |
@@ -75,6 +81,7 @@ steps:
     depends: record
     run: |
       set -euo pipefail
+      printf '%s\n' "$DAGU_FEATURE_BUNDLE"
       test "$(git -C "$PRIMARY" rev-parse --show-toplevel)" = "$PRIMARY"
       test "$(git -C "$PRIMARY" rev-parse --absolute-git-dir)" = "$(git -C "$PRIMARY" rev-parse --path-format=absolute --git-common-dir)"
       test "$(git -C "$PRIMARY" symbolic-ref --short HEAD)" = "$BASE_BRANCH"
@@ -124,7 +131,7 @@ steps:
       git -C "$WORKTREE" diff --name-only --no-renames -z "$(cat "$STATE/base.sha")" > "$STATE/tracked.paths"
       git -C "$WORKTREE" ls-files --others --exclude-standard -z > "$STATE/untracked.paths"
       while IFS= read -r -d '' path; do
-        if [[ "$path" == *.md || "$path" =~ _test\.go$|^tests/ ]]; then
+        if [[ "$path" == *.md || "$path" =~ $TEST_PATHS ]]; then
           printf 'Cutover path: %s\n' "$path" >&2
           exit 1
         fi
