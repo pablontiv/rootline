@@ -37,10 +37,6 @@ Run `just --list` to see all available recipes. Key ones:
 | `just validate` | Validate docs/roadmap with rootline |
 | `just fix-docs` | Fix and propagate doc aggregates |
 | `just test-install` | Offline installer tests (PowerShell when available) |
-| `just dagu-version` | Report the user-level Dagu version |
-| `just dagu-validate` | Validate the versioned feature and PoC DAGs |
-| `just dagu-enqueue RUN_ID ISSUE PRIMARY BRANCH OMP_SESSION_ID` | Enqueue one issue lifecycle |
-| `just dagu-complete-implementation RUN_ID` | Complete the implementation checkpoint after one clean commit |
 
 ## Workflow
 
@@ -51,23 +47,9 @@ Run `just --list` to see all available recipes. Key ones:
 5. Commit using [Conventional Commits](https://www.conventionalcommits.org/)
 6. Open a Pull Request
 
-### Optional Dagu lifecycle
-
-The [Dagu workflow](docs/dagu.md) runs the versioned `feature.yaml` and
-`poc.yaml` from bundle `@a4s/omp-dagu@0.2.0`
-(`pablontiv/a4s@3654f16`, bootstrap `bootstrap-rootline-v0-2-0`) on a user-level
-daemon. Their identity headers, labels, and adoption commit trailers identify
-the installed bundle. Enqueue from a clean primary clone on
-`master`, using the `OMP_SESSION_ID` returned to the coordinating session. The
-feature run owns triage, optional feasibility PoC routing, the fixed
-`.workspace/worktrees/issue-<n>` worktree, dependency and conflict review,
-local gates, guarded auto-merge, reconciliation, primary synchronization, and
-terminal cleanup. The `candidate` GitHub check remains the required remote
-merge gate.
-
 ## Releasing
 
-Releases are fully automated via CI. On push to `master`, the CI pipeline analyzes conventional commit prefixes, auto-tags, and triggers goreleaser for cross-platform binaries and GitHub Releases. No manual release steps needed — just push with conventional commit messages.
+Releases are automated and batched. Every push to `master` runs the full quality gates; once a week (Tuesdays 14:17 UTC) — or on a manual run of the **CI** workflow — the pipeline analyzes the conventional commits since the last tag, cuts one PATCH or MINOR tag for the batch, and goreleaser publishes cross-platform binaries. Just write conventional commit messages; see the Release Flow section of `CLAUDE.md` for details.
 
 ## Commit Convention
 

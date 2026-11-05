@@ -82,7 +82,7 @@ Derivation evaluates per-record expressions from `.stem` `derive:` fields. Aggre
 
 ## Project Documentation
 
-- `docs/research/` — Pre-research for deferred features (plugin architecture)
+- `docs/adr/` — Architecture decision records (Spanish), one file per decision
 - `docs/roadmap/` — Feature roadmap as Rootline-governed records (`O##` objectives with `T###` tasks, `.stem`-validated). Query it with the CLI (`rootline query docs/roadmap/ --where "estado == 'Pending'"`) instead of reading files manually.
 - Documentation is written in a mix of Spanish and English (field names like `estado`, `tipo`, `ejecutable_en` are in Spanish)
 

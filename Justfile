@@ -108,20 +108,3 @@ validate:
 # Fix docs (propagate aggregates)
 fix-docs:
     rootline fix --all docs/roadmap/
-
-# Report the user-level Dagu version
-dagu-version:
-    dagu version
-
-# Validate both stamped @a4s/omp-dagu 0.2.0 lifecycle DAGs (a4s@3654f16)
-dagu-validate:
-    dagu validate .workspace/dagu/dags/feature.yaml
-    dagu validate .workspace/dagu/dags/poc.yaml
-
-# Enqueue one issue lifecycle on the user-level Dagu daemon
-dagu-enqueue run_id issue primary branch omp_session_id pr_number="":
-    dagu enqueue --run-id "{{run_id}}" .workspace/dagu/dags/feature.yaml -- ISSUE="{{issue}}" PR_NUMBER="{{pr_number}}" PRIMARY="{{primary}}" BRANCH="{{branch}}" OMP_SESSION_ID="{{omp_session_id}}"
-
-# Complete the implementation checkpoint after leaving one clean commit
-dagu-complete-implementation run_id:
-    dagu human-task complete --run-id "{{run_id}}" --step implement feature
