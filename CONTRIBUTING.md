@@ -89,13 +89,15 @@ Breaking changes use `!` suffix: `feat!: remove deprecated flag`
 
 ## Git Hooks
 
-Hooks live in `.githooks/` and are activated with `git config core.hooksPath .githooks`.
+Hooks live in `.githooks/` and are activated with `git config core.hooksPath .githooks`. Each hook stops at its first failing step.
+
+Do not run `rootline hooks install` in this clone: with `core.hooksPath` set it targets `.githooks/pre-commit` and, with `--force`, replaces the tracked contributor hook. That command is meant for repositories that adopt Rootline.
 
 | Hook | What it does |
 |------|-------------|
 | `pre-commit` | gofmt check + golangci-lint + gitleaks secret scan |
 | `commit-msg` | Validates conventional commit format |
-| `pre-push` | Validates docs/roadmap changes, code-docs drift/coverage gates, syncs skills; no binary installation |
+| `pre-push` | Validates docs/roadmap changes and code-docs drift/coverage gates; blocks `cmd/rootline/` pushes unless both docs and `.agents/skills/rootline/` are updated; does not distribute skills or install binaries |
 
 ## Quality Gates
 

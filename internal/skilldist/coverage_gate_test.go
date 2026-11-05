@@ -68,7 +68,7 @@ func TestServiceDefaultsAndErrorWrappers(t *testing.T) {
 }
 
 func TestReceiptDriftAndDestinationConvergenceBranches(t *testing.T) {
-	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.claude/skills/rootline", Commit: "abc", Digest: "sha256:source"}
+	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.agents/skills/rootline", Commit: "abc", Digest: "sha256:source"}
 	states := []DestinationState{
 		{ID: DestinationClaude, Path: "/home/.claude/skills/rootline", Kind: KindCorrectSymlink, Digest: source.Digest, LexicalTarget: source.SkillPath, CanonicalTarget: source.SkillPath},
 		{ID: DestinationAgents, Path: "/home/.agents/skills/rootline", Kind: KindCorrectSymlink, Digest: source.Digest, LexicalTarget: source.SkillPath, CanonicalTarget: source.SkillPath},
@@ -557,22 +557,22 @@ func TestSourceResolutionFailureBranches(t *testing.T) {
 		t.Fatal("ResolveSource accepted empty path")
 	}
 	nonRepo := t.TempDir()
-	mustWriteSkillFile(t, filepath.Join(nonRepo, ".claude", "skills", "rootline"), "SKILL.md", "---\nname: rootline\n---\n")
+	mustWriteSkillFile(t, filepath.Join(nonRepo, ".agents", "skills", "rootline"), "SKILL.md", "---\nname: rootline\n---\n")
 	if _, err := ResolveSource(context.Background(), nonRepo); err == nil {
 		t.Fatal("ResolveSource accepted non-git directory")
 	}
 	repo := initSkillRepository(t)
-	if err := os.RemoveAll(filepath.Join(repo, ".claude", "skills", "rootline", "SKILL.md")); err != nil {
+	if err := os.RemoveAll(filepath.Join(repo, ".agents", "skills", "rootline", "SKILL.md")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ResolveSource(context.Background(), repo); err == nil {
 		t.Fatal("ResolveSource accepted missing canonical skill file")
 	}
 	repo = initSkillRepository(t)
-	if err := os.Remove(filepath.Join(repo, ".claude", "skills", "rootline", "SKILL.md")); err != nil {
+	if err := os.Remove(filepath.Join(repo, ".agents", "skills", "rootline", "SKILL.md")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(repo, ".claude", "skills", "rootline", "SKILL.md"), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(repo, ".agents", "skills", "rootline", "SKILL.md"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ResolveSource(context.Background(), repo); err == nil {
@@ -653,7 +653,7 @@ func TestActionKindRejectsUnknownEntryKind(t *testing.T) {
 }
 
 func TestReceiptAndPlanValidationBranches(t *testing.T) {
-	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.claude/skills/rootline", Commit: "abc", Digest: "sha256:source"}
+	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.agents/skills/rootline", Commit: "abc", Digest: "sha256:source"}
 	for _, receipt := range []Receipt{
 		{Complete: true, Source: copySourcePtr(source)},
 		{ID: "r1", Complete: false, Source: copySourcePtr(source)},

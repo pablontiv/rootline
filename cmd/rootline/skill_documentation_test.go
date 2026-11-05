@@ -14,7 +14,7 @@ func TestSkillDistributionDocumentationContract(t *testing.T) {
 		"docs/skill.md": {
 			"rootline skill install", "--approve", "rootline skill uninstall", "rootline skill restore", "receipts.jsonl",
 		},
-		".claude/skills/rootline/SKILL.md": {
+		".agents/skills/rootline/SKILL.md": {
 			"CHANGELOG.md", "rootline skill status", "~/.agents/skills/rootline",
 		},
 		"README.md": {"docs/skill.md", "rootline skill install"},
@@ -32,7 +32,7 @@ func TestSkillDistributionDocumentationContract(t *testing.T) {
 
 func TestSkillGovernanceBoundaryDocumentationContract(t *testing.T) {
 	repo := documentationContractRepoRoot(t)
-	path := ".claude/skills/rootline/SKILL.md"
+	path := ".agents/skills/rootline/SKILL.md"
 	text := string(documentationContractRead(t, repo, path))
 	boundary := sectionFrom(text, "## Governance Boundary (root marker)")
 	assertScopeContainsAll(t, path+" governance boundary", boundary, []string{
@@ -69,7 +69,7 @@ func TestSkillGovernanceBoundaryDocumentationContract(t *testing.T) {
 		}
 	}
 
-	path = ".claude/skills/rootline/ref-query.md"
+	path = ".agents/skills/rootline/ref-query.md"
 	text = string(documentationContractRead(t, repo, path))
 	assertScopeContainsAll(t, path+" query", sectionFrom(text, "## query"), []string{
 		"Without any discovered `.stem`, `query` works",

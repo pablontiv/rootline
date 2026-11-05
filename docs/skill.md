@@ -9,15 +9,15 @@ Rootline distributes the canonical agent skill from a primary Rootline checkout 
 - Claude: `~/.claude/skills/rootline`
 - OpenCode and Pi: `~/.agents/skills/rootline`
 
-Both destinations are symlinks to the canonical source tree at `<source>/.claude/skills/rootline`. Rootline does not scan other runtime paths.
+Both destinations are symlinks to the canonical source tree at `<source>/.agents/skills/rootline`. Rootline does not scan other runtime paths.
 
 ## Source checkout requirement
 
 Use the primary, stable Rootline checkout as `--source`. The source must:
 
 - be a Git worktree root with a real `.git/` directory, not a linked worktree metadata file;
-- contain `.claude/skills/rootline/SKILL.md`;
-- have no uncommitted changes under `.claude/skills/rootline`;
+- contain `.agents/skills/rootline/SKILL.md`;
+- have no uncommitted changes under `.agents/skills/rootline`;
 - resolve to a non-empty `HEAD` commit.
 
 A linked worktree is refused with `linked_worktree_refused` so agents do not publish a transient development checkout as a user-level skill.
@@ -41,7 +41,7 @@ Example preview shape:
   "complete": false,
   "source": {
     "repo_root": "/stable/rootline",
-    "path": "/stable/rootline/.claude/skills/rootline",
+    "path": "/stable/rootline/.agents/skills/rootline",
     "commit": "abc123",
     "digest": "sha256:source"
   },

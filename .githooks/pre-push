@@ -33,12 +33,12 @@ while read local_ref local_sha remote_ref remote_sha; do
     if ! git diff --name-only "$range" -- docs/ README.md CLAUDE.md 2>/dev/null | grep -q .; then
       missing="docs"
     fi
-    if ! git diff --name-only "$range" -- .claude/skills/rootline/ 2>/dev/null | grep -q .; then
-      missing="${missing:+$missing + }skills"
+    if ! git diff --name-only "$range" -- .agents/skills/rootline/ 2>/dev/null | grep -q .; then
+      missing="${missing:+$missing + }.agents/skills/rootline/"
     fi
     if [ -n "$missing" ]; then
       echo "CLI code changed but $missing were not updated."
-      echo "Run: /update-docs all"
+      echo "Update the command reference in docs/ (and README.md/CLAUDE.md if affected) and .agents/skills/rootline/ in this push."
       exit 1
     fi
   fi

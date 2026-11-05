@@ -3,7 +3,7 @@ package skilldist
 import "testing"
 
 func TestInstallPlanIsStableIdempotentAndPreimageBound(t *testing.T) {
-	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.claude/skills/rootline", Commit: "abc", Digest: "sha256:source"}
+	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.agents/skills/rootline", Commit: "abc", Digest: "sha256:source"}
 	states := []DestinationState{
 		{ID: DestinationClaude, Path: "/home/.claude/skills/rootline", Kind: KindDirectory, Digest: "sha256:old"},
 		{ID: DestinationAgents, Path: "/home/.agents/skills/rootline", Kind: KindAbsent},
@@ -36,7 +36,7 @@ func TestInstallPlanIsStableIdempotentAndPreimageBound(t *testing.T) {
 }
 
 func TestInstallPlanNoOpsExactSymlinks(t *testing.T) {
-	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.claude/skills/rootline", Commit: "abc", Digest: "sha256:source"}
+	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.agents/skills/rootline", Commit: "abc", Digest: "sha256:source"}
 	states := []DestinationState{
 		{ID: DestinationClaude, Path: "/home/.claude/skills/rootline", Kind: KindCorrectSymlink, Digest: "sha256:source", LexicalTarget: source.SkillPath, CanonicalTarget: source.SkillPath},
 		{ID: DestinationAgents, Path: "/home/.agents/skills/rootline", Kind: KindCorrectSymlink, Digest: "sha256:source", LexicalTarget: source.SkillPath, CanonicalTarget: source.SkillPath},
@@ -59,7 +59,7 @@ func TestInstallPlanNoOpsExactSymlinks(t *testing.T) {
 }
 
 func TestInstallPlanRejectsUnsupportedDestinationBeforeApproval(t *testing.T) {
-	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.claude/skills/rootline", Commit: "abc", Digest: "sha256:source"}
+	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.agents/skills/rootline", Commit: "abc", Digest: "sha256:source"}
 	states := []DestinationState{
 		{ID: DestinationClaude, Path: "/home/.claude/skills/rootline", Kind: KindUnsupported},
 	}
@@ -68,7 +68,7 @@ func TestInstallPlanRejectsUnsupportedDestinationBeforeApproval(t *testing.T) {
 }
 
 func TestInstallPlanRejectsUnsupportedDestinationID(t *testing.T) {
-	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.claude/skills/rootline", Commit: "abc", Digest: "sha256:source"}
+	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.agents/skills/rootline", Commit: "abc", Digest: "sha256:source"}
 	states := []DestinationState{
 		{ID: DestinationID("legacy"), Path: "/home/unsupported/rootline", Kind: KindAbsent},
 	}
@@ -77,7 +77,7 @@ func TestInstallPlanRejectsUnsupportedDestinationID(t *testing.T) {
 }
 
 func TestUninstallPlanIsReceiptAndCurrentStateBound(t *testing.T) {
-	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.claude/skills/rootline", Commit: "abc", Digest: "sha256:source"}
+	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.agents/skills/rootline", Commit: "abc", Digest: "sha256:source"}
 	receipt := completeInstallReceiptForPlan("receipt-1", source)
 	states := []DestinationState{
 		{ID: DestinationClaude, Path: "/home/.claude/skills/rootline", Kind: KindCorrectSymlink, Digest: source.Digest, LexicalTarget: source.SkillPath, CanonicalTarget: source.SkillPath},
@@ -117,7 +117,7 @@ func TestUninstallPlanIsReceiptAndCurrentStateBound(t *testing.T) {
 }
 
 func TestRestorePlanUsesRecordedPreimagesAndBindsReceiptAndCurrentState(t *testing.T) {
-	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.claude/skills/rootline", Commit: "abc", Digest: "sha256:source"}
+	source := Source{RepoRoot: "/repo", SkillPath: "/repo/.agents/skills/rootline", Commit: "abc", Digest: "sha256:source"}
 	receipt := completeInstallReceiptForPlan("receipt-1", source)
 	receipt.Actions[0].Before = DestinationState{ID: DestinationClaude, Path: "/home/.claude/skills/rootline", Kind: KindDirectory, Digest: "sha256:old"}
 	receipt.Backups = []Backup{{Destination: DestinationClaude, OriginalPath: "/home/.claude/skills/rootline", StoredPath: "/state/backups/receipt-1/claude", Kind: KindDirectory, Digest: "sha256:old"}}

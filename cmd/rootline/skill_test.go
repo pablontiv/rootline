@@ -333,7 +333,7 @@ func initSkillCommandRepository(t *testing.T) string {
 	runSkillCommandGit(t, repo, "init")
 	runSkillCommandGit(t, repo, "config", "user.name", "Rootline Test")
 	runSkillCommandGit(t, repo, "config", "user.email", "rootline-test@example.invalid")
-	mustWriteSkillCommandFile(t, filepath.Join(repo, ".claude", "skills", "rootline"), "SKILL.md", "---\nname: rootline\n---\n")
+	mustWriteSkillCommandFile(t, filepath.Join(repo, ".agents", "skills", "rootline"), "SKILL.md", "---\nname: rootline\n---\n")
 	commitSkillCommandRepository(t, repo, "add canonical skill")
 	return repo
 }

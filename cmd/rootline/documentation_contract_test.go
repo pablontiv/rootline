@@ -80,11 +80,11 @@ func TestLivingDocumentationStatesBehaviorSpecificContract(t *testing.T) {
 		"docs/describe.md":                        {"\"source\": \"body.section", "\"defined_in\": \"docs/.stem\""},
 		"docs/explain.md":                         {"\"name\": \"notes\"", "\"source\": \"body.section", "\"defined_in\": \"docs/.stem\""},
 		"docs/derivation.md":                      {"origin: derived", "origin: aggregate", "Physical schema provenance is reported as `defined_in`; the logical `source` field is used only for extraction directives"},
-		".claude/skills/rootline/SKILL.md":        {"defined_in `.stem`", "source: body.section", "frontmatter override"},
-		".claude/skills/rootline/ref-schema.md":   {"optional enum fields with no default are omitted", "Required enum fields without a default cause `rootline new` to refuse before dry-run output or disk write", "does not invent the first allowed value", "| Field | Type | Required | Values | Defined In | Source |"},
-		".claude/skills/rootline/ref-query.md":    {"defined_in `.stem`", "source: body.section", "duplicate matching headings", "origin: frontmatter, derived, aggregate, schema"},
-		".claude/skills/rootline/ref-validate.md": {"governance-root-relative", "empty section is present", "required means presence"},
-		".claude/skills/rootline/ref-advanced.md": {"source: body.section", "lexical heading order"},
+		".agents/skills/rootline/SKILL.md":        {"defined_in `.stem`", "source: body.section", "frontmatter override"},
+		".agents/skills/rootline/ref-schema.md":   {"optional enum fields with no default are omitted", "Required enum fields without a default cause `rootline new` to refuse before dry-run output or disk write", "does not invent the first allowed value", "| Field | Type | Required | Values | Defined In | Source |"},
+		".agents/skills/rootline/ref-query.md":    {"defined_in `.stem`", "source: body.section", "duplicate matching headings", "origin: frontmatter, derived, aggregate, schema"},
+		".agents/skills/rootline/ref-validate.md": {"governance-root-relative", "empty section is present", "required means presence"},
+		".agents/skills/rootline/ref-advanced.md": {"source: body.section", "lexical heading order"},
 	}
 	for path, fragments := range expect {
 		text := string(documentationContractRead(t, repo, path))
@@ -131,7 +131,7 @@ func assertDocsExplainOrigins(t *testing.T, repo string) {
 
 func assertRefSchemaAuthoredNotesExample(t *testing.T, repo string) {
 	t.Helper()
-	text := string(documentationContractRead(t, repo, ".claude/skills/rootline/ref-schema.md"))
+	text := string(documentationContractRead(t, repo, ".agents/skills/rootline/ref-schema.md"))
 	for _, block := range fencedBlocks(text) {
 		if block.lang != "yaml" && block.lang != "yml" {
 			continue
@@ -155,7 +155,7 @@ func assertRefSchemaAuthoredNotesExample(t *testing.T, repo string) {
 
 func assertRefQueryUsesExactAggregateOrigin(t *testing.T, repo string) {
 	t.Helper()
-	text := string(documentationContractRead(t, repo, ".claude/skills/rootline/ref-query.md"))
+	text := string(documentationContractRead(t, repo, ".agents/skills/rootline/ref-query.md"))
 	if strings.Contains(text, "origin: frontmatter, derived, aggregated, schema") {
 		t.Fatalf("ref-query uses stale explain origin spelling aggregated")
 	}
