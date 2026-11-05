@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pablontiv/rootline/internal/gitenv"
-	"github.com/pablontiv/rootline/internal/skilldist"
+	"github.com/pablontiv/rootline/v9/internal/gitenv"
+	"github.com/pablontiv/rootline/v9/internal/skilldist"
 )
 
 type skillCommandFixture struct {

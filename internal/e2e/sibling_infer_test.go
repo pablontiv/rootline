@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/index"
-	"github.com/pablontiv/rootline/internal/proposal"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/index"
+	"github.com/pablontiv/rootline/v9/internal/proposal"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 func TestFixAllSiblingInference(t *testing.T) {

@@ -195,5 +195,7 @@ Inference preserves the parsed level and text. It does not preserve the original
 ## Module Path
 
 ```
-github.com/pablontiv/rootline
+github.com/pablontiv/rootline/v9
 ```
+
+The `/v9` suffix is the Go major-version suffix, not a product name. Go ignores tags ≥ v2 on a module whose path lacks the suffix, so without it `go install ...@latest` resolved to the last v1 tag. The suffix must change if and only if a deliberate MAJOR release is cut (see Version Strategy); every import path inside the repository changes with it.

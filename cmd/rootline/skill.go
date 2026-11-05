@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/pablontiv/rootline/internal/skilldist"
+	"github.com/pablontiv/rootline/v9/internal/skilldist"
 	"github.com/spf13/cobra"
 )
 

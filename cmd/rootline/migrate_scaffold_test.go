@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/migrate"
+	"github.com/pablontiv/rootline/v9/internal/migrate"
 	"github.com/spf13/cobra"
 )
 

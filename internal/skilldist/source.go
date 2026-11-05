@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/gitenv"
+	"github.com/pablontiv/rootline/v9/internal/gitenv"
 )
 
 func ResolveSource(ctx context.Context, requested string) (Source, error) {

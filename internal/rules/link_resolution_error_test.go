@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 func TestLinkHelpersReturnInvalidGovernanceErrorsWithoutMutatingRecords(t *testing.T) {

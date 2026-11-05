@@ -3,9 +3,9 @@ package e2e
 import (
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/infer"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/infer"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 func TestAnalyzeIncremental_FiltersCoveredInferences(t *testing.T) {

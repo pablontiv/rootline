@@ -3,7 +3,7 @@ package infer
 import (
 	"fmt"
 
-	"github.com/pablontiv/rootline/internal/graph"
+	"github.com/pablontiv/rootline/v9/internal/graph"
 )
 
 // unidirectionalTypes are link types that do not require a back-reference.

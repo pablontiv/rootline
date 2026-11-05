@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/proposal"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/proposal"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // Issue #60 defect 1: a required field with no declared default: must be

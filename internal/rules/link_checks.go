@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 // HeadingCache caches heading slugs per target file within a validation run.

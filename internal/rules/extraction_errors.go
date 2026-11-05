@@ -1,6 +1,6 @@
 package rules
 
-import "github.com/pablontiv/rootline/internal/extract"
+import "github.com/pablontiv/rootline/v9/internal/extract"
 
 // ExtractionErrors converts a record's non-fatal extraction errors (e.g. malformed
 // YAML frontmatter that fell back to the permissive line-by-line parser) into

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/gitenv"
+	"github.com/pablontiv/rootline/v9/internal/gitenv"
 )
 
 func TestFindStemFiles(t *testing.T) {

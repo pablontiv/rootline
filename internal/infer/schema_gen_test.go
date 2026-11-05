@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 	"github.com/yuin/goldmark"
 	gmast "github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"

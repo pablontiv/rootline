@@ -53,8 +53,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // RecordResolver resolves a record path to its Record.

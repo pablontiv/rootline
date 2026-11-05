@@ -3,7 +3,7 @@ package proposal
 import (
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 func TestDetectRemoveStemField_FieldOverride(t *testing.T) {

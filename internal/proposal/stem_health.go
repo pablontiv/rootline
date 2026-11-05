@@ -3,7 +3,7 @@ package proposal
 import (
 	"fmt"
 
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // DetectRemoveStemField generates remove_stem_field proposals from stem-health

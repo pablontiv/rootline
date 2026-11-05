@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 // ScaffoldSchema creates a minimal version-2 .stem file at dirPath by

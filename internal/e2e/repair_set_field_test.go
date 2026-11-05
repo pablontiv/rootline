@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pablontiv/rootline/internal/fix"
+	"github.com/pablontiv/rootline/v9/internal/fix"
 )
 
 // A stored report must resume past satisfied paths, then become a read-only replay.

@@ -7,13 +7,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/fsx"
-	"github.com/pablontiv/rootline/internal/index"
-	"github.com/pablontiv/rootline/internal/infer"
-	"github.com/pablontiv/rootline/internal/rules"
-	"github.com/pablontiv/rootline/internal/stemyaml"
-	"github.com/pablontiv/rootline/internal/templates"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/fsx"
+	"github.com/pablontiv/rootline/v9/internal/index"
+	"github.com/pablontiv/rootline/v9/internal/infer"
+	"github.com/pablontiv/rootline/v9/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/stemyaml"
+	"github.com/pablontiv/rootline/v9/internal/templates"
 	"github.com/spf13/cobra"
 )
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/pablontiv/picokit/fuzzy"
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 // ResolveRequest describes one link target to resolve.

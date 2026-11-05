@@ -1,7 +1,7 @@
 package proposal
 
 import (
-	"github.com/pablontiv/rootline/internal/migrate"
+	"github.com/pablontiv/rootline/v9/internal/migrate"
 )
 
 // BreakingChangeToEvolutionProposal converts a breaking change from a migrate diff

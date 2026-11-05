@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/proposal"
+	"github.com/pablontiv/rootline/v9/internal/proposal"
 )
 
 func repairSectionFixture(t *testing.T, names ...string) (string, []byte) {

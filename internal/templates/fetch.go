@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pablontiv/rootline/internal/fsx"
-	"github.com/pablontiv/rootline/internal/gitenv"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/fsx"
+	"github.com/pablontiv/rootline/v9/internal/gitenv"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // ParseRef parses "owner/repo[@tag]" or "github.com/owner/repo[@tag]".

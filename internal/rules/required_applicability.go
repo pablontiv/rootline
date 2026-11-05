@@ -3,7 +3,7 @@ package rules
 import (
 	"path/filepath"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 func requiredCheckApplies(record *extract.Record, effective *StemFile, name string, field SchemaField) bool {

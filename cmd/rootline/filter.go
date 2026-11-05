@@ -8,9 +8,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/query"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/query"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // whereEnvBuiltins are the names query.BuildEnv injects on every record

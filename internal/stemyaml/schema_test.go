@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 func mustFilterRulesSchemaByMatch(t *testing.T, schema map[string]*rules.SchemaField, recordPath string) map[string]*rules.SchemaField {

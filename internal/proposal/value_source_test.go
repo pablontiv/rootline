@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // Issue #60 defect 1: an add_field proposal carried no marker separating a value

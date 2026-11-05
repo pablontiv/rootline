@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 var invariantRe = regexp.MustCompile(`INV(\d+):\s*(.+)`)

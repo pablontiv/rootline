@@ -3,7 +3,7 @@ package rules
 import (
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 func TestExtractionErrors_NoErrors(t *testing.T) {

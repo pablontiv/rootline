@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/gitenv"
+	"github.com/pablontiv/rootline/v9/internal/gitenv"
 )
 
 // runGit is a helper to run git commands in tests.

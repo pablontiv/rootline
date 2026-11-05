@@ -3,7 +3,7 @@ package infer
 import (
 	"fmt"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 // DetectConstantFields finds fields with identical values across all records.

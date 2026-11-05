@@ -1,6 +1,6 @@
 package rules
 
-import "github.com/pablontiv/rootline/internal/extract"
+import "github.com/pablontiv/rootline/v9/internal/extract"
 
 // ResolveFieldValue resolves a schema field using frontmatter-first precedence.
 func ResolveFieldValue(record *extract.Record, name string, field SchemaField) (any, bool, error) {

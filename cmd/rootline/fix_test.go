@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/fix"
-	"github.com/pablontiv/rootline/internal/proposal"
+	"github.com/pablontiv/rootline/v9/internal/fix"
+	"github.com/pablontiv/rootline/v9/internal/proposal"
 	"gopkg.in/yaml.v3"
 )
 

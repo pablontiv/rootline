@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/fsx"
-	"github.com/pablontiv/rootline/internal/infer"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/fsx"
+	"github.com/pablontiv/rootline/v9/internal/infer"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 func executeSchemaPropose(t *testing.T, args ...string) (string, error) {
