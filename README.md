@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-light.png">
+    <img alt="Rootline" src="docs/assets/logo.png" width="260">
+  </picture>
+</p>
+
 # Rootline
 
 [![CI](https://github.com/pablontiv/rootline/actions/workflows/ci.yml/badge.svg)](https://github.com/pablontiv/rootline/actions/workflows/ci.yml)
@@ -5,6 +12,8 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 
 **Schemas, queries and a link graph for the Markdown your team — and your AI agents — already write.**
+
+![rootline validate, fix, query, explain and graph on a small roadmap](docs/assets/demo.gif)
 
 Rootline is a single-binary CLI that turns a directory of Markdown files into a validated, queryable dataset. You declare what each folder's documents must look like in a small `.stem` file; Rootline validates every file against it, answers questions like *"which tasks are still pending in this epic?"* without grepping, keeps roll-up counts in index files current, and checks that the links between documents actually resolve. Nothing is rendered, nothing is uploaded, and no database is introduced: the files stay plain Markdown in Git.
 
