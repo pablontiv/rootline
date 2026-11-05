@@ -140,6 +140,8 @@ docs/roadmap/.stem      adds: id as sequence T###, owner required
 docs/roadmap/T014.md    validated against the merge of both
 ```
 
+A field does not have to live in frontmatter. `source: body.section["## Summary"]` binds a typed field to a section of the document body, so a heading your team already writes becomes validated, queryable data; frontmatter remains an explicit override when both exist. Rules are small and composable: `required` means presence, `non_empty` is separate, `values:` constrains an `enum`, and `exists` checks presence of an effective field — frontmatter, body-sourced or derived.
+
 The pipeline is **extract → resolve schema → validate → derive → aggregate → query**, and every command emits a versioned JSON envelope (`"version": 2, "kind": "rootline/validate-batch"`) so output shapes are a contract, not an accident.
 
 Rootline **never leaves a file its own schema refuses.** Repairs go through atomic writes, preserve YAML key order and comments, and each written file is re-validated and restored byte-for-byte if the result fails. Git is optional: `.git` is only consulted by the explicit `--staged`, `hooks` and `migrate` flows, never for schema discovery.
