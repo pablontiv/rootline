@@ -85,3 +85,16 @@ No se permiten transparencias, sombras ni degradados.
 - Simplicidad antes que ornamento
 - Estructura antes que resultado
 - Claridad antes que estilo
+
+---
+
+## Archivos
+
+| Archivo | Uso |
+|---|---|
+| `docs/assets/logo.png` | Lockup a color (isologo + logotipo), fondo transparente, para fondos claros |
+| `docs/assets/logo-light.png` | Lockup monocromo claro, para fondos oscuros (README en tema dark) |
+| `docs/assets/mark.png` / `mark-light.png` | Solo el isologo, mismas dos variantes |
+| `docs/assets/social-preview.png` | 2560×1280, imagen social del repositorio en GitHub |
+
+Los PNG son recortes del original rasterizado; si existe el vector, debe sustituirlos.

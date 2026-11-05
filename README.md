@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-light.png">
+    <img alt="Rootline" src="docs/assets/logo.png" width="260">
+  </picture>
+</p>
+
 # Rootline
 
 [![CI](https://github.com/pablontiv/rootline/actions/workflows/ci.yml/badge.svg)](https://github.com/pablontiv/rootline/actions/workflows/ci.yml)
