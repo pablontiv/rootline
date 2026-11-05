@@ -5,13 +5,23 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  # Weekly release batch. Pushes to master run every quality gate but no
+  # longer tag; the commits accumulate and this schedule (or a manual
+  # dispatch) cuts one release with the highest bump the batch earned.
+  # Tuesdays 14:17 UTC = 08:17 America/Monterrey.
+  schedule:
+    - cron: '17 14 * * 2'
   workflow_dispatch:
     inputs:
       force-bump:
-        description: Force a deliberate major release
+        description: >-
+          Release now. 'auto' computes the bump from the commits since the
+          last tag; 'major' is the deliberate MAJOR path (see CLAUDE.md).
         required: true
         type: choice
+        default: auto
         options:
+          - auto
           - major
 
 concurrency:
@@ -410,11 +420,17 @@ jobs:
   release:
     uses: pablontiv/crossbeam/.github/workflows/go-release.yml@v2
     needs: [ci, gitleaks, docs-validate, installer-tests, durability]
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     with:
       quality-gate-jobs: '["ci","gitleaks","docs-validate","installer-tests","durability"]'
       binary-name: rootline
-      force-bump: ${{ inputs['force-bump'] }}
+      # Batch cadence: on push the auto-tag step is a no-op; only schedule and
+      # workflow_dispatch may tag. The bump still spans every commit since the
+      # last tag. See crossbeam README, "Batch releases instead of one per push".
+      release-on: explicit
+      force-bump: ${{ inputs['force-bump'] == 'major' && 'major' || '' }}
     permissions:
       contents: write
       id-token: write
@@ -435,7 +451,9 @@ jobs:
   # docs-validate — while it proves its value. Tracked in docs/roadmap/T012.
   installer-smoke:
     needs: [release]
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Only meaningful right after a tag was actually cut, which under the
+    # batch cadence happens on schedule or dispatch, never on push.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
