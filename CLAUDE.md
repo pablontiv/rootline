@@ -144,9 +144,11 @@ Versions are derived from conventional commits by the release workflow, with MAJ
 
 ## Release Flow
 
-Release-worthy pushes to `master` are automated via CI. The `go-release` reusable workflow (from `pablontiv/crossbeam@v1`) analyzes conventional commits since the latest tag, creates a PATCH or MINOR tag, and triggers goreleaser to build multi-platform binaries. A range containing only `docs`, `test`, `refactor`, `ci`, `chore`, or `style` commits stops without creating a tag or release. Smoke tests verify `--version` and `--help` before creating GitHub Releases. Version is injected at build time via `-ldflags -X main.version={{.Version}}`.
+Releases are batched. Every push to `master` runs the full quality gates, but the `go-release` reusable workflow (from `pablontiv/crossbeam@v2`, called with `release-on: explicit`) only tags on two triggers: the weekly `schedule` in `ci.yml` (Tuesdays 14:17 UTC) and a manual `workflow_dispatch`. When it tags, it analyzes every conventional commit since the latest tag and creates one PATCH or MINOR tag for the whole batch, then goreleaser builds multi-platform binaries. A range containing only `docs`, `test`, `refactor`, `ci`, `chore`, or `style` commits stops without creating a tag or release. Smoke tests verify `--version` and `--help` before creating GitHub Releases. Version is injected at build time via `-ldflags -X main.version={{.Version}}`.
 
-MAJOR releases are deliberate. Before cutting one, a maintainer must review the full commit range since the latest tag, confirm that the compatibility break warrants a MAJOR, and verify that `master` is green and points at the exact commit to release. Then run `gh workflow run ci.yml --ref master -f force-bump=major`, or dispatch the **CI** workflow from the Actions UI with `master` selected and **Force a deliberate major release** set to `major`. The dispatch runs the normal quality gates and passes `force-bump: major` to crossbeam; do not use it to compensate for malformed commit history or a failing branch.
+To release before the weekly batch, run `gh workflow run ci.yml --ref master -f force-bump=auto` (or dispatch **CI** from the Actions UI with `master` selected and `force-bump` left at `auto`). `auto` passes an empty `force-bump` to crossbeam, so the bump is computed, not forced.
+
+MAJOR releases are deliberate. Before cutting one, a maintainer must review the full commit range since the latest tag, confirm that the compatibility break warrants a MAJOR, verify that `master` is green and points at the exact commit to release, and bump the `/vN` suffix in `go.mod` and every import path in the same change (see Module Path). Then run `gh workflow run ci.yml --ref master -f force-bump=major`, or dispatch **CI** with `force-bump` set to `major`. Do not use it to compensate for malformed commit history or a failing branch.
 
 The Justfile contains only development recipes (`check`, `test`, `fmt`, `validate`). Release logic lives in crossbeam shared workflows.
 
@@ -156,7 +158,7 @@ The Justfile contains only development recipes (`check`, `test`, `fmt`, `validat
 
 ## CI Workflows
 
-CI/CD uses shared reusable workflows from `pablontiv/crossbeam@v1`:
+CI/CD uses shared reusable workflows from `pablontiv/crossbeam@v2`:
 - `go-ci.yml` — build, test (with 85% coverage threshold and `-race`), tidy, lint, vuln. All of these need `profile: full`; crossbeam defaults to `light`, which runs build, test and the coverage gate only and skips the other three.
 - `gitleaks.yml` — secret scanning
 - `go-release.yml` — auto-tag + goreleaser release
