@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/fix"
-	"github.com/pablontiv/rootline/internal/fsx"
+	"github.com/pablontiv/rootline/v9/internal/fix"
+	"github.com/pablontiv/rootline/v9/internal/fsx"
 )
 
 const schemaApplyPlannerPatchA = "version: 2\nscope:\n  match: \"*.md\"\nschema:\n  title:\n    type: string\n"

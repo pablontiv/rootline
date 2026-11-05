@@ -50,7 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/pablontiv/rootline/master/install.s
 irm https://raw.githubusercontent.com/pablontiv/rootline/master/install.ps1 | iex
 
 # From source (Go 1.26+)
-go install github.com/pablontiv/rootline/cmd/rootline@latest
+go install github.com/pablontiv/rootline/v9/cmd/rootline@latest
 ```
 
 Release builds auto-update within their compatibility boundary; see [docs/auto-update.md](docs/auto-update.md).

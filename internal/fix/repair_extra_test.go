@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/proposal"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/proposal"
 )
 
 func TestApplyRepair_SetField(t *testing.T) {

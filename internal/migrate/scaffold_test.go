@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 func acceptScaffoldValidation(ctx context.Context, in ScaffoldValidationInput) (*rules.ValidationResult, error) {

@@ -3,7 +3,7 @@ package infer
 import (
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 func TestDetectInvariants_InvariantesSection(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pablontiv/rootline/internal/proposal"
+	"github.com/pablontiv/rootline/v9/internal/proposal"
 )
 
 func correctLinkProposal(paths ...string) proposal.Proposal {

@@ -11,10 +11,10 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/fsx"
-	"github.com/pablontiv/rootline/internal/proposal"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/fsx"
+	"github.com/pablontiv/rootline/v9/internal/proposal"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // RolledBackFile records a file that was written and then restored because it

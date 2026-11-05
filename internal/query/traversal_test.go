@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/graph"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/graph"
 )
 
 func subWhere(s string) *string { return &s }

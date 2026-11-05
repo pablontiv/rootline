@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/proposal"
+	"github.com/pablontiv/rootline/v9/internal/proposal"
 )
 
 // These tests cover issue #60 defect 2: repair apply documented a rollback it

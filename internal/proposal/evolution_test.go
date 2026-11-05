@@ -3,7 +3,7 @@ package proposal
 import (
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/migrate"
+	"github.com/pablontiv/rootline/v9/internal/migrate"
 )
 
 func TestBreakingChangeToEvolutionProposal_FieldRemoved(t *testing.T) {

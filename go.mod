@@ -1,4 +1,4 @@
-module github.com/pablontiv/rootline
+module github.com/pablontiv/rootline/v9
 
 go 1.26
 

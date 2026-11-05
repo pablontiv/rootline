@@ -13,8 +13,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // fileEntry holds paths collected during Phase 1 discovery.

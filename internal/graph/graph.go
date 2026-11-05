@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/pablontiv/picokit/fuzzy"
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 // Graph represents a directed graph of document links.

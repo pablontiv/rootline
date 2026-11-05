@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 // DetectSectionPatterns analyzes heading structure across records in a directory.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/proposal"
+	"github.com/pablontiv/rootline/v9/internal/proposal"
 )
 
 // TestApplyRepair_Issue178_RerunClobbersHumanEdit tests that a re-run of the same

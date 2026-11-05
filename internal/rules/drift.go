@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 // DriftWarning represents a detected inconsistency between a parent record

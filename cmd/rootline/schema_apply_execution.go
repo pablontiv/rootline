@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/fsx"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/fsx"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 type stemWritePlan struct {

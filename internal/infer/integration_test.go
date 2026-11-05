@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/graph"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/graph"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // loadFixtures reads all .md files from a testdata directory and returns extract.Records.

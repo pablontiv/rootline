@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/infer"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/infer"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 const schemaApplyMalformedOverlayStem = `version: 2

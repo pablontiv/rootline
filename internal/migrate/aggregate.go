@@ -3,7 +3,7 @@ package migrate
 import (
 	"fmt"
 
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // GenerateAggregateExpr generates a field-agnostic aggregate expression.

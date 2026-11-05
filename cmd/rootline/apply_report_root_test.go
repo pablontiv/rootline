@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/infer"
-	"github.com/pablontiv/rootline/internal/proposal"
+	"github.com/pablontiv/rootline/v9/internal/infer"
+	"github.com/pablontiv/rootline/v9/internal/proposal"
 )
 
 const reportRootStem = `version: 2

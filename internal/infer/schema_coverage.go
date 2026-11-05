@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // DetectMissingSchemata walks directories from scanRoot and flags those

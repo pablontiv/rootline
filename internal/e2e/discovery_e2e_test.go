@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/index"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/index"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // TestWalkUp_StableRegardlessOfWorkingDirectory_E2E verifies that schema resolution

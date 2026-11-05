@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/gitenv"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/gitenv"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // ErrPreviousStemNotFound means the implicit Git baseline does not exist.

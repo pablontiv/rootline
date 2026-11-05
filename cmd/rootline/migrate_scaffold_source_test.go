@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/migrate"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/migrate"
 )
 
 func newMigrateScaffoldSectionSourceProject(t *testing.T, schema, body string) string {

@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/infer"
-	"github.com/pablontiv/rootline/internal/rules"
-	"github.com/pablontiv/rootline/internal/stemyaml"
+	"github.com/pablontiv/rootline/v9/internal/infer"
+	"github.com/pablontiv/rootline/v9/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/stemyaml"
 	"gopkg.in/yaml.v3"
 )
 

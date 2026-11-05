@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/skilldist"
+	"github.com/pablontiv/rootline/v9/internal/skilldist"
 )
 
 func TestSkillLifecycleEndToEnd(t *testing.T) {

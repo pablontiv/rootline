@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 	"gopkg.in/yaml.v3"
 )
 

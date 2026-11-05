@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // AggregateAll runs hierarchical aggregation on index files.

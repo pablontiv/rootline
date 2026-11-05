@@ -3,7 +3,7 @@ package rules
 import (
 	"sort"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 // ExplainResult is the versioned JSON output for the explain command.

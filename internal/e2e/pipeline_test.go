@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/index"
-	"github.com/pablontiv/rootline/internal/query"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/index"
+	"github.com/pablontiv/rootline/v9/internal/query"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 func mustNewDescribeResult(t *testing.T, path string, entries []rules.StemEntry, effective *rules.StemFile) *rules.DescribeResult {

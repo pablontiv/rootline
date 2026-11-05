@@ -3,8 +3,8 @@ package proposal
 import (
 	"fmt"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 func detectTypeRepresentationRepairs(records []*extract.Record, errs map[string][]rules.ValidationError) ([]Proposal, []TypeFinding) {

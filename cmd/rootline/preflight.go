@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 	"github.com/spf13/cobra"
 )
 

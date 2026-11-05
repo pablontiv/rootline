@@ -3,7 +3,7 @@ package index
 import (
 	"path/filepath"
 
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 // ScopeResolver returns the effective StemFile for a given directory, or an error.

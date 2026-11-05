@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 // hierarchicalPathRe matches hierarchical path references like E02/F04, E13/F02/S001, etc.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/proposal"
+	"github.com/pablontiv/rootline/v9/internal/proposal"
 )
 
 func TestApplySchemaProposals_Empty(t *testing.T) {

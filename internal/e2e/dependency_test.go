@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/derive"
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/index"
-	"github.com/pablontiv/rootline/internal/query"
+	"github.com/pablontiv/rootline/v9/internal/derive"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/index"
+	"github.com/pablontiv/rootline/v9/internal/query"
 )
 
 // stemWithDeriveAndLinks returns a .stem YAML string that configures:

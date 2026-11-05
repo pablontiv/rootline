@@ -3,7 +3,7 @@ package migrate
 import (
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 func TestGenerateAggregateExpr_SingleValue(t *testing.T) {

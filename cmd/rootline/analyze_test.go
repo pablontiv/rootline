@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/infer"
+	"github.com/pablontiv/rootline/v9/internal/infer"
 )
 
 func writeAnalyzeFile(t *testing.T, path, content string) {

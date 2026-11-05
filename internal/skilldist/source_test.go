@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/gitenv"
+	"github.com/pablontiv/rootline/v9/internal/gitenv"
 )
 
 func TestResolveSourceRequiresPrimaryCheckoutAndCanonicalSkill(t *testing.T) {

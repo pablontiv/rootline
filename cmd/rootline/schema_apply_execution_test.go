@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/fsx"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/fsx"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 func mustAtomicStemTarget(t *testing.T, root, logical string) *fsx.AtomicTarget {

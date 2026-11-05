@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/proposal"
+	"github.com/pablontiv/rootline/v9/internal/proposal"
 )
 
 func mixedContainmentRepairProposal(proposalType proposal.Type) proposal.Proposal {

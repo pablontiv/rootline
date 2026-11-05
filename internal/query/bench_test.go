@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 func BenchmarkExecuteExpr(b *testing.B) {

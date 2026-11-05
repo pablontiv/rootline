@@ -3,7 +3,7 @@ package rules
 import (
 	"path/filepath"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 // ResolveMarkdownTargets rewrites markdown-style link targets to the

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 func executeDescribe(t *testing.T, args ...string) (string, error) {

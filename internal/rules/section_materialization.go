@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 type SectionMaterialization struct {

@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/infer"
-	"github.com/pablontiv/rootline/internal/rules"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/infer"
+	"github.com/pablontiv/rootline/v9/internal/rules"
 )
 
 func TestApply_SchemaApply_EnumExtension(t *testing.T) {

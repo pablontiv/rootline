@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/expr-lang/expr/vm"
-	"github.com/pablontiv/rootline/internal/extract"
-	"github.com/pablontiv/rootline/internal/graph"
+	"github.com/pablontiv/rootline/v9/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/graph"
 )
 
 // TraversalOptions configures link-traversal filtering of query candidates.

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/infer"
+	"github.com/pablontiv/rootline/v9/internal/infer"
 )
 
 func TestGovernance_AnalyzePipeline(t *testing.T) {

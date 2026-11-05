@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/pablontiv/rootline/internal/extract"
+	"github.com/pablontiv/rootline/v9/internal/extract"
 )
 
 func BenchmarkDetectSectionPatternsHierarchical(b *testing.B) {
