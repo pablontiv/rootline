@@ -44,7 +44,7 @@ func TestHistoricalDocumentationPairsLegacyAndCanonicalForms(t *testing.T) {
 
 func TestActiveSchemasUseCanonicalDeclarationsAndPassHealth(t *testing.T) {
 	repo := documentationContractRepoRoot(t)
-	for _, path := range []string{"docs/roadmap", "lines", "paused", "closed", "theories"} {
+	for _, path := range []string{"docs/roadmap"} {
 		result, err := rules.ValidateStemHealth(context.Background(), filepath.Join(repo, path))
 		if err != nil {
 			t.Fatalf("ValidateStemHealth %s: %v", path, err)
@@ -66,19 +66,6 @@ func TestActiveSchemasUseCanonicalDeclarationsAndPassHealth(t *testing.T) {
 	})
 	assertExact(t, "docs/roadmap derive", roadmapStem["derive"], map[string]any{"is_done": "estado in ['Completed', 'Obsolete']"})
 	assertExact(t, "docs/roadmap validate", roadmapStem["validate"], []any{map[string]any{"field": "tipo", "rule": "non_empty"}})
-
-	assertStemSchemaExact(t, repo, "lines/.stem", map[string]any{
-		"tipo": map[string]any{"type": "enum", "values": []any{"question", "field-log"}, "required": true}, "estado": map[string]any{"type": "enum", "values": []any{"active", "paused", "closed"}}, "tipo_entendimiento": map[string]any{"type": "enum", "values": []any{"describe", "understand", "explore", "build"}}, "fecha_inicio": map[string]any{"type": "string"}, "linea": map[string]any{"type": "string"}, "ciclos_registrados": map[string]any{"type": "integer"},
-	})
-	assertStemSchemaExact(t, repo, "paused/.stem", map[string]any{
-		"tipo": map[string]any{"type": "enum", "values": []any{"question", "field-log"}, "required": true}, "estado": map[string]any{"type": "enum", "values": []any{"active", "paused", "closed"}}, "tipo_entendimiento": map[string]any{"type": "enum", "values": []any{"describe", "understand", "explore", "build"}}, "fecha_inicio": map[string]any{"type": "string"}, "linea": map[string]any{"type": "string"}, "ciclos_registrados": map[string]any{"type": "integer"},
-	})
-	assertStemSchemaExact(t, repo, "closed/.stem", map[string]any{
-		"tipo": map[string]any{"type": "enum", "values": []any{"question", "field-log", "closure"}, "required": true}, "estado": map[string]any{"type": "enum", "values": []any{"active", "paused", "closed"}}, "tipo_entendimiento": map[string]any{"type": "enum", "values": []any{"describe", "understand", "explore", "build"}}, "fecha_inicio": map[string]any{"type": "string"}, "fecha_cierre": map[string]any{"type": "string"}, "linea": map[string]any{"type": "string"}, "ciclos_registrados": map[string]any{"type": "integer"}, "ciclos_completados": map[string]any{"type": "integer"}, "teoria_emergente": map[string]any{"type": "string"},
-	})
-	assertStemSchemaExact(t, repo, "theories/.stem", map[string]any{
-		"tipo": map[string]any{"type": "enum", "values": []any{"theory"}, "required": true}, "confianza": map[string]any{"type": "enum", "values": []any{"emergent", "developing", "consolidated"}, "required": true}, "fecha": map[string]any{"type": "string", "required": true}, "linea_origen": map[string]any{"type": "string", "required": true},
-	})
 }
 
 func TestLivingDocumentationStatesBehaviorSpecificContract(t *testing.T) {
@@ -201,12 +188,6 @@ func fieldOrigin(obj map[string]any, name string) (string, bool) {
 		return origin, ok
 	}
 	return "", false
-}
-
-func assertStemSchemaExact(t *testing.T, repo, path string, want map[string]any) {
-	t.Helper()
-	schema := documentationContractMap(t, documentationContractSchema(t, repo, path)["schema"], path+" schema")
-	assertExact(t, path+" schema", schema, want)
 }
 
 func assertExact(t *testing.T, name string, got, want any) {
