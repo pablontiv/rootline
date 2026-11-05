@@ -748,7 +748,7 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 }
 
 func (f *serviceFixture) skillPath() string {
-	return filepath.Join(f.repo, ".claude", "skills", "rootline")
+	return filepath.Join(f.repo, ".agents", "skills", "rootline")
 }
 
 func (f *serviceFixture) claudePath() string {

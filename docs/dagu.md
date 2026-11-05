@@ -1,9 +1,10 @@
 # Dagu issue lifecycle
 
-Rootline versions two repository-owned workflows:
+Rootline runs two local workflows. They live under `.workspace/`, which is
+git-ignored, so each checkout installs its own copy from the bundle below:
 
-- [`.workspace/dagu/dags/feature.yaml`](../.workspace/dagu/dags/feature.yaml) carries an issue from triage through merge and cleanup.
-- [`.workspace/dagu/dags/poc.yaml`](../.workspace/dagu/dags/poc.yaml) proves uncertain external or runtime behavior before implementation.
+- `.workspace/dagu/dags/feature.yaml` carries an issue from triage through merge and cleanup.
+- `.workspace/dagu/dags/poc.yaml` proves uncertain external or runtime behavior before implementation.
 
 The adopted bundle is `@a4s/omp-dagu@0.2.0` from
 `pablontiv/a4s@3654f1646aba40298a6cd7ade2812c91acf94a84` (`3654f16`),
@@ -12,7 +13,8 @@ the `# dagu-feature-bundle:` identity header and carry
 `dagu-feature-bundle=0.2.0` in their labels. `start_gate` and PoC `base` log
 the bundle, source, and bootstrap identity.
 
-Inspect the installed bundle and its adoption history with:
+Inspect the installed bundle with the commands below. The two `git log` lines
+show the adoption history from when the DAGs were versioned:
 
 ```sh
 head -1 .workspace/dagu/dags/feature.yaml .workspace/dagu/dags/poc.yaml

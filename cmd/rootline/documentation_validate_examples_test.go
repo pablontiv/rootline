@@ -47,7 +47,7 @@ func TestValidateDocumentationDiagnosticExamplesMatchCLI(t *testing.T) {
 
 	repo := documentationContractRepoRoot(t)
 	delete(actualHealth, "path")
-	for _, path := range []string{"docs/validate.md", ".claude/skills/rootline/ref-validate.md"} {
+	for _, path := range []string{"docs/validate.md", ".agents/skills/rootline/ref-validate.md"} {
 		document := string(documentationContractRead(t, repo, path))
 		documentedHealth := documentedJSONDiagnostic(t, document, "check", "scope-match")
 		delete(documentedHealth, "path")

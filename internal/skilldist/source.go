@@ -12,6 +12,8 @@ import (
 	"github.com/pablontiv/rootline/v9/internal/gitenv"
 )
 
+const canonicalSkillRelativePath = ".agents/skills/rootline"
+
 func ResolveSource(ctx context.Context, requested string) (Source, error) {
 	if requested == "" {
 		return Source{}, operationError(ErrSourceNotCanonical, "", "", fmt.Errorf("source path is required"))
@@ -38,7 +40,7 @@ func ResolveSource(ctx context.Context, requested string) (Source, error) {
 		return Source{}, err
 	}
 
-	skillPath := filepath.Join(repoRoot, ".claude", "skills", "rootline")
+	skillPath := filepath.Join(repoRoot, filepath.FromSlash(canonicalSkillRelativePath))
 	skillFile := filepath.Join(skillPath, "SKILL.md")
 	info, err := os.Stat(skillFile)
 	if err != nil {
@@ -48,7 +50,7 @@ func ResolveSource(ctx context.Context, requested string) (Source, error) {
 		return Source{}, operationError(ErrSourceNotCanonical, skillFile, "", fmt.Errorf("canonical skill file must be regular"))
 	}
 
-	status, err := gitOutput(ctx, repoRoot, "status", "--porcelain", "--", ".claude/skills/rootline")
+	status, err := gitOutput(ctx, repoRoot, "status", "--porcelain", "--", canonicalSkillRelativePath)
 	if err != nil {
 		return Source{}, operationError(ErrSourceNotCanonical, skillPath, "", err)
 	}

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Pre-commit: format check, lint, and secret scan
+set -euo pipefail
 
 echo "Running gofmt check..."
 UNFORMATTED=$(gofmt -l . 2>/dev/null | grep -v vendor || true)

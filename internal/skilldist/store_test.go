@@ -432,8 +432,8 @@ func TestStoreAcceptsInstallNoOpReceiptWithoutBackup(t *testing.T) {
 		{
 			Destination: DestinationClaude,
 			Action:      ActionNoOp,
-			Before:      DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.claude/skills/rootline", CanonicalTarget: "/repo/.claude/skills/rootline", Digest: "sha256:source"},
-			After:       DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.claude/skills/rootline", CanonicalTarget: "/repo/.claude/skills/rootline", Digest: "sha256:source"},
+			Before:      DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.agents/skills/rootline", CanonicalTarget: "/repo/.agents/skills/rootline", Digest: "sha256:source"},
+			After:       DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.agents/skills/rootline", CanonicalTarget: "/repo/.agents/skills/rootline", Digest: "sha256:source"},
 			Complete:    true,
 		},
 	}
@@ -491,7 +491,7 @@ func TestReceiptSemanticValidationBranches(t *testing.T) {
 		{name: "install replace invalid before", mutate: func(r *Receipt) {
 			r.Actions[0].Before.Kind = KindCorrectSymlink
 			r.Actions[0].Action = ActionReplaceWithSymlink
-			r.Backups[0] = Backup{Destination: DestinationClaude, OriginalPath: "/x", Kind: KindCorrectSymlink, LinkTarget: "/repo/.claude/skills/rootline"}
+			r.Backups[0] = Backup{Destination: DestinationClaude, OriginalPath: "/x", Kind: KindCorrectSymlink, LinkTarget: "/repo/.agents/skills/rootline"}
 		}, want: "replace_with_symlink"},
 		{name: "install after not symlink", mutate: func(r *Receipt) { r.Actions[1].After.Kind = KindDirectory }, want: "must finish"},
 		{name: "uninstall invalid action", mutate: func(r *Receipt) { makeUninstallReceipt(r); r.Actions[0].Action = ActionCreateSymlink }, want: "not valid for uninstall"},
@@ -544,7 +544,7 @@ func makeUninstallReceipt(receipt *Receipt) {
 	receipt.Actions = []ActionResult{{
 		Destination: DestinationClaude,
 		Action:      ActionRemoveManagedSymlink,
-		Before:      DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.claude/skills/rootline", CanonicalTarget: "/repo/.claude/skills/rootline", Digest: "sha256:source"},
+		Before:      DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.agents/skills/rootline", CanonicalTarget: "/repo/.agents/skills/rootline", Digest: "sha256:source"},
 		After:       DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindAbsent},
 		Complete:    true,
 	}}
@@ -558,21 +558,21 @@ func semanticallyValidInstallReceipt() Receipt {
 		Timestamp:  time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC),
 		Operation:  OperationInstall,
 		Complete:   true,
-		Source:     &Source{RepoRoot: "/repo", SkillPath: "/repo/.claude/skills/rootline", Commit: "abc123", Digest: "sha256:source"},
+		Source:     &Source{RepoRoot: "/repo", SkillPath: "/repo/.agents/skills/rootline", Commit: "abc123", Digest: "sha256:source"},
 		PlanDigest: "sha256:plan",
 		Actions: []ActionResult{
 			{
 				Destination: DestinationClaude,
 				Action:      ActionReplaceWithSymlink,
 				Before:      DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindDirectory, Digest: "sha256:old"},
-				After:       DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.claude/skills/rootline", CanonicalTarget: "/repo/.claude/skills/rootline", Digest: "sha256:source"},
+				After:       DestinationState{ID: DestinationClaude, Path: "/home/agent/.claude/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.agents/skills/rootline", CanonicalTarget: "/repo/.agents/skills/rootline", Digest: "sha256:source"},
 				Complete:    true,
 			},
 			{
 				Destination: DestinationAgents,
 				Action:      ActionCreateSymlink,
 				Before:      DestinationState{ID: DestinationAgents, Path: "/home/agent/.agents/skills/rootline", Kind: KindAbsent},
-				After:       DestinationState{ID: DestinationAgents, Path: "/home/agent/.agents/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.claude/skills/rootline", CanonicalTarget: "/repo/.claude/skills/rootline", Digest: "sha256:source"},
+				After:       DestinationState{ID: DestinationAgents, Path: "/home/agent/.agents/skills/rootline", Kind: KindCorrectSymlink, LexicalTarget: "/repo/.agents/skills/rootline", CanonicalTarget: "/repo/.agents/skills/rootline", Digest: "sha256:source"},
 				Complete:    true,
 			},
 		},

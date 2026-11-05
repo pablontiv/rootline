@@ -20,7 +20,7 @@ func TestResolveSourceRequiresPrimaryCheckoutAndCanonicalSkill(t *testing.T) {
 	if source.RepoRoot != repo {
 		t.Fatalf("RepoRoot = %q, want %q", source.RepoRoot, repo)
 	}
-	if source.SkillPath != filepath.Join(repo, ".claude", "skills", "rootline") {
+	if source.SkillPath != filepath.Join(repo, ".agents", "skills", "rootline") {
 		t.Fatalf("SkillPath = %q", source.SkillPath)
 	}
 	if source.Commit == "" || source.Digest == "" {
@@ -30,7 +30,7 @@ func TestResolveSourceRequiresPrimaryCheckoutAndCanonicalSkill(t *testing.T) {
 
 func TestResolveSourceRejectsLinkedWorktreeMarker(t *testing.T) {
 	repo := t.TempDir()
-	mustWriteSkillFile(t, filepath.Join(repo, ".claude", "skills", "rootline"), "SKILL.md", "---\nname: rootline\n---\n")
+	mustWriteSkillFile(t, filepath.Join(repo, ".agents", "skills", "rootline"), "SKILL.md", "---\nname: rootline\n---\n")
 	if err := os.WriteFile(filepath.Join(repo, ".git"), []byte("gitdir: /tmp/common/worktrees/probe\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestResolveSourceRejectsSymlinkInsideCanonicalTree(t *testing.T) {
 	if err := os.WriteFile(outside, []byte("outside"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(outside, filepath.Join(repo, ".claude", "skills", "rootline", "escape.md")); err != nil {
+	if err := os.Symlink(outside, filepath.Join(repo, ".agents", "skills", "rootline", "escape.md")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	commitSkillRepository(t, repo, "add canonical symlink")
@@ -54,7 +54,7 @@ func TestResolveSourceRejectsSymlinkInsideCanonicalTree(t *testing.T) {
 
 func TestResolveSourceRejectsDirtyCanonicalTree(t *testing.T) {
 	repo := initSkillRepository(t)
-	mustWriteSkillFile(t, filepath.Join(repo, ".claude", "skills", "rootline"), "untracked.md", "dirty")
+	mustWriteSkillFile(t, filepath.Join(repo, ".agents", "skills", "rootline"), "untracked.md", "dirty")
 	_, err := ResolveSource(context.Background(), repo)
 	assertOperationErrorCode(t, err, ErrSourceNotCanonical)
 }
@@ -65,7 +65,7 @@ func initSkillRepository(t *testing.T) string {
 	runGit(t, repo, "init")
 	runGit(t, repo, "config", "user.name", "Rootline Test")
 	runGit(t, repo, "config", "user.email", "rootline-test@example.invalid")
-	mustWriteSkillFile(t, filepath.Join(repo, ".claude", "skills", "rootline"), "SKILL.md", "---\nname: rootline\n---\n")
+	mustWriteSkillFile(t, filepath.Join(repo, ".agents", "skills", "rootline"), "SKILL.md", "---\nname: rootline\n---\n")
 	commitSkillRepository(t, repo, "add canonical skill")
 	return repo
 }

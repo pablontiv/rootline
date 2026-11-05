@@ -15,7 +15,7 @@ import (
 type fencedBlock struct{ lang, body string }
 
 func activeDocumentationContractFiles() []string {
-	return []string{"README.md", "CLAUDE.md", "docs/analyze.md", "docs/init.md", "docs/validate.md", "docs/migrate.md", "docs/new.md", "docs/query.md", "docs/describe.md", "docs/explain.md", "docs/derivation.md", "docs/set.md", "docs/extensibility.md", "docs/levels.md", ".claude/skills/rootline/SKILL.md", ".claude/skills/rootline/ref-schema.md", ".claude/skills/rootline/ref-validate.md", ".claude/skills/rootline/ref-query.md", ".claude/skills/rootline/ref-advanced.md"}
+	return []string{"README.md", "CLAUDE.md", "docs/analyze.md", "docs/init.md", "docs/validate.md", "docs/migrate.md", "docs/new.md", "docs/query.md", "docs/describe.md", "docs/explain.md", "docs/derivation.md", "docs/set.md", "docs/extensibility.md", "docs/levels.md", ".agents/skills/rootline/SKILL.md", ".agents/skills/rootline/ref-schema.md", ".agents/skills/rootline/ref-validate.md", ".agents/skills/rootline/ref-query.md", ".agents/skills/rootline/ref-advanced.md"}
 }
 
 func fencedBlocks(text string) []fencedBlock {

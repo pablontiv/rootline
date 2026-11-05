@@ -36,7 +36,7 @@ dist/
 Thumbs.db
 
 # Skill evals (local only)
-.claude/skills/*/evals/
+.agents/skills/*/evals/
 
 # JavaScript dependencies
 node_modules/
@@ -49,5 +49,5 @@ context/
 # CodeGraph index
 .codegraph/
 
-# Dagu-managed issue and PoC worktrees
-/.workspace/worktrees/
+# Local Dagu workflows and issue/PoC worktrees (not versioned)
+/.workspace/
