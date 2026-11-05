@@ -4,464 +4,221 @@
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 
-Keep your Markdown consistent, connected, and queryable as it grows.
+**Schemas, queries and a link graph for the Markdown your team — and your AI agents — already write.**
 
-Rootline treats your documentation as structured data. **`.stem` files define schemas** (what fields must exist, their types, allowed values). **Validation rules** enforce consistency. **Queries** retrieve relevant records without reading every file. **Field inspection** shows where frontmatter and source-backed values came from and how computed fields were produced. Humans, automation, and AI agents all consume the same governed outputs.
-
----
-
-## Table of Contents
-
-- [Installation](#installation)
-- [Why It Matters](#why-it-matters)
-- [Quick Start](#quick-start)
-- [Core Concepts](#core-concepts)
-- [Command Capabilities](#command-capabilities)
-- [Optional Integrations](#optional-integrations)
-- [Documentation & References](#documentation--references)
-- [Development](#development)
-- [License](#license)
-
----
-
-## Installation
-
-### Linux / macOS
+Rootline is a single-binary CLI that turns a directory of Markdown files into a validated, queryable dataset. You declare what each folder's documents must look like in a small `.stem` file; Rootline validates every file against it, answers questions like *"which tasks are still pending in this epic?"* without grepping, keeps roll-up counts in index files current, and checks that the links between documents actually resolve. Nothing is rendered, nothing is uploaded, and no database is introduced: the files stay plain Markdown in Git.
 
 ```bash
+rootline validate --all docs/                      # every document conforms to its schema?
+rootline query docs/ --where 'status == "pending"' # records as JSON, no grep
+rootline graph docs/ --check                       # broken links and cycles → exit code
+```
+
+---
+
+## The problem
+
+Teams keep more and more of their operating knowledge in Markdown: PRDs, ADRs, roadmaps, runbooks, task files, Obsidian vaults, the `docs/` folder an AI coding agent reads before every change. It scales badly:
+
+- **Frontmatter drifts.** `status: Pending` in one file, `estado: pending` in the next, a required `owner` missing in half of them. Nobody notices until something downstream breaks.
+- **Nothing is queryable.** "What is blocked right now?" means opening files or writing a one-off script.
+- **Roll-ups go stale.** The `README.md` that says *12 of 20 tasks done* was true two weeks ago.
+- **Links rot silently.** `[[T014-migrate-auth]]` was renamed; three documents still point at it.
+- **Agents guess at structure.** Coding agents write Markdown fast and inconsistently unless something tells them — in a machine-readable way — what a valid record is.
+
+Linters check formatting. Static-site frameworks validate frontmatter only inside their build. Query tools read frontmatter but enforce nothing. Rootline does all four jobs — **validate, query, derive, link-check** — from one CLI, with inherited schemas and stable JSON output that humans, CI and agents consume the same way.
+
+## Who it is for
+
+- **Docs-as-code teams** keeping PRDs, ADRs, roadmaps or runbooks in a Git repository and wanting CI to reject malformed records.
+- **Engineering teams using AI coding agents** (Claude Code, Codex, Gemini CLI, …) that need a contract for the Markdown those agents read and write.
+- **Obsidian / Markdown vault owners** who want validation and queries from the terminal and in CI, not only inside an editor plugin.
+
+If your Markdown is prose with no metadata, Rootline is not the tool. If it has frontmatter you rely on, it is.
+
+---
+
+## Quick start (5 minutes)
+
+### 1. Install
+
+```bash
+# Linux / macOS
 curl -fsSL https://raw.githubusercontent.com/pablontiv/rootline/master/install.sh | bash
-```
 
-### Windows (PowerShell)
-
-```powershell
+# Windows (PowerShell)
 irm https://raw.githubusercontent.com/pablontiv/rootline/master/install.ps1 | iex
-```
 
-### From source
-
-```bash
+# From source (Go 1.26+)
 go install github.com/pablontiv/rootline/cmd/rootline@latest
 ```
 
----
+Release builds auto-update within their compatibility boundary; see [docs/auto-update.md](docs/auto-update.md).
 
-## Why It Matters
-
-As Markdown documentation grows, two problems emerge: **structural drift** and **retrieval difficulty**. Rootline solves both.
-
-- **Schema inheritance prevents drift**: Parent directories define rules that child documents inherit. Fields, types, and constraints flow top-down; mutations raise errors immediately.
-- **Validation rules catch inconsistencies early**: `required`, `enum`, and structural constraints enforce consistency without manual review.
-- **Queryable fields eliminate document reading**: Search by metadata (estado, tipo, tags) using declarative filters — no grep, no manual scanning.
-- **Link graphs show dependencies**: Discover which documents reference each other, block on external targets, or form cycles.
-- **Humans, agents, and automation consume the same governed outputs**: Stable JSON contracts mean your Markdown structure is machine-readable and auditable.
-
-Rootline does not render documentation. It **models** it — making your Markdown a queryable, governed knowledge system.
-
----
-
-## Quick Start
-
-Initialize your documentation directory, validate its structure, and query its contents.
+### 2. Infer a schema from what you already have
 
 ```bash
-# 1. Initialize — infer a .stem schema from existing documents
-# (writes a root: true marker so schema discovery knows where to stop)
 rootline init docs/
-
-# 2. Query — find records by metadata
-rootline query docs/ --where 'estado == "published"'
-
-# 3. Validate — check documents against their schema rules
-# Schema discovery walks up the tree until it hits a root: true .stem
-# (or the filesystem root). No Git required.
-rootline validate --all docs/
-
-# 4. Graph — render the dependency diagram (Mermaid)
-rootline graph docs/ --format mermaid -o table
-
-# 5. New — scaffold a document from the effective schema
-rootline new docs/task-001.md
-
-# 6. Explain — trace where a field value came from
-rootline explain docs/task-001.md
 ```
 
-Data and inspection commands output JSON by default when they have a machine-readable envelope. Use `--output table` for supported human-readable tables. (`graph --check` reports cycles and broken links as text plus an exit code.)
+`init` reads the frontmatter in `docs/`, infers field types, enums and required fields, and writes a `docs/.stem` with `root: true` (the boundary where schema discovery stops). Preview with `--dry-run`, or start from someone else's schema with `--template owner/repo`.
 
----
-
-## Core Concepts
-
-### What Rootline Models
-
-- **Directory hierarchy**: Directories are tables; files are records.
-- **Inherited rules**: `.stem` files define schemas; rules flow from parent to child via top-down merge.
-- **Derived fields**: Expressions compute fields (slugify, concatenate, filter); aggregates roll up from children to parents.
-- **Links**: Documents reference each other via `[[wiki-links]]` by default and `[markdown](links)` when `links.styles` includes `markdown`, forming a queryable dependency graph.
-- **Queryable outputs**: Data and inspection commands return stable JSON; records can be filtered, sorted, and projected where the command supports those flags.
-
-### How Schema Inheritance Works
-
-Rootline discovers schemas by **walking up** your directory tree:
-
-1. Start at the target path (file or directory)
-2. Collect `.stem` files at each level, moving up until a `.stem` declares `root: true` — the governance boundary — or, if none does, until the filesystem root
-3. Merge collected schemas from root to leaf (parent → child)
-
-Each level can add new fields or narrow parent definitions. Type-driven merge rules ensure predictable inheritance (maps merge key-level; arrays and scalars replace entirely).
-
-**A child never removes anything.** Not in `schema:`, not in `derive:`, not in `aggregate:`. Setting a key to `null` in a child does not delete it — a `.stem` that drops a parent's declaration silently reduces the guarantee that parent made to everything beneath it, which is the one thing hierarchical governance exists to prevent. If a field has to go, the structure is wrong: remove it from the `.stem` that declares it.
-
-A `.stem` file with `root: true` marks the governance boundary; walk-up discovery stops there. The marker is required, not optional: if the walk reaches the filesystem root without finding one, the chain may have collected `.stem` files from outside your project, so the boundary preflight refuses to run governed commands. On a terminal it offers to add `root: true` for you; in a pipeline or CI it is a hard error, and the fix is to add the marker to the `.stem` at the top of your project. **Git is optional** — Rootline works in any directory, with or without Git, and never uses `.git` as a boundary.
-
-### The `.stem` File
-
-A `.stem` file is the DDL schema for a directory. It defines what fields exist, what types they have, which are required, and how values are validated.
+A `.stem` is small and readable:
 
 ```yaml
 version: 2
 
 schema:
-  title: { type: string, required: true }
+  title:  { type: string, required: true }
   status:
     type: enum
-    values: [draft, review, published]
-    default: draft
+    values: [pending, in_progress, done, blocked]
+    default: pending
     required: true
+  owner:  { type: string }
+
+derive:
+  slug: 'slugify(title)'
 
 aggregate:
-  completed: 'len(filter(descendants, .status == "published"))'
+  done_count: 'len(filter(descendants, .status == "done"))'
 
 links:
-  allowed: [blocks, depends]
+  blocked_by:
+    target: '.*/T[0-9]{3}-.*\.md$'
 ```
 
-> Body sections are source-backed values: use a real type with `source: body.section["## Summary"]`; frontmatter remains an explicit override.
+### 3. Validate
 
-### What Validation Means
+```bash
+rootline validate --all docs/
+```
 
-Validation enforces consistency using rules defined in `.stem`:
+A typo in an enum value, a missing required field or a link to a file that does not exist is reported with the file, the rule, the `.stem` that declared it and — when there is an obvious fix — a suggestion:
 
-- **required**: Field presence; `""` and `[]` are present, while `non_empty` is separate
-- **enum**: Field value must be one of the declared `values:`
-- **type**: Strict string, list, enum, sequence, link, boolean, and integer conformance without coercion
-- **exists**: `exists` checks presence of an effective field, including source-backed or derived values
-- **structural**: Directory naming, required children, index files
+```json
+{
+  "rule": "enum",
+  "field": "status",
+  "message": "value pendig is not in allowed values: [pending, in_progress, done, blocked] (did you mean \"pending\"?)",
+  "source": "docs/.stem",
+  "severity": "error",
+  "suggestion": "pending"
+}
+```
 
-Violations are reported as errors; the command exits with code 1. Use `--strict` to treat warnings as errors.
+Exit code is non-zero on any error, so the same command gates a pre-commit hook (`rootline hooks install`) or a CI job.
 
-### What Queryability Means
+### 4. Query
 
-Queries retrieve relevant records without scanning entire documents:
+```bash
+rootline query docs/ --where 'status == "blocked"' --select path,title,owner
+rootline query docs/ --where 'status != "done"' --count
+rootline query docs/ --has-outbound 'status == "blocked"'   # records that depend on something blocked
+```
 
-- Declarative filtering: `--where 'estado == "published" && tipo == "epic"'`
-- Metadata projection: `--select path,estado` returns compact rows
-- Graph traversal: `--has-inbound` / `--has-outbound` with link predicates
-- Counted results: `--count` returns summary statistics
+Filters use [expr-lang](https://expr-lang.org/) syntax over frontmatter, derived and aggregated fields. Output is JSON by default; `--output table`, `jsonl` and `csv` are available where they make sense.
 
-These outputs are JSON, suitable for piping to automation and AI consumers.
+### 5. Fix, scaffold, explain
+
+```bash
+rootline fix --all docs/ --dry-run      # proposed repairs (enum typos, missing defaults) — nothing written
+rootline new docs/T021-rotate-keys.md   # a new record with frontmatter pre-filled from the effective schema
+rootline explain docs/README.md         # where each field value came from: frontmatter, derive, aggregate, which .stem
+rootline graph docs/ --format mermaid -o table   # the dependency graph, ready to paste into GitHub
+```
 
 ---
 
-## Command Capabilities
+## How it works
 
-Rootline ships as a **single static Go binary** with no dependencies. Commands are grouped by use case. Traversal/data commands such as `query`, `stats`, `tree`, `graph`, and `validate --all` support `--where 'expr'` (expr-lang syntax) to filter records before processing.
+**Directories are tables, files are records, `.stem` files are the schema.** When Rootline resolves the schema for a file it walks *up* the directory tree collecting `.stem` files until it reaches one marked `root: true`, then merges them top-down. A child directory can add fields or tighten constraints; it can never remove a guarantee a parent made. That one rule is what makes a large tree governable: whatever `docs/.stem` promises holds for everything beneath it.
 
-### Validate & Govern
-
-Check documents against inherited schemas and trace field origins.
-
-- **`validate`** — Check documents against `.stem` rules
-  - `rootline validate [file...]` — Single file
-  - `rootline validate --all [--where 'expr'] [--strict]` — All files in scope
-  - `rootline validate --staged` — Git staging area only
-
-- **`describe`** — Show effective schema for a directory
-  - `rootline describe <path>` — Merged schema with all inherited rules
-
-- **`explain`** — Trace field origins, derivations, and errors
-  - `rootline explain <file>` — Inspect field origins and computed expressions
-
-### Query & Traverse
-
-Find records and visualize dependencies.
-
-- **`query`** — Search by metadata using declarative filters
-  - `rootline query [path] --where 'expr'` — Filter records
-  - `rootline query --where 'expr' --count` — Summary count
-  - `rootline query --where 'expr' --select path,estado` — Compact row output
-  - `rootline query --where 'expr' --has-inbound '<sub-expr>'` — Records with inbound links
-  - `rootline query --where 'expr' --has-outbound '<sub-expr>'` — Records with outbound links
-
-- **`tree`** — Hierarchical view with recursive record totals
-  - `rootline tree [path] [--where 'expr']` — Directory structure with metadata
-
-- **`graph`** — Dependency graph from governed link styles
-  - `rootline graph [path]` — Dependency graph as JSON (default)
-  - `rootline graph [path] --format dot|mermaid -o table` — Render a diagram
-  - `rootline graph [path] --check` — Validate cycles and broken links (text report + exit code)
-  - `rootline graph [path] --fail-cycles` — Treat cycles as errors
-
-### Build & Maintain
-
-Create and update documents.
-
-- **`init`** — Generate `.stem` schema from existing documents
-  - `rootline init [path]` — Infer schema from frontmatter patterns
-  - `rootline init [path] --template owner/repo[@tag]` — Fetch `.stem` from remote
-  - `rootline init [path] --force` — Overwrite existing `.stem`
-  - `rootline init [path] --dry-run` — Preview without writing
-
-- **`new`** — Scaffold a document from effective schema
-  - `rootline new <filepath>` — Create with frontmatter pre-populated
-  - `rootline new <filepath> --force` — Overwrite an existing file
-  - `rootline new <filepath> --dry-run` — Preview generated content
-
-- **`set`** — Mutate frontmatter fields with validation
-  - `rootline set <file> field=value [field2=value2 ...]` — Set fields
-  - `rootline set <file> field=@file` — Load content from file
-  - `rootline set <file> ... --dry-run` — Preview changes
-
-- **`fix`** — Auto-repair validation errors
-  - `rootline fix [file...]` — Fix single file
-  - `rootline fix --all` — Fix all files in scope
-  - `rootline fix --dry-run` — Preview proposed changes
-
-### Analyze & Evolve
-
-Analyze patterns and manage schema evolution.
-
-- **`analyze`** — Run 14 inference detectors (12 data + 2 governance)
-  - `rootline analyze [directory]` — Produce structured report
-  - `rootline analyze [directory] --incremental` — Only inferences not covered by existing `.stem`
-
-- **`schema`** — Schema operations
-  - `rootline schema propose [directory]` — Generate schema proposals
-  - `rootline schema apply --report <file>` — Apply schema proposals to `.stem` files
-
-- **`repair`** — Apply data-only repairs from version 1 `rootline/proposals` fix reports
-  - Generate a report with `rootline fix --all <dir> --dry-run -o json`
-  - `rootline repair apply --report <file>` — Fix frontmatter only (not `.stem`)
-  - `rootline repair apply --report <file> --dry-run` — Preview repairs
-
-- **`migrate`** — Detect and apply schema changes
-  - `rootline migrate [path]` — Compare current `.stem` against git HEAD
-  - `rootline migrate [path] --rename old_field=new_field` — Bulk field rename
-  - `rootline migrate [path] --split` — Convert flat `.stem` to hierarchical per-level files
-  - `rootline migrate [path] --scaffold` — Create missing required sections
-  - `rootline migrate [path] --dry-run` — Preview without modifying
-
-### Infrastructure
-
-- **`completion`** — Generate shell completion scripts
-  - `rootline completion bash|zsh|fish` — Load in your shell
-
-- **`hooks`** — Git pre-commit hook management
-  - `rootline hooks install` — Enable pre-commit validation
-  - `rootline hooks status` — Check installation status
-  - `rootline hooks uninstall` — Remove hook
-  - All three commands use Git's effective hooks directory: `.git/hooks` by default, or the absolute or repository-relative directory configured by `core.hooksPath`. They also work from repository subdirectories and ignore hooks in an unused `.git/hooks` directory.
-  - Existing non-Rootline hooks are preserved unless installation uses `--force`; uninstall removes only Rootline-managed hooks.
-
-Commands with JSON envelopes support `--output json` and `--field` for dot-path extraction; `query` also supports `jsonl` and `csv` with `--select`. Commands that emit only human text or write files reject `--field`:
-
-```bash
-# Dot-path extraction
-rootline describe docs/prd/ --field schema.id.next
-# "T004"
-
-# Query field extraction uses the rows array
-rootline query --where 'estado == "Pending"' --field 'rows[].path'
-# ["docs/projects/P01/tasks/T005-deploy-grafana.md", ...]
-
-# Array projection: extract fields from arrays (rows, edges, etc.)
-rootline query --field 'rows[].path'
-# ["docs/projects/P01/tasks/T005-deploy-grafana.md", ...]
-
-rootline query --field 'rows[].frontmatter.estado'
-# ["Pending", "In Progress", ...]
-
-rootline graph docs/ --field 'edges[].source'
-# ["docs/api/auth.md", ...]
-
-# Compact query projections with --select (JSON, JSONL, CSV)
-rootline query --select path,estado
-# {"rows": [{"path": "...", "estado": "Pending"}, ...]}
-
-rootline query --select path,estado --output jsonl
-# {"path": "...", "estado": "Pending"}
-# {"path": "...", "estado": "In Progress"}
-
-rootline query --select path,estado --output csv
-# path,estado
-# docs/api/auth.md,Pending
-# docs/api/endpoints.md,In Progress
-
-# Filtering across commands
-rootline tree docs/epics/ --where 'estado != "Completed"'
-rootline stats docs/epics/ --where 'tipo == "software-module"'
-rootline graph docs/epics/ --where 'tipo != "feature"' --check
+```
+docs/.stem              root: true — title, status required for every record
+docs/roadmap/.stem      adds: id as sequence T###, owner required
+docs/roadmap/T014.md    validated against the merge of both
 ```
 
-### Query Expressions
+The pipeline is **extract → resolve schema → validate → derive → aggregate → query**, and every command emits a versioned JSON envelope (`"version": 2, "kind": "rootline/validate-batch"`) so output shapes are a contract, not an accident.
 
-Queries use [expr-lang/expr](https://expr-lang.org/) syntax. Use bare metadata names (such as `estado` or `impact_score`) consistently in `--where`, `--sort`, and `--select`, not `frontmatter.<field>` or `derived.<field>` namespace paths. These names are separate from JSON output paths used by `--field`. See [CLI field names and lower-level query APIs](docs/query.md#cli-field-names). Multiple `--where` flags are combined with AND:
+Rootline **never leaves a file its own schema refuses.** Repairs go through atomic writes, preserve YAML key order and comments, and each written file is re-validated and restored byte-for-byte if the result fails. Git is optional: `.git` is only consulted by the explicit `--staged`, `hooks` and `migrate` flows, never for schema discovery.
 
-```bash
-rootline query --where 'estado == "Pending"'
-rootline query --where 'tipo in ["lxc", "vm"]' --where 'estado != "Completed"'
-rootline query --where 'body contains "migration"'
-rootline query --where 'tags != nil' --count
-```
+---
 
-### Derivation & Aggregation
+## How it compares
 
-`.stem` files can define derived fields (computed per-record) and aggregates (rolled up from children to parent index files):
+| | Rootline | Markdown linters (`markdownlint`, `mdschema`, `remark-lint-frontmatter-schema`) | Frontmatter query tools (`krafna`, `markdowndb`, Obsidian Dataview) | Framework collections (Astro, Contentlayer) |
+|---|---|---|---|---|
+| Validate frontmatter against a schema | ✅ | ✅ | ❌ | ✅ (only inside the build) |
+| Schema inherited through the directory tree | ✅ | ❌ | ❌ | ❌ |
+| Infer a schema from existing files | ✅ | partial | ❌ | ❌ |
+| Query records with filters | ✅ | ❌ | ✅ | ✅ (in app code) |
+| Derived and aggregated fields | ✅ | ❌ | partial | ❌ |
+| Link graph, broken-link and cycle checks | ✅ | partial | partial | ❌ |
+| Propose and apply safe repairs | ✅ | ❌ | ❌ | ❌ |
+| Single static binary, no runtime | ✅ Go | mostly Node (`mdschema`: Go) | varies | Node |
+
+Use a linter for prose style; use Rootline when the metadata in your Markdown is data you depend on.
+
+---
+
+## In CI and in agents
+
+### GitHub Action
+
+This repository ships a composite action. Add it to any workflow:
 
 ```yaml
-derive:
-  slug: 'slugify(titulo)'
-  name_lower: 'lower(nombre)'
-
-aggregate:
-  total: 'len(descendants)'
-  completed: 'len(filter(descendants, .estado == "Completed"))'
+- uses: pablontiv/rootline@master
+  with:
+    path: docs/
+    fail-on: error     # or: warning | never
 ```
 
-Derived and aggregate fields appear in query results. In `tree` JSON they are merged into leaf nodes' `frontmatter`; directory nodes carry recursive `total` counts and child nodes, not frontmatter.
+It installs the latest release (or uses a `rootline` already on `PATH`), runs `validate --all` and exposes `valid` and `error_count` as outputs.
 
-### Dependency Graph
-
-Documents reference each other via `[[wiki-links]]` by default, or via both wikilinks and markdown links when `.stem` sets `links.styles: [wikilink, markdown]`. Rootline extracts the governed styles and builds a directed graph:
+### Pre-commit hook
 
 ```bash
-rootline graph docs/                            # Dependency graph as JSON (default)
-rootline graph docs/ --format mermaid -o table  # Mermaid diagram
-rootline graph docs/ --format dot -o table      # Graphviz DOT
-rootline graph docs/ --check                    # Validate: cycles + broken links (text + exit code)
+rootline hooks install      # validates staged Markdown on every commit; respects core.hooksPath
 ```
 
-Link schemas in `.stem` files control which link types are allowed and validate targets against regex patterns.
+### AI coding agents
 
-### Fix & Proposals
+Rootline is built to be the structured source of truth an agent calls instead of reading files: `query`, `validate`, `describe`, `explain`, `tree`, `stats` and `graph` all return stable JSON, and `--field` extracts exactly the value a tool call needs. `rootline skill install` publishes a managed agent skill into `~/.claude/skills` and `~/.agents/skills` through an explicit plan-and-approve flow — see [docs/skill.md](docs/skill.md).
 
-`rootline fix` goes beyond adding missing fields — it proposes intelligent repairs:
-
-```bash
-rootline fix doc.md --dry-run    # Preview proposed changes
-rootline fix --all               # Fix all files in scope
-```
-
-Proposals include: correct misspelled enum values (Levenshtein matching), withheld `.stem` enum-extension suggestions for review, migrate values with wiki-link insertion, and aggregate propagation when configured.
-
-### Explain
-
-`rootline explain` traces **why** a document has its current state — field origins, derivation expressions, aggregation sources, and validation errors:
-
-```bash
-rootline explain docs/projects/P01/F01/README.md
-```
-
-Shows each field's origin (`frontmatter`, `schema`, `derived`, or `aggregate`). Frontmatter/source-backed schema fields carry `defined_in` and logical `source` directives when available; computed derive/aggregate fields carry expressions and currently do not report `.stem` provenance.
+The engine decides everything that follows from **form** (a field present in >80 % of records is inferred as required; a majority value becomes a default). Decisions that need **meaning** are not guessed: `analyze` marks them `requires_agent` and reports percentage evidence for a human or an agent to resolve.
 
 ---
 
-## Optional Integrations
+## Command reference
 
-Git is optional. Rootline works in any directory, with or without version control.
+| Area | Commands | Docs |
+|---|---|---|
+| Validate & govern | `validate`, `describe`, `explain` | [validate](docs/validate.md) · [describe](docs/describe.md) · [explain](docs/explain.md) |
+| Query & traverse | `query`, `tree`, `stats`, `graph` | [query](docs/query.md) · [tree](docs/tree.md) · [stats](docs/stats.md) · [graph](docs/graph.md) |
+| Build & maintain | `init`, `new`, `set`, `fix` | [init](docs/init.md) · [new](docs/new.md) · [set](docs/set.md) · [fix](docs/fix.md) |
+| Analyze & evolve | `analyze`, `schema propose/apply`, `repair apply`, `migrate` | [analyze](docs/analyze.md) · [migrate](docs/migrate.md) |
+| Infrastructure | `hooks`, `skill`, `completion` | [skill](docs/skill.md) · [auto-update](docs/auto-update.md) |
 
-### Git-based Workflows
+Commands with a JSON envelope accept `--output json|table` (plus `jsonl`/`csv` on `query --select`) and `--field <dot.path>` for extracting one value; commands that only write files or print text reject them. `query`, `stats`, `tree`, `graph` and `validate --all` accept `--where 'expr'`. Full contracts: [docs/output.md](docs/output.md).
 
-Rootline integrates with Git for continuous validation and collaborative workflows:
-
-- **Manual staged validation** — `rootline validate --staged` is available when you want to check staged Markdown files
-- **CI validation** — GitHub Actions workflows in `.github/workflows/` run tests and repository checks
-- **Diff-aware reviews** — Queries and validation support `--where` filters, making it easy to review focused record subsets
-
-These workflows are optional enhancements, not product requirements. You can use Rootline without Git by running commands manually.
-
----
-
-## AI-Native
-
-Rootline is designed as a **structured knowledge source for AI assistants**. Data commands output stable, versioned JSON contracts (each payload carries its own `version` field), making them suitable for tool use and automation.
-
-### CLI-first automation
-
-AI assistants and automation should call the Rootline CLI directly and consume stable JSON output from commands that emit envelopes, such as `query`, `validate`, `describe`, `tree`, `stats`, `explain`, `fix --all --dry-run`, and `graph` JSON mode. Commands such as `set`, `new`, `init`, and `graph --check` emit human text or perform writes instead of a JSON envelope.
-
-### Agent skill distribution
-
-Rootline owns the agent skill distribution lifecycle through the explicit `rootline skill install` plan-and-approve command family. Git hooks do not mutate user skill directories. Agents and operators should follow [docs/skill.md](docs/skill.md) for install, status, uninstall, and restore workflows.
-
-### Engine vs. agent: division of labor
-
-Rootline's engine decides everything resolvable **from form** — frequency
-thresholds (a field present in >80% of records is inferred as `required`), unanimous or
-majority value agreement, and structural conventions (directory naming, type
-consistency). Decisions that need **meaning** — is this value semantically the
-same as that one? — are not guessed: `analyze` marks those proposals
-`requires_agent` for a human or agent to resolve. The report exposes
-**percentage evidence, not opinions**; consumers apply their own thresholds.
-
----
-
-## Documentation & References
-
-### User Documentation
-
-| Topic | Description |
-|-------|-------------|
-| [Output Formats](docs/output.md) | The `--output` contract and which command supports which format |
-| [Init](docs/init.md) | Schema inference from existing documents |
-| [Validate](docs/validate.md) | Validation rules, batch mode, staged checks |
-| [Describe](docs/describe.md) | Describe output, field extraction, source tracking |
-| [Query Engine](docs/query.md) | Query contract, operators, result shapes |
-| [New](docs/new.md) | Document scaffolding from effective schema |
-| [Set](docs/set.md) | Mutate frontmatter overrides with schema validation |
-| [Fix & Proposals](docs/fix.md) | Auto-repair, enum correction, field inference |
-| [Analyze](docs/analyze.md) | Infer schemas and patterns from documents |
-| [Explain](docs/explain.md) | Field origin tracing, derivation chain, error diagnosis |
-| [Tree](docs/tree.md) | Hierarchical view with recursive record totals |
-| [Stats](docs/stats.md) | Total record counts, optionally filtered |
-| [Dependency Graph](docs/graph.md) | Wiki-links, link schema, cycle detection, DOT/Mermaid |
-| [Agent Skill Distribution](docs/skill.md) | `rootline skill install`, status, uninstall, restore, receipts, and backups |
-| [Derivation Engine](docs/derivation.md) | Derive and aggregate expressions, builtins, linked fields |
-| [Schema Migration](docs/migrate.md) | Breaking change detection, field rename, v2 upgrade |
-| [Levels & Match](docs/levels.md) | Hierarchical field scoping with match patterns |
-| [Extensibility](docs/extensibility.md) | Extractor architecture, future formats |
-| [Visual Identity](docs/identity.md) | Logo, colors, usage guidelines |
-
----
-
-## Updating
-
-Release builds auto-update in the background using a staged async pattern — the new binary is downloaded during run N and applied at the start of run N+1. Local builds (`version == "dev"`) skip this entirely. See [docs/auto-update.md](docs/auto-update.md) for details.
+Deeper topics: [derivation & aggregation](docs/derivation.md) · [levels & `match:` scoping](docs/levels.md) · [extensibility](docs/extensibility.md) · [upgrading from v1 `.stem`](docs/UPGRADE.md).
 
 ---
 
 ## Development
 
-### Requirements
-
-- **Product requirement**: Go 1.26+
-- **Contributor workflow**: Git (for pre-commit hooks, tests, CI)
-
-### Contributor Setup
+Requires Go 1.26+ and Git (for hooks and CI). Field names in this repository's own governed data (`docs/roadmap/`) are in Spanish — `estado`, `tipo` — because that is how the roadmap was written; Rootline itself has no opinion on language.
 
 ```bash
-go build ./cmd/rootline/          # Build
-go test ./... -race               # Tests with race detector
-go vet ./...                      # Static analysis
-golangci-lint run ./...           # Full lint
+just check      # gofmt + golangci-lint + go build
+just test       # go test ./... -race
+just validate   # rootline validate --all docs/roadmap/
 ```
 
-Pre-commit hooks run `golangci-lint` and `gofmt` automatically. Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): description`), enforced by a commit-msg hook. Pre-push keeps validation and skill synchronization without installing an unmerged branch build. Run `just install` explicitly when you want to install the current checkout.
-
-**Note**: Git workflow is contributor-only; Rootline itself does not require Git.
-
----
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/) and are enforced by a commit-msg hook. See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Visual identity guidelines live in [docs/identity.md](docs/identity.md).
 
 ## License
 
