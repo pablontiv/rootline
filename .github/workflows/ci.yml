@@ -111,7 +111,7 @@ jobs:
     needs: [ci, gitleaks, docs-validate, installer-tests, durability]
     if: github.event_name == 'pull_request'
     uses: >-
-      pablontiv/crossbeam/.github/workflows/go-candidate.yml@b012cf53f083e637a013080ef8c677d1af5e0161
+      pablontiv/crossbeam/.github/workflows/go-candidate.yml@ae9b5c07d3b1c07e28412eaa1c491bd9b4d9b69e
     permissions:
       contents: read
       pull-requests: read
