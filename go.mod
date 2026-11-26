@@ -3,7 +3,7 @@ module github.com/pablontiv/rootline/v9
 go 1.26
 
 require (
-	github.com/expr-lang/expr v1.17.8
+	github.com/expr-lang/expr v1.18.1
 	github.com/pablontiv/picokit v1.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/yuin/goldmark v1.8.5
